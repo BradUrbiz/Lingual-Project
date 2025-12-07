@@ -61,7 +61,7 @@ def assessment():
 
     # Check if assessment is complete
     if current_index >= len(items):
-        return redirect(url_for('assessment_results'))
+        return redirect(url_for('categories'))
 
     current_item = items[current_index]
 
@@ -87,7 +87,7 @@ def assessment_submit():
     current_index = session.get('current_item_index', 0)
 
     if current_index >= len(items):
-        return redirect(url_for('assessment_results'))
+        return redirect(url_for('categories'))
 
     current_item = items[current_index]
     item_id = current_item['id']
@@ -115,7 +115,7 @@ def assessment_submit():
 
     # Check if complete
     if session['current_item_index'] >= len(items):
-        return redirect(url_for('assessment_results'))
+        return redirect(url_for('categories'))
 
     return redirect(url_for('assessment'))
 
@@ -136,7 +136,7 @@ def assessment_skip():
         session['current_item_index'] = current_index + 1
 
     if session['current_item_index'] >= len(items):
-        return redirect(url_for('assessment_results'))
+        return redirect(url_for('categories'))
 
     return redirect(url_for('assessment'))
 

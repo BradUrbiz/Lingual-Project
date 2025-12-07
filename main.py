@@ -7,44 +7,30 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import io
 
-# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
 
-# Initialize OpenAI client (lazy initialization)
 openai_client = None
 
 def get_openai_client():
-    """Get or initialize OpenAI client."""
     global openai_client
     api_key = os.environ.get('OPENAI_API_KEY')
     if api_key and openai_client is None:
         openai_client = OpenAI(api_key=api_key)
     return openai_client
 
-# Import scoring module
 from scoring import load_assessment_data, score_item, compute_results, get_sklc_description, SKLC_LEVEL_DESCRIPTIONS
 
 
 def get_assessment():
-    """Load and cache assessment data."""
     return load_assessment_data("data/assessment_v1.json")
 
-
-# =============================================================================
-# Landing Page
-# =============================================================================
 
 @app.route('/')
 def index():
     return render_template('index.html')
-
-
-# =============================================================================
-# Initial Quiz Flow (Goals & Duration)
-# =============================================================================
 
 @app.route('/general', methods=['GET', 'POST'])
 def general():
@@ -52,7 +38,6 @@ def general():
         goals = request.form.get('goals', '')
         duration = request.form.get('duration', '0')
 
-        # Store in session
         session['user_goals'] = [g.strip() for g in goals.split(',') if g.strip()]
         session['learning_duration'] = int(duration)
 
@@ -61,16 +46,10 @@ def general():
     return render_template('general.html')
 
 
-# =============================================================================
-# Assessment Flow
-# =============================================================================
-
 @app.route('/assessment')
 def assessment():
-    """Start or resume assessment."""
     assessment_data = get_assessment()
 
-    # Initialize or get current progress
     if 'assessment_responses' not in session:
         session['assessment_responses'] = {}
         session['current_item_index'] = 0
@@ -78,13 +57,11 @@ def assessment():
     current_index = session.get('current_item_index', 0)
     items = assessment_data['items']
 
-    # Check if assessment is complete
     if current_index >= len(items):
         return redirect(url_for('categories'))
 
     current_item = items[current_index]
 
-    # Get UI language preference (default to English)
     ui_lang = session.get('ui_language', 'en')
 
     return render_template(
@@ -99,7 +76,6 @@ def assessment():
 
 @app.route('/assessment/submit', methods=['POST'])
 def assessment_submit():
-    """Handle assessment item submission."""
     assessment_data = get_assessment()
     items = assessment_data['items']
 
@@ -111,7 +87,6 @@ def assessment_submit():
     current_item = items[current_index]
     item_id = current_item['id']
 
-    # Get response based on item type
     item_type = current_item.get('item_type')
 
     if item_type == 'mcq_single':
@@ -119,20 +94,16 @@ def assessment_submit():
     elif item_type == 'text_short':
         response = request.form.get('response', '')
     elif item_type == 'audio_read':
-        # For audio, we'll get transcript from client-side ASR or skip
         response = request.form.get('transcript', '')
     else:
         response = request.form.get('response', '')
 
-    # Store response
     responses = session.get('assessment_responses', {})
     responses[item_id] = response
     session['assessment_responses'] = responses
 
-    # Move to next item
     session['current_item_index'] = current_index + 1
 
-    # Check if complete
     if session['current_item_index'] >= len(items):
         return redirect(url_for('categories'))
 
@@ -141,7 +112,6 @@ def assessment_submit():
 
 @app.route('/assessment/skip', methods=['POST'])
 def assessment_skip():
-    """Skip current assessment item."""
     assessment_data = get_assessment()
     items = assessment_data['items']
 
@@ -150,7 +120,7 @@ def assessment_skip():
     if current_index < len(items):
         item_id = items[current_index]['id']
         responses = session.get('assessment_responses', {})
-        responses[item_id] = ''  # Empty response for skipped
+        responses[item_id] = ''
         session['assessment_responses'] = responses
         session['current_item_index'] = current_index + 1
 
@@ -162,21 +132,17 @@ def assessment_skip():
 
 @app.route('/assessment/results')
 def assessment_results():
-    """Display assessment results."""
     assessment_data = get_assessment()
     responses = session.get('assessment_responses', {})
 
     if not responses:
         return redirect(url_for('assessment'))
 
-    # Compute results
     results = compute_results(assessment_data, responses)
 
-    # Get SKLC descriptions
     ui_lang = session.get('ui_language', 'en')
     sklc_info = get_sklc_description(results['global_stage'], ui_lang)
 
-    # Domain-level SKLC info
     domain_sklc = {}
     for domain, band in results['domain_bands'].items():
         domain_sklc[domain] = get_sklc_description(band, ui_lang)
@@ -192,19 +158,13 @@ def assessment_results():
 
 @app.route('/assessment/reset')
 def assessment_reset():
-    """Reset assessment progress."""
     session.pop('assessment_responses', None)
     session.pop('current_item_index', None)
     return redirect(url_for('assessment'))
 
 
-# =============================================================================
-# Categories & AI Pages
-# =============================================================================
-
 @app.route('/categories', methods=['GET', 'POST'])
 def categories():
-    # Compute and store assessment results if not already done
     if 'assessment_results' not in session and 'assessment_responses' in session:
         assessment_data = get_assessment()
         responses = session.get('assessment_responses', {})
@@ -212,7 +172,6 @@ def categories():
             results = compute_results(assessment_data, responses)
             session['assessment_results'] = results
 
-    # Handle POST from categories form
     if request.method == 'POST':
         selected_categories = request.form.get('categories', '')
         session['selected_categories'] = [c.strip() for c in selected_categories.split(',') if c.strip()]
@@ -223,7 +182,6 @@ def categories():
 
 @app.route('/ai')
 def ai():
-    # Get user's proficiency data for display
     results = session.get('assessment_results', {})
     global_stage = results.get('global_stage', 0)
     sklc_info = get_sklc_description(global_stage)
@@ -231,12 +189,7 @@ def ai():
     return render_template('ai.html', sklc_level=sklc_info.get('level', 'Not assessed'))
 
 
-# =============================================================================
-# AI Chat API
-# =============================================================================
-
 def get_user_proficiency_context():
-    """Build a context string describing the user's proficiency level."""
     results = session.get('assessment_results', {})
     goals = session.get('user_goals', [])
     duration = session.get('learning_duration', 0)
@@ -269,7 +222,6 @@ USER BACKGROUND:
 
 
 def build_system_prompt(proficiency_context):
-    """Build the system prompt for the AI tutor."""
     return f"""You are Lingu, a friendly and encouraging Korean language tutor AI. Your role is to help users practice and improve their Korean speaking skills through conversation.
 
 {proficiency_context}
@@ -295,43 +247,35 @@ Remember: You're a supportive tutor, not a strict teacher. Make learning fun!"""
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
-    """Handle AI chat messages."""
     data = request.get_json()
     user_message = data.get('message', '').strip()
 
     if not user_message:
         return jsonify({'error': 'Message is required'}), 400
 
-    # Check for API key
     if not os.environ.get('OPENAI_API_KEY'):
         return jsonify({'error': 'OpenAI API key not configured'}), 500
 
-    # Get or initialize chat history
     if 'chat_history' not in session:
         session['chat_history'] = []
 
     chat_history = session['chat_history']
 
-    # Build messages for OpenAI
     proficiency_context = get_user_proficiency_context()
     system_prompt = build_system_prompt(proficiency_context)
 
     messages = [{"role": "system", "content": system_prompt}]
 
-    # Add chat history (last 10 messages to keep context manageable)
     for msg in chat_history[-10:]:
         messages.append(msg)
 
-    # Add current user message
     messages.append({"role": "user", "content": user_message})
 
     try:
-        # Get OpenAI client
         client = get_openai_client()
         if not client:
             return jsonify({'error': 'OpenAI API key not configured', 'success': False}), 500
 
-        # Call OpenAI API (using gpt-4o-mini as gpt-5-mini doesn't exist yet)
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
@@ -341,7 +285,6 @@ def api_chat():
 
         assistant_message = response.choices[0].message.content
 
-        # Update chat history
         chat_history.append({"role": "user", "content": user_message})
         chat_history.append({"role": "assistant", "content": assistant_message})
         session['chat_history'] = chat_history
@@ -360,58 +303,48 @@ def api_chat():
 
 @app.route('/api/chat/reset', methods=['POST'])
 def api_chat_reset():
-    """Reset chat history."""
     session.pop('chat_history', None)
     return jsonify({'success': True, 'message': 'Chat history cleared'})
 
 
 @app.route('/api/chat/voice', methods=['POST'])
 def api_chat_voice():
-    """Handle voice-to-voice conversation using GPT-4o with audio."""
     try:
-        # Check for API key
         if not os.environ.get('OPENAI_API_KEY'):
             return jsonify({'error': 'OpenAI API key not configured', 'success': False}), 500
 
-        # Get audio file from request
         if 'audio' not in request.files:
             return jsonify({'error': 'No audio file provided', 'success': False}), 400
 
         audio_file = request.files['audio']
 
-        # Save audio temporarily
         temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix='.webm')
         audio_file.save(temp_audio.name)
         temp_audio.close()
 
-        # Get OpenAI client
         client = get_openai_client()
         if not client:
             return jsonify({'error': 'OpenAI client not initialized', 'success': False}), 500
 
-        # Step 1: Transcribe audio using GPT-4o Audio
         with open(temp_audio.name, 'rb') as audio:
             transcript_response = client.audio.transcriptions.create(
                 model="whisper-1",
                 file=audio,
-                language="ko"  # Korean language
+                language="ko"
             )
 
         transcript = transcript_response.text
 
-        # Clean up temp audio file
         os.unlink(temp_audio.name)
 
         if not transcript or not transcript.strip():
             return jsonify({'error': 'Could not transcribe audio', 'success': False}), 400
 
-        # Step 2: Get AI response using regular chat
         if 'chat_history' not in session:
             session['chat_history'] = []
 
         chat_history = session['chat_history']
 
-        # Build messages
         proficiency_context = get_user_proficiency_context()
         system_prompt = build_system_prompt(proficiency_context)
 
@@ -420,7 +353,6 @@ def api_chat_voice():
             messages.append(msg)
         messages.append({"role": "user", "content": transcript})
 
-        # Get text response
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
@@ -430,32 +362,26 @@ def api_chat_voice():
 
         assistant_message = response.choices[0].message.content
 
-        # Update chat history
         chat_history.append({"role": "user", "content": transcript})
         chat_history.append({"role": "assistant", "content": assistant_message})
         session['chat_history'] = chat_history
 
-        # Step 3: Generate TTS audio
         tts_response = client.audio.speech.create(
             model="tts-1",
-            voice="nova",  # Female voice, can use: alloy, echo, fable, onyx, nova, shimmer
+            voice="nova",
             input=assistant_message,
             response_format="mp3"
         )
 
-        # Save TTS audio temporarily for serving
         if 'tts_audio' not in session:
             session['tts_audio'] = []
 
-        # Generate unique filename
         audio_filename = f"tts_{len(session['tts_audio'])}.mp3"
         audio_path = os.path.join(tempfile.gettempdir(), audio_filename)
 
-        # Write audio to file
         with open(audio_path, 'wb') as f:
             f.write(tts_response.content)
 
-        # Store path in session
         session['tts_audio'].append(audio_path)
 
         return jsonify({
@@ -474,7 +400,6 @@ def api_chat_voice():
 
 @app.route('/api/audio/<filename>')
 def serve_audio(filename):
-    """Serve TTS audio files."""
     try:
         audio_path = os.path.join(tempfile.gettempdir(), filename)
         if os.path.exists(audio_path):
@@ -487,7 +412,6 @@ def serve_audio(filename):
 
 @app.route('/api/user/profile')
 def api_user_profile():
-    """Get user's assessment profile for the AI page."""
     results = session.get('assessment_results', {})
     goals = session.get('user_goals', [])
 
@@ -510,13 +434,8 @@ def api_user_profile():
     })
 
 
-# =============================================================================
-# API Endpoints (for AJAX/future use)
-# =============================================================================
-
 @app.route('/api/assessment/status')
 def api_assessment_status():
-    """Get current assessment status."""
     assessment_data = get_assessment()
     return jsonify({
         'current_index': session.get('current_item_index', 0),
@@ -527,7 +446,6 @@ def api_assessment_status():
 
 @app.route('/api/set-language', methods=['POST'])
 def api_set_language():
-    """Set UI language preference."""
     data = request.get_json()
     lang = data.get('language', 'en')
     if lang in ['en', 'ko']:
@@ -535,10 +453,6 @@ def api_set_language():
         return jsonify({'success': True, 'language': lang})
     return jsonify({'success': False, 'error': 'Invalid language'}), 400
 
-
-# =============================================================================
-# Run
-# =============================================================================
 
 if __name__ == '__main__':
     app.run(debug=True)

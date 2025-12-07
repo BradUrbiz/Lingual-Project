@@ -19,6 +19,28 @@
 		}
 
 		.quiz-container {
+					.top-bar {
+						width: 100%;
+						background: #e9d6fa;
+						border-radius: 18px;
+						padding: 18px 24px 12px 24px;
+						box-sizing: border-box;
+						margin-bottom: 24px;
+						display: flex;
+						flex-direction: column;
+						align-items: flex-start;
+					}
+					.top-bar-title {
+						color: rgb(135, 42, 211);
+						font-size: 1.7rem;
+						font-weight: bold;
+						margin-bottom: 4px;
+					}
+					.top-bar-subtitle {
+						color: #2d3a4a;
+						font-size: 1.1rem;
+						margin-bottom: 0;
+					}
 			width: 75vw;
 			max-width: 1000px;
 			min-height: 70vh;
@@ -39,6 +61,16 @@
 			color: #2d3a4a;
 		}
 
+		.question { margin-bottom: 32px; }
+		.options { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+		.option-btn {
+			padding: 10px 18px;
+			border: 2px solid #b0b8c1;
+			border-radius: 8px;
+			background: #f4f6fb;
+			color: #2d3a4a;
+		}
+
 		.big-input {
 			width: 95%;
 			min-height: 200;
@@ -50,7 +82,7 @@
 			font-size: 20px;
 			border-radius: 10px;
 			border: 2px solid #ccc;
-			resize: none; 
+			resize: none;
 		}
 
 		.submit-btn {
@@ -65,6 +97,10 @@
 			cursor: pointer;
 			margin-top: 20px;
 			transition: background 0.2s;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			text-align: center;
 		}
 
 		.submit-btn:hover {

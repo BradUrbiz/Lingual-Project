@@ -146,6 +146,67 @@
 			cursor: not-allowed;
 		}
 
+		.voice-btn {
+			height: 48px;
+			width: 48px;
+			background: #10b981;
+			color: #fff;
+			border: none;
+			border-radius: 50%;
+			font-size: 1.2rem;
+			cursor: pointer;
+			transition: all 0.2s;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.voice-btn:hover {
+			background: #059669;
+		}
+
+		.voice-btn.recording {
+			background: #ef4444;
+			animation: pulse 1.5s ease-in-out infinite;
+		}
+
+		.voice-btn:disabled {
+			background: #9ca3af;
+			cursor: not-allowed;
+		}
+
+		@keyframes pulse {
+			0%, 100% { opacity: 1; }
+			50% { opacity: 0.6; }
+		}
+
+		.mode-toggle {
+			display: flex;
+			gap: 8px;
+			margin-bottom: 12px;
+		}
+
+		.mode-btn {
+			flex: 1;
+			padding: 8px;
+			border: 2px solid #e5e7eb;
+			background: white;
+			border-radius: 8px;
+			cursor: pointer;
+			font-size: 0.9rem;
+			transition: all 0.2s;
+		}
+
+		.mode-btn.active {
+			background: #4f8cff;
+			color: white;
+			border-color: #4f8cff;
+		}
+
+		.voice-btn.hidden {
+			display: none;
+		}
+
 		.sidebar {
 			position: fixed;
 			right: 32px;
@@ -250,6 +311,11 @@
 			<div class="top-bar-subtitle">Your Personalized AI Korean Language Teacher</div>
 		</div>
 
+		<div class="mode-toggle">
+			<button class="mode-btn active" id="textModeBtn" type="button">💬 Text</button>
+			<button class="mode-btn" id="voiceModeBtn" type="button">🎤 Voice</button>
+		</div>
+
 		<div class="chat-messages" id="chatMessages">
 			<div class="message assistant">
 				Hello! I'm Lingu, your Korean language tutor. I'm here to help you practice and improve your Korean skills. What would you like to talk about today?
@@ -263,6 +329,7 @@
 				placeholder="Type your message... (Press Enter to send)"
 				rows="1"
 			></textarea>
+			<button class="voice-btn hidden" id="voiceBtn" type="button">🎤</button>
 			<button class="send-btn" id="sendBtn" type="button">Send</button>
 		</div>
 	</div>
@@ -296,7 +363,16 @@
 		const chatMessages = document.getElementById('chatMessages');
 		const chatInput = document.getElementById('chatInput');
 		const sendBtn = document.getElementById('sendBtn');
+		const voiceBtn = document.getElementById('voiceBtn');
 		const clearBtn = document.getElementById('clearBtn');
+		const textModeBtn = document.getElementById('textModeBtn');
+		const voiceModeBtn = document.getElementById('voiceModeBtn');
+
+		let isVoiceMode = false;
+		let isRecording = false;
+		let mediaRecorder = null;
+		let audioChunks = [];
+		let audioElement = null;
 
 		// Load user profile
 		async function loadProfile() {
@@ -387,8 +463,141 @@
 			}
 		}
 
+		// Toggle between text and voice mode
+		function toggleMode(mode) {
+			isVoiceMode = mode === 'voice';
+
+			if (isVoiceMode) {
+				textModeBtn.classList.remove('active');
+				voiceModeBtn.classList.add('active');
+				chatInput.classList.add('hidden');
+				sendBtn.classList.add('hidden');
+				voiceBtn.classList.remove('hidden');
+			} else {
+				voiceModeBtn.classList.remove('active');
+				textModeBtn.classList.add('active');
+				voiceBtn.classList.add('hidden');
+				chatInput.classList.remove('hidden');
+				sendBtn.classList.remove('hidden');
+			}
+		}
+
+		// Initialize audio recording
+		async function initAudioRecording() {
+			try {
+				const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+				mediaRecorder = new MediaRecorder(stream);
+
+				mediaRecorder.ondataavailable = (event) => {
+					audioChunks.push(event.data);
+				};
+
+				mediaRecorder.onstop = async () => {
+					const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+					audioChunks = [];
+					await sendVoiceMessage(audioBlob);
+				};
+
+				return true;
+			} catch (error) {
+				console.error('Error accessing microphone:', error);
+				alert('Could not access microphone. Please grant permission.');
+				return false;
+			}
+		}
+
+		// Start/stop recording
+		async function toggleRecording() {
+			if (!isRecording) {
+				// Start recording
+				if (!mediaRecorder) {
+					const success = await initAudioRecording();
+					if (!success) return;
+				}
+
+				audioChunks = [];
+				mediaRecorder.start();
+				isRecording = true;
+				voiceBtn.classList.add('recording');
+				voiceBtn.textContent = '⏹️';
+			} else {
+				// Stop recording
+				mediaRecorder.stop();
+				isRecording = false;
+				voiceBtn.classList.remove('recording');
+				voiceBtn.textContent = '🎤';
+			}
+		}
+
+		// Send voice message
+		async function sendVoiceMessage(audioBlob) {
+			voiceBtn.disabled = true;
+
+			// Add user message placeholder
+			const userMsg = addMessage('🎤 Voice message...', 'user');
+
+			// Add loading indicator
+			const loadingMsg = addMessage('Lingu is listening and responding...', 'loading');
+
+			try {
+				// Create form data
+				const formData = new FormData();
+				formData.append('audio', audioBlob, 'recording.webm');
+
+				// Send to server
+				const response = await fetch('/api/chat/voice', {
+					method: 'POST',
+					body: formData
+				});
+
+				const data = await response.json();
+
+				// Remove loading indicator
+				loadingMsg.remove();
+
+				if (data.success) {
+					// Update user message with transcription
+					userMsg.textContent = data.transcript || '🎤 Voice message';
+
+					// Add assistant text response
+					addMessage(data.response, 'assistant');
+
+					// Play audio response if available
+					if (data.audio_url) {
+						await playAudioResponse(data.audio_url);
+					}
+				} else {
+					loadingMsg.textContent = `Error: ${data.error || 'Something went wrong'}`;
+				}
+			} catch (error) {
+				loadingMsg.remove();
+				addMessage('Error: Could not process voice message.', 'assistant');
+				console.error('Voice message error:', error);
+			}
+
+			voiceBtn.disabled = false;
+		}
+
+		// Play audio response
+		async function playAudioResponse(audioUrl) {
+			if (audioElement) {
+				audioElement.pause();
+				audioElement = null;
+			}
+
+			audioElement = new Audio(audioUrl);
+			try {
+				await audioElement.play();
+			} catch (error) {
+				console.error('Error playing audio:', error);
+			}
+		}
+
 		// Event listeners
 		sendBtn.addEventListener('click', sendMessage);
+		voiceBtn.addEventListener('click', toggleRecording);
+		textModeBtn.addEventListener('click', () => toggleMode('text'));
+		voiceModeBtn.addEventListener('click', () => toggleMode('voice'));
 
 		chatInput.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter' && !e.shiftKey) {

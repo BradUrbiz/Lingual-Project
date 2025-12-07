@@ -1,8 +1,11 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file
 import json
 import os
+import tempfile
+from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
+import io
 
 # Load environment variables
 load_dotenv()
@@ -360,6 +363,126 @@ def api_chat_reset():
     """Reset chat history."""
     session.pop('chat_history', None)
     return jsonify({'success': True, 'message': 'Chat history cleared'})
+
+
+@app.route('/api/chat/voice', methods=['POST'])
+def api_chat_voice():
+    """Handle voice-to-voice conversation using GPT-4o with audio."""
+    try:
+        # Check for API key
+        if not os.environ.get('OPENAI_API_KEY'):
+            return jsonify({'error': 'OpenAI API key not configured', 'success': False}), 500
+
+        # Get audio file from request
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio file provided', 'success': False}), 400
+
+        audio_file = request.files['audio']
+
+        # Save audio temporarily
+        temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix='.webm')
+        audio_file.save(temp_audio.name)
+        temp_audio.close()
+
+        # Get OpenAI client
+        client = get_openai_client()
+        if not client:
+            return jsonify({'error': 'OpenAI client not initialized', 'success': False}), 500
+
+        # Step 1: Transcribe audio using GPT-4o Audio
+        with open(temp_audio.name, 'rb') as audio:
+            transcript_response = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio,
+                language="ko"  # Korean language
+            )
+
+        transcript = transcript_response.text
+
+        # Clean up temp audio file
+        os.unlink(temp_audio.name)
+
+        if not transcript or not transcript.strip():
+            return jsonify({'error': 'Could not transcribe audio', 'success': False}), 400
+
+        # Step 2: Get AI response using regular chat
+        if 'chat_history' not in session:
+            session['chat_history'] = []
+
+        chat_history = session['chat_history']
+
+        # Build messages
+        proficiency_context = get_user_proficiency_context()
+        system_prompt = build_system_prompt(proficiency_context)
+
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in chat_history[-10:]:
+            messages.append(msg)
+        messages.append({"role": "user", "content": transcript})
+
+        # Get text response
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            max_tokens=500,
+            temperature=0.7
+        )
+
+        assistant_message = response.choices[0].message.content
+
+        # Update chat history
+        chat_history.append({"role": "user", "content": transcript})
+        chat_history.append({"role": "assistant", "content": assistant_message})
+        session['chat_history'] = chat_history
+
+        # Step 3: Generate TTS audio
+        tts_response = client.audio.speech.create(
+            model="tts-1",
+            voice="nova",  # Female voice, can use: alloy, echo, fable, onyx, nova, shimmer
+            input=assistant_message,
+            response_format="mp3"
+        )
+
+        # Save TTS audio temporarily for serving
+        if 'tts_audio' not in session:
+            session['tts_audio'] = []
+
+        # Generate unique filename
+        audio_filename = f"tts_{len(session['tts_audio'])}.mp3"
+        audio_path = os.path.join(tempfile.gettempdir(), audio_filename)
+
+        # Write audio to file
+        with open(audio_path, 'wb') as f:
+            f.write(tts_response.content)
+
+        # Store path in session
+        session['tts_audio'].append(audio_path)
+
+        return jsonify({
+            'success': True,
+            'transcript': transcript,
+            'response': assistant_message,
+            'audio_url': f'/api/audio/{audio_filename}'
+        })
+
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+
+@app.route('/api/audio/<filename>')
+def serve_audio(filename):
+    """Serve TTS audio files."""
+    try:
+        audio_path = os.path.join(tempfile.gettempdir(), filename)
+        if os.path.exists(audio_path):
+            return send_file(audio_path, mimetype='audio/mpeg')
+        else:
+            return jsonify({'error': 'Audio file not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/user/profile')

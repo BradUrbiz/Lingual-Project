@@ -120,22 +120,7 @@
 			body { padding-right: 0; }
 			.quiz-container { width: 100vw; padding-top: 80px; }
 		}
-		.input-row {
-			display: flex;
-			gap: 16px;
-			margin-top: 40px;  /* LOWER the whole row */
-		}
-
-		.big-input {
-			flex: 1;          /* makes the textarea take most of the space */
-			height: 120px;
-		}
-
-		.submit-btn {
-			height: 120px;     /* matches textarea height */
-			padding: 0 20px;
-			font-size: 1.1rem;
-		}
+		
 	</style>
 </head>
 
@@ -150,7 +135,7 @@
 			</div>
 
 			<div class="input-row">
-				<textarea class="big-input" name="user_input" placeholder="Start talking..."></textarea>
+				<textarea class="big-input" name="user_input" placeholder="Start talking..." style="margin-top: 25%;"></textarea>
 
 				<button class="submit-btn" type="submit">Submit</button>
 			</div>
@@ -165,7 +150,7 @@
 
 		<div class="sidebar-image">
 			<!-- backend will set the state of the image from ai.py -->
-			<img id="aiImage" src="/imgs/c-notspeak.png" alt="AI visual" />
+			<img id="aiImage" src="/imgs/c-notalk.png" alt="AI visual" />
 		</div>
 	</aside>
 

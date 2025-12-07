@@ -1,0 +1,379 @@
+{
+  "test_id": "korean_speaking_diagnostic_v1",
+  "version": "1.0.0",
+  "title": "Korean Speaking Diagnostic (v1)",
+  "description": "Short diagnostic for Korean speaking-related proficiency: grammar, vocabulary, pragmatics, pronunciation.",
+  "domains": ["grammar", "vocabulary", "pragmatics", "pronunciation"],
+  "items": [
+    {
+      "id": "S1-Q1",
+      "section": "profile",
+      "item_type": "mcq_single",
+      "order": 1,
+      "domains": {
+        "grammar": 0.0,
+        "vocabulary": 0.0,
+        "pragmatics": 0.0,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_ko": "당신의 한국어 말하기 실력을 가장 잘 설명하는 문장을 고르세요.",
+        "prompt_en": "Choose the sentence that best describes your Korean speaking ability.",
+        "context": null,
+        "instructions": null
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "거의 말할 수 없습니다." },
+          { "id": "2", "text": "아주 간단한 자기소개나 일상 표현만 말할 수 있습니다." },
+          { "id": "3", "text": "기본적인 대화를 하고 간단한 생각을 설명할 수 있습니다." },
+          { "id": "4", "text": "대부분의 일상적인 주제에 대해 자세히 말할 수 있습니다." },
+          { "id": "5", "text": "학교나 직장 같은 공식적인 상황에서도 한국어를 편하게 쓸 수 있습니다." }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id_any": true }, "score": 0.0 }
+        ]
+      }
+    },
+    {
+      "id": "S1-Q2",
+      "section": "profile",
+      "item_type": "text_short",
+      "order": 2,
+      "domains": {
+        "grammar": 0.5,
+        "vocabulary": 0.5,
+        "pragmatics": 0.0,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_ko": "한국어로 자기소개를 간단히 써 보세요. (2–4문장)",
+        "prompt_en": "Briefly introduce yourself in Korean. (2–4 sentences)",
+        "context": "예: 이름, 하는 일/학교, 취미, 관심 있는 것 등을 포함해 주세요.",
+        "instructions": "한글로 입력해 주세요."
+      },
+      "content": {},
+      "scoring": {
+        "response_type": "text",
+        "method": "heuristic_self_intro_v1",
+        "params": {
+          "min_sentences": 2,
+          "weights": {
+            "sentences": 0.3,
+            "basic_verbs": 0.3,
+            "topic_or_hobby": 0.2
+          },
+          "lexicons": {
+            "basic_verbs": ["이다", "하다", "좋아하다", "공부하다", "살다", "일하다"],
+            "topic_or_hobby": ["학교", "회사", "학생", "취미", "영화", "음악", "게임", "책", "운동"]
+          }
+        }
+      }
+    },
+    {
+      "id": "S2-Q1",
+      "section": "grammar_vocab",
+      "item_type": "mcq_single",
+      "order": 3,
+      "domains": {
+        "grammar": 0.7,
+        "vocabulary": 0.3,
+        "pragmatics": 0.0,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_ko": "빈칸에 들어갈 가장 알맞은 말을 고르세요.",
+        "prompt_en": "Choose the best word for the blank.",
+        "context": "어제 친구를 만나서 같이 영화를 ___요.",
+        "instructions": null
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "보" },
+          { "id": "2", "text": "봐" },
+          { "id": "3", "text": "봤" },
+          { "id": "4", "text": "보는" }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id": "3" }, "score": 1.0 },
+          { "condition": { "selected_option_id": "2" }, "score": 0.5 },
+          { "condition": { "selected_option_id_in": ["1", "4"] }, "score": 0.2 }
+        ]
+      }
+    },
+    {
+      "id": "S2-Q2",
+      "section": "grammar_vocab",
+      "item_type": "mcq_single",
+      "order": 4,
+      "domains": {
+        "grammar": 0.6,
+        "vocabulary": 0.2,
+        "pragmatics": 0.2,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_ko": "다음 상황에서 가장 자연스러운 문장을 고르세요.",
+        "prompt_en": "Choose the most natural sentence for this situation.",
+        "context": "상황: 내일 교수님께 수업을 결석해야 한다고 이메일로 말씀드리고 싶어요.",
+        "instructions": null
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "내일 수업 못 가요. 이해해 주세요." },
+          { "id": "2", "text": "내일 수업 가지 마세요." },
+          { "id": "3", "text": "교수님, 내일 수업에 개인적인 일이 있어서 참석하지 못합니다. 죄송합니다." },
+          { "id": "4", "text": "교수님, 내일 수업 가기 싫어요." }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id": "3" }, "score": 1.0 },
+          { "condition": { "selected_option_id": "1" }, "score": 0.6 },
+          { "condition": { "selected_option_id_in": ["2", "4"] }, "score": 0.2 }
+        ]
+      }
+    },
+    {
+      "id": "S2-Q3",
+      "section": "grammar_vocab",
+      "item_type": "text_short",
+      "order": 5,
+      "domains": {
+        "grammar": 0.5,
+        "vocabulary": 0.5,
+        "pragmatics": 0.0,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_ko": "한국어로 어제 하루를 간단히 써 보세요. (2–3문장)",
+        "prompt_en": "Briefly describe your day yesterday in Korean. (2–3 sentences)",
+        "context": "예: 몇 시에 일어났는지, 무엇을 했는지, 누구를 만났는지 등.",
+        "instructions": "한글로 2–3문장을 써 주세요."
+      },
+      "content": {},
+      "scoring": {
+        "response_type": "text",
+        "method": "heuristic_past_routine_v1",
+        "params": {
+          "min_sentences": 2,
+          "weights": {
+            "sentences": 0.3,
+            "past_tense": 0.4,
+            "content_words": 0.3
+          },
+          "patterns": {
+            "past_tense_regex": "(았|었|했)(어|어요|습니다|다)",
+            "sentence_end_regex": "(요\\.|다\\.|\\?|!)"
+          },
+          "lexicons": {
+            "content_words": [
+              "어제", "아침", "점심", "저녁",
+              "학교", "회사", "집", "친구",
+              "가다", "오다", "먹다", "보다", "공부하다", "일하다"
+            ],
+            "min_content_word_count": 3
+          }
+        }
+      }
+    },
+    {
+      "id": "S3-Q1",
+      "section": "pragmatics",
+      "item_type": "mcq_single",
+      "order": 6,
+      "domains": {
+        "grammar": 0.2,
+        "vocabulary": 0.0,
+        "pragmatics": 0.8,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_ko": "다음 상황에서 가장 알맞은 표현을 고르세요.",
+        "prompt_en": "Choose the most appropriate expression for this situation.",
+        "context": "상황: 수업이 끝난 후, 교수님께 내일 수업에 대해 질문하고 싶어요.",
+        "instructions": null
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "교수님, 내일 수업 몇 시야?" },
+          { "id": "2", "text": "교수님, 내일 수업 몇 시예요?" },
+          { "id": "3", "text": "교수님, 내일 수업은 몇 시에 시작합니까?" },
+          { "id": "4", "text": "야, 내일 수업 몇 시야?" }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id": "3" }, "score": 1.0 },
+          { "condition": { "selected_option_id": "2" }, "score": 0.7 },
+          { "condition": { "selected_option_id": "1" }, "score": 0.3 },
+          { "condition": { "selected_option_id": "4" }, "score": 0.0 }
+        ]
+      }
+    },
+    {
+      "id": "S3-Q2",
+      "section": "pragmatics",
+      "item_type": "text_short",
+      "order": 7,
+      "domains": {
+        "grammar": 0.2,
+        "vocabulary": 0.0,
+        "pragmatics": 0.8,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_ko": "다음 문장을 교수님께 말하는 표현으로 바꾸세요. (1–2문장)",
+        "prompt_en": "Rewrite the sentence as if you are politely speaking to your professor. (1–2 sentences)",
+        "context": "원문 (친구에게 말함): \"오늘 숙제 못 냈어. 내일까지 내도 돼?\"",
+        "instructions": "교수님께 정중하게 말하는 표현으로 바꾸어 써 보세요."
+      },
+      "content": {},
+      "scoring": {
+        "response_type": "text",
+        "method": "heuristic_professor_polite_rewrite_v1",
+        "params": {
+          "weights": {
+            "address_professor": 0.2,
+            "apology": 0.2,
+            "polite_endings": 0.4,
+            "request_content": 0.2,
+            "penalty_casual": -0.3
+          },
+          "lexicons": {
+            "professor_terms": ["교수님"],
+            "apology_terms": ["죄송", "실례"],
+            "request_keywords": ["숙제", "제출", "내일", "내일까지", "내다", "제출하다", "되다", "괜찮다"]
+          },
+          "patterns": {
+            "polite_endings_regex": "(요\\.|요\\?|습니다\\.|습니까\\?|겠습니까\\?|괜찮을까요\\?)",
+            "casual_endings_regex": "(어\\?|어\\.|아\\?|아\\.|했어|냈어|돼\\?)"
+          }
+        }
+      }
+    },
+    {
+      "id": "S4-Q1",
+      "section": "pronunciation",
+      "item_type": "audio_read",
+      "order": 8,
+      "domains": {
+        "grammar": 0.0,
+        "vocabulary": 0.0,
+        "pragmatics": 0.0,
+        "pronunciation": 1.0
+      },
+      "ui": {
+        "prompt_ko": "아래 단어들을 한 번씩 소리 내어 읽어 주세요.",
+        "prompt_en": "Read each word aloud once.",
+        "context": "버스 / 보스 / 커피 / 코피 / 부모님 / 부문 / 학교 / 학생 / 맛있어요 / 맛없어요",
+        "instructions": "준비가 되면 녹음 버튼을 눌러 읽어 주세요."
+      },
+      "content": {
+        "word_list": [
+          "버스", "보스", "커피", "코피", "부모님",
+          "부문", "학교", "학생", "맛있어요", "맛없어요"
+        ]
+      },
+      "scoring": {
+        "response_type": "audio",
+        "method": "asr_pron_wordlist_v1",
+        "params": {
+          "target_words": [
+            "버스", "보스", "커피", "코피", "부모님",
+            "부문", "학교", "학생", "맛있어요", "맛없어요"
+          ],
+          "thresholds": {
+            "per_avg_1_0": 0.15,
+            "per_avg_0_7": 0.30,
+            "per_avg_0_4": 0.50
+          }
+        }
+      }
+    },
+    {
+      "id": "S4-Q2",
+      "section": "pronunciation",
+      "item_type": "audio_read",
+      "order": 9,
+      "domains": {
+        "grammar": 0.0,
+        "vocabulary": 0.0,
+        "pragmatics": 0.0,
+        "pronunciation": 1.0
+      },
+      "ui": {
+        "prompt_ko": "아래 문장을 자연스럽게 읽어 주세요.",
+        "prompt_en": "Read the sentences naturally.",
+        "context": "1) 오늘 날씨가 좋아서 친구랑 한강에 갔어요.\n2) 이 제품에 문제가 있어서 교환하고 싶은데요.",
+        "instructions": "준비가 되면 녹음 버튼을 누르고 문장들을 읽어 주세요."
+      },
+      "content": {
+        "sentences": [
+          "오늘 날씨가 좋아서 친구랑 한강에 갔어요.",
+          "이 제품에 문제가 있어서 교환하고 싶은데요."
+        ]
+      },
+      "scoring": {
+        "response_type": "audio",
+        "method": "asr_pron_sentence_v1",
+        "params": {
+          "target_sentences": [
+            "오늘 날씨가 좋아서 친구랑 한강에 갔어요.",
+            "이 제품에 문제가 있어서 교환하고 싶은데요."
+          ],
+          "thresholds": {
+            "wer_avg_1_0": 0.15,
+            "wer_avg_0_7": 0.30,
+            "wer_avg_0_4": 0.50
+          }
+        }
+      }
+    }
+  ],
+  "aggregation": {
+    "domains": {
+      "grammar": {
+        "method": "weighted_average",
+        "item_weight_source": "item.domains.grammar"
+      },
+      "vocabulary": {
+        "method": "weighted_average",
+        "item_weight_source": "item.domains.vocabulary"
+      },
+      "pragmatics": {
+        "method": "weighted_average",
+        "item_weight_source": "item.domains.pragmatics"
+      },
+      "pronunciation": {
+        "method": "weighted_average",
+        "item_weight_source": "item.domains.pronunciation"
+      }
+    },
+    "banding": {
+      "bands": [
+        { "band": 0, "min_score": 0.0, "max_score": 0.19 },
+        { "band": 1, "min_score": 0.2, "max_score": 0.39 },
+        { "band": 2, "min_score": 0.4, "max_score": 0.59 },
+        { "band": 3, "min_score": 0.6, "max_score": 0.79 },
+        { "band": 4, "min_score": 0.8, "max_score": 0.94 },
+        { "band": 5, "min_score": 0.95, "max_score": 1.0 }
+      ]
+    },
+    "global_stage": {
+      "method": "average_domain_bands",
+      "included_domains": ["grammar", "vocabulary", "pragmatics", "pronunciation"],
+      "rounding": "nearest_int",
+      "min_stage": 0,
+      "max_stage": 5
+    }
+  }
+}

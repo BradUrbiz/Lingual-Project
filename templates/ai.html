@@ -7,7 +7,21 @@
 	<title>AI Page</title>
 	<style>
 		body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; background: #f4f6fb; }
-		.quiz-container { max-width: 75%; margin: 40px auto; padding: 32px 28px; background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+		.quiz-container {
+			width: 75vw;
+			min-width: 320px;
+			max-width: 1200px;
+			min-height: 75vh;
+			height: 75vh;
+			margin: 40px auto;
+			padding: 32px 28px;
+			background: #fff;
+			border-radius: 16px;
+			box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+		}
 		h2 { text-align: center; color: #2d3a4a; }
 		.question { margin-bottom: 32px; }
 		.options { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
@@ -52,14 +66,7 @@
 </head>
 <body style="display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f2f2f2;">
 
-	<div class="quiz-container" style="
-		background: white;
-		padding: 30px;
-		border-radius: 12px;
-		box-shadow: 0 0 15px rgba(0,0,0,0.1);
-		text-align: center;
-		width: 400px;
-	">
+	<div class="quiz-container">
 
 		<h2>AI Conversation</h2>
 

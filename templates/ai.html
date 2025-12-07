@@ -7,7 +7,7 @@
 	<title>AI Page</title>
 	<style>
 		body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; background: #f4f6fb; }
-		.quiz-container { max-width: 1200px; margin: 40px auto; padding: 32px 28px; background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+		.quiz-container { max-width: 75%; margin: 40px auto; padding: 32px 28px; background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
 		h2 { text-align: center; color: #2d3a4a; }
 		.question { margin-bottom: 32px; }
 		.options { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
@@ -50,19 +50,48 @@
 		}
 	</style>
 </head>
-<body>
-	<div class="quiz-container">
-		<h2>Categories</h2>
+<body style="display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f2f2f2;">
+
+	<div class="quiz-container" style="
+		background: white;
+		padding: 30px;
+		border-radius: 12px;
+		box-shadow: 0 0 15px rgba(0,0,0,0.1);
+		text-align: center;
+		width: 400px;
+	">
+
+		<h2>AI Conversation</h2>
+
 		<form method="POST" id="quizForm">
 			<div class="question">
 				<label><strong>Start Talking With Your Personalized AI Language Teacher</strong></label>
 			</div>
-            <input type="text" placeholder="Start talking..">
-            <!-- this needs to give info to the api, but stay on the same page-->
-			<a href="ai.html"><buttonclass="submit-btn" type="submit">Submit</button></a>
+
+			<input type="text" placeholder="Start talking.." style="
+				width: 90%;
+				padding: 15px;
+				font-size: 18px;
+				margin-top: 15px;
+				border-radius: 8px;
+				border: 1px solid #ccc;
+			">
+
+			<button class="submit-btn" type="submit" style="
+				margin-top: 20px;
+				padding: 12px 24px;
+				font-size: 16px;
+				border: none;
+				border-radius: 6px;
+				background: #4a73ff;
+				color: white;
+				cursor: pointer;
+			">Submit</button>
+
 		</form>
+
 	</div>
-	<script>
-	</script>
+
 </body>
+
 </html>

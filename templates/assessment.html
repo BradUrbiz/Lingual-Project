@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ test_title }} - Question {{ item_index + 1 }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            background: #f4f6fb;
+            min-height: 100vh;
+        }
+        .assessment-container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 32px 28px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .progress-info {
+            color: #6a7684;
+            font-size: 0.95rem;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4f8cff, #2563eb);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        .section-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #e0e7ff;
+            color: #4338ca;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 16px;
+        }
+        .prompt {
+            font-size: 1.2rem;
+            color: #2d3a4a;
+            margin-bottom: 12px;
+            line-height: 1.5;
+        }
+        .prompt-ko {
+            font-size: 1.1rem;
+            color: #4b5563;
+            margin-bottom: 16px;
+        }
+        .context {
+            background: #f9fafb;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4f8cff;
+            white-space: pre-line;
+        }
+        .instructions {
+            color: #6b7280;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+            font-style: italic;
+        }
+
+        /* MCQ Options */
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .option-btn {
+            display: block;
+            width: 100%;
+            padding: 14px 18px;
+            border: 2px solid #d1d5db;
+            border-radius: 10px;
+            background: #fff;
+            color: #2d3a4a;
+            font-size: 1rem;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .option-btn:hover {
+            border-color: #4f8cff;
+            background: #f0f7ff;
+        }
+        .option-btn.selected {
+            border-color: #4f8cff;
+            background: #4f8cff;
+            color: #fff;
+        }
+        .option-btn input[type="radio"] {
+            display: none;
+        }
+
+        /* Text Input */
+        .text-input {
+            width: 100%;
+            min-height: 120px;
+            padding: 14px;
+            border: 2px solid #d1d5db;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-family: inherit;
+            resize: vertical;
+            margin-bottom: 24px;
+        }
+        .text-input:focus {
+            outline: none;
+            border-color: #4f8cff;
+            box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.1);
+        }
+
+        /* Audio Recording */
+        .audio-section {
+            margin-bottom: 24px;
+        }
+        .word-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .word-chip {
+            padding: 8px 16px;
+            background: #f3f4f6;
+            border-radius: 20px;
+            font-size: 1.1rem;
+        }
+        .record-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 16px;
+            border: 2px dashed #d1d5db;
+            border-radius: 10px;
+            background: #fafafa;
+            color: #6b7280;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .record-btn:hover {
+            border-color: #ef4444;
+            color: #ef4444;
+        }
+        .record-btn.recording {
+            border-color: #ef4444;
+            background: #fef2f2;
+            color: #ef4444;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .record-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        /* Action Buttons */
+        .actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+        .btn {
+            flex: 1;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #4f8cff;
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+        .btn-primary:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+
+        /* Language Toggle */
+        .lang-toggle {
+            display: flex;
+            gap: 8px;
+        }
+        .lang-btn {
+            padding: 6px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: #fff;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .lang-btn.active {
+            background: #4f8cff;
+            color: #fff;
+            border-color: #4f8cff;
+        }
+    </style>
+</head>
+<body>
+    <div class="assessment-container">
+        <div class="header">
+            <span class="progress-info">Question {{ item_index + 1 }} of {{ total_items }}</span>
+            <div class="lang-toggle">
+                <button class="lang-btn {% if ui_lang == 'en' %}active{% endif %}" onclick="setLanguage('en')">EN</button>
+                <button class="lang-btn {% if ui_lang == 'ko' %}active{% endif %}" onclick="setLanguage('ko')">KO</button>
+            </div>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {{ ((item_index) / total_items) * 100 }}%"></div>
+        </div>
+
+        <span class="section-badge">{{ item.section | replace('_', ' ') | title }}</span>
+
+        <form method="POST" action="/assessment/submit" id="assessmentForm">
+            <!-- Prompt -->
+            <div class="prompt">
+                {% if ui_lang == 'ko' and item.ui.prompt_ko %}
+                    {{ item.ui.prompt_ko }}
+                {% else %}
+                    {{ item.ui.prompt_en }}
+                {% endif %}
+            </div>
+
+            {% if ui_lang == 'en' and item.ui.prompt_ko %}
+                <div class="prompt-ko">{{ item.ui.prompt_ko }}</div>
+            {% endif %}
+
+            <!-- Context -->
+            {% if item.ui.context %}
+                <div class="context">{{ item.ui.context }}</div>
+            {% endif %}
+
+            <!-- Instructions -->
+            {% if item.ui.instructions %}
+                <div class="instructions">{{ item.ui.instructions }}</div>
+            {% endif %}
+
+            <!-- MCQ Single Choice -->
+            {% if item.item_type == 'mcq_single' %}
+                <div class="options">
+                    {% for option in item.content.options %}
+                        <label class="option-btn" data-value="{{ option.id }}">
+                            <input type="radio" name="response" value="{{ option.id }}" required>
+                            {{ option.text }}
+                        </label>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <!-- Text Short -->
+            {% if item.item_type == 'text_short' %}
+                <textarea
+                    class="text-input"
+                    name="response"
+                    placeholder="{% if ui_lang == 'ko' %}Type here...{% else %}Type your answer here...{% endif %}"
+                    required
+                ></textarea>
+            {% endif %}
+
+            <!-- Audio Read -->
+            {% if item.item_type == 'audio_read' %}
+                <div class="audio-section">
+                    {% if item.content.word_list %}
+                        <div class="word-list">
+                            {% for word in item.content.word_list %}
+                                <span class="word-chip">{{ word }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    {% if item.content.sentences %}
+                        <div class="context">
+                            {% for sentence in item.content.sentences %}
+                                <div style="margin-bottom: 8px;">{{ loop.index }}. {{ sentence }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <button type="button" class="record-btn" id="recordBtn" onclick="toggleRecording()">
+                        <span class="record-icon"></span>
+                        <span id="recordText">{% if ui_lang == 'ko' %}Start Recording{% else %}Start Recording{% endif %}</span>
+                    </button>
+                    <input type="hidden" name="transcript" id="transcriptInput" value="">
+
+                    <p style="text-align: center; color: #9ca3af; margin-top: 12px; font-size: 0.9rem;">
+                        Audio recording is under development. Please skip for now.
+                    </p>
+                </div>
+            {% endif %}
+
+            <!-- Actions -->
+            <div class="actions">
+                <button type="button" class="btn btn-secondary" onclick="skipQuestion()">
+                    {% if ui_lang == 'ko' %}Skip{% else %}Skip{% endif %}
+                </button>
+                <button type="submit" class="btn btn-primary" id="submitBtn" {% if item.item_type == 'audio_read' %}disabled{% endif %}>
+                    {% if ui_lang == 'ko' %}Next{% else %}Next{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // MCQ Selection
+        document.querySelectorAll('.option-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+                this.classList.add('selected');
+                this.querySelector('input').checked = true;
+            });
+        });
+
+        // Skip Question
+        function skipQuestion() {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/assessment/skip';
+            document.body.appendChild(form);
+            form.submit();
+        }
+
+        // Language Toggle
+        function setLanguage(lang) {
+            fetch('/api/set-language', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ language: lang })
+            }).then(() => {
+                location.reload();
+            });
+        }
+
+        // Audio Recording (Placeholder)
+        let isRecording = false;
+        function toggleRecording() {
+            const btn = document.getElementById('recordBtn');
+            const text = document.getElementById('recordText');
+            const submitBtn = document.getElementById('submitBtn');
+
+            if (!isRecording) {
+                isRecording = true;
+                btn.classList.add('recording');
+                text.textContent = 'Recording... (click to stop)';
+            } else {
+                isRecording = false;
+                btn.classList.remove('recording');
+                text.textContent = 'Recording Complete';
+                submitBtn.disabled = false;
+
+                // In production, this would be the ASR transcript
+                document.getElementById('transcriptInput').value = 'audio_recorded';
+            }
+        }
+
+        // Enable submit for audio after simulated recording
+        {% if item.item_type == 'audio_read' %}
+            // For now, enable submit button for testing
+            document.getElementById('submitBtn').disabled = false;
+        {% endif %}
+    </script>
+</body>
+</html>

@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,57 +6,50 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>AI Page</title>
 	<style>
-		body {
-			font-family: 'Segoe UI', Arial, sans-serif;
-			margin: 0;
-			background: #f2f2f2;
-
-			padding-right: 25vw;
-
-			display: flex;
-			justify-content: center;
-			align-items: flex-start;
-			height: 100vh;
-		}
-
+		body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; background: #f4f6fb; }
 		.quiz-container {
 			width: 75vw;
-			max-width: 1000px;
-			min-height: 70vh;
-
+			min-width: 320px;
+			max-width: 1200px;
+			min-height: 75vh;
+			height: 75vh;
+			margin: 40px auto;
 			padding: 32px 28px;
 			background: #fff;
 			border-radius: 16px;
 			box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-
-			display: flex;
-			flex-direction: column;
-			justify-content: flex-start;
-			padding-top: 120px;
-		}
-
-		h2 {
-			text-align: center;
-			color: #2d3a4a;
-		}
-
-		.big-input {
-			width: 95%;
-			min-height: 200;
 			display: flex;
 			flex-direction: column;
 			justify-content: center;
-			height: 140px;
-			padding: 18px;
-			font-size: 20px;
-			border-radius: 10px;
-			border: 2px solid #ccc;
-			resize: none; 
 		}
-
+		h2 { text-align: center; color: #2d3a4a; }
+		.question { margin-bottom: 32px; }
+		.options { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+		.option-btn {
+			padding: 10px 18px;
+			border: 2px solid #b0b8c1;
+			border-radius: 8px;
+			background: #f4f6fb;
+			color: #2d3a4a;
+			font-size: 1rem;
+			cursor: pointer;
+			transition: all 0.2s;
+			outline: none;
+		}
+		.option-btn.selected, .option-btn:active {
+			background: #4f8cff;
+			color: #fff;
+			border-color: #4f8cff;
+		}
+		.slider-labels { display: flex; justify-content: space-between; font-size: 0.95em; color: #6a7684; margin-top: 4px; }
+		.slider-value { text-align: center; font-weight: bold; color: #4f8cff; margin-top: 8px; }
+		input[type=range] {
+			width: 100%;
+			margin-top: 12px;
+		}
 		.submit-btn {
 			width: 100%;
-			padding: 14px;
+			padding: 12px;
 			background: #4f8cff;
 			color: #fff;
 			border: none;
@@ -63,96 +57,48 @@
 			font-size: 1.1rem;
 			font-weight: bold;
 			cursor: pointer;
-			margin-top: 20px;
 			transition: background 0.2s;
 		}
-
 		.submit-btn:hover {
 			background: #2563eb;
 		}
-
-		.sidebar {
-			position: fixed;
-			right: 0;
-			top: 0;
-			width: 25vw;
-			height: 100vh;
-			min-width: 220px;
-			background: #ffffff;
-			box-shadow: -4px 0 24px rgba(0,0,0,0.06);
-			display: flex;
-			flex-direction: column;
-			justify-content: space-between;
-			padding: 20px;
-			box-sizing: border-box;
-		}
-
-		.sidebar-output {
-			height: 55%;
-			background: #f9fafb;
-			border: 1px solid #e6e9ef;
-			border-radius: 10px;
-			padding: 14px;
-			overflow: auto;
-			color: #1f2937;
-		}
-
-		.sidebar-image {
-			height: 40%;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			background: #fff;
-			border-radius: 10px;
-			border: 1px solid #e6e9ef;
-			padding: 8px;
-		}
-
-		.sidebar-image img {
-			max-width: 100%;
-			max-height: 100%;
-			object-fit: contain;
-			border-radius: 8px;
-		}
-
-		@media (max-width: 900px) {
-			.sidebar { display: none; }
-			body { padding-right: 0; }
-			.quiz-container { width: 100vw; padding-top: 80px; }
-		}
-		
 	</style>
 </head>
-
-<body>
+<body style="display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f2f2f2;">
 
 	<div class="quiz-container">
-		<h2 style="color:rgb(135, 42, 211); text-align: center; margin-top: -10%;">Speak to Lingu</h2>
+
+		<h2>AI Conversation</h2>
 
 		<form method="POST" id="quizForm">
 			<div class="question">
-				<label><strong><p style="text-align: center; margin-top: 0;">Start Talking With Your Personalized AI Language Teacher</p></strong></label>
+				<label><strong>Start Talking With Your Personalized AI Language Teacher</strong></label>
 			</div>
 
-			<div class="input-row">
-				<textarea class="big-input" name="user_input" placeholder="Start talking..." style="margin-top: 25%;"></textarea>
+			<input type="text" placeholder="Start talking.." style="
+				width: 90%;
+				padding: 15px;
+				font-size: 18px;
+				margin-top: 15px;
+				border-radius: 8px;
+				border: 1px solid #ccc;
+			">
 
-				<button class="submit-btn" type="submit">Submit</button>
-			</div>
+			<button class="submit-btn" type="submit" style="
+				margin-top: 20px;
+				padding: 12px 24px;
+				font-size: 16px;
+				border: none;
+				border-radius: 6px;
+				background: #4a73ff;
+				color: white;
+				cursor: pointer;
+			">Submit</button>
 
 		</form>
+
 	</div>
 
-	<aside class="sidebar" aria-label="AI sidebar">
-		<div class="sidebar-output" id="sidebarOutput">
-			<p style="margin:0; color:#334155;">AI output will appear here.</p>
-		</div>
-
-		<div class="sidebar-image">
-			<!-- backend will set the state of the image from ai.py -->
-			<img id="aiImage" src="/imgs/c-notalk.png" alt="AI visual" />
-		</div>
-	</aside>
-
 </body>
+
 </html>

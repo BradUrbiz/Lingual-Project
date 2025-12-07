@@ -1,0 +1,97 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Language Level Quiz</title>
+	<style>
+		body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; background: #f4f6fb; }
+		.quiz-container { max-width: 420px; margin: 40px auto; padding: 32px 28px; background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+		h2 { text-align: center; color: #2d3a4a; }
+		.question { margin-bottom: 32px; }
+		.options { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+		.option-btn {
+			padding: 10px 18px;
+			border: 2px solid #b0b8c1;
+			border-radius: 8px;
+			background: #f4f6fb;
+			color: #2d3a4a;
+			font-size: 1rem;
+			cursor: pointer;
+			transition: all 0.2s;
+			outline: none;
+		}
+		.option-btn.selected, .option-btn:active {
+			background: #4f8cff;
+			color: #fff;
+			border-color: #4f8cff;
+		}
+		.slider-labels { display: flex; justify-content: space-between; font-size: 0.95em; color: #6a7684; margin-top: 4px; }
+		.slider-value { text-align: center; font-weight: bold; color: #4f8cff; margin-top: 8px; }
+		input[type=range] {
+			width: 100%;
+			margin-top: 12px;
+		}
+		.submit-btn {
+			width: 100%;
+			padding: 12px;
+			background: #4f8cff;
+			color: #fff;
+			border: none;
+			border-radius: 8px;
+			font-size: 1.1rem;
+			font-weight: bold;
+			cursor: pointer;
+			transition: background 0.2s;
+		}
+		.submit-btn:hover {
+			background: #2563eb;
+		}
+	</style>
+</head>
+<body>
+	<div class="quiz-container">
+		<h2>Categories</h2>
+		<form method="POST" id="quizForm">
+			<div class="question">
+				<label><strong>Choose a category</strong></label>
+				<div class="options">
+					<button type="button" class="option-btn" data-value="grammar">Grammar</button>
+					<button type="button" class="option-btn" data-value="vocabulary">Vocabulary</button>
+					<button type="button" class="option-btn" data-value="cultural phrases/idioms">Cultural Phrases/Idioms</button>
+					<button type="button" class="option-btn" data-value="pronounciation">Pronounciation</button>
+				</div>
+				<!-- Hidden input to store selected goals -->
+				<input type="hidden" name="goals" id="goalsInput">
+			</div>
+			<a href="ai.html"><buttonclass="submit-btn" type="submit">Submit</button></a>
+		</form>
+	</div>
+	<script>
+		// Multi-select for goals
+		const optionBtns = document.querySelectorAll('.option-btn');
+		const goalsInput = document.getElementById('goalsInput');
+		let selectedGoals = [];
+		optionBtns.forEach(btn => {
+			btn.addEventListener('click', () => {
+				const value = btn.getAttribute('data-value');
+				if (selectedGoals.includes(value)) {
+					selectedGoals = selectedGoals.filter(g => g !== value);
+					btn.classList.remove('selected');
+				} else {
+					selectedGoals.push(value);
+					btn.classList.add('selected');
+				}
+				goalsInput.value = selectedGoals.join(',');
+			});
+		});
+		// Prevent form submit if no goal selected
+		document.getElementById('quizForm').addEventListener('submit', function(e) {
+			if (selectedGoals.length === 0) {
+				alert('Please select at least one goal.');
+				e.preventDefault();
+			}
+		});	</script>
+</body>
+</html>

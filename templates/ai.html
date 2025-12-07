@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>AI Page</title>
+	<title>Chat with Lingu</title>
 	<style>
 		body {
 			font-family: 'Segoe UI', Arial, sans-serif;
@@ -15,98 +15,135 @@
 			height: 100vh;
 		}
 
-		.quiz-container {
-					.top-bar {
-						width: 100%;
-						background: #e9d6fa;
-						border-radius: 18px;
-						padding: 18px 24px 12px 24px;
-						box-sizing: border-box;
-						margin-bottom: 24px;
-						display: flex;
-						flex-direction: column;
-						align-items: flex-start;
-					}
-					.top-bar-title {
-						color: rgb(135, 42, 211);
-						font-size: 1.7rem;
-						font-weight: bold;
-						margin-bottom: 4px;
-					}
-					.top-bar-subtitle {
-						color: #2d3a4a;
-						font-size: 1.1rem;
-						margin-bottom: 0;
-					}
+		.chat-container {
 			width: 75vw;
 			max-width: 1000px;
 			min-height: 70vh;
+			max-height: 85vh;
 			margin-right: 25vw;
 			margin-left: 32px;
-			padding: 32px 24px;
+			padding: 24px;
 			background: #fff;
 			border-radius: 16px;
 			box-shadow: 0 4px 24px rgba(0,0,0,0.08);
 			display: flex;
 			flex-direction: column;
-			justify-content: flex-start;
 			position: relative;
 		}
 
-		h2 {
-			text-align: center;
-			color: #2d3a4a;
+		.top-bar {
+			width: 100%;
+			background: #e9d6fa;
+			border-radius: 18px;
+			padding: 18px 24px 12px 24px;
+			box-sizing: border-box;
+			margin-bottom: 16px;
+			display: flex;
+			flex-direction: column;
+			align-items: flex-start;
 		}
 
-		.big-input {
-			width: 80%;
-			min-height: 48px;
-			max-height: 120px;
-			height: 48px;
-			padding: 12px 16px;
-			font-size: 18px;
-			border-radius: 10px;
-			border: 2px solid #ccc;
-			resize: vertical;
-			margin-right: 12px;
+		.top-bar-title {
+			color: rgb(135, 42, 211);
+			font-size: 1.7rem;
+			font-weight: bold;
+			margin-bottom: 4px;
+		}
+
+		.top-bar-subtitle {
+			color: #2d3a4a;
+			font-size: 1.1rem;
+			margin-bottom: 0;
+		}
+
+		.chat-messages {
+			flex: 1;
 			overflow-y: auto;
+			padding: 16px;
 			display: flex;
-			align-items: center;
+			flex-direction: column;
+			gap: 12px;
+			margin-bottom: 80px;
+		}
+
+		.message {
+			max-width: 80%;
+			padding: 12px 16px;
+			border-radius: 16px;
+			line-height: 1.5;
+			white-space: pre-wrap;
+		}
+
+		.message.user {
+			align-self: flex-end;
+			background: #4f8cff;
+			color: white;
+			border-bottom-right-radius: 4px;
+		}
+
+		.message.assistant {
+			align-self: flex-start;
+			background: #f3f4f6;
+			color: #1f2937;
+			border-bottom-left-radius: 4px;
+		}
+
+		.message.loading {
+			background: #f3f4f6;
+			color: #6b7280;
+			font-style: italic;
 		}
 
 		.input-row {
 			display: flex;
 			flex-direction: row;
-			align-items: stretch;
+			align-items: center;
 			width: 100%;
 			position: absolute;
 			left: 0;
-			bottom: 32px;
-			padding: 0 28px;
+			bottom: 24px;
+			padding: 0 24px;
+			box-sizing: border-box;
+			gap: 12px;
 		}
 
-		.submit-btn {
-			width: 5%;
+		.chat-input {
+			flex: 1;
+			min-height: 48px;
+			max-height: 120px;
+			padding: 12px 16px;
+			font-size: 16px;
+			border-radius: 10px;
+			border: 2px solid #ccc;
+			resize: none;
+			font-family: inherit;
+		}
+
+		.chat-input:focus {
+			outline: none;
+			border-color: #4f8cff;
+		}
+
+		.send-btn {
 			height: 48px;
-			padding: 0 28px;
+			padding: 0 24px;
 			background: #4f8cff;
 			color: #fff;
 			border: none;
 			border-radius: 8px;
-			font-size: 1.1rem;
+			font-size: 1rem;
 			font-weight: bold;
 			cursor: pointer;
-			margin-top: 0;
 			transition: background 0.2s;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			text-align: center;
-			align-self: center;
 		}
 
-		.submit-btn:hover {
+		.send-btn:hover {
 			background: #2563eb;
+		}
+
+		.send-btn:disabled {
+			background: #9ca3af;
+			cursor: not-allowed;
 		}
 
 		.sidebar {
@@ -115,7 +152,7 @@
 			top: 50%;
 			transform: translateY(-50%);
 			width: 18vw;
-			min-width: 160px;
+			min-width: 200px;
 			min-height: 500px;
 			height: 60vh;
 			background: #ffffff;
@@ -128,18 +165,40 @@
 			border-radius: 24px;
 		}
 
+		.sidebar-profile {
+			background: #f9fafb;
+			border: 1px solid #e6e9ef;
+			border-radius: 10px;
+			padding: 14px;
+			margin-bottom: 12px;
+		}
+
+		.sidebar-profile h3 {
+			margin: 0 0 8px 0;
+			color: rgb(135, 42, 211);
+			font-size: 1rem;
+		}
+
+		.profile-item {
+			font-size: 0.9rem;
+			color: #4b5563;
+			margin-bottom: 4px;
+		}
+
 		.sidebar-output {
-			height: 55%;
+			flex: 1;
 			background: #f9fafb;
 			border: 1px solid #e6e9ef;
 			border-radius: 10px;
 			padding: 14px;
 			overflow: auto;
 			color: #1f2937;
+			margin-bottom: 12px;
 		}
 
 		.sidebar-image {
-			height: 40%;
+			height: 35%;
+			min-height: 120px;
 			display: flex;
 			align-items: center;
 			justify-content: center;
@@ -156,40 +215,198 @@
 			border-radius: 8px;
 		}
 
+		.clear-btn {
+			width: 100%;
+			padding: 8px;
+			background: #ef4444;
+			color: white;
+			border: none;
+			border-radius: 6px;
+			cursor: pointer;
+			font-size: 0.9rem;
+			margin-top: 8px;
+		}
+
+		.clear-btn:hover {
+			background: #dc2626;
+		}
+
 		@media (max-width: 900px) {
 			.sidebar { display: none; }
 			body { padding-right: 0; }
-			.quiz-container { width: 100vw; padding-top: 80px; }
+			.chat-container {
+				width: 95vw;
+				margin: 16px auto;
+				margin-right: auto;
+			}
 		}
-		
 	</style>
 </head>
 
 <body>
-
-	<div class="quiz-container" style="position:relative;">
+	<div class="chat-container">
 		<div class="top-bar">
-			<div class="top-bar-title">Speak to Lingu</div>
-			<div class="top-bar-subtitle">Start Talking With Your Personalized AI Language Teacher</div>
+			<div class="top-bar-title">Chat with Lingu</div>
+			<div class="top-bar-subtitle">Your Personalized AI Korean Language Teacher</div>
 		</div>
-		<form method="POST" id="quizForm">
-			<div class="input-row">
-				<textarea class="big-input" name="user_input" placeholder="Start talking..."></textarea>
-				<button class="submit-btn" type="submit">Send</button>
+
+		<div class="chat-messages" id="chatMessages">
+			<div class="message assistant">
+				Hello! I'm Lingu, your Korean language tutor. I'm here to help you practice and improve your Korean skills. What would you like to talk about today?
 			</div>
-		</form>
+		</div>
+
+		<div class="input-row">
+			<textarea
+				class="chat-input"
+				id="chatInput"
+				placeholder="Type your message... (Press Enter to send)"
+				rows="1"
+			></textarea>
+			<button class="send-btn" id="sendBtn" type="button">Send</button>
+		</div>
 	</div>
 
 	<aside class="sidebar" aria-label="AI sidebar">
-		<div class="sidebar-output" id="sidebarOutput">
-			<p style="margin:0; color:#334155;">AI output will appear here.</p>
+		<div class="sidebar-profile">
+			<h3>Your Profile</h3>
+			<div class="profile-item" id="profileLevel">Level: Loading...</div>
+			<div class="profile-item" id="profileGoals">Goals: Loading...</div>
 		</div>
+
+		<div class="sidebar-output" id="sidebarOutput">
+			<p style="margin:0; color:#6b7280; font-size: 0.9rem;">
+				<strong>Tips:</strong><br>
+				- Try typing in Korean!<br>
+				- Ask questions about grammar<br>
+				- Practice conversations<br>
+				- Request corrections
+			</p>
+		</div>
+
+		<button class="clear-btn" id="clearBtn">Clear Chat</button>
 
 		<div class="sidebar-image">
 			<!-- backend will set the state of the image from ai.py -->
-			<img id="aiImage" src="static/imgs/c-notalk.png" alt="AI visual" />
+			<img id="aiImage" src="/imgs/c-notalk.png" alt="AI visual" />
 		</div>
 	</aside>
 
+	<script>
+		const chatMessages = document.getElementById('chatMessages');
+		const chatInput = document.getElementById('chatInput');
+		const sendBtn = document.getElementById('sendBtn');
+		const clearBtn = document.getElementById('clearBtn');
+
+		// Load user profile
+		async function loadProfile() {
+			try {
+				const response = await fetch('/api/user/profile');
+				const data = await response.json();
+
+				if (data.assessed) {
+					document.getElementById('profileLevel').textContent = `Level: ${data.sklc_level}`;
+					document.getElementById('profileGoals').textContent = `Goals: ${data.goals.join(', ') || 'Not set'}`;
+				} else {
+					document.getElementById('profileLevel').textContent = 'Level: Not assessed';
+					document.getElementById('profileGoals').textContent = 'Complete assessment first';
+				}
+			} catch (error) {
+				console.error('Failed to load profile:', error);
+			}
+		}
+
+		// Add message to chat
+		function addMessage(content, role) {
+			const messageDiv = document.createElement('div');
+			messageDiv.className = `message ${role}`;
+			messageDiv.textContent = content;
+			chatMessages.appendChild(messageDiv);
+			chatMessages.scrollTop = chatMessages.scrollHeight;
+			return messageDiv;
+		}
+
+		// Send message to AI
+		async function sendMessage() {
+			const message = chatInput.value.trim();
+			if (!message) return;
+
+			// Disable input while sending
+			chatInput.disabled = true;
+			sendBtn.disabled = true;
+
+			// Add user message
+			addMessage(message, 'user');
+			chatInput.value = '';
+
+			// Add loading indicator
+			const loadingMsg = addMessage('Lingu is typing...', 'loading');
+
+			try {
+				const response = await fetch('/api/chat', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify({ message })
+				});
+
+				const data = await response.json();
+
+				// Remove loading indicator
+				loadingMsg.remove();
+
+				if (data.success) {
+					addMessage(data.response, 'assistant');
+				} else {
+					addMessage(`Error: ${data.error || 'Something went wrong'}`, 'assistant');
+				}
+			} catch (error) {
+				loadingMsg.remove();
+				addMessage('Error: Could not connect to the server.', 'assistant');
+			}
+
+			// Re-enable input
+			chatInput.disabled = false;
+			sendBtn.disabled = false;
+			chatInput.focus();
+		}
+
+		// Clear chat history
+		async function clearChat() {
+			if (!confirm('Clear all chat history?')) return;
+
+			try {
+				await fetch('/api/chat/reset', { method: 'POST' });
+
+				// Clear UI
+				chatMessages.innerHTML = '';
+				addMessage("Hello! I'm Lingu, your Korean language tutor. I'm here to help you practice and improve your Korean skills. What would you like to talk about today?", 'assistant');
+			} catch (error) {
+				console.error('Failed to clear chat:', error);
+			}
+		}
+
+		// Event listeners
+		sendBtn.addEventListener('click', sendMessage);
+
+		chatInput.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' && !e.shiftKey) {
+				e.preventDefault();
+				sendMessage();
+			}
+		});
+
+		clearBtn.addEventListener('click', clearChat);
+
+		// Auto-resize textarea
+		chatInput.addEventListener('input', () => {
+			chatInput.style.height = 'auto';
+			chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+		});
+
+		// Load profile on page load
+		loadProfile();
+	</script>
 </body>
 </html>

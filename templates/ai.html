@@ -399,20 +399,16 @@
 			return messageDiv;
 		}
 
-		// Send message to AI
 		async function sendMessage() {
 			const message = chatInput.value.trim();
 			if (!message) return;
 
-			// Disable input while sending
 			chatInput.disabled = true;
 			sendBtn.disabled = true;
 
-			// Add user message
 			addMessage(message, 'user');
 			chatInput.value = '';
 
-			// Add loading indicator
 			const loadingMsg = addMessage('Lingu is typing...', 'loading');
 
 			try {
@@ -426,7 +422,6 @@
 
 				const data = await response.json();
 
-				// Remove loading indicator
 				loadingMsg.remove();
 
 				if (data.success) {
@@ -439,20 +434,17 @@
 				addMessage('Error: Could not connect to the server.', 'assistant');
 			}
 
-			// Re-enable input
 			chatInput.disabled = false;
 			sendBtn.disabled = false;
 			chatInput.focus();
 		}
 
-		// Clear chat history
 		async function clearChat() {
 			if (!confirm('Clear all chat history?')) return;
 
 			try {
 				await fetch('/api/chat/reset', { method: 'POST' });
 
-				// Clear UI
 				chatMessages.innerHTML = '';
 				addMessage("Hello! I'm Lingu, your Korean language tutor. I'm here to help you practice and improve your Korean skills. What would you like to talk about today?", 'assistant');
 			} catch (error) {
@@ -460,7 +452,6 @@
 			}
 		}
 
-		// Toggle between text and voice mode
 		function toggleMode(mode) {
 			isVoiceMode = mode === 'voice';
 
@@ -479,7 +470,6 @@
 			}
 		}
 
-		// Initialize audio recording
 		async function initAudioRecording() {
 			try {
 				const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -503,10 +493,8 @@
 			}
 		}
 
-		// Start/stop recording
 		async function toggleRecording() {
 			if (!isRecording) {
-				// Start recording
 				if (!mediaRecorder) {
 					const success = await initAudioRecording();
 					if (!success) return;
@@ -518,7 +506,6 @@
 				voiceBtn.classList.add('recording');
 				voiceBtn.textContent = '⏹️';
 			} else {
-				// Stop recording
 				mediaRecorder.stop();
 				isRecording = false;
 				voiceBtn.classList.remove('recording');
@@ -526,22 +513,17 @@
 			}
 		}
 
-		// Send voice message
 		async function sendVoiceMessage(audioBlob) {
 			voiceBtn.disabled = true;
 
-			// Add user message placeholder
 			const userMsg = addMessage('🎤 Voice message...', 'user');
 
-			// Add loading indicator
 			const loadingMsg = addMessage('Lingu is listening and responding...', 'loading');
 
 			try {
-				// Create form data
 				const formData = new FormData();
 				formData.append('audio', audioBlob, 'recording.webm');
 
-				// Send to server
 				const response = await fetch('/api/chat/voice', {
 					method: 'POST',
 					body: formData
@@ -549,17 +531,13 @@
 
 				const data = await response.json();
 
-				// Remove loading indicator
 				loadingMsg.remove();
 
 				if (data.success) {
-					// Update user message with transcription
 					userMsg.textContent = data.transcript || '🎤 Voice message';
 
-					// Add assistant text response
 					addMessage(data.response, 'assistant');
 
-					// Play audio response if available
 					if (data.audio_url) {
 						await playAudioResponse(data.audio_url);
 					}
@@ -575,7 +553,6 @@
 			voiceBtn.disabled = false;
 		}
 
-		// Play audio response
 		async function playAudioResponse(audioUrl) {
 			if (audioElement) {
 				audioElement.pause();
@@ -590,7 +567,6 @@
 			}
 		}
 
-		// Event listeners
 		sendBtn.addEventListener('click', sendMessage);
 		voiceBtn.addEventListener('click', toggleRecording);
 		textModeBtn.addEventListener('click', () => toggleMode('text'));
@@ -605,13 +581,11 @@
 
 		clearBtn.addEventListener('click', clearChat);
 
-		// Auto-resize textarea
 		chatInput.addEventListener('input', () => {
 			chatInput.style.height = 'auto';
 			chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
 		});
 
-		// Load profile on page load
 		loadProfile();
 	</script>
 </body>

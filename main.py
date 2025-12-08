@@ -1,16 +1,42 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file
+from functools import wraps
 import json
 import os
 import tempfile
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
+import firebase_admin
+from firebase_admin import credentials, auth as firebase_auth
 import io
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
+
+# Initialize Firebase Admin SDK
+firebase_app = None
+try:
+    # For production: use GOOGLE_APPLICATION_CREDENTIALS or default credentials
+    if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
+        cred = credentials.Certificate(os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'))
+        firebase_app = firebase_admin.initialize_app(cred)
+    else:
+        # Use Application Default Credentials (works on Cloud Run)
+        firebase_app = firebase_admin.initialize_app()
+except Exception as e:
+    print(f"Firebase initialization error: {e}")
+
+
+def login_required(f):
+    """Decorator to require authentication for routes."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 openai_client = None
 
@@ -22,6 +48,13 @@ def get_openai_client():
     return openai_client
 
 from scoring import load_assessment_data, score_item, compute_results, get_sklc_description, SKLC_LEVEL_DESCRIPTIONS
+import database as db
+
+
+def get_current_user_uid():
+    """Get the current user's UID from session."""
+    user = session.get('user')
+    return user.get('uid') if user else None
 
 
 def get_assessment():
@@ -30,27 +63,112 @@ def get_assessment():
 
 @app.route('/')
 def index():
+    # If user is logged in, redirect to general quiz
+    if 'user' in session:
+        return redirect(url_for('general'))
     return render_template('index.html')
 
+
+@app.route('/login')
+def login():
+    # If user is already logged in, redirect to general
+    if 'user' in session:
+        return redirect(url_for('general'))
+    return render_template('login.html')
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('index'))
+
+
+@app.route('/api/auth/verify', methods=['POST'])
+def verify_auth():
+    """Verify Firebase ID token and create session."""
+    try:
+        data = request.get_json()
+        id_token = data.get('idToken')
+
+        if not id_token:
+            return jsonify({'success': False, 'error': 'No token provided'}), 400
+
+        # Verify the ID token with Firebase
+        decoded_token = firebase_auth.verify_id_token(id_token)
+        uid = decoded_token['uid']
+        email = decoded_token.get('email', '')
+        name = decoded_token.get('name', email.split('@')[0] if email else 'User')
+
+        # Store user info in session
+        session['user'] = {
+            'uid': uid,
+            'email': email,
+            'name': name
+        }
+
+        # Create or get user in database
+        db.get_or_create_user(uid, email, name)
+
+        return jsonify({'success': True, 'user': session['user']})
+
+    except firebase_auth.InvalidIdTokenError:
+        return jsonify({'success': False, 'error': 'Invalid token'}), 401
+    except firebase_auth.ExpiredIdTokenError:
+        return jsonify({'success': False, 'error': 'Token expired'}), 401
+    except Exception as e:
+        print(f"Auth verification error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/general', methods=['GET', 'POST'])
+@login_required
 def general():
+    uid = get_current_user_uid()
+
     if request.method == 'POST':
         goals = request.form.get('goals', '')
         duration = request.form.get('duration', '0')
 
-        session['user_goals'] = [g.strip() for g in goals.split(',') if g.strip()]
-        session['learning_duration'] = int(duration)
+        goals_list = [g.strip() for g in goals.split(',') if g.strip()]
+        duration_int = int(duration)
+
+        # Save to database
+        db.update_user_profile(uid, goals=goals_list, learning_duration=duration_int)
+
+        # Reset assessment in database
+        db.reset_assessment(uid)
+
+        # Keep session for quick access during assessment
+        session['user_goals'] = goals_list
+        session['learning_duration'] = duration_int
+        session.pop('assessment_responses', None)
+        session.pop('current_item_index', None)
+        session.pop('assessment_results', None)
 
         return redirect(url_for('assessment'))
+
+    # Load existing profile from database
+    user_data = db.get_user(uid)
+    if user_data and user_data.get('profile'):
+        profile = user_data['profile']
+        session['user_goals'] = profile.get('goals', [])
+        session['learning_duration'] = profile.get('learning_duration', 0)
 
     return render_template('general.html')
 
 
 @app.route('/assessment')
+@login_required
 def assessment():
+    uid = get_current_user_uid()
     assessment_data = get_assessment()
 
-    if 'assessment_responses' not in session:
+    # Load assessment state from database
+    assessment_state = db.get_assessment_state(uid)
+    if assessment_state:
+        session['assessment_responses'] = assessment_state.get('responses', {})
+        session['current_item_index'] = assessment_state.get('current_item_index', 0)
+    elif 'assessment_responses' not in session:
         session['assessment_responses'] = {}
         session['current_item_index'] = 0
 
@@ -75,7 +193,9 @@ def assessment():
 
 
 @app.route('/assessment/submit', methods=['POST'])
+@login_required
 def assessment_submit():
+    uid = get_current_user_uid()
     assessment_data = get_assessment()
     items = assessment_data['items']
 
@@ -104,6 +224,9 @@ def assessment_submit():
 
     session['current_item_index'] = current_index + 1
 
+    # Save to database
+    db.update_assessment_response(uid, item_id, response, session['current_item_index'])
+
     if session['current_item_index'] >= len(items):
         return redirect(url_for('categories'))
 
@@ -111,7 +234,9 @@ def assessment_submit():
 
 
 @app.route('/assessment/skip', methods=['POST'])
+@login_required
 def assessment_skip():
+    uid = get_current_user_uid()
     assessment_data = get_assessment()
     items = assessment_data['items']
 
@@ -124,6 +249,9 @@ def assessment_skip():
         session['assessment_responses'] = responses
         session['current_item_index'] = current_index + 1
 
+        # Save to database
+        db.update_assessment_response(uid, item_id, '', session['current_item_index'])
+
     if session['current_item_index'] >= len(items):
         return redirect(url_for('categories'))
 
@@ -131,6 +259,7 @@ def assessment_skip():
 
 
 @app.route('/assessment/results')
+@login_required
 def assessment_results():
     assessment_data = get_assessment()
     responses = session.get('assessment_responses', {})
@@ -157,32 +286,64 @@ def assessment_results():
 
 
 @app.route('/assessment/reset')
+@login_required
 def assessment_reset():
+    uid = get_current_user_uid()
     session.pop('assessment_responses', None)
     session.pop('current_item_index', None)
+    session.pop('assessment_results', None)
+
+    # Reset in database
+    db.reset_assessment(uid)
+
     return redirect(url_for('assessment'))
 
 
 @app.route('/categories', methods=['GET', 'POST'])
+@login_required
 def categories():
+    uid = get_current_user_uid()
+
+    # Try to load results from database first
+    if 'assessment_results' not in session:
+        db_results = db.get_assessment_results(uid)
+        if db_results:
+            session['assessment_results'] = db_results
+
+    # Compute results if we have responses but no results
     if 'assessment_results' not in session and 'assessment_responses' in session:
         assessment_data = get_assessment()
         responses = session.get('assessment_responses', {})
         if responses:
             results = compute_results(assessment_data, responses)
             session['assessment_results'] = results
+            # Save results to database
+            db.save_assessment_results(uid, results)
 
     if request.method == 'POST':
         selected_categories = request.form.get('categories', '')
-        session['selected_categories'] = [c.strip() for c in selected_categories.split(',') if c.strip()]
+        categories_list = [c.strip() for c in selected_categories.split(',') if c.strip()]
+        session['selected_categories'] = categories_list
+
+        # Save to database
+        db.update_selected_categories(uid, categories_list)
+
         return redirect(url_for('ai'))
 
     return render_template('categories.html')
 
 
 @app.route('/ai')
+@login_required
 def ai():
-    results = session.get('assessment_results', {})
+    uid = get_current_user_uid()
+
+    # Load results from database if not in session
+    results = session.get('assessment_results')
+    if not results:
+        results = db.get_assessment_results(uid) or {}
+        session['assessment_results'] = results
+
     global_stage = results.get('global_stage', 0)
     sklc_info = get_sklc_description(global_stage)
 
@@ -190,9 +351,23 @@ def ai():
 
 
 def get_user_proficiency_context():
-    results = session.get('assessment_results', {})
-    goals = session.get('user_goals', [])
-    duration = session.get('learning_duration', 0)
+    uid = get_current_user_uid()
+
+    # Try to get from database first, fall back to session
+    if uid:
+        profile_context = db.get_user_profile_context(uid)
+        if profile_context:
+            results = profile_context.get('results') or {}
+            goals = profile_context.get('goals', [])
+            duration = profile_context.get('learning_duration', 0)
+        else:
+            results = session.get('assessment_results', {})
+            goals = session.get('user_goals', [])
+            duration = session.get('learning_duration', 0)
+    else:
+        results = session.get('assessment_results', {})
+        goals = session.get('user_goals', [])
+        duration = session.get('learning_duration', 0)
 
     if not results:
         return "The user has not completed their assessment yet. Assume beginner level."
@@ -246,7 +421,9 @@ Remember: You're a supportive tutor, not a strict teacher. Make learning fun!"""
 
 
 @app.route('/api/chat', methods=['POST'])
+@login_required
 def api_chat():
+    uid = get_current_user_uid()
     data = request.get_json()
     user_message = data.get('message', '').strip()
 
@@ -256,18 +433,17 @@ def api_chat():
     if not os.environ.get('OPENAI_API_KEY'):
         return jsonify({'error': 'OpenAI API key not configured'}), 500
 
-    if 'chat_history' not in session:
-        session['chat_history'] = []
-
-    chat_history = session['chat_history']
+    # Load chat history from database
+    chat_history = db.get_chat_history(uid, limit=20)
 
     proficiency_context = get_user_proficiency_context()
     system_prompt = build_system_prompt(proficiency_context)
 
     messages = [{"role": "system", "content": system_prompt}]
 
+    # Only include role and content for OpenAI API
     for msg in chat_history[-10:]:
-        messages.append(msg)
+        messages.append({"role": msg["role"], "content": msg["content"]})
 
     messages.append({"role": "user", "content": user_message})
 
@@ -285,9 +461,9 @@ def api_chat():
 
         assistant_message = response.choices[0].message.content
 
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": assistant_message})
-        session['chat_history'] = chat_history
+        # Save messages to database
+        db.append_chat_message(uid, "user", user_message)
+        db.append_chat_message(uid, "assistant", assistant_message)
 
         return jsonify({
             'response': assistant_message,
@@ -302,13 +478,22 @@ def api_chat():
 
 
 @app.route('/api/chat/reset', methods=['POST'])
+@login_required
 def api_chat_reset():
+    uid = get_current_user_uid()
     session.pop('chat_history', None)
+
+    # Clear in database
+    db.clear_chat_history(uid)
+
     return jsonify({'success': True, 'message': 'Chat history cleared'})
 
 
 @app.route('/api/chat/voice', methods=['POST'])
+@login_required
 def api_chat_voice():
+    uid = get_current_user_uid()
+
     try:
         if not os.environ.get('OPENAI_API_KEY'):
             return jsonify({'error': 'OpenAI API key not configured', 'success': False}), 500
@@ -340,17 +525,15 @@ def api_chat_voice():
         if not transcript or not transcript.strip():
             return jsonify({'error': 'Could not transcribe audio', 'success': False}), 400
 
-        if 'chat_history' not in session:
-            session['chat_history'] = []
-
-        chat_history = session['chat_history']
+        # Load chat history from database
+        chat_history = db.get_chat_history(uid, limit=20)
 
         proficiency_context = get_user_proficiency_context()
         system_prompt = build_system_prompt(proficiency_context)
 
         messages = [{"role": "system", "content": system_prompt}]
         for msg in chat_history[-10:]:
-            messages.append(msg)
+            messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": transcript})
 
         response = client.chat.completions.create(
@@ -362,9 +545,9 @@ def api_chat_voice():
 
         assistant_message = response.choices[0].message.content
 
-        chat_history.append({"role": "user", "content": transcript})
-        chat_history.append({"role": "assistant", "content": assistant_message})
-        session['chat_history'] = chat_history
+        # Save messages to database
+        db.append_chat_message(uid, "user", transcript)
+        db.append_chat_message(uid, "assistant", assistant_message)
 
         tts_response = client.audio.speech.create(
             model="tts-1",
@@ -450,9 +633,18 @@ def api_set_language():
     lang = data.get('language', 'en')
     if lang in ['en', 'ko']:
         session['ui_language'] = lang
+
+        # Save to database if user is logged in
+        uid = get_current_user_uid()
+        if uid:
+            db.update_user_profile(uid, ui_language=lang)
+
         return jsonify({'success': True, 'language': lang})
     return jsonify({'success': False, 'error': 'Invalid language'}), 400
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Use PORT environment variable for Cloud Run, default to 5000 for local dev
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV', 'development') == 'development'
+    app.run(host='0.0.0.0', port=port, debug=debug)

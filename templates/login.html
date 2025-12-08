@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lingual - Sign In</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            background: #b385ce;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .auth-container {
+            max-width: 420px;
+            width: 90%;
+            padding: 40px 32px;
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 4px 32px rgba(0,0,0,0.10);
+            text-align: center;
+        }
+        h1 { color: #4b3d80; font-size: 2rem; margin-bottom: 0.3em; }
+        .subtitle { color: #666; font-size: 1rem; margin-bottom: 1.5em; }
+
+        .auth-form { margin-bottom: 1.5em; }
+        .form-group { margin-bottom: 1em; text-align: left; }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.4em;
+            color: #4b3d80;
+            font-weight: 500;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1rem;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #4f8cff;
+        }
+
+        .auth-btn {
+            width: 100%;
+            padding: 14px;
+            background: #4f8cff;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 0.5em;
+        }
+        .auth-btn:hover { background: #2563eb; }
+        .auth-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 1.5em 0;
+            color: #999;
+        }
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #e0e0e0;
+        }
+        .divider span { padding: 0 1em; font-size: 0.9rem; }
+
+        .google-btn {
+            width: 100%;
+            padding: 12px;
+            background: #fff;
+            color: #333;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .google-btn:hover {
+            background: #f8f8f8;
+            border-color: #ccc;
+        }
+        .google-btn img { width: 20px; height: 20px; }
+
+        .toggle-mode {
+            margin-top: 1.5em;
+            color: #666;
+            font-size: 0.95rem;
+        }
+        .toggle-mode a {
+            color: #4f8cff;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .toggle-mode a:hover { text-decoration: underline; }
+
+        .error-message {
+            background: #fee;
+            color: #c00;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 1em;
+            display: none;
+            font-size: 0.9rem;
+        }
+        .error-message.show { display: block; }
+
+        .success-message {
+            background: #efe;
+            color: #060;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 1em;
+            display: none;
+            font-size: 0.9rem;
+        }
+        .success-message.show { display: block; }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #fff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <h1>Lingual</h1>
+        <p class="subtitle" id="authTitle">Sign in to continue</p>
+
+        <div class="error-message" id="errorMsg"></div>
+        <div class="success-message" id="successMsg"></div>
+
+        <form class="auth-form" id="authForm">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required placeholder="you@example.com">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required placeholder="Your password" minlength="6">
+            </div>
+            <button type="submit" class="auth-btn" id="submitBtn">Sign In</button>
+        </form>
+
+        <div class="divider"><span>or</span></div>
+
+        <button class="google-btn" id="googleBtn">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+            Continue with Google
+        </button>
+
+        <p class="toggle-mode" id="toggleText">
+            Don't have an account? <a href="#" id="toggleLink">Sign up</a>
+        </p>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import {
+            getAuth,
+            signInWithEmailAndPassword,
+            createUserWithEmailAndPassword,
+            signInWithPopup,
+            GoogleAuthProvider,
+            onAuthStateChanged
+        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDGLmiMun2eMunDsJMgoo7vRCqSgmHZ4LU",
+            authDomain: "lingu-480600.firebaseapp.com",
+            projectId: "lingu-480600",
+            storageBucket: "lingu-480600.firebasestorage.app",
+            messagingSenderId: "6288717566",
+            appId: "1:6288717566:web:cff5a5c0b8b96d83e2d7af"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const googleProvider = new GoogleAuthProvider();
+
+        let isSignUp = false;
+
+        // Check if user is already logged in
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // User is signed in, get token and send to backend
+                const idToken = await user.getIdToken();
+                await sendTokenToBackend(idToken);
+            }
+        });
+
+        // Toggle between sign in and sign up
+        document.getElementById('toggleLink').addEventListener('click', (e) => {
+            e.preventDefault();
+            isSignUp = !isSignUp;
+            updateAuthMode();
+        });
+
+        function updateAuthMode() {
+            const title = document.getElementById('authTitle');
+            const btn = document.getElementById('submitBtn');
+            const toggle = document.getElementById('toggleText');
+
+            if (isSignUp) {
+                title.textContent = 'Create your account';
+                btn.textContent = 'Sign Up';
+                toggle.innerHTML = 'Already have an account? <a href="#" id="toggleLink">Sign in</a>';
+            } else {
+                title.textContent = 'Sign in to continue';
+                btn.textContent = 'Sign In';
+                toggle.innerHTML = 'Don\'t have an account? <a href="#" id="toggleLink">Sign up</a>';
+            }
+
+            document.getElementById('toggleLink').addEventListener('click', (e) => {
+                e.preventDefault();
+                isSignUp = !isSignUp;
+                updateAuthMode();
+            });
+
+            hideMessages();
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('errorMsg');
+            errorEl.textContent = message;
+            errorEl.classList.add('show');
+            document.getElementById('successMsg').classList.remove('show');
+        }
+
+        function showSuccess(message) {
+            const successEl = document.getElementById('successMsg');
+            successEl.textContent = message;
+            successEl.classList.add('show');
+            document.getElementById('errorMsg').classList.remove('show');
+        }
+
+        function hideMessages() {
+            document.getElementById('errorMsg').classList.remove('show');
+            document.getElementById('successMsg').classList.remove('show');
+        }
+
+        function setLoading(loading) {
+            const btn = document.getElementById('submitBtn');
+            const googleBtn = document.getElementById('googleBtn');
+
+            if (loading) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading"></span>';
+                googleBtn.disabled = true;
+            } else {
+                btn.disabled = false;
+                btn.textContent = isSignUp ? 'Sign Up' : 'Sign In';
+                googleBtn.disabled = false;
+            }
+        }
+
+        async function sendTokenToBackend(idToken) {
+            try {
+                const response = await fetch('/api/auth/verify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ idToken })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Redirect to general quiz
+                    window.location.href = '/general';
+                } else {
+                    showError(data.error || 'Authentication failed');
+                }
+            } catch (error) {
+                showError('Failed to verify authentication');
+                console.error(error);
+            }
+        }
+
+        // Email/Password authentication
+        document.getElementById('authForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideMessages();
+            setLoading(true);
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                let userCredential;
+
+                if (isSignUp) {
+                    userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    showSuccess('Account created successfully!');
+                } else {
+                    userCredential = await signInWithEmailAndPassword(auth, email, password);
+                }
+
+                // Get ID token and send to backend
+                const idToken = await userCredential.user.getIdToken();
+                await sendTokenToBackend(idToken);
+
+            } catch (error) {
+                console.error('Auth error:', error);
+
+                let message = 'Authentication failed';
+                switch (error.code) {
+                    case 'auth/email-already-in-use':
+                        message = 'This email is already registered';
+                        break;
+                    case 'auth/invalid-email':
+                        message = 'Invalid email address';
+                        break;
+                    case 'auth/weak-password':
+                        message = 'Password should be at least 6 characters';
+                        break;
+                    case 'auth/user-not-found':
+                    case 'auth/wrong-password':
+                    case 'auth/invalid-credential':
+                        message = 'Invalid email or password';
+                        break;
+                    case 'auth/too-many-requests':
+                        message = 'Too many attempts. Please try again later';
+                        break;
+                }
+                showError(message);
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        // Google Sign In
+        document.getElementById('googleBtn').addEventListener('click', async () => {
+            hideMessages();
+            setLoading(true);
+
+            try {
+                const result = await signInWithPopup(auth, googleProvider);
+                const idToken = await result.user.getIdToken();
+                await sendTokenToBackend(idToken);
+            } catch (error) {
+                console.error('Google auth error:', error);
+
+                if (error.code === 'auth/popup-closed-by-user') {
+                    // User closed popup, don't show error
+                } else if (error.code === 'auth/popup-blocked') {
+                    showError('Popup was blocked. Please allow popups for this site.');
+                } else {
+                    showError('Google sign in failed. Please try again.');
+                }
+            } finally {
+                setLoading(false);
+            }
+        });
+    </script>
+</body>
+</html>

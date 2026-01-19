@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file
+from flask_cors import CORS
 from functools import wraps
 import json
 import os
@@ -15,16 +16,23 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
 
+# Enable CORS for React development server
+CORS(app, origins=['http://localhost:5173', 'http://localhost:3000'], supports_credentials=True)
+
 # Initialize Firebase Admin SDK
 firebase_app = None
+FIREBASE_PROJECT_ID = os.environ.get('GOOGLE_CLOUD_PROJECT', 'lingu-480600')
+
 try:
     # For production: use GOOGLE_APPLICATION_CREDENTIALS or default credentials
     if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
         cred = credentials.Certificate(os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'))
         firebase_app = firebase_admin.initialize_app(cred)
     else:
-        # Use Application Default Credentials (works on Cloud Run)
-        firebase_app = firebase_admin.initialize_app()
+        # Use Application Default Credentials with explicit project ID
+        firebase_app = firebase_admin.initialize_app(options={
+            'projectId': FIREBASE_PROJECT_ID
+        })
 except Exception as e:
     print(f"Firebase initialization error: {e}")
 
@@ -641,6 +649,239 @@ def api_set_language():
 
         return jsonify({'success': True, 'language': lang})
     return jsonify({'success': False, 'error': 'Invalid language'}), 400
+
+
+# ============================================
+# NEW JSON API ENDPOINTS FOR REACT FRONTEND
+# ============================================
+
+@app.route('/api/profile', methods=['POST'])
+@login_required
+def api_update_profile():
+    """Update user goals and learning duration (JSON API)."""
+    uid = get_current_user_uid()
+    data = request.get_json()
+
+    goals = data.get('goals', [])
+    duration = data.get('duration', 0)
+
+    # Save to database
+    db.update_user_profile(uid, goals=goals, learning_duration=duration)
+
+    # Reset assessment in database
+    db.reset_assessment(uid)
+
+    # Keep session for quick access during assessment
+    session['user_goals'] = goals
+    session['learning_duration'] = duration
+    session.pop('assessment_responses', None)
+    session.pop('current_item_index', None)
+    session.pop('assessment_results', None)
+
+    return jsonify({
+        'success': True,
+        'profile': {'goals': goals, 'duration': duration}
+    })
+
+
+@app.route('/api/assessment/items', methods=['GET'])
+@login_required
+def api_assessment_items():
+    """Get all assessment items and current progress (JSON API)."""
+    uid = get_current_user_uid()
+    assessment_data = get_assessment()
+
+    # Load assessment state from database
+    assessment_state = db.get_assessment_state(uid)
+    if assessment_state:
+        current_index = assessment_state.get('current_item_index', 0)
+        responses = assessment_state.get('responses', {})
+    else:
+        current_index = session.get('current_item_index', 0)
+        responses = session.get('assessment_responses', {})
+
+    return jsonify({
+        'items': assessment_data['items'],
+        'totalItems': len(assessment_data['items']),
+        'currentIndex': current_index,
+        'responses': responses,
+        'title': assessment_data['title']
+    })
+
+
+@app.route('/api/assessment/submit', methods=['POST'])
+@login_required
+def api_assessment_submit_json():
+    """Submit an assessment response (JSON API)."""
+    uid = get_current_user_uid()
+    data = request.get_json()
+
+    item_id = data.get('itemId')
+    response = data.get('response', '')
+
+    if not item_id:
+        return jsonify({'success': False, 'error': 'Item ID is required'}), 400
+
+    assessment_data = get_assessment()
+    items = assessment_data['items']
+
+    # Find current index based on item_id
+    current_index = next(
+        (i for i, item in enumerate(items) if item['id'] == item_id),
+        None
+    )
+
+    if current_index is None:
+        return jsonify({'success': False, 'error': 'Invalid item ID'}), 400
+
+    # Save response
+    responses = session.get('assessment_responses', {})
+    responses[item_id] = response
+    session['assessment_responses'] = responses
+    session['current_item_index'] = current_index + 1
+
+    # Save to database
+    db.update_assessment_response(uid, item_id, response, current_index + 1)
+
+    is_complete = (current_index + 1) >= len(items)
+
+    return jsonify({
+        'success': True,
+        'nextIndex': current_index + 1,
+        'isComplete': is_complete
+    })
+
+
+@app.route('/api/assessment/skip', methods=['POST'])
+@login_required
+def api_assessment_skip_json():
+    """Skip current assessment question (JSON API)."""
+    uid = get_current_user_uid()
+    data = request.get_json()
+
+    item_id = data.get('itemId')
+
+    if not item_id:
+        return jsonify({'success': False, 'error': 'Item ID is required'}), 400
+
+    assessment_data = get_assessment()
+    items = assessment_data['items']
+
+    # Find current index based on item_id
+    current_index = next(
+        (i for i, item in enumerate(items) if item['id'] == item_id),
+        None
+    )
+
+    if current_index is None:
+        return jsonify({'success': False, 'error': 'Invalid item ID'}), 400
+
+    # Save empty response
+    responses = session.get('assessment_responses', {})
+    responses[item_id] = ''
+    session['assessment_responses'] = responses
+    session['current_item_index'] = current_index + 1
+
+    # Save to database
+    db.update_assessment_response(uid, item_id, '', current_index + 1)
+
+    is_complete = (current_index + 1) >= len(items)
+
+    return jsonify({
+        'success': True,
+        'nextIndex': current_index + 1,
+        'isComplete': is_complete
+    })
+
+
+@app.route('/api/assessment/results', methods=['GET'])
+@login_required
+def api_assessment_results_json():
+    """Get computed assessment results (JSON API)."""
+    uid = get_current_user_uid()
+
+    # Try to get results from session or database
+    results = session.get('assessment_results')
+    if not results:
+        results = db.get_assessment_results(uid)
+
+    # Compute results if we have responses but no results
+    if not results:
+        responses = session.get('assessment_responses', {})
+        if not responses:
+            assessment_state = db.get_assessment_state(uid)
+            if assessment_state:
+                responses = assessment_state.get('responses', {})
+
+        if responses:
+            assessment_data = get_assessment()
+            results = compute_results(assessment_data, responses)
+            session['assessment_results'] = results
+            db.save_assessment_results(uid, results)
+
+    if results:
+        global_stage = results.get('global_stage', 0)
+        sklc_info = get_sklc_description(global_stage)
+
+        return jsonify({
+            'success': True,
+            'results': results,
+            'sklcLevel': sklc_info['level'],
+            'sklcDescription': sklc_info['description']
+        })
+
+    return jsonify({
+        'success': False,
+        'error': 'No results available'
+    }), 404
+
+
+@app.route('/api/assessment/reset', methods=['POST'])
+@login_required
+def api_assessment_reset_json():
+    """Reset assessment progress (JSON API)."""
+    uid = get_current_user_uid()
+
+    session.pop('assessment_responses', None)
+    session.pop('current_item_index', None)
+    session.pop('assessment_results', None)
+
+    # Reset in database
+    db.reset_assessment(uid)
+
+    return jsonify({'success': True})
+
+
+@app.route('/api/categories', methods=['POST'])
+@login_required
+def api_update_categories():
+    """Update selected practice categories (JSON API)."""
+    uid = get_current_user_uid()
+    data = request.get_json()
+
+    categories = data.get('categories', [])
+    session['selected_categories'] = categories
+
+    # Compute and save results if not already done
+    if 'assessment_results' not in session:
+        db_results = db.get_assessment_results(uid)
+        if db_results:
+            session['assessment_results'] = db_results
+        elif 'assessment_responses' in session:
+            assessment_data = get_assessment()
+            responses = session.get('assessment_responses', {})
+            if responses:
+                results = compute_results(assessment_data, responses)
+                session['assessment_results'] = results
+                db.save_assessment_results(uid, results)
+
+    # Save to database
+    db.update_selected_categories(uid, categories)
+
+    return jsonify({
+        'success': True,
+        'categories': categories
+    })
 
 
 if __name__ == '__main__':

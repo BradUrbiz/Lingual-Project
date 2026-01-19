@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/* Tailwind Custom Theme */
+@theme {
+  --color-primary: #4f8cff;
+  --color-primary-hover: #2563eb;
+  --color-background: #b385ce;
+  --color-card: #ffffff;
+  --color-text: #2d3a4a;
+  --color-text-secondary: #6a7684;
+  --color-success: #10b981;
+  --color-error: #ef4444;
+  --color-purple-accent: rgb(135, 42, 211);
+}
+
+/* Base Styles */
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+/* Hide cursor/caret on non-editable elements */
+*:not(input):not(textarea):not([contenteditable="true"]) {
+  caret-color: transparent;
+}
+
+/* Ensure no accidental user-select cursor */
+#root {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Allow text selection in specific areas */
+p, span, h1, h2, h3, h4, h5, h6, .selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Animation for voice recording */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+}
+
+.animate-pulse-recording {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Spinner animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}

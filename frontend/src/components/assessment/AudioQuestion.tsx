@@ -1,0 +1,89 @@
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
+
+interface AudioQuestionProps {
+  wordList?: string[];
+  sentences?: string[];
+  onTranscriptChange: (transcript: string) => void;
+}
+
+export function AudioQuestion({
+  wordList,
+  sentences,
+  onTranscriptChange,
+}: AudioQuestionProps) {
+  const { isRecording, startRecording, stopRecording, error } = useVoiceRecorder();
+
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      stopRecording();
+      // For now, we'll just set a placeholder since we don't have transcription
+      onTranscriptChange('[Audio recorded]');
+    } else {
+      await startRecording();
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {wordList && wordList.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {wordList.map((word, index) => (
+            <span
+              key={index}
+              className="px-3 py-1 bg-gray-100 rounded-full text-text text-sm"
+            >
+              {word}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {sentences && sentences.length > 0 && (
+        <div className="space-y-2 mb-4">
+          {sentences.map((sentence, index) => (
+            <p key={index} className="text-text text-lg">
+              {sentence}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      <button
+        onClick={handleToggleRecording}
+        className={`w-16 h-16 mx-auto flex items-center justify-center rounded-full transition-all ${
+          isRecording
+            ? 'bg-red-500 animate-pulse-recording'
+            : 'bg-success hover:bg-success/90'
+        }`}
+      >
+        <svg
+          className="w-8 h-8 text-white"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          {isRecording ? (
+            <rect x="6" y="6" width="12" height="12" strokeWidth="2" fill="currentColor" />
+          ) : (
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+            />
+          )}
+        </svg>
+      </button>
+
+      <p className="text-center text-text-secondary text-sm">
+        {isRecording ? 'Recording... Click to stop' : 'Click to start recording'}
+      </p>
+    </div>
+  );
+}

@@ -5,18 +5,11 @@ import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Button, AnimatedCard } from '@/components/ui';
 import { AnimatedPage } from '@/components/layout/AnimatedPage';
-import { useEffect } from 'react';
 
 export function LandingPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const { t } = useLanguage();
-
-  useEffect(() => {
-    if (user && !loading) {
-      navigate('/general');
-    }
-  }, [user, loading, navigate]);
 
   if (loading) {
     return (
@@ -73,7 +66,17 @@ export function LandingPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
         >
-          <Button onClick={() => navigate('/auth')} className="w-full" size="lg">
+          <Button
+            onClick={() => {
+              if (user) {
+                navigate('/general');
+              } else {
+                navigate('/auth');
+              }
+            }}
+            className="w-full"
+            size="lg"
+          >
             {t('app.getStarted')}
           </Button>
         </motion.div>

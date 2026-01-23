@@ -258,7 +258,7 @@ export function ChatPage() {
                       }`}
                     />
                     <span className="text-muted-foreground">
-                      {isConnected ? '연결됨 - 말씀하세요!' : '연결 대기 중'}
+                      {isConnected ? 'Connected' : 'Waiting to connect'}
                     </span>
                   </div>
 
@@ -295,11 +295,11 @@ export function ChatPage() {
                   <p className="text-muted-foreground text-sm">
                     {isConnected
                       ? isSpeaking
-                        ? 'Lingu가 말하는 중...'
+                        ? 'Lingu is speaking...'
                         : isListening
-                        ? '듣고 있어요...'
-                        : '대화하려면 말씀하세요'
-                      : '버튼을 눌러 대화 시작'}
+                        ? 'Listening...'
+                        : 'Speak to chat'
+                      : 'Press button to start'}
                   </p>
                 </motion.div>
               )}

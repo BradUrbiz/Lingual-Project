@@ -10,11 +10,17 @@ from openai import OpenAI
 import firebase_admin
 from firebase_admin import credentials, auth as firebase_auth
 import io
+import requests
 
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+
+# Session cookie configuration for production (Cloud Run uses HTTPS)
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Enable CORS for React development server
 CORS(app, origins=['http://localhost:5173', 'http://localhost:3000'], supports_credentials=True)
@@ -80,6 +86,60 @@ def api_logout():
     """API endpoint to clear session"""
     session.clear()
     return jsonify({'success': True})
+
+
+@app.route('/api/realtime/session', methods=['POST'])
+@login_required
+def create_realtime_session():
+    """Create ephemeral token for OpenAI Realtime API."""
+    try:
+        api_key = os.environ.get('OPENAI_API_KEY')
+        if not api_key:
+            return jsonify({'error': 'OpenAI API key not configured'}), 500
+
+        # Get user's proficiency context for system instructions
+        proficiency_context = get_user_proficiency_context()
+        system_instructions = build_system_prompt(proficiency_context)
+
+        # Request ephemeral token from OpenAI
+        response = requests.post(
+            'https://api.openai.com/v1/realtime/sessions',
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': 'gpt-4o-realtime-preview-2024-12-17',
+                'voice': 'coral',
+                'instructions': system_instructions,
+                'input_audio_transcription': {
+                    'model': 'whisper-1'
+                },
+                'turn_detection': {
+                    'type': 'server_vad',
+                    'threshold': 0.5,
+                    'prefix_padding_ms': 300,
+                    'silence_duration_ms': 500
+                }
+            }
+        )
+
+        if response.status_code != 200:
+            return jsonify({
+                'error': f'Failed to create session: {response.text}',
+                'success': False
+            }), response.status_code
+
+        data = response.json()
+        return jsonify({
+            'success': True,
+            'client_secret': data.get('client_secret', {}).get('value'),
+            'session_id': data.get('id'),
+            'expires_at': data.get('client_secret', {}).get('expires_at')
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e), 'success': False}), 500
 
 
 @app.route('/api/auth/verify', methods=['POST'])

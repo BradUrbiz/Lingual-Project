@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useChat } from '../hooks/useChat';
-import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import { useRealtimeChat } from '../hooks/useRealtimeChat';
 import { getUserProfile } from '../api/user';
 import { Card, Alert, AlertDescription } from '@/components/ui';
 import { AnimatedPage } from '@/components/layout/AnimatedPage';
@@ -11,22 +11,18 @@ import { messageVariants } from '@/lib/animations';
 import {
   ChatMessage,
   ChatInput,
-  VoiceRecorder,
-  ModeToggle,
   ProfileSidebar,
 } from '../components/chat';
 import type { UserProfile, ChatMessage as ChatMessageType } from '../types';
 
-type Mode = 'text' | 'voice';
+type Mode = 'text' | 'realtime';
 
 export function ChatPage() {
   const { t } = useLanguage();
-  const [mode, setMode] = useState<Mode>('text');
+  const [mode, setMode] = useState<Mode>('realtime');
   const [inputValue, setInputValue] = useState('');
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [aiState, setAiState] = useState<'speak' | 'notalk' | 'bruh'>('notalk');
-  const [audioElement] = useState(() => new Audio());
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const initialMessages: ChatMessageType[] = [
@@ -38,22 +34,29 @@ export function ChatPage() {
     },
   ];
 
+  // Text chat hook
   const {
-    messages,
+    messages: textMessages,
     isLoading,
-    error,
+    error: textError,
     sendTextMessage,
-    sendAudioMessage,
     clearChat,
   } = useChat(initialMessages);
 
+  // Realtime chat hook
   const {
-    isRecording,
-    audioBlob,
-    startRecording,
-    stopRecording,
-    clearAudio,
-  } = useVoiceRecorder();
+    isConnected,
+    isListening,
+    isSpeaking,
+    messages: realtimeMessages,
+    error: realtimeError,
+    connect,
+    disconnect,
+  } = useRealtimeChat();
+
+  // Current messages and error based on mode
+  const messages = mode === 'realtime' ? realtimeMessages : textMessages;
+  const error = mode === 'realtime' ? realtimeError : textError;
 
   useEffect(() => {
     loadProfile();
@@ -63,11 +66,26 @@ export function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
+  // Update AI state based on realtime status
   useEffect(() => {
-    if (audioBlob && !isRecording) {
-      handleSendVoiceMessage();
+    if (mode === 'realtime') {
+      if (isSpeaking) {
+        setAiState('speak');
+      } else if (isListening) {
+        setAiState('bruh');
+      } else {
+        setAiState('notalk');
+      }
     }
-  }, [audioBlob, isRecording]);
+  }, [mode, isSpeaking, isListening]);
+
+  // Disconnect realtime when switching modes
+  const handleModeChange = (newMode: Mode) => {
+    if (mode === 'realtime' && isConnected && newMode !== 'realtime') {
+      disconnect();
+    }
+    setMode(newMode);
+  };
 
   const loadProfile = async () => {
     try {
@@ -90,29 +108,6 @@ export function ChatPage() {
     setAiState('speak');
 
     await sendTextMessage(message);
-    setAiState('notalk');
-  };
-
-  const handleToggleRecording = async () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      await startRecording();
-    }
-  };
-
-  const handleSendVoiceMessage = async () => {
-    if (!audioBlob) return;
-
-    setAiState('speak');
-    const result = await sendAudioMessage(audioBlob);
-
-    if (result?.audioUrl) {
-      audioElement.src = result.audioUrl;
-      audioElement.play();
-    }
-
-    clearAudio();
     setAiState('notalk');
   };
 
@@ -140,7 +135,31 @@ export function ChatPage() {
                 </h1>
                 <p className="text-sm text-muted-foreground">{t('chat.subtitle')}</p>
               </div>
-              <ModeToggle mode={mode} onModeChange={setMode} />
+              {/* Custom Mode Toggle with Realtime option */}
+              <div className="flex bg-gray-100 rounded-lg p-1">
+                <button
+                  type="button"
+                  onClick={() => handleModeChange('text')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    mode === 'text'
+                      ? 'bg-white text-primary shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {t('chat.textMode')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleModeChange('realtime')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    mode === 'realtime'
+                      ? 'bg-white text-primary shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Realtime
+                </button>
+              </div>
             </div>
           </motion.div>
 
@@ -207,7 +226,7 @@ export function ChatPage() {
             className="p-4 border-t border-gray-100"
           >
             <AnimatePresence mode="wait">
-              {mode === 'text' ? (
+              {mode === 'text' && (
                 <motion.div
                   key="text-input"
                   initial={{ opacity: 0, x: -10 }}
@@ -222,19 +241,66 @@ export function ChatPage() {
                     placeholder={t('chat.placeholder')}
                   />
                 </motion.div>
-              ) : (
+              )}
+              {mode === 'realtime' && (
                 <motion.div
-                  key="voice-input"
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  className="flex justify-center"
+                  key="realtime-input"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="flex flex-col items-center gap-4"
                 >
-                  <VoiceRecorder
-                    isRecording={isRecording}
-                    onToggleRecording={handleToggleRecording}
-                    disabled={isLoading}
-                  />
+                  {/* Connection Status */}
+                  <div className="flex items-center gap-2 text-sm">
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        isConnected ? 'bg-green-500' : 'bg-gray-400'
+                      }`}
+                    />
+                    <span className="text-muted-foreground">
+                      {isConnected ? '연결됨 - 말씀하세요!' : '연결 대기 중'}
+                    </span>
+                  </div>
+
+                  {/* Voice Button */}
+                  <button
+                    type="button"
+                    onClick={isConnected ? disconnect : connect}
+                    className={`relative w-20 h-20 rounded-full transition-all duration-300 ${
+                      isConnected
+                        ? isSpeaking
+                          ? 'bg-purple-500 scale-110'
+                          : isListening
+                          ? 'bg-red-500'
+                          : 'bg-green-500 hover:bg-green-600'
+                        : 'bg-primary hover:bg-primary/90'
+                    }`}
+                  >
+                    {/* Ripple effect when listening */}
+                    {isListening && (
+                      <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-25" />
+                    )}
+
+                    {/* Icon */}
+                    <span className="relative text-white text-2xl">
+                      {isConnected ? (
+                        isSpeaking ? '🔊' : isListening ? '🎤' : '🎙️'
+                      ) : (
+                        '📞'
+                      )}
+                    </span>
+                  </button>
+
+                  {/* Status Text */}
+                  <p className="text-muted-foreground text-sm">
+                    {isConnected
+                      ? isSpeaking
+                        ? 'Lingu가 말하는 중...'
+                        : isListening
+                        ? '듣고 있어요...'
+                        : '대화하려면 말씀하세요'
+                      : '버튼을 눌러 대화 시작'}
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>

@@ -1,0 +1,40 @@
+# Git
+.git/
+.gitignore
+
+# Node modules (built inside Docker)
+frontend/node_modules/
+node_modules/
+
+# Frontend build (built inside Docker)
+frontend/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Environment files
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Service account (injected via Cloud Run)
+service-account.json
+*-firebase-adminsdk-*.json
+
+# Local static/react build
+static/react/
+
+# Misc
+*.log
+tmp/
+temp/

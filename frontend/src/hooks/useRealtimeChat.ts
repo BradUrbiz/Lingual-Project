@@ -8,6 +8,10 @@ interface RealtimeMessage {
   timestamp: string;
 }
 
+interface UseRealtimeChatOptions {
+  onMessage?: (role: 'user' | 'assistant', content: string) => void;
+}
+
 interface UseRealtimeChatReturn {
   isConnected: boolean;
   isListening: boolean;
@@ -18,9 +22,11 @@ interface UseRealtimeChatReturn {
   disconnect: () => void;
   startListening: () => void;
   stopListening: () => void;
+  clearMessages: () => void;
 }
 
-export function useRealtimeChat(): UseRealtimeChatReturn {
+export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeChatReturn {
+  const onMessageCallback = options?.onMessage;
   const [isConnected, setIsConnected] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -63,7 +69,12 @@ export function useRealtimeChat(): UseRealtimeChatReturn {
       timestamp: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, message]);
-  }, []);
+
+    // Call the callback to save message to database
+    if (onMessageCallback) {
+      onMessageCallback(role, content);
+    }
+  }, [onMessageCallback]);
 
   const connect = useCallback(async () => {
     try {
@@ -321,6 +332,11 @@ export function useRealtimeChat(): UseRealtimeChatReturn {
     }
   }, []);
 
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    processedItemsRef.current.clear();
+  }, []);
+
   return {
     isConnected,
     isListening,
@@ -331,5 +347,6 @@ export function useRealtimeChat(): UseRealtimeChatReturn {
     disconnect,
     startListening,
     stopListening,
+    clearMessages,
   };
 }

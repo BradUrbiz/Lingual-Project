@@ -532,6 +532,67 @@ def api_update_chat_title(chat_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/chats/<chat_id>/messages/save', methods=['POST'])
+@login_required
+def api_save_message(chat_id):
+    """Save a single message to a chat (no AI response). Used for realtime chat."""
+    uid = get_current_user_uid()
+    data = request.get_json()
+    role = data.get('role', '').strip()
+    content = data.get('content', '').strip()
+
+    if not role or role not in ['user', 'assistant']:
+        return jsonify({'success': False, 'error': 'Invalid role'}), 400
+
+    if not content:
+        return jsonify({'success': False, 'error': 'Content is required'}), 400
+
+    try:
+        # Verify chat exists
+        chat = db.get_chat_session(uid, chat_id)
+        if not chat:
+            return jsonify({'success': False, 'error': 'Chat not found'}), 404
+
+        # Save message
+        message = db.add_message_to_chat(uid, chat_id, role, content)
+
+        # Generate title if this is the first user message
+        chat_messages = chat.get('messages', [])
+        if len(chat_messages) == 0 and role == 'user':
+            try:
+                client = get_openai_client()
+                if client:
+                    title_response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "Generate a very brief chat title (max 30 characters) in the same language as the user's message. Just return the title, nothing else. No quotes."
+                            },
+                            {
+                                "role": "user",
+                                "content": f"User message: {content}"
+                            }
+                        ],
+                        max_tokens=30,
+                        temperature=0.5
+                    )
+                    title = title_response.choices[0].message.content.strip()[:40]
+                    db.update_chat_title(uid, chat_id, title)
+            except Exception:
+                # Fallback to truncated message
+                title = content[:30] + ('...' if len(content) > 30 else '')
+                db.update_chat_title(uid, chat_id, title)
+
+        return jsonify({
+            'success': True,
+            'message': message
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/chats/<chat_id>/messages', methods=['POST'])
 @login_required
 def api_send_chat_message(chat_id):
@@ -582,10 +643,28 @@ def api_send_chat_message(chat_id):
         user_msg = db.add_message_to_chat(uid, chat_id, "user", user_message)
         assistant_msg = db.add_message_to_chat(uid, chat_id, "assistant", assistant_message)
 
-        # Auto-generate title from first user message if it's a new chat
+        # Auto-generate title from first message using AI
         if len(chat_messages) == 0:
-            # Generate a short title from the first message
-            title = user_message[:30] + ('...' if len(user_message) > 30 else '')
+            try:
+                title_response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "Generate a very brief chat title (max 30 characters) in the same language as the user's message. Just return the title, nothing else. No quotes."
+                        },
+                        {
+                            "role": "user",
+                            "content": f"User: {user_message}\nAssistant: {assistant_message[:200]}"
+                        }
+                    ],
+                    max_tokens=30,
+                    temperature=0.5
+                )
+                title = title_response.choices[0].message.content.strip()[:40]
+            except Exception:
+                # Fallback to truncated message if AI fails
+                title = user_message[:30] + ('...' if len(user_message) > 30 else '')
             db.update_chat_title(uid, chat_id, title)
 
         return jsonify({

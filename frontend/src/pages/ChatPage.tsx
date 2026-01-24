@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Plus, MessageSquare, Trash2, ChevronLeft } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -10,6 +10,7 @@ import {
   getChatSession,
   deleteChatSession,
   sendChatMessage,
+  saveMessageToChat,
 } from '../api/chat';
 import { Card, Alert, AlertDescription, Button } from '@/components/ui';
 import { AnimatedPage } from '@/components/layout/AnimatedPage';
@@ -47,6 +48,20 @@ export function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Use ref for currentChatId to avoid stale closures in callback
+  const currentChatIdRef = useRef<string | null>(null);
+  currentChatIdRef.current = currentChatId;
+
+  // Callback to save realtime messages to database
+  const handleRealtimeMessage = useCallback((role: 'user' | 'assistant', content: string) => {
+    const chatId = currentChatIdRef.current;
+    if (chatId && content.trim()) {
+      saveMessageToChat(chatId, role, content).catch((err) => {
+        console.error('Failed to save realtime message:', err);
+      });
+    }
+  }, []);
+
   // Realtime chat hook
   const {
     isConnected,
@@ -56,7 +71,8 @@ export function ChatPage() {
     error: realtimeError,
     connect,
     disconnect,
-  } = useRealtimeChat();
+    clearMessages: clearRealtimeMessages,
+  } = useRealtimeChat({ onMessage: handleRealtimeMessage });
 
   // Use realtime messages when in realtime mode
   const displayMessages = mode === 'realtime' ? realtimeMessages : messages;
@@ -120,6 +136,8 @@ export function ChatPage() {
   const handleSelectChat = async (chatId: string) => {
     setIsLoading(true);
     setError(null);
+    // Clear realtime messages when switching chats
+    clearRealtimeMessages();
     try {
       const chat = await getChatSession(chatId);
       setCurrentChatId(chatId);
@@ -143,6 +161,8 @@ export function ChatPage() {
   const handleNewChat = async () => {
     setIsLoading(true);
     setError(null);
+    // Clear realtime messages when creating new chat
+    clearRealtimeMessages();
     try {
       const { chatId } = await createChatSession();
       setCurrentChatId(chatId);
@@ -153,7 +173,7 @@ export function ChatPage() {
         updated_at: new Date().toISOString(),
         messages: [],
       });
-      // Add welcome message
+      // Add welcome message (don't save to DB - it's just UI)
       setMessages([
         {
           id: 'welcome',
@@ -195,9 +215,11 @@ export function ChatPage() {
     if (mode === 'realtime' && isConnected) {
       disconnect();
     }
+    clearRealtimeMessages();
     setView('list');
     setCurrentChatId(null);
     setCurrentChat(null);
+    setMessages([]);
     loadChatSessions();
   };
 

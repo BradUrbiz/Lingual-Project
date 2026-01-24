@@ -103,3 +103,18 @@ export const sendChatMessage = async (chatId: string, message: string): Promise<
   }
   throw new Error(response.data.error || 'Failed to send message');
 };
+
+// Save a single message to chat (for realtime mode - no AI response)
+export const saveMessageToChat = async (
+  chatId: string,
+  role: 'user' | 'assistant',
+  content: string
+): Promise<void> => {
+  const response = await api.post<{ success: boolean; error?: string }>(
+    `/chats/${chatId}/messages/save`,
+    { role, content }
+  );
+  if (!response.data.success) {
+    throw new Error(response.data.error || 'Failed to save message');
+  }
+};

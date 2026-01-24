@@ -5,8 +5,38 @@ export interface User {
   name: string;
 }
 
+// Profile form data for GeneralPage
+export type Gender = 'male' | 'female' | 'other' | 'prefer_not_to_say';
+export type Rigor = 'light' | 'casual' | 'moderate' | 'serious' | 'intense';
+export type FrequencyUnit = 'day' | 'week' | 'month';
+
+export interface ProfileFormData {
+  displayName: string;
+  age: number | null;
+  gender: Gender | null;
+  rigor: Rigor | null;
+  frequency: number | null;
+  frequencyUnit: FrequencyUnit | null;
+  levelObjective: string;
+}
+
 export interface UserProfile {
+  // Profile completion status
+  profileCompleted: boolean;
   assessed: boolean;
+
+  // Basic info
+  displayName?: string;
+  age?: number;
+  gender?: Gender;
+
+  // Learning preferences
+  rigor?: Rigor;
+  frequency?: number;
+  frequencyUnit?: FrequencyUnit;
+  levelObjective?: string;
+
+  // Assessment results
   globalStage?: number;
   sklcLevel?: string;
   sklcDescription?: string;
@@ -16,8 +46,6 @@ export interface UserProfile {
     pragmatics: number;
     pronunciation: number;
   };
-  goals?: string[];
-  learningDuration?: number;
   selectedCategories?: string[];
 }
 

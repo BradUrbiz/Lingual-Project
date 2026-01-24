@@ -192,16 +192,30 @@ def get_user_proficiency_context():
         profile_context = db.get_user_profile_context(uid)
         if profile_context:
             results = profile_context.get('results') or {}
-            goals = profile_context.get('goals', [])
-            duration = profile_context.get('learning_duration', 0)
+            display_name = profile_context.get('display_name', '')
+            age = profile_context.get('age')
+            rigor = profile_context.get('rigor', '')
+            frequency = profile_context.get('frequency')
+            frequency_unit = profile_context.get('frequency_unit', '')
+            level_objective = profile_context.get('level_objective', '')
         else:
             results = session.get('assessment_results', {})
-            goals = session.get('user_goals', [])
-            duration = session.get('learning_duration', 0)
+            user_profile = session.get('user_profile', {})
+            display_name = user_profile.get('display_name', '')
+            age = user_profile.get('age')
+            rigor = user_profile.get('rigor', '')
+            frequency = user_profile.get('frequency')
+            frequency_unit = user_profile.get('frequency_unit', '')
+            level_objective = user_profile.get('level_objective', '')
     else:
         results = session.get('assessment_results', {})
-        goals = session.get('user_goals', [])
-        duration = session.get('learning_duration', 0)
+        user_profile = session.get('user_profile', {})
+        display_name = user_profile.get('display_name', '')
+        age = user_profile.get('age')
+        rigor = user_profile.get('rigor', '')
+        frequency = user_profile.get('frequency')
+        frequency_unit = user_profile.get('frequency_unit', '')
+        level_objective = user_profile.get('level_objective', '')
 
     if not results:
         return "The user has not completed their assessment yet. Assume beginner level."
@@ -212,8 +226,13 @@ def get_user_proficiency_context():
 
     sklc_info = SKLC_LEVEL_DESCRIPTIONS.get(global_stage, SKLC_LEVEL_DESCRIPTIONS[0])
 
+    # Format frequency string
+    frequency_str = f"{frequency} times per {frequency_unit}" if frequency and frequency_unit else 'Not specified'
+
     context = f"""
 USER PROFICIENCY PROFILE:
+- Name: {display_name if display_name else 'Not specified'}
+- Age: {age if age else 'Not specified'}
 - Overall Level: {sklc_info['level']} (Stage {global_stage}/5)
 - Description: {sklc_info['description_en']}
 
@@ -223,9 +242,10 @@ DOMAIN BREAKDOWN:
 - Pragmatics: Band {domain_bands.get('pragmatics', 0)}/5 (Score: {domain_scores.get('pragmatics', 0):.2f})
 - Pronunciation: Band {domain_bands.get('pronunciation', 0)}/5 (Score: {domain_scores.get('pronunciation', 0):.2f})
 
-USER BACKGROUND:
-- Learning Goals: {', '.join(goals) if goals else 'Not specified'}
-- Learning Duration: {duration} (on scale 0-10, where 0=just started, 10=10+ years)
+USER LEARNING PREFERENCES:
+- Learning Intensity: {rigor.capitalize() if rigor else 'Not specified'}
+- Study Frequency: {frequency_str}
+- Level Objective: {level_objective if level_objective else 'Not specified'}
 """
     return context
 
@@ -447,19 +467,38 @@ def api_user_profile():
     results = user_data.get('results')
     assessment = user_data.get('assessment', {})
 
-    goals = profile.get('goals', [])
-    learning_duration = profile.get('learning_duration', 0)
+    # New profile fields
+    display_name = profile.get('display_name', '')
+    age = profile.get('age')
+    gender = profile.get('gender')
+    rigor = profile.get('rigor')
+    frequency = profile.get('frequency')
+    frequency_unit = profile.get('frequency_unit')
+    level_objective = profile.get('level_objective', '')
     selected_categories = user_data.get('selected_categories', [])
 
     # Check if assessment is completed
     is_assessed = assessment.get('completed', False) and results is not None
 
+    # Check if profile is completed
+    profile_completed = bool(display_name and age and gender and rigor)
+
+    base_response = {
+        'profile_completed': profile_completed,
+        'display_name': display_name,
+        'age': age,
+        'gender': gender,
+        'rigor': rigor,
+        'frequency': frequency,
+        'frequency_unit': frequency_unit,
+        'level_objective': level_objective,
+        'selected_categories': selected_categories
+    }
+
     if not is_assessed:
         return jsonify({
+            **base_response,
             'assessed': False,
-            'goals': goals,
-            'learning_duration': learning_duration,
-            'selected_categories': selected_categories,
             'message': 'Please complete the assessment first'
         })
 
@@ -467,14 +506,12 @@ def api_user_profile():
     sklc_info = get_sklc_description(global_stage)
 
     return jsonify({
+        **base_response,
         'assessed': True,
         'global_stage': global_stage,
         'sklc_level': sklc_info['level'],
         'sklc_description': sklc_info['description'],
-        'domain_bands': results.get('domain_bands', {}),
-        'goals': goals,
-        'learning_duration': learning_duration,
-        'selected_categories': selected_categories
+        'domain_bands': results.get('domain_bands', {})
     })
 
 
@@ -511,29 +548,61 @@ def api_set_language():
 @app.route('/api/profile', methods=['POST'])
 @login_required
 def api_update_profile():
-    """Update user goals and learning duration (JSON API)."""
+    """Update user profile information (JSON API)."""
     uid = get_current_user_uid()
     data = request.get_json()
 
-    goals = data.get('goals', [])
-    duration = data.get('duration', 0)
+    # Extract new profile fields
+    display_name = data.get('displayName', '')
+    age = data.get('age')
+    gender = data.get('gender')
+    rigor = data.get('rigor')
+    frequency = data.get('frequency')
+    frequency_unit = data.get('frequencyUnit')
+    level_objective = data.get('levelObjective', '')
+    is_edit = data.get('isEdit', False)
 
     # Save to database
-    db.update_user_profile(uid, goals=goals, learning_duration=duration)
+    db.update_user_profile(
+        uid,
+        display_name=display_name,
+        age=age,
+        gender=gender,
+        rigor=rigor,
+        frequency=frequency,
+        frequency_unit=frequency_unit,
+        level_objective=level_objective
+    )
 
-    # Reset assessment in database
-    db.reset_assessment(uid)
+    # Only reset assessment if this is NOT an edit (first time setup)
+    if not is_edit:
+        db.reset_assessment(uid)
+        session.pop('assessment_responses', None)
+        session.pop('current_item_index', None)
+        session.pop('assessment_results', None)
 
-    # Keep session for quick access during assessment
-    session['user_goals'] = goals
-    session['learning_duration'] = duration
-    session.pop('assessment_responses', None)
-    session.pop('current_item_index', None)
-    session.pop('assessment_results', None)
+    # Keep session for quick access
+    session['user_profile'] = {
+        'display_name': display_name,
+        'age': age,
+        'gender': gender,
+        'rigor': rigor,
+        'frequency': frequency,
+        'frequency_unit': frequency_unit,
+        'level_objective': level_objective
+    }
 
     return jsonify({
         'success': True,
-        'profile': {'goals': goals, 'duration': duration}
+        'profile': {
+            'displayName': display_name,
+            'age': age,
+            'gender': gender,
+            'rigor': rigor,
+            'frequency': frequency,
+            'frequencyUnit': frequency_unit,
+            'levelObjective': level_objective
+        }
     })
 
 

@@ -8,8 +8,13 @@ Schema:
     - created_at: timestamp
     - updated_at: timestamp
     - profile:
-        - goals: list[str]
-        - learning_duration: int (0-10 scale)
+        - display_name: str (user's preferred name)
+        - age: int
+        - gender: str ('male', 'female', 'other', 'prefer_not_to_say')
+        - rigor: str ('light', 'casual', 'moderate', 'serious', 'intense')
+        - frequency: int (how many times)
+        - frequency_unit: str ('day', 'week', 'month')
+        - level_objective: str (user's goal description)
         - ui_language: str ('en' or 'ko')
     - assessment:
         - responses: dict (item_id -> response)
@@ -49,8 +54,13 @@ def create_user(uid, email, name):
         'created_at': firestore.SERVER_TIMESTAMP,
         'updated_at': firestore.SERVER_TIMESTAMP,
         'profile': {
-            'goals': [],
-            'learning_duration': 0,
+            'display_name': '',
+            'age': None,
+            'gender': None,
+            'rigor': None,
+            'frequency': None,
+            'frequency_unit': None,
+            'level_objective': '',
             'ui_language': 'en'
         },
         'assessment': {
@@ -84,15 +94,27 @@ def get_or_create_user(uid, email, name):
     return user
 
 
-def update_user_profile(uid, goals=None, learning_duration=None, ui_language=None):
+def update_user_profile(uid, display_name=None, age=None, gender=None,
+                        rigor=None, frequency=None, frequency_unit=None,
+                        level_objective=None, ui_language=None):
     """Update user profile fields."""
     user_ref = get_user_ref(uid)
     updates = {'updated_at': firestore.SERVER_TIMESTAMP}
 
-    if goals is not None:
-        updates['profile.goals'] = goals
-    if learning_duration is not None:
-        updates['profile.learning_duration'] = learning_duration
+    if display_name is not None:
+        updates['profile.display_name'] = display_name
+    if age is not None:
+        updates['profile.age'] = age
+    if gender is not None:
+        updates['profile.gender'] = gender
+    if rigor is not None:
+        updates['profile.rigor'] = rigor
+    if frequency is not None:
+        updates['profile.frequency'] = frequency
+    if frequency_unit is not None:
+        updates['profile.frequency_unit'] = frequency_unit
+    if level_objective is not None:
+        updates['profile.level_objective'] = level_objective
     if ui_language is not None:
         updates['profile.ui_language'] = ui_language
 
@@ -217,9 +239,15 @@ def get_user_profile_context(uid):
     """Get user profile data for AI context."""
     user = get_user(uid)
     if user:
+        profile = user.get('profile', {})
         return {
-            'goals': user.get('profile', {}).get('goals', []),
-            'learning_duration': user.get('profile', {}).get('learning_duration', 0),
+            'display_name': profile.get('display_name', ''),
+            'age': profile.get('age'),
+            'gender': profile.get('gender'),
+            'rigor': profile.get('rigor'),
+            'frequency': profile.get('frequency'),
+            'frequency_unit': profile.get('frequency_unit'),
+            'level_objective': profile.get('level_objective', ''),
             'results': user.get('results'),
             'selected_categories': user.get('selected_categories', [])
         }

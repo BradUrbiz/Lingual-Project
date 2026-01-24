@@ -1,8 +1,10 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../contexts/LanguageContext';
+import { getUserProfile } from '../api/user';
 import { Button, AnimatedCard } from '@/components/ui';
 import { AnimatedPage } from '@/components/layout/AnimatedPage';
 
@@ -10,8 +12,37 @@ export function LandingPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const { t } = useLanguage();
+  const [checkingProfile, setCheckingProfile] = useState(false);
 
-  if (loading) {
+  const handleGetStarted = async () => {
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+
+    setCheckingProfile(true);
+    try {
+      const profile = await getUserProfile();
+      if (profile.profileCompleted) {
+        // Profile is complete, go to chat or assessment based on status
+        if (profile.assessed) {
+          navigate('/chat');
+        } else {
+          navigate('/assessment');
+        }
+      } else {
+        // Profile not complete, go to general page
+        navigate('/general');
+      }
+    } catch {
+      // If error (e.g., first time user), go to general page
+      navigate('/general');
+    } finally {
+      setCheckingProfile(false);
+    }
+  };
+
+  if (loading || checkingProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <motion.div
@@ -67,13 +98,7 @@ export function LandingPage() {
           transition={{ delay: 0.5 }}
         >
           <Button
-            onClick={() => {
-              if (user) {
-                navigate('/general');
-              } else {
-                navigate('/auth');
-              }
-            }}
+            onClick={handleGetStarted}
             className="w-full"
             size="lg"
           >

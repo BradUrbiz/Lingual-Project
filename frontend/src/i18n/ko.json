@@ -43,6 +43,12 @@
   "general.levelObjectivePlaceholder": "예: TOPIK 3급 합격, 일상 대화 가능",
   "general.fillRequired": "모든 필수 항목을 입력해주세요",
   "general.continue": "계속하기",
+  "general.next": "다음",
+  "general.back": "이전",
+  "general.welcomeMessage": "당신에 대해 알아볼게요!",
+  "general.aboutYou": "자기소개를 해주세요",
+  "general.optionalField": "이 항목은 선택사항입니다",
+  "general.editMode": "수정 모드",
 
   "assessment.progress": "질문",
   "assessment.of": "/",

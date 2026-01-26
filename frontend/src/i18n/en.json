@@ -43,6 +43,12 @@
   "general.levelObjectivePlaceholder": "e.g., Pass TOPIK Level 3, Have daily conversations",
   "general.fillRequired": "Please fill in all required fields",
   "general.continue": "Continue",
+  "general.next": "Next",
+  "general.back": "Back",
+  "general.welcomeMessage": "Let's get to know you!",
+  "general.aboutYou": "Tell us about yourself",
+  "general.optionalField": "This field is optional",
+  "general.editMode": "Edit Mode",
 
   "assessment.progress": "Question",
   "assessment.of": "of",

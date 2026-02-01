@@ -14,7 +14,7 @@ import {
 } from '../api/chat';
 // FLASHCARDFLIP
 import { generateFlashcards, type Flashcard } from '../api/minigames';
-import { FlashcardFlip } from '../components/minigames';
+import { FlashcardFlip, WordMatch } from '../components/minigames';
 // FLASHCARDFLIP
 import { Card, Alert, AlertDescription, Button } from '@/components/ui';
 import { AnimatedPage } from '@/components/layout/AnimatedPage';
@@ -56,6 +56,9 @@ export function ChatPage() {
   const [showFlashcards, setShowFlashcards] = useState(false);
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [loadingFlashcards, setLoadingFlashcards] = useState(false);
+  const [showWordMatch, setShowWordMatch] = useState(false);
+  const [wordMatchPairs, setWordMatchPairs] = useState<Flashcard[]>([]);
+  const [loadingWordMatch, setLoadingWordMatch] = useState(false);
   // FLASHCARDFLIP
 
   // Use ref for currentChatId to avoid stale closures in callback
@@ -236,7 +239,6 @@ export function ChatPage() {
   // FLASHCARDFLIP
   const handleMinigameCommand = async (command: string): Promise<boolean> => {
     if (!currentChatId) return false;
-    
     if (command.toLowerCase() === '!flashcardflip') {
       setLoadingFlashcards(true);
       try {
@@ -250,7 +252,19 @@ export function ChatPage() {
       }
       return true;
     }
-    
+    if (command.toLowerCase() === '!wordmatch') {
+      setLoadingWordMatch(true);
+      try {
+        const cards = await generateFlashcards(currentChatId);
+        setWordMatchPairs(cards);
+        setShowWordMatch(true);
+      } catch (err) {
+        setError('Failed to generate word match pairs');
+      } finally {
+        setLoadingWordMatch(false);
+      }
+      return true;
+    }
     return false;
   };
   // FLASHCARDFLIP
@@ -652,12 +666,26 @@ export function ChatPage() {
             onClose={() => setShowFlashcards(false)}
           />
         )}
+        {showWordMatch && wordMatchPairs.length > 0 && (
+          <WordMatch
+            wordPairs={wordMatchPairs}
+            onClose={() => setShowWordMatch(false)}
+          />
+        )}
       </AnimatePresence>
       {loadingFlashcards && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 flex items-center gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
             <span>Generating flashcards...</span>
+          </div>
+        </div>
+      )}
+      {loadingWordMatch && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 flex items-center gap-3">
+            <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+            <span>Generating word match game...</span>
           </div>
         </div>
       )}

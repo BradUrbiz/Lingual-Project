@@ -18,11 +18,11 @@ const MINIGAMES: Minigame[] = [
     command: '!flashcardflip',
   },
   {
-    id: 'comingsoon1',
+    id: 'wordmatch',
     name: 'Word Match',
-    description: 'Coming soon!',
-    logo: '',
-    command: '',
+    description: 'Match Korean words to their English meanings!',
+    logo: '/minigamelogos/wordmatchlogo.png',
+    command: '!wordmatch',
   },
   {
     id: 'comingsoon2',

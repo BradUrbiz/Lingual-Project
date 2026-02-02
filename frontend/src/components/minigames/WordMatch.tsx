@@ -1,6 +1,8 @@
+// WordMatch - Warm Brutalism Edition
+
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X } from 'lucide-react';
+import { X, Trophy, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui';
 
 // Use public path for Vite static asset
@@ -18,8 +20,10 @@ interface WordMatchProps {
 
 export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
   // Shuffle words for columns
-  const [leftWords] = useState(() => wordPairs.map(w => w.korean).sort(() => Math.random() - 0.5));
-  const [rightWords] = useState(() => wordPairs.map(w => w.english).sort(() => Math.random() - 0.5));
+  const [leftWords] = useState(() => wordPairs.map((w) => w.korean).sort(() => Math.random() - 0.5));
+  const [rightWords] = useState(() =>
+    wordPairs.map((w) => w.english).sort(() => Math.random() - 0.5)
+  );
   const [selectedLeft, setSelectedLeft] = useState<number | null>(null);
   const [selectedRight, setSelectedRight] = useState<number | null>(null);
   const [matched, setMatched] = useState<{ left: number[]; right: number[] }>({ left: [], right: [] });
@@ -66,43 +70,83 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-foreground/60 flex items-center justify-center z-50 p-4"
     >
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-2xl p-8 max-w-2xl w-full mx-4 relative"
+        className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 max-w-2xl w-full relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <img src={wordMatchLogo} alt="Word Match Logo" className="w-12 h-12 rounded-lg shadow" />
-            <span className="text-2xl font-bold text-blue-700">Word Match</span>
+            <div className="w-12 h-12 rounded-xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center shadow-stamp-sm overflow-hidden">
+              {wordMatchLogo ? (
+                <img src={wordMatchLogo} alt="Word Match Logo" className="w-full h-full object-cover" />
+              ) : (
+                <Link2 size={24} strokeWidth={2.5} />
+              )}
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                Minigame
+              </p>
+              <span className="text-2xl font-display font-bold text-foreground">Word Match</span>
+            </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <X size={28} />
+          <button
+            onClick={onClose}
+            className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-xl border-2 border-transparent hover:border-border transition-colors"
+          >
+            <X size={28} strokeWidth={2.5} />
           </button>
         </div>
+
         {/* Score */}
-        <div className="text-lg font-semibold text-green-700 mb-4">Score: {score}</div>
+        <div className="flex items-center justify-between mb-6">
+          <div className="bg-success/10 text-success px-4 py-2 rounded-xl border-2 border-success/30">
+            <span className="text-lg font-bold">Score: {score}</span>
+          </div>
+          <div className="bg-secondary text-muted-foreground px-4 py-2 rounded-xl border-2 border-border">
+            <span className="text-sm font-semibold">
+              {matched.left.length}/{wordPairs.length} matched
+            </span>
+          </div>
+        </div>
+
         {/* Game Over */}
         {gameOver ? (
           <div className="flex flex-col items-center justify-center py-12">
-            <div className="text-3xl font-bold text-green-700 mb-2">Excellent!</div>
-            <div className="text-lg mb-6">All words matched!</div>
-            <Button onClick={onClose} className="w-40">Close</Button>
+            <div className="w-20 h-20 rounded-2xl bg-accent text-accent-foreground border-3 border-foreground flex items-center justify-center mb-6 shadow-stamp">
+              <Trophy size={40} strokeWidth={2.5} />
+            </div>
+            <div className="text-4xl font-display font-bold text-foreground mb-2">Excellent!</div>
+            <p className="text-muted-foreground mb-2">All words matched!</p>
+            <div className="bg-secondary rounded-xl border-2 border-border px-6 py-4 mb-6">
+              <p className="text-3xl font-display font-bold text-primary">
+                {score} points
+              </p>
+            </div>
+            <Button onClick={onClose} className="w-40">
+              Close
+            </Button>
           </div>
         ) : (
           <div className="flex flex-row gap-8 justify-center">
             {/* Left Column (Korean) */}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold text-center mb-2">
+                Korean
+              </p>
               {leftWords.map((word, i) => (
                 <button
                   key={i}
-                  className={`px-6 py-3 rounded-lg border text-lg font-medium transition-all
-                    ${matched.left.includes(i) ? 'bg-gray-200 text-gray-400 cursor-default' : ''}
-                    ${selectedLeft === i ? 'bg-blue-200 text-blue-800 border-blue-400' : 'bg-white border-gray-300 hover:bg-blue-50'}
+                  className={`
+                    px-6 py-3 rounded-xl border-2 text-lg font-display font-bold transition-all
+                    ${matched.left.includes(i) ? 'bg-success/10 text-success border-success cursor-default' : ''}
+                    ${selectedLeft === i && !matched.left.includes(i) ? 'bg-primary/10 text-primary border-primary shadow-stamp-sm' : ''}
+                    ${selectedLeft !== i && !matched.left.includes(i) ? 'bg-card border-border hover:border-foreground hover:shadow-stamp-sm text-foreground' : ''}
                   `}
                   disabled={matched.left.includes(i)}
                   onClick={() => handleSelect('left', i)}
@@ -111,14 +155,25 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
                 </button>
               ))}
             </div>
+
+            {/* Connector Line Visual */}
+            <div className="flex items-center justify-center">
+              <div className="w-8 h-0.5 bg-border rounded-full" />
+            </div>
+
             {/* Right Column (English) */}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold text-center mb-2">
+                English
+              </p>
               {rightWords.map((word, i) => (
                 <button
                   key={i}
-                  className={`px-6 py-3 rounded-lg border text-lg font-medium transition-all
-                    ${matched.right.includes(i) ? 'bg-gray-200 text-gray-400 cursor-default' : ''}
-                    ${selectedRight === i ? 'bg-blue-200 text-blue-800 border-blue-400' : 'bg-white border-gray-300 hover:bg-blue-50'}
+                  className={`
+                    px-6 py-3 rounded-xl border-2 text-lg font-medium transition-all
+                    ${matched.right.includes(i) ? 'bg-success/10 text-success border-success cursor-default' : ''}
+                    ${selectedRight === i && !matched.right.includes(i) ? 'bg-accent/10 text-accent border-accent shadow-stamp-sm' : ''}
+                    ${selectedRight !== i && !matched.right.includes(i) ? 'bg-card border-border hover:border-foreground hover:shadow-stamp-sm text-foreground' : ''}
                   `}
                   disabled={matched.right.includes(i)}
                   onClick={() => handleSelect('right', i)}
@@ -128,6 +183,13 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
               ))}
             </div>
           </div>
+        )}
+
+        {/* Instructions */}
+        {!gameOver && (
+          <p className="text-center text-sm text-muted-foreground mt-6">
+            Click a word on each side to match them together
+          </p>
         )}
       </motion.div>
     </motion.div>

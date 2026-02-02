@@ -1,80 +1,108 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Warm Brutalism Typography */
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap');
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* Warm Brutalism Color Palette */
   --font-size: 16px;
-  --background: #ffffff;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #7c3aed;
-  --primary-foreground: #ffffff;
-  --secondary: #eef2ff;
-  --secondary-foreground: #1f2937;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --accent: #7c3aed;
-  --accent-foreground: #ffffff;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #e2e8f0;
+  --background: #F5F0E8;           /* warm cream */
+  --foreground: #2D2A26;           /* charcoal */
+  --card: #FFFDF9;                 /* warm white */
+  --card-foreground: #2D2A26;
+  --popover: #FFFDF9;
+  --popover-foreground: #2D2A26;
+  --primary: #C75D3A;              /* terracotta */
+  --primary-foreground: #FFFDF9;
+  --secondary: #E8DDD4;            /* soft clay */
+  --secondary-foreground: #2D2A26;
+  --muted: #E8E2D9;                /* muted cream */
+  --muted-foreground: #6B6560;     /* warm gray */
+  --accent: #D4A03E;               /* mustard */
+  --accent-foreground: #1A1816;
+  --destructive: #B84233;          /* deep terracotta */
+  --destructive-foreground: #FFFDF9;
+  --border: #D4CEC4;               /* warm border */
   --input: transparent;
-  --input-background: #f8fafc;
-  --switch-background: #cbd5e1;
-  --font-weight-medium: 500;
+  --input-background: #FFFDF9;
+  --switch-background: #D4CEC4;
+  --font-weight-medium: 600;
   --font-weight-normal: 400;
-  --ring: #c4b5fd;
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.75rem;
-  --sidebar: #f8fafc;
-  --sidebar-foreground: #0f172a;
-  --sidebar-primary: #7c3aed;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ede9fe;
-  --sidebar-accent-foreground: #4c1d95;
-  --sidebar-border: #e2e8f0;
-  --sidebar-ring: #c4b5fd;
+  --ring: #C75D3A;
+
+  /* Chart colors - warm palette */
+  --chart-1: #C75D3A;              /* terracotta */
+  --chart-2: #D4A03E;              /* mustard */
+  --chart-3: #7D9A78;              /* sage */
+  --chart-4: #5C8A9A;              /* dusty teal */
+  --chart-5: #9A7B5C;              /* warm brown */
+
+  /* Brutalist sizing */
+  --radius: 1rem;                  /* 16px - chunky corners */
+  --border-thick: 3px;             /* visible borders */
+  --border-chunky: 4px;            /* extra chunky */
+
+  /* Sidebar */
+  --sidebar: #E8DDD4;
+  --sidebar-foreground: #2D2A26;
+  --sidebar-primary: #C75D3A;
+  --sidebar-primary-foreground: #FFFDF9;
+  --sidebar-accent: #D4A03E;
+  --sidebar-accent-foreground: #1A1816;
+  --sidebar-border: #D4CEC4;
+  --sidebar-ring: #C75D3A;
+
+  /* Additional Warm Brutalism tokens */
+  --success: #7D9A78;              /* sage green */
+  --success-foreground: #FFFDF9;
+  --warning: #D4A03E;              /* mustard */
+  --warning-foreground: #1A1816;
+  --ink: #1A1816;                  /* deepest dark */
+
+  /* Typography */
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-body: 'Satoshi', system-ui, sans-serif;
 }
 
+/* Dark mode - Warm Brutalism (deep charcoal with warm accents) */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.7 0.2 280);
-  --primary-foreground: oklch(0.145 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  --background: #1A1816;           /* ink */
+  --foreground: #F5F0E8;           /* warm cream */
+  --card: #2D2A26;                 /* charcoal */
+  --card-foreground: #F5F0E8;
+  --popover: #2D2A26;
+  --popover-foreground: #F5F0E8;
+  --primary: #E07A5A;              /* lighter terracotta */
+  --primary-foreground: #1A1816;
+  --secondary: #3D3835;            /* warm dark */
+  --secondary-foreground: #F5F0E8;
+  --muted: #3D3835;
+  --muted-foreground: #A8A29E;     /* warm gray */
+  --accent: #E5B84A;               /* bright mustard */
+  --accent-foreground: #1A1816;
+  --destructive: #D65A4A;
+  --destructive-foreground: #F5F0E8;
+  --border: #4A4540;               /* warm dark border */
+  --input: #3D3835;
+  --ring: #E07A5A;
+  --sidebar: #2D2A26;
+  --sidebar-foreground: #F5F0E8;
+  --sidebar-primary: #E07A5A;
+  --sidebar-primary-foreground: #1A1816;
+  --sidebar-accent: #E5B84A;
+  --sidebar-accent-foreground: #1A1816;
+  --sidebar-border: #4A4540;
+  --sidebar-ring: #E07A5A;
+  --success: #8FB085;
+  --success-foreground: #1A1816;
 }
 
 @theme inline {
+  /* Core colors */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -96,15 +124,31 @@
   --color-input-background: var(--input-background);
   --color-switch-background: var(--switch-background);
   --color-ring: var(--ring);
+
+  /* Chart colors */
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Warm Brutalism specific */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-ink: var(--ink);
+  --color-primary-hover: #A84D2E;  /* darker terracotta */
+  --color-error: var(--destructive);
+
+  /* Chunky border radius for brutalism */
+  --radius-sm: calc(var(--radius) - 4px);   /* 12px */
+  --radius-md: var(--radius);                /* 16px */
+  --radius-lg: calc(var(--radius) + 4px);    /* 20px */
+  --radius-xl: calc(var(--radius) + 8px);    /* 24px */
+  --radius-2xl: calc(var(--radius) + 16px);  /* 32px */
+
+  /* Sidebar */
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -113,13 +157,14 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Text aliases */
   --color-text: var(--foreground);
   --color-text-secondary: var(--muted-foreground);
-  --color-primary-hover: #6d28d9;
-  --color-success: #10b981;
-  --color-success-foreground: #ffffff;
-  --color-error: #ef4444;
-  --color-purple-accent: #7c3aed;
+
+  /* Typography */
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
 }
 
 @layer base {
@@ -133,52 +178,73 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Segoe UI', Arial, sans-serif;
+    font-family: var(--font-body);
     margin: 0;
     padding: 0;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Warm Brutalism Typography - Chunky display headers */
   h1 {
-    font-size: var(--text-2xl);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    font-family: var(--font-display);
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
   }
 
   h2 {
-    font-size: var(--text-xl);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
   }
 
   h3 {
-    font-size: var(--text-lg);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.2;
   }
 
   h4 {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.3;
   }
 
   label {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 500;
     line-height: 1.5;
   }
 
   button {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 600;
     line-height: 1.5;
   }
 
-  input {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-normal);
+  input, textarea {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 400;
     line-height: 1.5;
+  }
+
+  /* Utility class for display font */
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
   }
 }
 
@@ -242,26 +308,93 @@
   animation: spin 1s linear infinite;
 }
 
-/* Custom scrollbar for minigames */
+/* Custom scrollbar - Warm Brutalism style */
 .minigame-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #94a3b8 #f1f5f9;
+  scrollbar-color: var(--border) var(--muted);
 }
 
 .minigame-scroll::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
 }
 
 .minigame-scroll::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 4px;
+  background: var(--muted);
+  border-radius: 8px;
 }
 
 .minigame-scroll::-webkit-scrollbar-thumb {
-  background: #94a3b8;
-  border-radius: 4px;
+  background: var(--border);
+  border-radius: 8px;
+  border: 2px solid var(--muted);
 }
 
 .minigame-scroll::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+  background: var(--primary);
+}
+
+/* Warm Brutalism Utility Classes */
+
+/* Chunky borders - Tailwind doesn't have border-3 by default */
+.border-3 {
+  border-width: 3px;
+}
+
+.border-b-3 {
+  border-bottom-width: 3px;
+}
+
+.border-t-3 {
+  border-top-width: 3px;
+}
+
+.border-chunky {
+  border-width: 3px;
+}
+
+.border-extra-chunky {
+  border-width: 4px;
+}
+
+/* Stamp-like shadow effect */
+.shadow-stamp {
+  box-shadow: 4px 4px 0 0 var(--foreground);
+}
+
+.shadow-stamp-sm {
+  box-shadow: 2px 2px 0 0 var(--foreground);
+}
+
+.shadow-stamp-primary {
+  box-shadow: 4px 4px 0 0 var(--primary);
+}
+
+/* Brutalist card style */
+.card-brutalist {
+  background: var(--card);
+  border: 3px solid var(--foreground);
+  border-radius: var(--radius);
+  box-shadow: 6px 6px 0 0 var(--foreground);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card-brutalist:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0 0 var(--foreground);
+}
+
+.card-brutalist:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 var(--foreground);
+}
+
+/* Warm backgrounds */
+.bg-warm-gradient {
+  background: linear-gradient(135deg, var(--background) 0%, var(--secondary) 100%);
+}
+
+/* Text selection */
+::selection {
+  background: var(--primary);
+  color: var(--primary-foreground);
 }

@@ -36,7 +36,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         {label && <Label>{label}</Label>}
         <textarea
           className={cn(
-            'flex min-h-[80px] w-full rounded-lg border border-input bg-background px-4 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all disabled:cursor-not-allowed disabled:opacity-50 resize-none',
+            'flex min-h-[80px] w-full rounded-xl border-2 border-border bg-card px-4 py-3 text-base font-medium text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:shadow-stamp-sm transition-all disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-secondary resize-none',
             error && 'border-destructive',
             className
           )}

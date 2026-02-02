@@ -1,8 +1,8 @@
-// FLASHCARDFLIP
+// FLASHCARDFLIP - Warm Brutalism Edition
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X } from 'lucide-react';
+import { X, Trophy, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui';
 
 interface Flashcard {
@@ -31,9 +31,9 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const isCorrect = answer.toLowerCase().trim() === currentCard.english.toLowerCase().trim();
-    
+
     if (isCorrect) {
       setScore(score + 1);
       setShowResult('correct');
@@ -44,7 +44,7 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
     setTimeout(() => {
       setShowResult(null);
       setAnswer('');
-      
+
       if (currentIndex + 1 >= flashcards.length) {
         setGameOver(true);
       } else {
@@ -54,24 +54,36 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
   };
 
   if (gameOver) {
+    const percentage = Math.round((score / flashcards.length) * 100);
     return (
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        className="fixed inset-0 bg-foreground/60 flex items-center justify-center z-50 p-4"
         onClick={onClose}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="bg-white rounded-2xl p-8 max-w-md w-full mx-4 text-center"
+          className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 max-w-md w-full text-center"
           onClick={(e) => e.stopPropagation()}
         >
-          <h2 className="text-3xl font-bold text-blue-600 mb-4">Game Over!</h2>
-          <p className="text-xl mb-6">
-            Score: <span className="font-bold text-blue-600">{score}</span> / {flashcards.length}
-          </p>
+          <div className="w-16 h-16 rounded-2xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center mx-auto mb-6 shadow-stamp-sm">
+            <Trophy size={32} strokeWidth={2.5} />
+          </div>
+          <h2 className="text-3xl font-display font-bold text-foreground mb-2">Game Over!</h2>
+          <p className="text-muted-foreground mb-6">Great effort on this practice session</p>
+
+          <div className="bg-secondary rounded-xl border-2 border-border p-6 mb-6">
+            <p className="text-5xl font-display font-bold text-primary mb-2">
+              {score}/{flashcards.length}
+            </p>
+            <p className="text-sm text-muted-foreground font-medium">
+              {percentage}% accuracy
+            </p>
+          </div>
+
           <Button onClick={onClose} className="w-full">
             Close
           </Button>
@@ -85,30 +97,48 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-foreground/60 flex items-center justify-center z-50 p-4"
     >
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-2xl p-8 max-w-md w-full mx-4"
+        className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 max-w-md w-full"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
-          <div className="text-lg font-medium text-gray-600">
-            Card {currentIndex + 1} / {flashcards.length}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary border-2 border-primary/30 flex items-center justify-center">
+              <Sparkles size={20} strokeWidth={2.5} />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Card</p>
+              <p className="font-display font-bold text-foreground">
+                {currentIndex + 1} of {flashcards.length}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-4">
-            <div className="text-lg font-bold text-blue-600">
-              Score: {score}
+            <div className="bg-success/10 text-success px-3 py-1.5 rounded-lg border border-success/20">
+              <span className="text-sm font-bold">Score: {score}</span>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-xl border-2 border-transparent hover:border-border transition-colors"
             >
-              <X size={24} />
+              <X size={24} strokeWidth={2.5} />
             </button>
           </div>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="h-2 w-full rounded-lg bg-secondary border border-border overflow-hidden mb-6">
+          <motion.div
+            className="h-full bg-primary rounded-lg"
+            initial={{ width: 0 }}
+            animate={{ width: `${((currentIndex + 1) / flashcards.length) * 100}%` }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          />
         </div>
 
         {/* Flashcard */}
@@ -119,18 +149,23 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -50, opacity: 0 }}
             className={`
-              rounded-xl p-8 mb-6 text-center
-              ${showResult === 'correct' ? 'bg-green-100' : ''}
-              ${showResult === 'wrong' ? 'bg-red-100' : ''}
-              ${!showResult ? 'bg-blue-50' : ''}
+              rounded-xl p-8 mb-6 text-center border-2 transition-colors
+              ${showResult === 'correct' ? 'bg-success/10 border-success' : ''}
+              ${showResult === 'wrong' ? 'bg-destructive/10 border-destructive' : ''}
+              ${!showResult ? 'bg-secondary border-border' : ''}
             `}
           >
-            <p className="text-4xl font-bold text-gray-800 mb-4">
+            <p className="text-4xl font-display font-bold text-foreground mb-4">
               {currentCard.korean}
             </p>
             {showResult === 'wrong' && (
-              <p className="text-lg text-red-600">
+              <p className="text-lg text-destructive font-semibold">
                 Correct: {currentCard.english}
+              </p>
+            )}
+            {showResult === 'correct' && (
+              <p className="text-lg text-success font-semibold">
+                Correct!
               </p>
             )}
           </motion.div>
@@ -145,14 +180,14 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
             onChange={(e) => setAnswer(e.target.value)}
             placeholder="Type the English translation..."
             disabled={showResult !== null}
-            className="w-full px-4 py-3 text-lg border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none disabled:bg-gray-100"
+            className="w-full px-4 py-3 text-lg bg-card border-2 border-border rounded-xl focus:border-primary focus:outline-none disabled:bg-secondary disabled:text-muted-foreground font-medium placeholder:text-muted-foreground transition-colors"
           />
           <Button
             type="submit"
             disabled={!answer.trim() || showResult !== null}
             className="w-full mt-4"
           >
-            Submit
+            Submit Answer
           </Button>
         </form>
       </motion.div>

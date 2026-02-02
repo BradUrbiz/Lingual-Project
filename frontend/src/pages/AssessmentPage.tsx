@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, AlertTriangle, Info, Lightbulb } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Loader2, AlertTriangle, Info, Lightbulb, BookOpen } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Button, Progress, Badge, AnimatedCard, Alert, AlertDescription } from '@/components/ui';
+import { Button, Progress, Badge, Card, Alert, AlertDescription } from '@/components/ui';
 import { AnimatedPage } from '@/components/layout/AnimatedPage';
 import { LanguageToggle } from '../components/common';
 import { MCQQuestion, TextQuestion, AudioQuestion } from '../components/assessment';
@@ -213,12 +213,12 @@ export function AssessmentPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <motion.div
           animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
         >
-          <Loader2 className="h-12 w-12 text-purple-600" />
+          <Loader2 className="h-12 w-12 text-primary" strokeWidth={3} />
         </motion.div>
       </div>
     );
@@ -226,11 +226,13 @@ export function AssessmentPage() {
 
   if (!currentItem) {
     return (
-      <AnimatedPage className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-slate-900 mb-4">No assessment items found</p>
+      <AnimatedPage className="min-h-screen bg-background flex items-center justify-center p-6">
+        <Card className="p-8 text-center">
+          <p className="text-foreground font-display font-bold text-xl mb-4">
+            No assessment items found
+          </p>
           <Button onClick={() => navigate('/general')}>Go Back</Button>
-        </div>
+        </Card>
       </AnimatedPage>
     );
   }
@@ -238,61 +240,71 @@ export function AssessmentPage() {
   const progressValue = ((currentIndex + 1) / items.length) * 100;
 
   return (
-    <AnimatedPage className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <AnimatedCard className="p-8 max-w-2xl w-full bg-white border border-slate-200 shadow-sm">
-        <div className="border-b border-slate-100 pb-6 mb-6 space-y-4">
+    <AnimatedPage className="min-h-screen bg-background flex items-center justify-center p-6">
+      <Card className="p-8 max-w-3xl w-full">
+        {/* Header */}
+        <div className="border-b-2 border-border pb-6 mb-6 space-y-5">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">Diagnostic</p>
-              <h1 className="text-2xl font-bold text-slate-900">Placement Check‑in</h1>
-              <p className="text-sm text-slate-500 mt-1">
-                Answer a few quick questions to calibrate your level.
-              </p>
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center shadow-stamp-sm">
+                <BookOpen size={24} strokeWidth={2.5} />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                  Diagnostic
+                </p>
+                <h1 className="text-2xl font-display font-bold">Placement Check‑in</h1>
+                <p className="text-muted-foreground mt-1">
+                  Answer a few quick questions to calibrate your level.
+                </p>
+              </div>
             </div>
             <LanguageToggle />
           </div>
 
+          {/* Progress */}
           <div>
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+            <div className="flex items-center justify-between text-sm text-muted-foreground mb-3 font-medium">
               <span>
                 {t('assessment.progress')} {currentIndex + 1} {t('assessment.of')} {items.length}
               </span>
               <span>{Math.round(progressValue)}% complete</span>
             </div>
-            <Progress value={progressValue} />
+            <Progress value={progressValue} variant="chunky" size="lg" />
           </div>
 
+          {/* Section Badge */}
           <motion.div
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
           >
-            <Badge
-              variant="accent"
-              className="bg-purple-50 text-purple-700 border border-purple-100"
-            >
+            <Badge variant="accent" size="lg">
               {currentItem.section}
             </Badge>
           </motion.div>
         </div>
 
+        {/* Error Alert */}
         <AnimatePresence mode="wait">
           {error && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="mb-4"
+              className="mb-6"
             >
               <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
+                <AlertTriangle className="h-5 w-5" />
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <div className="border-t border-slate-100 pt-6">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
+        {/* Main Content */}
+        <div className="border-t-2 border-border pt-6">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
+            {/* Question Area */}
             <div>
               <AnimatePresence mode="wait">
                 <motion.div
@@ -300,19 +312,21 @@ export function AssessmentPage() {
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.3 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                   className="mb-6"
                 >
-                  <p className="text-xl text-slate-900 mb-2">{getPrompt()}</p>
+                  <p className="text-xl font-display font-semibold text-foreground mb-4">
+                    {getPrompt()}
+                  </p>
                   {currentItem.ui.context && (
-                    <div className="mt-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 relative overflow-hidden">
-                      <div className="absolute left-0 top-4 bottom-4 w-1 bg-purple-200 rounded-full" />
+                    <div className="mt-4 rounded-xl border-2 border-border bg-secondary p-4 relative overflow-hidden">
+                      <div className="absolute left-0 top-3 bottom-3 w-1 bg-primary rounded-full" />
                       <div className="pl-4">
-                        <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400 mb-2">
-                          <Info className="h-3.5 w-3.5" />
+                        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+                          <Info className="h-4 w-4" />
                           Context
                         </div>
-                        <pre className="text-slate-900 whitespace-pre-wrap font-sans text-sm leading-relaxed">
+                        <pre className="text-foreground whitespace-pre-wrap font-body text-base leading-relaxed">
                           {currentItem.ui.context}
                         </pre>
                       </div>
@@ -321,13 +335,14 @@ export function AssessmentPage() {
                 </motion.div>
               </AnimatePresence>
 
+              {/* Answer Input */}
               <AnimatePresence mode="wait">
                 <motion.div
                   key={`answer-${currentIndex}`}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.3, delay: 0.1 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 30, delay: 0.1 }}
                   className="mb-8"
                 >
                   {currentItem.item_type === 'mcq_single' && currentItem.content.options && (
@@ -353,31 +368,33 @@ export function AssessmentPage() {
               </AnimatePresence>
             </div>
 
+            {/* Side Panel - Instructions & Tips */}
             <div className="lg:pt-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+              <div className="rounded-xl border-2 border-border bg-secondary p-5 space-y-5">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs uppercase tracking-wide text-slate-400">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
                       Instructions
                     </p>
-                    <span className="text-[10px] font-semibold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                    <Badge variant="outline" size="sm">
                       {getItemTypeLabel()}
-                    </span>
+                    </Badge>
                   </div>
-                  <p className="text-sm text-slate-600 mt-2">
+                  <p className="text-foreground leading-relaxed">
                     {getInstructions() || 'Answer clearly and keep your response concise.'}
                   </p>
                 </div>
+
                 {getItemTips().length > 0 && (
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
-                      <Lightbulb className="h-3.5 w-3.5" />
+                  <div className="rounded-xl border-2 border-border bg-card p-4">
+                    <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">
+                      <Lightbulb className="h-4 w-4 text-accent" />
                       Tips
                     </div>
-                    <div className="mt-2 space-y-2 text-sm text-slate-600">
+                    <div className="space-y-3">
                       {getItemTips().map((tip) => (
-                        <div key={tip} className="flex items-start gap-2">
-                          <span className="mt-1 h-2 w-2 rounded-full bg-purple-500" />
+                        <div key={tip} className="flex items-start gap-3 text-sm text-foreground">
+                          <span className="mt-1.5 h-2 w-2 rounded-full bg-primary flex-shrink-0" />
                           {tip}
                         </div>
                       ))}
@@ -389,17 +406,18 @@ export function AssessmentPage() {
           </div>
         </div>
 
+        {/* Action Buttons */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="flex gap-4"
+          className="flex gap-4 mt-6"
         >
           <Button
-            variant="secondary"
+            variant="outline"
             onClick={handleSkip}
             disabled={submitting}
-            className="flex-1 rounded-xl"
+            className="flex-1"
           >
             {t('assessment.skip')}
           </Button>
@@ -407,12 +425,12 @@ export function AssessmentPage() {
             onClick={handleSubmit}
             disabled={!canSubmit() || submitting}
             loading={submitting}
-            className="flex-1 rounded-xl"
+            className="flex-1"
           >
             {t('assessment.next')}
           </Button>
         </motion.div>
-      </AnimatedCard>
+      </Card>
     </AnimatedPage>
   );
 }

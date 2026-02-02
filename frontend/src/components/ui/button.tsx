@@ -5,32 +5,46 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center whitespace-nowrap rounded-xl text-base font-semibold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
+        // Warm Brutalism primary - stamp effect
         default:
-          'bg-primary text-white hover:bg-primary-hover disabled:bg-gray-300',
+          'bg-primary text-primary-foreground border-3 border-foreground shadow-stamp hover:shadow-[6px_6px_0_0_#2D2A26] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_#2D2A26]',
+        // Destructive with brutalist styling
         destructive:
-          'bg-destructive text-white hover:bg-red-600',
+          'bg-destructive text-destructive-foreground border-3 border-foreground shadow-stamp hover:shadow-[6px_6px_0_0_#2D2A26] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_#2D2A26]',
+        // Outline - visible border, warm hover
         outline:
-          'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+          'bg-card text-foreground border-3 border-foreground hover:bg-secondary active:bg-muted',
+        // Secondary - softer brutalist
         secondary:
-          'bg-white text-foreground border border-gray-300 hover:bg-gray-50',
+          'bg-secondary text-secondary-foreground border-2 border-border hover:border-foreground hover:bg-muted',
+        // Ghost - minimal but warm
         ghost:
-          'hover:bg-accent hover:text-accent-foreground',
+          'text-foreground hover:bg-secondary hover:text-foreground',
+        // Link - underline style
         link:
-          'text-primary underline-offset-4 hover:underline',
+          'text-primary underline-offset-4 hover:underline font-medium',
+        // Option - for selection buttons
         option:
-          'border-2 bg-white border-gray-200 text-foreground hover:border-primary/50',
+          'bg-card text-foreground border-3 border-border hover:border-primary hover:bg-primary/5',
+        // Google auth button
         google:
-          'bg-white text-foreground border border-gray-300 hover:bg-gray-50 gap-2',
+          'bg-card text-foreground border-3 border-foreground gap-3 hover:bg-secondary',
+        // Accent variant - mustard color
+        accent:
+          'bg-accent text-accent-foreground border-3 border-foreground shadow-stamp hover:shadow-[6px_6px_0_0_#2D2A26] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_#2D2A26]',
+        // Success variant - sage green
+        success:
+          'bg-success text-success-foreground border-3 border-foreground shadow-stamp hover:shadow-[6px_6px_0_0_#2D2A26] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_#2D2A26]',
       },
       size: {
-        default: 'h-11 px-6 py-3',
-        sm: 'h-9 px-3 text-xs',
-        lg: 'h-12 px-8 text-base',
-        icon: 'h-10 w-10',
+        default: 'h-12 px-6 py-3',
+        sm: 'h-10 px-4 text-sm',
+        lg: 'h-14 px-8 text-lg',
+        icon: 'h-12 w-12',
       },
       selected: {
         true: '',
@@ -41,7 +55,7 @@ const buttonVariants = cva(
       {
         variant: 'option',
         selected: true,
-        className: 'bg-primary/10 border-primary text-primary',
+        className: 'bg-primary/10 border-primary text-primary border-3',
       },
     ],
     defaultVariants: {
@@ -84,8 +98,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {loading ? (
           <span className="flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading...
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span>Loading...</span>
           </span>
         ) : (
           children

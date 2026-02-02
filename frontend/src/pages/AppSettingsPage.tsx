@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as Tabs from '@radix-ui/react-tabs';
-import { User, Bell, Shield, Lock, Smartphone } from 'lucide-react';
+import { User, Bell, Shield, Lock, Smartphone, Settings } from 'lucide-react';
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
@@ -67,11 +67,23 @@ export function AppSettingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold text-slate-900 mb-8">
-        {t('app.settings.title')}
-      </h1>
+      {/* Header */}
+      <div className="flex items-center gap-4 mb-8">
+        <div className="w-14 h-14 rounded-2xl bg-primary text-primary-foreground border-3 border-foreground flex items-center justify-center shadow-stamp">
+          <Settings size={28} strokeWidth={2.5} />
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+            Preferences
+          </p>
+          <h1 className="text-3xl font-display font-bold text-foreground">
+            {t('app.settings.title')}
+          </h1>
+        </div>
+      </div>
 
-      <Tabs.Root defaultValue="account" className="flex flex-col md:flex-row gap-8">
+      <Tabs.Root defaultValue="account" className="flex flex-col md:flex-row gap-6">
+        {/* Tab Navigation */}
         <Tabs.List className="flex flex-col space-y-2 md:w-64 flex-shrink-0">
           {[
             { value: 'account', icon: User, label: t('app.settings.tabs.account') },
@@ -84,27 +96,29 @@ export function AppSettingsPage() {
               key={tab.value}
               value={tab.value}
               className={clsx(
-                'group flex items-center space-x-3 px-4 py-3 rounded-xl text-left transition-all',
-                'data-[state=active]:bg-purple-600 data-[state=active]:text-white',
-                'text-slate-600 hover:bg-slate-100 data-[state=active]:shadow-md'
+                'group flex items-center space-x-3 px-4 py-3 rounded-xl text-left transition-all border-2',
+                'data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-foreground data-[state=active]:shadow-stamp',
+                'text-muted-foreground hover:text-foreground hover:bg-secondary border-transparent data-[state=inactive]:hover:border-border'
               )}
             >
-              <tab.icon size={18} className="opacity-70 group-data-[state=active]:opacity-100" />
-              <span className="font-medium">{tab.label}</span>
+              <tab.icon size={18} strokeWidth={2.5} className="opacity-70 group-data-[state=active]:opacity-100" />
+              <span className="font-bold">{tab.label}</span>
             </Tabs.Trigger>
           ))}
         </Tabs.List>
 
-        <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 p-8 min-h-[500px]">
+        {/* Content Panel */}
+        <div className="flex-1 bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 min-h-[500px]">
+          {/* Account Tab */}
           <Tabs.Content
             value="account"
             className="space-y-8 outline-none animate-in fade-in slide-in-from-right-4 duration-300"
           >
             <div>
-              <h2 className="text-xl font-bold text-slate-900 mb-1">
+              <h2 className="text-xl font-display font-bold text-foreground mb-1">
                 {t('app.settings.account.title')}
               </h2>
-              <p className="text-slate-500 text-sm">
+              <p className="text-muted-foreground text-sm">
                 {t('app.settings.account.subtitle')}
               </p>
             </div>
@@ -112,7 +126,7 @@ export function AppSettingsPage() {
             <div className="grid gap-6">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">
+                  <label className="text-sm font-bold text-foreground">
                     {t('app.settings.account.firstName')}
                   </label>
                   <input
@@ -121,11 +135,11 @@ export function AppSettingsPage() {
                     onChange={(event) => setFirstName(event.target.value)}
                     placeholder={t('app.settings.account.firstNamePlaceholder')}
                     disabled={isLoading}
-                    className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all disabled:bg-slate-50"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-border bg-card text-foreground font-medium placeholder:text-muted-foreground focus:border-primary focus:outline-none transition-all disabled:bg-secondary disabled:text-muted-foreground"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">
+                  <label className="text-sm font-bold text-foreground">
                     {t('app.settings.account.lastName')}
                   </label>
                   <input
@@ -134,13 +148,13 @@ export function AppSettingsPage() {
                     onChange={(event) => setLastName(event.target.value)}
                     placeholder={t('app.settings.account.lastNamePlaceholder')}
                     disabled={isLoading}
-                    className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all disabled:bg-slate-50"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-border bg-card text-foreground font-medium placeholder:text-muted-foreground focus:border-primary focus:outline-none transition-all disabled:bg-secondary disabled:text-muted-foreground"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">
+                <label className="text-sm font-bold text-foreground">
                   {t('app.settings.account.email')}
                 </label>
                 <input
@@ -148,7 +162,7 @@ export function AppSettingsPage() {
                   value={user?.email || ''}
                   readOnly
                   disabled
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-500 outline-none"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-border bg-secondary text-muted-foreground font-medium outline-none"
                 />
               </div>
 
@@ -156,7 +170,7 @@ export function AppSettingsPage() {
                 <button
                   onClick={handleSave}
                   disabled={isLoading || isSaving}
-                  className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-6 rounded-lg shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 px-6 rounded-xl border-2 border-foreground shadow-stamp hover:shadow-[6px_6px_0_0_var(--foreground)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_var(--foreground)] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:translate-y-0"
                 >
                   {isSaving ? t('app.settings.account.saving') : t('app.settings.account.save')}
                 </button>
@@ -164,15 +178,16 @@ export function AppSettingsPage() {
             </div>
           </Tabs.Content>
 
+          {/* Notifications Tab */}
           <Tabs.Content
             value="notifications"
             className="space-y-8 outline-none animate-in fade-in slide-in-from-right-4 duration-300"
           >
             <div>
-              <h2 className="text-xl font-bold text-slate-900 mb-1">
+              <h2 className="text-xl font-display font-bold text-foreground mb-1">
                 {t('app.settings.notifications.title')}
               </h2>
-              <p className="text-slate-500 text-sm">
+              <p className="text-muted-foreground text-sm">
                 {t('app.settings.notifications.subtitle')}
               </p>
             </div>
@@ -186,81 +201,87 @@ export function AppSettingsPage() {
               ].map((setting, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center justify-between p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors"
+                  className="flex items-center justify-between p-4 border-2 border-border rounded-xl hover:bg-secondary transition-colors"
                 >
                   <div>
-                    <div className="font-semibold text-slate-900">{t(setting.labelKey)}</div>
-                    <div className="text-sm text-slate-500">{t(setting.descKey)}</div>
+                    <div className="font-bold text-foreground">{t(setting.labelKey)}</div>
+                    <div className="text-sm text-muted-foreground">{t(setting.descKey)}</div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" defaultChecked={setting.default} className="sr-only peer" />
-                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    <div className="w-12 h-7 bg-secondary border-2 border-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-foreground after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-card after:border-2 after:border-border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary peer-checked:border-foreground"></div>
                   </label>
                 </div>
               ))}
             </div>
           </Tabs.Content>
 
+          {/* Privacy Tab */}
           <Tabs.Content
             value="privacy"
             className="space-y-8 outline-none animate-in fade-in slide-in-from-right-4 duration-300"
           >
             <div>
-              <h2 className="text-xl font-bold text-slate-900 mb-1">
+              <h2 className="text-xl font-display font-bold text-foreground mb-1">
                 {t('app.settings.privacy.title')}
               </h2>
-              <p className="text-slate-500 text-sm">{t('app.settings.privacy.subtitle')}</p>
+              <p className="text-muted-foreground text-sm">{t('app.settings.privacy.subtitle')}</p>
             </div>
 
             <div className="space-y-6">
-              <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl text-amber-800 text-sm">
+              <div className="p-4 bg-accent/10 border-2 border-accent/30 rounded-xl text-foreground text-sm">
                 {t('app.settings.privacy.notice')}
               </div>
 
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-900">
+                <div className="flex items-center justify-between p-4 border-2 border-border rounded-xl">
+                  <span className="font-bold text-foreground">
                     {t('app.settings.privacy.audio')}
                   </span>
-                  <input
-                    type="checkbox"
-                    checked
-                    readOnly
-                    className="h-5 w-5 text-purple-600 rounded border-slate-300 focus:ring-purple-500"
-                  />
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" defaultChecked className="sr-only peer" />
+                    <div className="w-12 h-7 bg-secondary border-2 border-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-foreground after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-card after:border-2 after:border-border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-success peer-checked:border-foreground"></div>
+                  </label>
                 </div>
-                <p className="text-sm text-slate-500 ml-0">
+                <p className="text-sm text-muted-foreground ml-0">
                   {t('app.settings.privacy.audioNote')}
                 </p>
               </div>
 
-              <div className="pt-8 border-t border-slate-100">
-                <h3 className="font-bold text-slate-900 mb-4">
+              <div className="pt-8 border-t-2 border-border">
+                <h3 className="font-display font-bold text-foreground mb-4">
                   {t('app.settings.privacy.danger')}
                 </h3>
-                <button className="text-red-600 font-semibold border border-red-200 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-lg transition-colors">
+                <button className="text-destructive font-bold border-2 border-destructive bg-destructive/10 hover:bg-destructive/20 px-4 py-3 rounded-xl transition-colors">
                   {t('app.settings.privacy.delete')}
                 </button>
               </div>
             </div>
           </Tabs.Content>
 
+          {/* Password Tab (Placeholder) */}
           <Tabs.Content
             value="password"
             className="outline-none animate-in fade-in slide-in-from-right-4 duration-300"
           >
-            <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-              <Lock size={48} className="mb-4 opacity-50" />
-              <p>{t('app.settings.password.placeholder')}</p>
+            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+              <div className="w-16 h-16 rounded-2xl bg-secondary border-2 border-border flex items-center justify-center mb-4">
+                <Lock size={32} strokeWidth={2} />
+              </div>
+              <p className="font-medium">{t('app.settings.password.placeholder')}</p>
             </div>
           </Tabs.Content>
+
+          {/* Devices Tab (Placeholder) */}
           <Tabs.Content
             value="devices"
             className="outline-none animate-in fade-in slide-in-from-right-4 duration-300"
           >
-            <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-              <Smartphone size={48} className="mb-4 opacity-50" />
-              <p>{t('app.settings.devices.placeholder')}</p>
+            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+              <div className="w-16 h-16 rounded-2xl bg-secondary border-2 border-border flex items-center justify-center mb-4">
+                <Smartphone size={32} strokeWidth={2} />
+              </div>
+              <p className="font-medium">{t('app.settings.devices.placeholder')}</p>
             </div>
           </Tabs.Content>
         </div>

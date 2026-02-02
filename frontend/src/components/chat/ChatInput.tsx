@@ -26,7 +26,7 @@ export function ChatInput({
   };
 
   return (
-    <div className="flex items-end gap-2">
+    <div className="flex items-end gap-3">
       <TextArea
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -35,18 +35,17 @@ export function ChatInput({
         disabled={disabled}
         autoResize
         rows={1}
-        className="flex-1"
+        className="flex-1 min-h-[48px]"
       />
       <button
         onClick={onSend}
         disabled={!value.trim() || disabled}
-        className="p-3 bg-primary text-white rounded-lg hover:bg-primary-hover disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+        className="p-3 bg-primary text-primary-foreground rounded-xl border-2 border-foreground shadow-stamp hover:shadow-[6px_6px_0_0_var(--foreground)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_var(--foreground)] disabled:bg-secondary disabled:text-muted-foreground disabled:border-border disabled:shadow-none disabled:cursor-not-allowed transition-all"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeWidth={2}
             d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
           />
         </svg>

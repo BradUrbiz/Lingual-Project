@@ -60,16 +60,16 @@ function SessionItem({
     <div
       onClick={() => onSelect(session.id)}
       className={clsx(
-        'w-full text-left relative flex items-center p-4 rounded-xl border transition-all mb-4 cursor-pointer group',
+        'w-full text-left relative flex items-center p-4 rounded-xl border-2 transition-all mb-4 cursor-pointer group',
         isActive
-          ? 'bg-white border-purple-200 shadow-lg ring-2 ring-purple-100'
-          : 'bg-white border-slate-100 hover:border-purple-200'
+          ? 'bg-card border-foreground shadow-stamp'
+          : 'bg-card border-border hover:border-foreground hover:shadow-stamp-sm'
       )}
     >
       <div
         className={clsx(
-          'w-10 h-10 rounded-full flex items-center justify-center mr-4 z-10',
-          hasMessages ? 'bg-purple-600 text-white shadow-lg shadow-purple-200' : 'bg-slate-200 text-slate-400'
+          'w-10 h-10 rounded-xl flex items-center justify-center mr-4 z-10 border-2',
+          hasMessages ? 'bg-primary text-primary-foreground border-foreground' : 'bg-secondary text-muted-foreground border-border'
         )}
       >
         {hasMessages ? <CheckCircle2 size={20} /> : <Play size={18} fill="currentColor" />}
@@ -77,16 +77,16 @@ function SessionItem({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-3">
-          <h4 className="font-bold text-sm text-slate-900 truncate">
+          <h4 className="font-display font-bold text-sm text-foreground truncate">
             {session.title || t('app.learn.sessions.newChatTitle')}
           </h4>
-          <span className="text-xs text-slate-400">{formatShortDate(session.updated_at)}</span>
+          <span className="text-xs text-muted-foreground">{formatShortDate(session.updated_at)}</span>
         </div>
-        <p className="text-xs text-slate-500 mt-1 truncate">{lastMessage}</p>
+        <p className="text-xs text-muted-foreground mt-1 truncate">{lastMessage}</p>
       </div>
 
       {hasMessages && (
-        <div className="ml-3 text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
+        <div className="ml-3 text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg border border-primary/20">
           {session.message_count}
         </div>
       )}
@@ -94,7 +94,7 @@ function SessionItem({
       {/* Delete button - shows on hover */}
       <button
         onClick={(e) => onDelete(session.id, e)}
-        className="absolute right-2 top-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 hover:bg-red-50"
+        className="absolute right-2 top-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10"
         title={t('chat.deleteConfirm') || 'Delete chat'}
       >
         <Trash2 size={14} />
@@ -497,17 +497,17 @@ export function AppLearningPage() {
     return domain.replace(/_/g, ' ');
   };
   const domainStyles: Record<string, string> = {
-    grammar: 'bg-purple-500',
-    vocabulary: 'bg-blue-500',
-    pragmatics: 'bg-amber-500',
-    pronunciation: 'bg-emerald-500',
+    grammar: 'bg-primary',
+    vocabulary: 'bg-accent',
+    pragmatics: 'bg-success',
+    pronunciation: 'bg-foreground',
   };
   const domainBadgeStyles: Record<string, string> = {
-    grammar: 'bg-purple-50 text-purple-700',
-    vocabulary: 'bg-blue-50 text-blue-700',
-    cultural: 'bg-indigo-50 text-indigo-700',
-    pragmatics: 'bg-amber-50 text-amber-700',
-    pronunciation: 'bg-emerald-50 text-emerald-700',
+    grammar: 'bg-primary/10 text-primary border border-primary/20',
+    vocabulary: 'bg-accent/10 text-accent border border-accent/20',
+    cultural: 'bg-secondary text-foreground border border-border',
+    pragmatics: 'bg-success/10 text-success border border-success/20',
+    pronunciation: 'bg-foreground/10 text-foreground border border-foreground/20',
   };
   const topDomain = domainEntries[0];
   const focusBadge = focusAreas.length > 0
@@ -523,41 +523,42 @@ export function AppLearningPage() {
   }, [currentChatId, historyMessages.length, scheduleRefreshSessions]);
 
   return (
-    <div className="grid lg:grid-cols-12 gap-8 h-[calc(100vh-8rem)]">
+    <div className="grid lg:grid-cols-12 gap-6 h-[calc(100vh-8rem)]">
       <div className="lg:col-span-4 flex flex-col h-full gap-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        {/* Learning Path Card */}
+        <div className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
                 {t('app.learn.path.label')}
               </p>
-              <h2 className="text-lg font-bold text-slate-900">
+              <h2 className="text-lg font-display font-bold text-foreground">
                 {t('app.learn.path.title')}
               </h2>
             </div>
             {assessmentResults?.sklcLevel ? (
-              <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-3 py-1 rounded-full">
+              <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1.5 rounded-lg border border-primary/20">
                 {t('app.learn.path.level')} {assessmentResults.sklcLevel}
               </span>
             ) : (
-              <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+              <span className="text-xs font-bold text-muted-foreground bg-secondary px-3 py-1.5 rounded-lg border border-border">
                 {t('app.learn.path.pending')}
               </span>
             )}
           </div>
           {assessmentResults?.sklcDescription ? (
-            <p className="text-sm text-slate-500 mb-4">{assessmentResults.sklcDescription}</p>
+            <p className="text-sm text-muted-foreground mb-4">{assessmentResults.sklcDescription}</p>
           ) : (
-            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-900">
+            <div className="mb-4 rounded-xl border-2 border-border bg-secondary p-4">
+              <p className="text-sm font-display font-bold text-foreground">
                 {t('app.learn.path.empty.title')}
               </p>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {t('app.learn.path.empty.description')}
               </p>
               <button
                 onClick={() => (window.location.href = '/assessment')}
-                className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-purple-600 hover:text-purple-700"
+                className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-primary hover:text-primary/80 underline underline-offset-4"
               >
                 {t('app.learn.path.empty.cta')}
               </button>
@@ -566,14 +567,14 @@ export function AppLearningPage() {
 
           {focusAreas.length > 0 && (
             <div className="mb-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
                 {t('app.learn.path.focus')}
               </p>
               <div className="flex flex-wrap gap-2">
                 {focusAreas.map((area) => (
                   <span
                     key={area}
-                    className="text-xs font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-full"
+                    className="text-xs font-bold text-foreground bg-secondary px-3 py-1.5 rounded-lg border-2 border-border"
                   >
                     {getCategoryLabel(area)}
                   </span>
@@ -584,20 +585,20 @@ export function AppLearningPage() {
 
           {domainEntries.length > 0 && (
             <div className="space-y-3">
-              <p className="text-xs uppercase tracking-wide text-slate-400">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
                 {t('app.learn.path.strengths')}
               </p>
               {domainEntries.slice(0, 3).map(([domain, score]) => (
                 <div key={domain} className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-500">
-                    <span className="font-medium text-slate-700 capitalize">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="font-bold text-foreground capitalize">
                       {domain.replace(/_/g, ' ')}
                     </span>
-                    <span>{score}/10</span>
+                    <span className="font-semibold">{score}/10</span>
                   </div>
-                  <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                  <div className="h-2 w-full rounded-lg bg-secondary border border-border overflow-hidden">
                     <div
-                      className={`h-full ${domainStyles[domain] || 'bg-slate-400'}`}
+                      className={`h-full rounded-lg ${domainStyles[domain] || 'bg-muted-foreground'}`}
                       style={{ width: `${score * 10}%` }}
                     />
                   </div>
@@ -608,27 +609,29 @@ export function AppLearningPage() {
         </div>
 
         {/* Minigames Section */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Gamepad2 size={18} className="text-purple-600" />
-            <h3 className="font-bold text-slate-900">{t('app.learn.minigames.title') || 'Practice Games'}</h3>
+        <div className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center">
+              <Gamepad2 size={20} strokeWidth={2.5} />
+            </div>
+            <h3 className="font-display font-bold text-foreground">{t('app.learn.minigames.title') || 'Practice Games'}</h3>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={handleFlashcardGame}
               disabled={!currentChatId || loadingFlashcards}
               className={clsx(
-                'p-4 rounded-xl border transition-all text-left',
+                'p-4 rounded-xl border-2 transition-all text-left',
                 currentChatId
-                  ? 'border-purple-100 bg-purple-50 hover:bg-purple-100 hover:border-purple-200'
-                  : 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
+                  ? 'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary hover:shadow-stamp-sm'
+                  : 'border-border bg-secondary opacity-50 cursor-not-allowed'
               )}
             >
               <span className="text-2xl mb-2 block">🃏</span>
-              <span className="text-sm font-semibold text-slate-900">
+              <span className="text-sm font-display font-bold text-foreground">
                 {t('app.learn.minigames.flashcards') || 'Flashcard Flip'}
               </span>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {t('app.learn.minigames.flashcardsDesc') || 'Review vocabulary'}
               </p>
             </button>
@@ -636,43 +639,44 @@ export function AppLearningPage() {
               onClick={handleWordMatchGame}
               disabled={!currentChatId || loadingWordMatch}
               className={clsx(
-                'p-4 rounded-xl border transition-all text-left',
+                'p-4 rounded-xl border-2 transition-all text-left',
                 currentChatId
-                  ? 'border-blue-100 bg-blue-50 hover:bg-blue-100 hover:border-blue-200'
-                  : 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
+                  ? 'border-accent/30 bg-accent/5 hover:bg-accent/10 hover:border-accent hover:shadow-stamp-sm'
+                  : 'border-border bg-secondary opacity-50 cursor-not-allowed'
               )}
             >
               <span className="text-2xl mb-2 block">🔗</span>
-              <span className="text-sm font-semibold text-slate-900">
+              <span className="text-sm font-display font-bold text-foreground">
                 {t('app.learn.minigames.wordMatch') || 'Word Match'}
               </span>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {t('app.learn.minigames.wordMatchDesc') || 'Match pairs'}
               </p>
             </button>
           </div>
           {!currentChatId && (
-            <p className="text-xs text-slate-400 mt-3 text-center">
+            <p className="text-xs text-muted-foreground mt-3 text-center">
               {t('app.learn.minigames.selectChat') || 'Start a chat to unlock games'}
             </p>
           )}
         </div>
 
-        <div className="flex-1 min-h-0 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-          <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-start justify-between gap-4">
+        {/* Sessions Panel */}
+        <div className="flex-1 min-h-0 bg-card rounded-2xl border-3 border-foreground shadow-stamp overflow-hidden flex flex-col">
+          <div className="p-6 border-b-3 border-foreground bg-secondary flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold text-slate-900">
+              <h2 className="text-xl font-display font-bold text-foreground">
                 {t('app.learn.sessions.title')}
               </h2>
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 {t('app.learn.sessions.subtitle')}
               </p>
             </div>
             <button
               onClick={createNewChat}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-purple-600 bg-white border border-purple-100 hover:bg-purple-50"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-primary bg-card border-2 border-primary hover:bg-primary/5 transition-colors"
             >
-              <Plus size={16} />
+              <Plus size={16} strokeWidth={2.5} />
               {t('app.learn.sessions.new')}
             </button>
           </div>
@@ -681,30 +685,30 @@ export function AppLearningPage() {
             {showResume && mostRecentSession ? (
               <button
                 onClick={() => handleSelectSession(mostRecentSession.id)}
-                className="w-full mb-4 p-4 rounded-xl border border-purple-100 bg-purple-50 text-left hover:bg-purple-100 transition-colors"
+                className="w-full mb-4 p-4 rounded-xl border-2 border-primary/30 bg-primary/5 text-left hover:bg-primary/10 hover:border-primary transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-10 h-10 rounded-full bg-white text-purple-600 flex items-center justify-center shadow-sm">
-                    <History size={18} />
+                  <span className="w-10 h-10 rounded-xl bg-card text-primary flex items-center justify-center border-2 border-primary/30">
+                    <History size={18} strokeWidth={2.5} />
                   </span>
                 <div className="min-w-0">
-                  <p className="text-xs text-purple-600 font-semibold uppercase tracking-wide">
+                  <p className="text-xs text-primary font-bold uppercase tracking-wider">
                     {t('app.learn.sessions.resume')}
                   </p>
-                  <p className="text-sm font-semibold text-slate-900 truncate">
+                  <p className="text-sm font-display font-bold text-foreground truncate">
                     {mostRecentSession.title || t('app.learn.sessions.latest')}
                   </p>
                     {mostRecentSession.last_message ? (
-                      <p className="text-xs text-slate-500 truncate">{mostRecentSession.last_message}</p>
+                      <p className="text-xs text-muted-foreground truncate">{mostRecentSession.last_message}</p>
                     ) : null}
                   </div>
                 </div>
               </button>
           ) : null}
           {loadingSessions ? (
-            <div className="text-sm text-slate-500">{t('app.learn.sessions.loading')}</div>
+            <div className="text-sm text-muted-foreground">{t('app.learn.sessions.loading')}</div>
           ) : sessions.length === 0 ? (
-            <div className="text-sm text-slate-500">{t('app.learn.sessions.empty')}</div>
+            <div className="text-sm text-muted-foreground">{t('app.learn.sessions.empty')}</div>
           ) : (
             sessions.map((session) => (
               <SessionItem
@@ -721,32 +725,33 @@ export function AppLearningPage() {
         </div>
       </div>
 
-      <div className="lg:col-span-8 flex flex-col h-full bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
-        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white z-10 shadow-sm">
+      {/* Main Chat Panel */}
+      <div className="lg:col-span-8 flex flex-col h-full bg-card rounded-2xl border-3 border-foreground shadow-stamp overflow-hidden relative">
+        <div className="p-4 border-b-3 border-foreground flex justify-between items-center bg-card z-10">
           <div>
-            <div className="flex items-center space-x-2 text-sm text-purple-600 font-medium mb-0.5">
-              <MessageSquare size={16} />
+            <div className="flex items-center space-x-2 text-sm text-primary font-bold mb-0.5">
+              <MessageSquare size={16} strokeWidth={2.5} />
               <span>{t('app.learn.chat.label')}</span>
             </div>
-            <h2 className="text-lg font-bold text-slate-900">
+            <h2 className="text-lg font-display font-bold text-foreground">
               {currentSession?.title || t('app.learn.chat.title')}
             </h2>
             {(assessmentResults?.sklcLevel || focusBadge || topDomain) && (
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 {assessmentResults?.sklcLevel && (
-                  <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full">
+                  <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg border border-primary/20">
                     {t('app.learn.chat.badges.level')} {assessmentResults.sklcLevel}
                   </span>
                 )}
                 {focusBadge && (
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${focusBadgeClass}`}>
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${focusBadgeClass}`}>
                     {t('app.learn.chat.badges.focus')} {focusBadge}
                   </span>
                 )}
                 {topDomain && (
                   <span
-                    className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-                      domainBadgeStyles[topDomain[0]] || 'bg-slate-100 text-slate-600'
+                    className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                      domainBadgeStyles[topDomain[0]] || 'bg-secondary text-muted-foreground border border-border'
                     }`}
                   >
                     {t('app.learn.chat.badges.strength')} {getDomainLabel(topDomain[0])} • {topDomain[1]}/10
@@ -757,15 +762,15 @@ export function AppLearningPage() {
           </div>
           <div className="flex items-center space-x-4">
             {/* Mode Toggle */}
-            <div className="flex bg-slate-100 rounded-lg p-1">
+            <div className="flex bg-secondary rounded-xl p-1 border-2 border-border">
               <button
                 type="button"
                 onClick={() => handleModeChange('text')}
                 className={clsx(
-                  'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                  'px-3 py-1.5 rounded-lg text-sm font-bold transition-colors',
                   mode === 'text'
-                    ? 'bg-white text-purple-600 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
+                    ? 'bg-card text-primary border-2 border-foreground shadow-stamp-sm'
+                    : 'text-muted-foreground hover:text-foreground border-2 border-transparent'
                 )}
               >
                 {t('chat.textMode')}
@@ -774,41 +779,41 @@ export function AppLearningPage() {
                 type="button"
                 onClick={() => handleModeChange('realtime')}
                 className={clsx(
-                  'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                  'px-3 py-1.5 rounded-lg text-sm font-bold transition-colors',
                   mode === 'realtime'
-                    ? 'bg-white text-purple-600 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
+                    ? 'bg-card text-primary border-2 border-foreground shadow-stamp-sm'
+                    : 'text-muted-foreground hover:text-foreground border-2 border-transparent'
                 )}
               >
                 {t('chat.voiceMode')}
               </button>
             </div>
             {mode === 'realtime' && (
-              <div className="hidden sm:flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-lg text-sm">
-                <span className="text-slate-500">{t('app.learn.chat.status')}</span>
-                <span className="font-semibold text-slate-800">{statusLabel}</span>
+              <div className="hidden sm:flex items-center space-x-2 bg-secondary px-3 py-1.5 rounded-xl border-2 border-border text-sm">
+                <span className="text-muted-foreground">{t('app.learn.chat.status')}</span>
+                <span className="font-bold text-foreground">{statusLabel}</span>
               </div>
             )}
             <button
               onClick={createNewChat}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg"
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-xl border-2 border-transparent hover:border-border transition-colors"
             >
-              <RefreshCcw size={20} />
+              <RefreshCcw size={20} strokeWidth={2.5} />
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 relative">
+        <div className="flex-1 overflow-y-auto p-6 bg-secondary/50 relative">
           {error || realtimeError ? (
-            <div className="mb-4 p-3 rounded-lg border border-red-100 bg-red-50 text-sm text-red-600">
+            <div className="mb-4 p-4 rounded-xl border-2 border-destructive bg-destructive/10 text-sm text-destructive font-medium">
               {error || realtimeError}
             </div>
           ) : null}
 
           {loadingChat ? (
-            <div className="text-sm text-slate-500">{t('app.learn.chat.loading')}</div>
+            <div className="text-sm text-muted-foreground">{t('app.learn.chat.loading')}</div>
           ) : historyMessages.length === 0 ? (
-            <div className="text-sm text-slate-500">{t('app.learn.chat.empty')}</div>
+            <div className="text-sm text-muted-foreground">{t('app.learn.chat.empty')}</div>
           ) : (
             <div className="space-y-6 max-w-3xl mx-auto pb-32">
               {historyMessages.map((msg) => {
@@ -823,14 +828,14 @@ export function AppLearningPage() {
                     <img
                       src={isUser ? USER_AVATAR : AI_AVATAR}
                       alt={isUser ? 'You' : 'Lingual AI'}
-                      className="w-10 h-10 rounded-full bg-white border border-slate-200 shadow-sm"
+                      className="w-10 h-10 rounded-xl bg-card border-2 border-foreground"
                     />
                     <div
                       className={clsx(
-                        'max-w-[80%] p-4 rounded-2xl shadow-sm text-lg leading-relaxed',
+                        'max-w-[80%] p-4 rounded-2xl text-lg leading-relaxed border-2',
                         isUser
-                          ? 'bg-purple-600 text-white rounded-tr-none'
-                          : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
+                          ? 'bg-primary text-primary-foreground border-foreground rounded-tr-none shadow-stamp-sm'
+                          : 'bg-card text-foreground border-border rounded-tl-none'
                       )}
                     >
                       {msg.content}
@@ -844,7 +849,7 @@ export function AppLearningPage() {
           )}
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-white via-white to-transparent">
+        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-card via-card to-transparent">
           <AnimatePresence mode="wait">
             {mode === 'text' ? (
               <motion.div
@@ -869,7 +874,7 @@ export function AppLearningPage() {
                 exit={{ opacity: 0, y: -10 }}
                 className="flex items-center justify-between gap-4"
               >
-                <div className="flex-1 bg-white border border-slate-200 rounded-2xl px-4 py-3 text-slate-400">
+                <div className="flex-1 bg-card border-2 border-border rounded-xl px-4 py-3 text-muted-foreground font-medium">
                   {isConnected
                     ? t('app.learn.chat.input.connected')
                     : t('app.learn.chat.input.disconnected')}
@@ -878,18 +883,18 @@ export function AppLearningPage() {
                   onClick={handleRecordToggle}
                   disabled={!currentChatId || isConnecting}
                   className={clsx(
-                    'w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all',
+                    'w-14 h-14 rounded-xl flex items-center justify-center border-2 border-foreground transition-all',
                     isConnected
                       ? isSpeaking
-                        ? 'bg-purple-500 text-white'
+                        ? 'bg-primary text-primary-foreground shadow-stamp'
                         : isListening
-                        ? 'bg-red-500 text-white animate-pulse'
-                        : 'bg-emerald-500 text-white'
-                      : 'bg-purple-600 hover:bg-purple-700 text-white',
+                        ? 'bg-destructive text-white animate-pulse shadow-stamp'
+                        : 'bg-success text-white shadow-stamp'
+                      : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-stamp hover:shadow-[6px_6px_0_0_var(--foreground)]',
                     (isConnecting || !currentChatId) && 'opacity-60 cursor-not-allowed'
                   )}
                 >
-                  <Mic size={20} />
+                  <Mic size={20} strokeWidth={2.5} />
                 </button>
               </motion.div>
             )}
@@ -915,18 +920,18 @@ export function AppLearningPage() {
 
       {/* Loading Overlays */}
       {loadingFlashcards && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 flex items-center gap-3">
-            <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
-            <span>{t('app.learn.minigames.loadingFlashcards') || 'Generating flashcards...'}</span>
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-xl border-3 border-foreground shadow-stamp p-6 flex items-center gap-3">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" strokeWidth={2.5} />
+            <span className="font-display font-bold text-foreground">{t('app.learn.minigames.loadingFlashcards') || 'Generating flashcards...'}</span>
           </div>
         </div>
       )}
       {loadingWordMatch && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 flex items-center gap-3">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-            <span>{t('app.learn.minigames.loadingWordMatch') || 'Generating word match game...'}</span>
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-xl border-3 border-foreground shadow-stamp p-6 flex items-center gap-3">
+            <Loader2 className="h-6 w-6 animate-spin text-accent" strokeWidth={2.5} />
+            <span className="font-display font-bold text-foreground">{t('app.learn.minigames.loadingWordMatch') || 'Generating word match game...'}</span>
           </div>
         </div>
       )}

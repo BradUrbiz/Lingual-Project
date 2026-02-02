@@ -3,15 +3,25 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const alertVariants = cva(
-  'relative w-full rounded-xl border p-4 shadow-sm [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground',
+  'relative w-full rounded-xl p-4 [&>svg~*]:pl-8 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4',
   {
     variants: {
       variant: {
-        default: 'bg-white text-slate-900 border-slate-200',
+        // Default - Warm Brutalism
+        default:
+          'bg-card text-foreground border-3 border-foreground shadow-stamp-sm [&>svg]:text-foreground',
+        // Info - subtle
+        info:
+          'bg-secondary text-foreground border-2 border-border [&>svg]:text-muted-foreground',
+        // Destructive - error state
         destructive:
-          'border-red-200 text-red-700 bg-red-50 [&>svg]:text-red-600',
+          'bg-destructive/10 text-destructive border-2 border-destructive [&>svg]:text-destructive',
+        // Success - sage green
         success:
-          'border-emerald-200 text-emerald-700 bg-emerald-50 [&>svg]:text-emerald-600',
+          'bg-success/10 text-foreground border-2 border-success [&>svg]:text-success',
+        // Warning - mustard accent
+        warning:
+          'bg-accent/10 text-foreground border-2 border-accent [&>svg]:text-accent',
       },
     },
     defaultVariants: {
@@ -39,7 +49,10 @@ const AlertTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <h5
     ref={ref}
-    className={cn('mb-1 font-medium leading-none tracking-tight', className)}
+    className={cn(
+      'mb-1 font-display font-bold leading-none tracking-tight',
+      className
+    )}
     {...props}
   />
 ));
@@ -51,10 +64,10 @@ const AlertDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn('text-sm [&_p]:leading-relaxed', className)}
+    className={cn('text-sm leading-relaxed [&_p]:leading-relaxed', className)}
     {...props}
   />
 ));
 AlertDescription.displayName = 'AlertDescription';
 
-export { Alert, AlertTitle, AlertDescription };
+export { Alert, AlertTitle, AlertDescription, alertVariants };

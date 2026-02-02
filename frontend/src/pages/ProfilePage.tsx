@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import {
   ArrowLeft,
   LogOut,
@@ -43,6 +43,7 @@ import {
   Input,
   Label,
   Slider,
+  Badge,
 } from '@/components/ui';
 import { LoadingSpinner } from '@/components/common';
 import { staggerContainer, staggerItem } from '@/lib/animations';
@@ -128,9 +129,8 @@ export function ProfilePage() {
         frequency: editFrequency,
         frequencyUnit: editFrequencyUnit,
         levelObjective: editLevelObjective,
-      }, true); // isEdit = true
+      }, true);
 
-      // Reload profile to get updated data
       await loadProfile();
       setShowEditPreferences(false);
     } catch (error) {
@@ -212,7 +212,7 @@ export function ProfilePage() {
 
   if (loading) {
     return (
-      <AnimatedPage className="min-h-screen flex items-center justify-center">
+      <AnimatedPage className="min-h-screen bg-background flex items-center justify-center">
         <LoadingSpinner size="lg" />
       </AnimatedPage>
     );
@@ -258,10 +258,10 @@ export function ProfilePage() {
     ? Object.entries(resolvedDomainBands).sort((a, b) => b[1] - a[1])
     : [];
   const domainStyles: Record<string, { bar: string; chip: string; icon: typeof Globe }> = {
-    grammar: { bar: 'bg-purple-500', chip: 'bg-purple-50 text-purple-600', icon: Type },
-    vocabulary: { bar: 'bg-blue-500', chip: 'bg-blue-50 text-blue-600', icon: BookOpen },
-    pragmatics: { bar: 'bg-amber-500', chip: 'bg-amber-50 text-amber-600', icon: MessageCircle },
-    pronunciation: { bar: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-600', icon: Mic },
+    grammar: { bar: 'bg-primary', chip: 'bg-primary/10 text-primary', icon: Type },
+    vocabulary: { bar: 'bg-accent', chip: 'bg-accent/10 text-accent', icon: BookOpen },
+    pragmatics: { bar: 'bg-success', chip: 'bg-success/10 text-success', icon: MessageCircle },
+    pronunciation: { bar: 'bg-destructive', chip: 'bg-destructive/10 text-destructive', icon: Mic },
   };
 
   const personalInfoItems = [
@@ -278,21 +278,24 @@ export function ProfilePage() {
   ];
 
   return (
-    <AnimatedPage className="min-h-screen bg-slate-50 py-10 px-4">
+    <AnimatedPage className="min-h-screen bg-background py-10 px-4">
       <div className="max-w-6xl mx-auto">
+        {/* Header */}
         <div className="flex flex-col gap-4 mb-8 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Profile</p>
-            <h1 className="text-3xl font-bold text-slate-900">My Profile</h1>
-            <p className="text-slate-500">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+              Profile
+            </p>
+            <h1 className="text-3xl font-display font-bold">My Profile</h1>
+            <p className="text-muted-foreground">
               Review your learning details and keep your plan aligned.
             </p>
           </div>
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={() => navigate(-1)}
-              className="gap-2 text-slate-600 hover:text-slate-900"
+              className="gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
               {t('nav.back') || 'Back'}
@@ -301,6 +304,7 @@ export function ProfilePage() {
         </div>
 
         <div className="grid md:grid-cols-3 gap-8">
+          {/* Left Column */}
           <motion.div
             variants={staggerContainer}
             initial="initial"
@@ -309,38 +313,38 @@ export function ProfilePage() {
           >
             {/* Profile Header Card */}
             <motion.div variants={staggerItem}>
-              <Card className="bg-white border border-slate-200 shadow-sm">
+              <Card>
                 <CardContent className="pt-6">
                   <div className="flex flex-col items-center text-center">
-                    <Avatar className="h-20 w-20 border-4 border-purple-100 mb-4">
-                      <AvatarFallback className="bg-purple-600 text-white text-2xl">
+                    <Avatar className="h-20 w-20 border-3 border-foreground mb-4">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-display font-bold">
                         {getInitials(profile?.displayName, user?.name, user?.email)}
                       </AvatarFallback>
                     </Avatar>
-                    <h2 className="text-xl font-semibold text-slate-900">{displayName}</h2>
-                    <p className="text-slate-500">Learner • {planLabel}</p>
+                    <h2 className="text-xl font-display font-bold">{displayName}</h2>
+                    <p className="text-muted-foreground">Learner • {planLabel}</p>
                     {profile?.age && (
-                      <p className="text-sm text-slate-500 mt-1">
+                      <p className="text-sm text-muted-foreground mt-1">
                         {profile.age} {t('profile.yearsOld') || 'years old'}
                         {profile.gender && ` · ${genderLabels[profile.gender]}`}
                       </p>
                     )}
-                    <div className="mt-3 space-y-2 text-sm text-slate-600">
+                    <div className="mt-3 space-y-2 text-sm text-muted-foreground">
                       {user?.email && (
                         <div className="flex items-center justify-center gap-2">
-                          <Mail className="h-4 w-4 text-slate-400" />
+                          <Mail className="h-4 w-4" />
                           <span>{user.email}</span>
                         </div>
                       )}
                       {profile?.levelObjective && (
                         <div className="flex items-center justify-center gap-2">
-                          <GraduationCap className="h-4 w-4 text-slate-400" />
+                          <GraduationCap className="h-4 w-4" />
                           <span>{profile.levelObjective}</span>
                         </div>
                       )}
                       {focusSummary && (
                         <div className="flex items-center justify-center gap-2">
-                          <Globe className="h-4 w-4 text-slate-400" />
+                          <Globe className="h-4 w-4" />
                           <span>{focusSummary}</span>
                         </div>
                       )}
@@ -348,28 +352,28 @@ export function ProfilePage() {
                     {(resolvedSklcLevel || hasAssessment || getFrequencyText() || focusLabel) && (
                       <div className="mt-4 flex flex-wrap justify-center gap-2">
                         {resolvedSklcLevel && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
-                            <Star className="h-3 w-3" />
+                          <Badge variant="default">
+                            <Star className="h-3 w-3 mr-1" />
                             Level {resolvedSklcLevel}
-                          </span>
+                          </Badge>
                         )}
                         {hasAssessment && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                            <CheckCircle2 className="h-3 w-3" />
+                          <Badge variant="success">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
                             Assessed
-                          </span>
+                          </Badge>
                         )}
                         {getFrequencyText() && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                            <Clock className="h-3 w-3" />
+                          <Badge variant="secondary">
+                            <Clock className="h-3 w-3 mr-1" />
                             {getFrequencyText()}
-                          </span>
+                          </Badge>
                         )}
                         {focusLabel && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                            <Target className="h-3 w-3" />
+                          <Badge variant="secondary">
+                            <Target className="h-3 w-3 mr-1" />
                             {focusLabel}
-                          </span>
+                          </Badge>
                         )}
                       </div>
                     )}
@@ -381,59 +385,58 @@ export function ProfilePage() {
             {/* Learning Preferences Card */}
             {profile?.profileCompleted && (
               <motion.div variants={staggerItem}>
-                <Card className="bg-white border border-slate-200 shadow-sm">
-                  <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4">
-                    <CardTitle className="text-xl text-slate-900">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between border-b-2 border-border pb-4">
+                    <CardTitle>
                       {t('profile.learningPreferences') || 'Learning Preferences'}
                     </CardTitle>
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="icon"
                       onClick={openEditPreferences}
-                      className="h-8 w-8 p-0 text-slate-500 hover:text-slate-900"
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-4 pt-4">
                     {profile.rigor && (
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-50 rounded-lg">
-                          <Target className="h-4 w-4 text-purple-600" />
+                        <div className="p-2 bg-primary/10 rounded-lg border-2 border-primary/20">
+                          <Target className="h-4 w-4 text-primary" />
                         </div>
                         <div>
-                          <p className="text-sm text-slate-500">
+                          <p className="text-sm text-muted-foreground">
                             {t('profile.intensity') || 'Intensity'}
                           </p>
-                          <p className="font-medium text-slate-900">{rigorLabels[profile.rigor]}</p>
+                          <p className="font-semibold">{rigorLabels[profile.rigor]}</p>
                         </div>
                       </div>
                     )}
 
                     {getFrequencyText() && (
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-50 rounded-lg">
-                          <Clock className="h-4 w-4 text-purple-600" />
+                        <div className="p-2 bg-accent/10 rounded-lg border-2 border-accent/20">
+                          <Clock className="h-4 w-4 text-accent" />
                         </div>
                         <div>
-                          <p className="text-sm text-slate-500">
+                          <p className="text-sm text-muted-foreground">
                             {t('profile.studyFrequency') || 'Study Frequency'}
                           </p>
-                          <p className="font-medium text-slate-900">{getFrequencyText()}</p>
+                          <p className="font-semibold">{getFrequencyText()}</p>
                         </div>
                       </div>
                     )}
 
                     {profile.levelObjective && (
                       <div className="flex items-start gap-3">
-                        <div className="p-2 bg-purple-50 rounded-lg">
-                          <Calendar className="h-4 w-4 text-purple-600" />
+                        <div className="p-2 bg-success/10 rounded-lg border-2 border-success/20">
+                          <Calendar className="h-4 w-4 text-success" />
                         </div>
                         <div>
-                          <p className="text-sm text-slate-500">
+                          <p className="text-sm text-muted-foreground">
                             {t('profile.goal') || 'Goal'}
                           </p>
-                          <p className="font-medium text-slate-900">{profile.levelObjective}</p>
+                          <p className="font-semibold">{profile.levelObjective}</p>
                         </div>
                       </div>
                     )}
@@ -442,32 +445,32 @@ export function ProfilePage() {
               </motion.div>
             )}
 
+            {/* Domain Scores Sidebar */}
             {domainEntries.length > 0 && (
               <motion.div variants={staggerItem}>
-                <Card className="bg-white border border-slate-200 shadow-sm">
-                  <CardHeader className="border-b border-slate-100 pb-4">
+                <Card>
+                  <CardHeader className="border-b-2 border-border pb-4">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg text-slate-900 flex items-center gap-2">
-                        <Globe className="h-4 w-4 text-purple-600" />
-                        Languages / Focus Areas
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <Globe className="h-4 w-4 text-primary" />
+                        Focus Areas
                       </CardTitle>
-                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                      <Badge variant="outline" size="sm">
                         {domainEntries.length} skills
-                      </span>
+                      </Badge>
                     </div>
-                    <p className="text-xs text-slate-500 mt-2">
-                      Snapshot of your strongest domains.
-                    </p>
                   </CardHeader>
                   <CardContent className="space-y-4 pt-5">
                     {selectedCategories.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
-                        <span className="uppercase tracking-wide text-slate-400">Top focus</span>
-                        <span className="font-semibold text-slate-700">
+                      <div className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-border bg-secondary px-3 py-2 text-sm">
+                        <span className="uppercase tracking-wider text-muted-foreground text-xs font-semibold">
+                          Top focus
+                        </span>
+                        <span className="font-semibold">
                           {formatCategoryLabel(selectedCategories[0])}
                         </span>
                         {selectedCategories.length > 1 && (
-                          <span className="text-slate-400">
+                          <span className="text-muted-foreground">
                             +{selectedCategories.length - 1} more
                           </span>
                         )}
@@ -476,27 +479,27 @@ export function ProfilePage() {
 
                     {domainEntries.map(([domain, score]) => {
                       const style = domainStyles[domain] || {
-                        bar: 'bg-slate-400',
-                        chip: 'bg-slate-100 text-slate-500',
+                        bar: 'bg-muted-foreground',
+                        chip: 'bg-muted text-muted-foreground',
                         icon: Globe,
                       };
                       const Icon = style.icon;
                       return (
                         <div key={domain} className="space-y-2">
-                          <div className="flex items-center justify-between text-xs text-slate-500">
+                          <div className="flex items-center justify-between text-sm">
                             <div className="flex items-center gap-2">
-                              <span className={`h-7 w-7 rounded-full flex items-center justify-center ${style.chip}`}>
+                              <span className={`h-8 w-8 rounded-lg flex items-center justify-center ${style.chip} border-2 border-current/20`}>
                                 <Icon className="h-4 w-4" />
                               </span>
-                              <span className="font-medium text-slate-700">
+                              <span className="font-medium">
                                 {domainLabels[domain] || domain}
                               </span>
                             </div>
-                            <span>{score}/10</span>
+                            <span className="text-muted-foreground font-semibold">{score}/10</span>
                           </div>
-                          <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                          <div className="h-2 w-full rounded-full bg-secondary border border-border overflow-hidden">
                             <div
-                              className={`h-full ${style.bar}`}
+                              className={`h-full ${style.bar} rounded-full`}
                               style={{ width: `${score * 10}%` }}
                             />
                           </div>
@@ -509,18 +512,18 @@ export function ProfilePage() {
             )}
           </motion.div>
 
+          {/* Right Column */}
           <motion.div
             variants={staggerContainer}
             initial="initial"
             animate="animate"
             className="space-y-6 md:col-span-2"
           >
+            {/* Personal Information */}
             <motion.div variants={staggerItem}>
-              <Card className="bg-white border border-slate-200 shadow-sm">
-                <CardHeader className="border-b border-slate-100 pb-4">
-                  <CardTitle className="text-xl text-slate-900">
-                    Personal Information
-                  </CardTitle>
+              <Card>
+                <CardHeader className="border-b-2 border-border pb-4">
+                  <CardTitle>Personal Information</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6">
                   <div className="grid sm:grid-cols-2 gap-4">
@@ -528,17 +531,17 @@ export function ProfilePage() {
                       const hasValue = item.value !== '';
                       const Icon = item.icon;
                       return (
-                        <div key={item.label} className={`space-y-1 ${item.span || ''}`}>
-                          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        <div key={item.label} className={`space-y-2 ${item.span || ''}`}>
+                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                             {item.label}
                           </p>
-                          <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm flex items-center justify-between gap-2">
+                          <div className="rounded-xl border-2 border-border bg-secondary px-4 py-3 flex items-center justify-between gap-2">
                             {hasValue ? (
-                              <span className="font-medium text-slate-900">{item.value}</span>
+                              <span className="font-medium">{item.value}</span>
                             ) : (
-                              <span className="text-slate-400">Not set</span>
+                              <span className="text-muted-foreground">Not set</span>
                             )}
-                            {Icon && <Icon className="h-4 w-4 text-slate-400" />}
+                            {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
                           </div>
                         </div>
                       );
@@ -548,24 +551,26 @@ export function ProfilePage() {
               </Card>
             </motion.div>
 
-            {/* Learning Progress Card */}
+            {/* Learning Progress */}
             {hasAssessment && (
               <motion.div variants={staggerItem}>
-                <Card className="bg-white border border-slate-200 shadow-sm">
-                  <CardHeader className="border-b border-slate-100 pb-4">
-                    <CardTitle className="text-xl text-slate-900">
+                <Card>
+                  <CardHeader className="border-b-2 border-border pb-4">
+                    <CardTitle>
                       {t('profile.learningProgress') || 'Learning Progress'}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6 pt-6">
                     {resolvedSklcLevel && (
-                      <div className="text-center p-4 bg-purple-50 border border-purple-100 rounded-xl">
-                        <p className="text-sm text-slate-500 mb-1">
+                      <div className="text-center p-6 bg-primary/10 border-2 border-primary rounded-xl">
+                        <p className="text-sm text-muted-foreground mb-1 font-semibold">
                           {t('profile.yourLevel') || 'Your Level'}
                         </p>
-                        <p className="text-2xl font-bold text-purple-700">{resolvedSklcLevel}</p>
+                        <p className="text-3xl font-display font-bold text-primary">
+                          {resolvedSklcLevel}
+                        </p>
                         {resolvedSklcDescription && (
-                          <p className="text-sm text-slate-500 mt-1">
+                          <p className="text-sm text-muted-foreground mt-2">
                             {resolvedSklcDescription}
                           </p>
                         )}
@@ -575,30 +580,30 @@ export function ProfilePage() {
                     {resolvedDomainBands && (
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                          <h4 className="font-medium text-slate-900">
+                          <h4 className="font-display font-bold">
                             {t('profile.domainScores') || 'Domain Scores'}
                           </h4>
                           {domainCount > 0 && (
-                            <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+                            <Badge variant="outline" size="sm">
                               {domainCount} domains
-                            </span>
+                            </Badge>
                           )}
                         </div>
                         {Object.entries(resolvedDomainBands).map(([domain, score]) => {
                           const style = domainStyles[domain] || {
-                            bar: 'bg-slate-400',
-                            chip: 'bg-slate-100 text-slate-500',
+                            bar: 'bg-muted-foreground',
+                            chip: 'bg-muted text-muted-foreground',
                             icon: Globe,
                           };
                           return (
                             <div key={domain} className="space-y-2">
-                              <div className="flex justify-between text-sm text-slate-600">
-                                <span>{domainLabels[domain] || domain}</span>
-                                <span className="text-slate-400">{score}/10</span>
+                              <div className="flex justify-between text-sm">
+                                <span className="font-medium">{domainLabels[domain] || domain}</span>
+                                <span className="text-muted-foreground font-semibold">{score}/10</span>
                               </div>
-                              <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                              <div className="h-3 w-full rounded-full bg-secondary border-2 border-border overflow-hidden">
                                 <div
-                                  className={`h-full ${style.bar}`}
+                                  className={`h-full ${style.bar} rounded-full`}
                                   style={{ width: `${score * 10}%` }}
                                 />
                               </div>
@@ -612,50 +617,49 @@ export function ProfilePage() {
               </motion.div>
             )}
 
+            {/* Connected Accounts */}
             <motion.div variants={staggerItem}>
-              <Card className="bg-white border border-slate-200 shadow-sm">
-                <CardHeader className="border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
-                  <CardTitle className="text-xl text-slate-900">
-                    Connected Accounts
-                  </CardTitle>
-                  <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+              <Card>
+                <CardHeader className="border-b-2 border-border pb-4 flex flex-row items-center justify-between">
+                  <CardTitle>Connected Accounts</CardTitle>
+                  <Badge variant="outline" size="sm">
                     {user?.email ? '1 of 2 connected' : '0 of 2 connected'}
-                  </span>
+                  </Badge>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-6">
-                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 p-4 hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center justify-between gap-4 rounded-xl border-2 border-border p-4 hover:bg-secondary transition-colors">
                     <div className="flex items-center gap-4">
-                      <div className="h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-sm font-semibold text-slate-600">
+                      <div className="h-10 w-10 rounded-lg bg-card border-2 border-border flex items-center justify-center text-sm font-bold">
                         G
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-900">Google Classroom</p>
-                        <p className="text-sm text-slate-500">
+                        <p className="font-semibold">Google Classroom</p>
+                        <p className="text-sm text-muted-foreground">
                           {user?.email ? `Connected as ${user.email}` : 'Connected'}
                         </p>
                       </div>
                     </div>
                     <button
                       type="button"
-                      className="text-sm font-semibold text-slate-400 hover:text-red-500 transition-colors"
+                      className="text-sm font-semibold text-muted-foreground hover:text-destructive transition-colors"
                     >
                       Disconnect
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-100 p-4 hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center justify-between gap-4 rounded-xl border-2 border-border p-4 hover:bg-secondary transition-colors">
                     <div className="flex items-center gap-4">
-                      <div className="h-10 w-10 rounded-full bg-slate-900 text-white flex items-center justify-center">
+                      <div className="h-10 w-10 rounded-lg bg-foreground text-background flex items-center justify-center">
                         <Github size={18} />
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-900">GitHub</p>
-                        <p className="text-sm text-slate-500">Not connected</p>
+                        <p className="font-semibold">GitHub</p>
+                        <p className="text-sm text-muted-foreground">Not connected</p>
                       </div>
                     </div>
                     <button
                       type="button"
-                      className="text-sm font-semibold text-purple-600 hover:text-purple-700 transition-colors"
+                      className="text-sm font-semibold text-primary hover:text-primary/80 transition-colors"
                     >
                       Connect
                     </button>
@@ -664,55 +668,53 @@ export function ProfilePage() {
               </Card>
             </motion.div>
 
-            {/* Account Card */}
+            {/* Account Actions */}
             <motion.div variants={staggerItem}>
-              <Card className="bg-white border border-slate-200 shadow-sm">
-                <CardHeader className="border-b border-slate-100 pb-4">
-                  <CardTitle className="text-xl text-slate-900">
-                    {t('profile.account') || 'Account'}
-                  </CardTitle>
+              <Card>
+                <CardHeader className="border-b-2 border-border pb-4">
+                  <CardTitle>{t('profile.account') || 'Account'}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-6">
                   <button
                     type="button"
                     onClick={() => navigate('/general?edit=true')}
-                    className="w-full flex items-center justify-between gap-4 rounded-xl border border-slate-100 p-4 text-left hover:bg-slate-50 transition-colors"
+                    className="w-full flex items-center justify-between gap-4 rounded-xl border-2 border-border p-4 text-left hover:bg-secondary transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center">
+                      <div className="h-10 w-10 rounded-lg bg-secondary text-foreground border-2 border-border flex items-center justify-center">
                         <User className="h-5 w-5" />
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-900">
+                        <p className="font-semibold">
                           {t('profile.editProfile') || 'Edit Profile'}
                         </p>
-                        <p className="text-sm text-slate-500">
+                        <p className="text-sm text-muted-foreground">
                           Update your personal details
                         </p>
                       </div>
                     </div>
-                    <span className="text-sm font-semibold text-purple-600">Manage</span>
+                    <span className="text-sm font-semibold text-primary">Manage</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setShowLogoutDialog(true)}
-                    className="w-full flex items-center justify-between gap-4 rounded-xl border border-slate-100 p-4 text-left hover:bg-red-50 transition-colors"
+                    className="w-full flex items-center justify-between gap-4 rounded-xl border-2 border-destructive/30 p-4 text-left hover:bg-destructive/10 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+                      <div className="h-10 w-10 rounded-lg bg-destructive/10 text-destructive flex items-center justify-center">
                         <LogOut className="h-5 w-5" />
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-900">
+                        <p className="font-semibold">
                           {t('nav.logout') || 'Logout'}
                         </p>
-                        <p className="text-sm text-slate-500">
+                        <p className="text-sm text-muted-foreground">
                           Sign out of your account
                         </p>
                       </div>
                     </div>
-                    <span className="text-sm font-semibold text-red-600">Sign out</span>
+                    <span className="text-sm font-semibold text-destructive">Sign out</span>
                   </button>
                 </CardContent>
               </Card>
@@ -723,7 +725,7 @@ export function ProfilePage() {
 
       {/* Edit Preferences Dialog */}
       <Dialog open={showEditPreferences} onOpenChange={setShowEditPreferences}>
-        <DialogContent className="sm:max-w-[500px] bg-white border border-slate-200">
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>{t('profile.editPreferences') || 'Edit Learning Preferences'}</DialogTitle>
             <DialogDescription>
@@ -732,8 +734,7 @@ export function ProfilePage() {
           </DialogHeader>
 
           <div className="space-y-6 py-4">
-            {/* Rigor Selection */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <Label>{t('general.rigorLabel') || 'Learning Intensity'}</Label>
               <div className="flex flex-wrap gap-2">
                 {RIGOR_OPTIONS.map(({ id, labelKey, description }) => (
@@ -742,16 +743,15 @@ export function ProfilePage() {
                     variant="option"
                     selected={editRigor === id}
                     onClick={() => setEditRigor(id)}
-                    className="flex-col h-auto py-2 px-3 rounded-xl border-slate-200"
+                    className="flex-col h-auto py-2 px-3"
                   >
                     <span>{t(labelKey)}</span>
-                    <span className="text-xs text-slate-500">{description}</span>
+                    <span className="text-xs text-muted-foreground">{description}</span>
                   </Button>
                 ))}
               </div>
             </div>
 
-            {/* Frequency Selection */}
             <div className="space-y-3">
               <Label>{t('general.frequencyLabel') || 'How often do you want to learn?'}</Label>
               <Slider
@@ -768,7 +768,7 @@ export function ProfilePage() {
                     variant="option"
                     selected={editFrequencyUnit === id}
                     onClick={() => setEditFrequencyUnit(id)}
-                    className="flex-1 rounded-xl border-slate-200"
+                    className="flex-1"
                   >
                     {t(labelKey)}
                   </Button>
@@ -776,16 +776,16 @@ export function ProfilePage() {
               </div>
             </div>
 
-            {/* Level Objective */}
             <div className="space-y-2">
-              <Label htmlFor="levelObjective">{t('general.levelObjectiveLabel') || "What's your goal?"}</Label>
+              <Label htmlFor="levelObjective">
+                {t('general.levelObjectiveLabel') || "What's your goal?"}
+              </Label>
               <Input
                 id="levelObjective"
                 type="text"
                 placeholder={t('general.levelObjectivePlaceholder') || 'e.g., Pass TOPIK Level 3'}
                 value={editLevelObjective}
                 onChange={(e) => setEditLevelObjective(e.target.value)}
-                className="bg-slate-50 border-slate-200 focus:border-purple-500 focus:ring-purple-200"
               />
             </div>
           </div>
@@ -795,7 +795,6 @@ export function ProfilePage() {
               variant="outline"
               onClick={() => setShowEditPreferences(false)}
               disabled={saving}
-              className="rounded-xl border-slate-200"
             >
               {t('logout.cancel') || 'Cancel'}
             </Button>
@@ -803,7 +802,6 @@ export function ProfilePage() {
               onClick={handleSavePreferences}
               loading={saving}
               disabled={!editRigor}
-              className="rounded-xl"
             >
               {t('profile.save') || 'Save'}
             </Button>
@@ -813,7 +811,7 @@ export function ProfilePage() {
 
       {/* Logout Confirmation Dialog */}
       <Dialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
-        <DialogContent className="sm:max-w-[400px] bg-white border border-slate-200">
+        <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>{t('logout.title') || 'Logout'}</DialogTitle>
             <DialogDescription>
@@ -825,7 +823,6 @@ export function ProfilePage() {
               variant="outline"
               onClick={() => setShowLogoutDialog(false)}
               disabled={loggingOut}
-              className="rounded-xl border-slate-200"
             >
               {t('logout.cancel') || 'Cancel'}
             </Button>
@@ -833,7 +830,6 @@ export function ProfilePage() {
               variant="destructive"
               onClick={handleLogout}
               loading={loggingOut}
-              className="rounded-xl"
             >
               {t('logout.confirm_button') || 'Log Out'}
             </Button>

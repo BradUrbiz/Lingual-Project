@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, Check, AlertTriangle } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import {
   Button,
@@ -42,7 +42,7 @@ const TOTAL_STEPS = 5;
 // Animation variants for step transitions
 const stepVariants = {
   enter: (direction: number) => ({
-    x: direction > 0 ? 100 : -100,
+    x: direction > 0 ? 80 : -80,
     opacity: 0,
   }),
   center: {
@@ -50,7 +50,7 @@ const stepVariants = {
     opacity: 1,
   },
   exit: (direction: number) => ({
-    x: direction > 0 ? -100 : 100,
+    x: direction > 0 ? -80 : 80,
     opacity: 0,
   }),
 };
@@ -184,12 +184,12 @@ export function GeneralPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
         >
-          <Loader2 className="h-8 w-8 text-primary" />
+          <Loader2 className="h-8 w-8 text-purple-600" />
         </motion.div>
       </div>
     );
@@ -211,14 +211,16 @@ export function GeneralPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="text-muted-foreground"
+          className="text-slate-500"
         >
           {t('general.welcomeMessage') || "Let's get to know you!"}
         </motion.p>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="name">{t('general.nameLabel')} *</Label>
+        <Label htmlFor="name" className="text-slate-700">
+          {t('general.nameLabel')} *
+        </Label>
         <Input
           id="name"
           type="text"
@@ -226,6 +228,7 @@ export function GeneralPage() {
           value={formData.displayName}
           onChange={(e) => updateField('displayName', e.target.value)}
           autoFocus
+          className="bg-slate-50 border-slate-200 focus:border-purple-500 focus:ring-purple-200"
         />
       </div>
     </div>
@@ -234,13 +237,15 @@ export function GeneralPage() {
   const renderStep2 = () => (
     <div className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-xl font-semibold text-foreground">
-          {t('general.aboutYou') || 'Tell us about yourself'}
+        <h2 className="text-xl font-semibold text-slate-900">
+          {t('general.aboutYou')}
         </h2>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="age">{t('general.ageLabel')} *</Label>
+        <Label htmlFor="age" className="text-slate-700">
+          {t('general.ageLabel')} *
+        </Label>
         <Input
           id="age"
           type="number"
@@ -252,22 +257,24 @@ export function GeneralPage() {
             updateField('age', e.target.value ? parseInt(e.target.value) : null)
           }
           autoFocus
+          className="bg-slate-50 border-slate-200 focus:border-purple-500 focus:ring-purple-200"
         />
       </div>
 
       <div className="space-y-2">
-        <Label>{t('general.genderLabel')} *</Label>
+        <Label className="text-slate-700">{t('general.genderLabel')} *</Label>
         <div className="grid grid-cols-2 gap-2">
           {GENDER_OPTIONS.map(({ id, labelKey }) => (
-            <Button
-              key={id}
-              variant="option"
-              selected={formData.gender === id}
-              onClick={() => updateField('gender', id)}
-              className="text-sm"
-            >
-              {t(labelKey)}
-            </Button>
+            <motion.div key={id} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
+              <Button
+                variant="option"
+                selected={formData.gender === id}
+                onClick={() => updateField('gender', id)}
+                className="text-sm rounded-xl border-slate-200 bg-white shadow-sm hover:border-purple-200 hover:text-purple-700"
+              >
+                {t(labelKey)}
+              </Button>
+            </motion.div>
           ))}
         </div>
       </div>
@@ -277,26 +284,27 @@ export function GeneralPage() {
   const renderStep3 = () => (
     <div className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-xl font-semibold text-foreground">
+        <h2 className="text-xl font-semibold text-slate-900">
           {t('general.rigorLabel')} *
         </h2>
-        <p className="text-sm text-muted-foreground mt-2">
+        <p className="text-sm text-slate-500 mt-2">
           {t('general.rigorDescription')}
         </p>
       </div>
 
       <div className="grid gap-3">
         {RIGOR_OPTIONS.map(({ id, labelKey, description }) => (
-          <Button
-            key={id}
-            variant="option"
-            selected={formData.rigor === id}
-            onClick={() => updateField('rigor', id)}
-            className="w-full justify-between h-auto py-4 px-4"
-          >
-            <span className="font-medium">{t(labelKey)}</span>
-            <span className="text-sm text-muted-foreground">{description}</span>
-          </Button>
+          <motion.div key={id} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
+            <Button
+              variant="option"
+              selected={formData.rigor === id}
+              onClick={() => updateField('rigor', id)}
+              className="w-full justify-between h-auto py-4 px-4 rounded-2xl border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-purple-200"
+            >
+              <span className="font-medium">{t(labelKey)}</span>
+              <span className="text-sm text-slate-500">{description}</span>
+            </Button>
+          </motion.div>
         ))}
       </div>
     </div>
@@ -305,16 +313,16 @@ export function GeneralPage() {
   const renderStep4 = () => (
     <div className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-xl font-semibold text-foreground">
+        <h2 className="text-xl font-semibold text-slate-900">
           {t('general.frequencyLabel')} *
         </h2>
-        <p className="text-sm text-muted-foreground mt-2">
+        <p className="text-sm text-slate-500 mt-2">
           {t('general.frequencyDescription')}
         </p>
       </div>
 
       <div className="space-y-6">
-        <div className="px-4">
+        <div className="px-4 py-4 rounded-2xl border border-slate-200 bg-slate-50">
           <Slider
             min={1}
             max={14}
@@ -326,14 +334,16 @@ export function GeneralPage() {
 
         <div className="grid grid-cols-3 gap-2">
           {FREQUENCY_UNIT_OPTIONS.map(({ id, labelKey }) => (
-            <Button
-              key={id}
-              variant="option"
-              selected={formData.frequencyUnit === id}
-              onClick={() => updateField('frequencyUnit', id)}
-            >
-              {t(labelKey)}
-            </Button>
+            <motion.div key={id} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
+              <Button
+                variant="option"
+                selected={formData.frequencyUnit === id}
+                onClick={() => updateField('frequencyUnit', id)}
+                className="rounded-full border-slate-200 bg-white shadow-sm hover:border-purple-200 hover:text-purple-700"
+              >
+                {t(labelKey)}
+              </Button>
+            </motion.div>
           ))}
         </div>
       </div>
@@ -343,10 +353,10 @@ export function GeneralPage() {
   const renderStep5 = () => (
     <div className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-xl font-semibold text-foreground">
+        <h2 className="text-xl font-semibold text-slate-900">
           {t('general.levelObjectiveLabel')}
         </h2>
-        <p className="text-sm text-muted-foreground mt-2">
+        <p className="text-sm text-slate-500 mt-2">
           {t('general.levelObjectiveDescription')}
         </p>
       </div>
@@ -355,17 +365,15 @@ export function GeneralPage() {
         <Input
           id="levelObjective"
           type="text"
-          placeholder={
-            t('general.levelObjectivePlaceholder') ||
-            'e.g., Pass TOPIK Level 3, Have daily conversations'
-          }
+          placeholder={t('general.levelObjectivePlaceholder')}
           value={formData.levelObjective}
           onChange={(e) => updateField('levelObjective', e.target.value)}
           autoFocus
+          className="bg-slate-50 border-slate-200 focus:border-purple-500 focus:ring-purple-200"
         />
       </div>
 
-      <p className="text-xs text-muted-foreground text-center">
+      <p className="text-xs text-slate-500 text-center">
         {t('general.optionalField') || 'This field is optional'}
       </p>
     </div>
@@ -389,21 +397,24 @@ export function GeneralPage() {
   };
 
   return (
-    <AnimatedPage className="min-h-screen flex items-center justify-center p-4">
-      <AnimatedCard className="p-8 max-w-md w-full">
+    <AnimatedPage className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <AnimatedCard className="p-8 max-w-md w-full bg-white border border-slate-200 shadow-sm">
         {/* Progress indicator */}
         <div className="mb-8">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-muted-foreground">
-              {currentStep} / {TOTAL_STEPS}
-            </span>
+          <div className="flex justify-between items-center mb-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-400">Profile Setup</p>
+              <p className="text-sm font-semibold text-slate-900">
+                Step {currentStep} of {TOTAL_STEPS}
+              </p>
+            </div>
             {isEditMode && (
-              <span className="text-xs text-accent font-medium">
+              <span className="text-xs text-purple-600 font-medium">
                 {t('general.editMode') || 'Edit Mode'}
               </span>
             )}
           </div>
-          <div className="h-2 bg-muted rounded-full overflow-hidden">
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
             <motion.div
               className="h-full bg-primary rounded-full"
               initial={{ width: 0 }}
@@ -411,48 +422,80 @@ export function GeneralPage() {
               transition={{ duration: 0.3, ease: 'easeOut' }}
             />
           </div>
+          <div className="flex items-center justify-between mt-4">
+            {Array.from({ length: TOTAL_STEPS }).map((_, index) => {
+              const step = index + 1;
+              const isActive = step === currentStep;
+              const isComplete = step < currentStep;
+              return (
+                <div key={step} className="flex flex-col items-center gap-2">
+                  <div
+                    className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
+                      isComplete
+                        ? 'bg-purple-600 text-white'
+                        : isActive
+                        ? 'bg-purple-50 text-purple-700 ring-2 ring-purple-200'
+                        : 'bg-slate-100 text-slate-400'
+                    }`}
+                  >
+                    {isComplete ? <Check size={14} /> : step}
+                  </div>
+                  <span
+                    className={`text-[10px] uppercase tracking-wide ${
+                      isActive ? 'text-purple-600' : 'text-slate-400'
+                    }`}
+                  >
+                    Step {step}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Error message */}
-        <AnimatePresence mode="wait">
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mb-4"
-            >
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Step content with animation */}
-        <div className="min-h-[320px] relative">
-          <AnimatePresence mode="wait" custom={direction}>
-            <motion.div
-              key={currentStep}
-              custom={direction}
-              variants={stepVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.3, ease: 'easeInOut' }}
-            >
-              {renderCurrentStep()}
-            </motion.div>
+        <div className="border-t border-slate-100 pt-6">
+          {/* Error message */}
+          <AnimatePresence mode="wait">
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mb-4"
+              >
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              </motion.div>
+            )}
           </AnimatePresence>
+
+          {/* Step content with animation */}
+          <div className="min-h-[320px] relative">
+            <AnimatePresence mode="wait" custom={direction}>
+              <motion.div
+                key={currentStep}
+                custom={direction}
+                variants={stepVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+              >
+                {renderCurrentStep()}
+              </motion.div>
+            </AnimatePresence>
+          </div>
         </div>
 
         {/* Navigation buttons */}
-        <div className="flex gap-3 mt-8">
+        <div className="border-t border-slate-100 pt-6 flex gap-3 mt-8">
           {currentStep > 1 && (
             <Button
               variant="outline"
               onClick={goToPrevStep}
-              className="flex-1"
+              className="flex-1 rounded-xl border-slate-200"
             >
               <ChevronLeft className="h-4 w-4 mr-1" />
               {t('general.back') || 'Back'}
@@ -463,7 +506,7 @@ export function GeneralPage() {
             <Button
               onClick={goToNextStep}
               disabled={!isStepValid(currentStep)}
-              className="flex-1"
+              className="flex-1 rounded-xl"
             >
               {t('general.next') || 'Next'}
               <ChevronRight className="h-4 w-4 ml-1" />
@@ -472,7 +515,7 @@ export function GeneralPage() {
             <Button
               onClick={handleSubmit}
               loading={isSubmitting}
-              className="flex-1"
+              className="flex-1 rounded-xl"
             >
               {t('general.continue')}
             </Button>

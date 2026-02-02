@@ -1,0 +1,41 @@
+type User @table {
+  displayName: String!
+  email: String!
+  createdAt: Timestamp!
+  photoUrl: String
+  lastLogin: Timestamp
+}
+
+type ProficiencyAssessment @table {
+  user: User!
+  sklcLevel: Int!
+  assessmentDate: Date!
+  score: Float!
+  details: String # Storing JSON as a String
+}
+
+type Scenario @table {
+  title: String!
+  description: String!
+  difficultyLevel: Int!
+  keywords: [String]
+  suggestedPhrases: [String]
+}
+
+type ConversationSession @table {
+  user: User!
+  scenario: Scenario!
+  startTime: Timestamp!
+  durationMinutes: Int!
+  endTime: Timestamp
+  feedbackSummary: String
+}
+
+type ConversationUtterance @table {
+  conversationSession: ConversationSession!
+  speaker: String! # Could be an enum, but using String for simplicity as per instructions
+  text: String!
+  timestamp: Timestamp!
+  pronunciationFeedback: String # Storing JSON as a String
+  grammarSuggestions: String # Storing JSON as a String
+}

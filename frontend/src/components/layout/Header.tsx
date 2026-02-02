@@ -22,7 +22,7 @@ export function Header() {
       <div className="h-full max-w-7xl mx-auto px-4 flex items-center justify-between">
         {/* Logo */}
         <button
-          onClick={() => navigate('/general')}
+          onClick={() => navigate('/')}
           className="flex items-center gap-2 hover:opacity-80 transition-opacity"
         >
           <span className="text-xl font-bold text-accent">Lingual</span>

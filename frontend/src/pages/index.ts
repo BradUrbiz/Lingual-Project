@@ -5,3 +5,7 @@ export { AssessmentPage } from './AssessmentPage';
 export { CategoriesPage } from './CategoriesPage';
 export { ChatPage } from './ChatPage';
 export { ProfilePage } from './ProfilePage';
+export { AppLearningPage } from './AppLearningPage';
+export { AppProfilePage } from './AppProfilePage';
+export { AppSettingsPage } from './AppSettingsPage';
+export { TeacherDashboardPage } from './TeacherDashboardPage';

@@ -1,16 +1,20 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
+import { AppProtectedRoute } from './components/layout/AppProtectedRoute';
 import {
   LandingPage,
   AuthPage,
   GeneralPage,
   AssessmentPage,
   CategoriesPage,
-  ChatPage,
   ProfilePage,
+  AppLearningPage,
+  AppProfilePage,
+  AppSettingsPage,
+  TeacherDashboardPage,
 } from './pages';
 
 function AnimatedRoutes() {
@@ -28,8 +32,17 @@ function AnimatedRoutes() {
           <Route path="/general" element={<GeneralPage />} />
           <Route path="/assessment" element={<AssessmentPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
-          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/chat" element={<Navigate to="/app/learn" replace />} />
           <Route path="/profile" element={<ProfilePage />} />
+        </Route>
+
+        {/* New App Shell Routes */}
+        <Route path="/app" element={<AppProtectedRoute />}>
+          <Route index element={<Navigate to="learn" replace />} />
+          <Route path="learn" element={<AppLearningPage />} />
+          <Route path="profile" element={<AppProfilePage />} />
+          <Route path="settings" element={<AppSettingsPage />} />
+          <Route path="teacher" element={<TeacherDashboardPage />} />
         </Route>
       </Routes>
     </AnimatePresence>

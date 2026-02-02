@@ -1,7 +1,7 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { LoadingSpinner } from '../common';
-import { AppLayout } from './AppLayout';
+import { LegacyAppLayout } from './LegacyAppLayout';
 
 export function ProtectedRoute() {
   const { user, loading } = useAuth();
@@ -19,8 +19,8 @@ export function ProtectedRoute() {
   }
 
   return (
-    <AppLayout>
+    <LegacyAppLayout>
       <Outlet />
-    </AppLayout>
+    </LegacyAppLayout>
   );
 }

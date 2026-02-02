@@ -1,0 +1,78 @@
+mutation SeedDatabase @transaction @auth(level: NO_ACCESS) {
+  user_insertMany(data: [
+    {
+      id: "6777cf8b-1798-459b-b56f-e49c8d556885",
+      createdAt: "2024-04-26T12:00:00Z",
+      displayName: "Example User 1",
+      email: "user1@example.com"
+    },
+    {
+      id: "793b1781-c52e-4a6f-95c3-548b22025b8c",
+      createdAt: "2024-04-27T14:30:00Z",
+      displayName: "Example User 2",
+      email: "user2@example.com"
+    }
+  ])
+  scenario_insertMany(data: [
+    {
+      id: "a1b2c3d4-e5f6-4789-90ab-cdef01234567",
+      description: "A scenario for practicing greetings.",
+      difficultyLevel: 1,
+      title: "Greetings Scenario"
+    },
+    {
+      id: "b8c9d0e1-f2a3-4456-879a-bcde01234567",
+      description: "A scenario for ordering food at a restaurant.",
+      difficultyLevel: 2,
+      title: "Restaurant Ordering Scenario"
+    }
+  ])
+  conversationSession_insertMany(data: [
+    {
+      id: "c2d3e4f5-6789-4abc-def0-1234567890ab",
+      scenarioId: "a1b2c3d4-e5f6-4789-90ab-cdef01234567",
+      userId: "6777cf8b-1798-459b-b56f-e49c8d556885",
+      durationMinutes: 15,
+      startTime: "2024-04-27T15:00:00Z"
+    },
+    {
+      id: "d9e0f1a2-3456-4bcd-9efa-234567890abc",
+      scenarioId: "b8c9d0e1-f2a3-4456-879a-bcde01234567",
+      userId: "793b1781-c52e-4a6f-95c3-548b22025b8c",
+      durationMinutes: 20,
+      startTime: "2024-04-27T16:30:00Z"
+    }
+  ])
+  conversationUtterance_insertMany(data: [
+    {
+      id: "e3f4a5b6-7890-4cde-fabc-34567890abcd",
+      conversationSessionId: "c2d3e4f5-6789-4abc-def0-1234567890ab",
+      speaker: "User",
+      text: "Hello!",
+      timestamp: "2024-04-27T15:01:00Z"
+    },
+    {
+      id: "f0a1b2c3-4567-4def-9abc-4567890abcde",
+      conversationSessionId: "d9e0f1a2-3456-4bcd-9efa-234567890abc",
+      speaker: "User",
+      text: "I would like to order a pizza.",
+      timestamp: "2024-04-27T16:31:00Z"
+    }
+  ])
+  proficiencyAssessment_insertMany(data: [
+    {
+      id: "1g2h3i4j-5678-4efg-hijk-67890abcdef1",
+      userId: "6777cf8b-1798-459b-b56f-e49c8d556885",
+      assessmentDate: "2024-04-27",
+      score: 75.0,
+      sklcLevel: 3
+    },
+    {
+      id: "8k9l0m1n-2345-4opq-rstu-7890abcdef12",
+      userId: "793b1781-c52e-4a6f-95c3-548b22025b8c",
+      assessmentDate: "2024-04-28",
+      score: 80.0,
+      sklcLevel: 4
+    }
+  ])
+}

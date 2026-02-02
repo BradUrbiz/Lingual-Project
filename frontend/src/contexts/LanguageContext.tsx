@@ -19,7 +19,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLang] = useState<Language>('en');
 
   const t = (key: string): string => {
-    return translations[lang][key] || key;
+    return translations[lang][key] || translations.en[key] || key;
   };
 
   return (

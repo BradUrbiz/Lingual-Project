@@ -1,0 +1,34 @@
+mutation CreateNewScenario($description: String!, $difficultyLevel: Int!, $title: String!) @auth(level: USER) {
+  scenario_insert(data: {description: $description, difficultyLevel: $difficultyLevel, title: $title})
+}
+
+query ListScenarios @auth(level: PUBLIC, insecureReason: "This operation is safe to expose to the public") {
+  scenarios {
+    id
+    title
+    description
+    difficultyLevel
+  }
+}
+
+mutation UpdateFeedbackSummary($conversationSessionId: UUID!, $feedbackSummary: String) @auth(level: USER) {
+  conversationSession_update(
+    key: {id: $conversationSessionId}
+    data: {feedbackSummary: $feedbackSummary}
+  )
+}
+
+query GetUserConversationSessions($userId: UUID!) @auth(level: USER) {
+  conversationSessions(where: {userId: {eq: $userId}}) {
+    id
+    startTime
+    endTime
+    durationMinutes
+    feedbackSummary
+    scenario {
+      id
+      title
+      description
+    }
+  }
+}

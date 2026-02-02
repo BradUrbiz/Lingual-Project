@@ -15,14 +15,14 @@ const Progress = React.forwardRef<
   <ProgressPrimitive.Root
     ref={ref}
     className={cn(
-      'relative h-2 w-full overflow-hidden rounded-full bg-gray-200',
+      'relative h-2.5 w-full overflow-hidden rounded-full bg-slate-100',
       className
     )}
     {...props}
   >
     <ProgressPrimitive.Indicator asChild>
       <motion.div
-        className="h-full bg-gradient-to-r from-primary to-primary-hover"
+        className="h-full bg-gradient-to-r from-purple-500 to-indigo-500"
         initial={{ width: 0 }}
         animate={{ width: `${value}%` }}
         transition={{ duration: 0.3, ease: 'easeOut' }}

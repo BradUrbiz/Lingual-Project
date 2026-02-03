@@ -1,45 +1,45 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-
 /* Warm Brutalism Typography */
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&display=swap');
 @import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap');
 
+@import "tailwindcss";
+@import "tw-animate-css";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Warm Brutalism Color Palette */
+  /* Warm Purple Brutalism Color Palette */
   --font-size: 16px;
-  --background: #F5F0E8;           /* warm cream */
-  --foreground: #2D2A26;           /* charcoal */
-  --card: #FFFDF9;                 /* warm white */
-  --card-foreground: #2D2A26;
-  --popover: #FFFDF9;
-  --popover-foreground: #2D2A26;
-  --primary: #C75D3A;              /* terracotta */
-  --primary-foreground: #FFFDF9;
-  --secondary: #E8DDD4;            /* soft clay */
-  --secondary-foreground: #2D2A26;
-  --muted: #E8E2D9;                /* muted cream */
-  --muted-foreground: #6B6560;     /* warm gray */
-  --accent: #D4A03E;               /* mustard */
-  --accent-foreground: #1A1816;
-  --destructive: #B84233;          /* deep terracotta */
-  --destructive-foreground: #FFFDF9;
-  --border: #D4CEC4;               /* warm border */
+  --background: #F9F7FC;           /* warm white with purple tint */
+  --foreground: #2D2639;           /* deep purple-charcoal */
+  --card: #FFFCFE;                 /* pure warm white */
+  --card-foreground: #2D2639;
+  --popover: #FFFCFE;
+  --popover-foreground: #2D2639;
+  --primary: #9B7EC4;              /* soft warm purple */
+  --primary-foreground: #FFFCFE;
+  --secondary: #E8E3F0;            /* soft lavender */
+  --secondary-foreground: #2D2639;
+  --muted: #EDE8F5;                /* muted lavender */
+  --muted-foreground: #6B6179;     /* purple-gray */
+  --accent: #B89FD8;               /* warm lilac */
+  --accent-foreground: #1E1A26;
+  --destructive: #B8426D;          /* burgundy-purple */
+  --destructive-foreground: #FFFCFE;
+  --border: #D4CFDD;               /* soft purple border */
   --input: transparent;
-  --input-background: #FFFDF9;
-  --switch-background: #D4CEC4;
+  --input-background: #FFFCFE;
+  --switch-background: #D4CFDD;
   --font-weight-medium: 600;
   --font-weight-normal: 400;
-  --ring: #C75D3A;
+  --ring: #9B7EC4;
 
-  /* Chart colors - warm palette */
-  --chart-1: #C75D3A;              /* terracotta */
-  --chart-2: #D4A03E;              /* mustard */
-  --chart-3: #7D9A78;              /* sage */
-  --chart-4: #5C8A9A;              /* dusty teal */
-  --chart-5: #9A7B5C;              /* warm brown */
+  /* Chart colors - purple palette */
+  --chart-1: #9B7EC4;              /* soft purple */
+  --chart-2: #B89FD8;              /* warm lilac */
+  --chart-3: #8B9AA0;              /* purple-sage */
+  --chart-4: #7B8BA0;              /* dusty purple-blue */
+  --chart-5: #9A7B8B;              /* warm mauve */
 
   /* Brutalist sizing */
   --radius: 1rem;                  /* 16px - chunky corners */
@@ -47,58 +47,58 @@
   --border-chunky: 4px;            /* extra chunky */
 
   /* Sidebar */
-  --sidebar: #E8DDD4;
-  --sidebar-foreground: #2D2A26;
-  --sidebar-primary: #C75D3A;
-  --sidebar-primary-foreground: #FFFDF9;
-  --sidebar-accent: #D4A03E;
-  --sidebar-accent-foreground: #1A1816;
-  --sidebar-border: #D4CEC4;
-  --sidebar-ring: #C75D3A;
+  --sidebar: #E8E3F0;
+  --sidebar-foreground: #2D2639;
+  --sidebar-primary: #9B7EC4;
+  --sidebar-primary-foreground: #FFFCFE;
+  --sidebar-accent: #B89FD8;
+  --sidebar-accent-foreground: #1E1A26;
+  --sidebar-border: #D4CFDD;
+  --sidebar-ring: #9B7EC4;
 
-  /* Additional Warm Brutalism tokens */
-  --success: #7D9A78;              /* sage green */
-  --success-foreground: #FFFDF9;
-  --warning: #D4A03E;              /* mustard */
-  --warning-foreground: #1A1816;
-  --ink: #1A1816;                  /* deepest dark */
+  /* Additional Warm Purple Brutalism tokens */
+  --success: #8B9AA0;              /* purple-sage */
+  --success-foreground: #FFFCFE;
+  --warning: #B89FD8;              /* warm lilac */
+  --warning-foreground: #1E1A26;
+  --ink: #1E1A26;                  /* deepest dark purple */
 
   /* Typography */
   --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
   --font-body: 'Satoshi', system-ui, sans-serif;
 }
 
-/* Dark mode - Warm Brutalism (deep charcoal with warm accents) */
+/* Dark mode - Warm Purple Brutalism (deep purple-charcoal with lavender accents) */
 .dark {
-  --background: #1A1816;           /* ink */
-  --foreground: #F5F0E8;           /* warm cream */
-  --card: #2D2A26;                 /* charcoal */
-  --card-foreground: #F5F0E8;
-  --popover: #2D2A26;
-  --popover-foreground: #F5F0E8;
-  --primary: #E07A5A;              /* lighter terracotta */
-  --primary-foreground: #1A1816;
-  --secondary: #3D3835;            /* warm dark */
-  --secondary-foreground: #F5F0E8;
-  --muted: #3D3835;
-  --muted-foreground: #A8A29E;     /* warm gray */
-  --accent: #E5B84A;               /* bright mustard */
-  --accent-foreground: #1A1816;
-  --destructive: #D65A4A;
-  --destructive-foreground: #F5F0E8;
-  --border: #4A4540;               /* warm dark border */
-  --input: #3D3835;
-  --ring: #E07A5A;
-  --sidebar: #2D2A26;
-  --sidebar-foreground: #F5F0E8;
-  --sidebar-primary: #E07A5A;
-  --sidebar-primary-foreground: #1A1816;
-  --sidebar-accent: #E5B84A;
-  --sidebar-accent-foreground: #1A1816;
-  --sidebar-border: #4A4540;
-  --sidebar-ring: #E07A5A;
-  --success: #8FB085;
-  --success-foreground: #1A1816;
+  --background: #1E1A26;           /* deep purple-ink */
+  --foreground: #F9F7FC;           /* warm white */
+  --card: #2D2639;                 /* purple-charcoal */
+  --card-foreground: #F9F7FC;
+  --popover: #2D2639;
+  --popover-foreground: #F9F7FC;
+  --primary: #B89FD8;              /* warm lilac */
+  --primary-foreground: #1E1A26;
+  --secondary: #3D3845;            /* dark lavender */
+  --secondary-foreground: #F9F7FC;
+  --muted: #3D3845;
+  --muted-foreground: #AFA8B8;     /* purple-gray */
+  --accent: #C9B5DD;               /* bright lavender */
+  --accent-foreground: #1E1A26;
+  --destructive: #D6547A;
+  --destructive-foreground: #F9F7FC;
+  --border: #4A4550;               /* dark purple border */
+  --input: #3D3845;
+  --ring: #B89FD8;
+  --sidebar: #2D2639;
+  --sidebar-foreground: #F9F7FC;
+  --sidebar-primary: #B89FD8;
+  --sidebar-primary-foreground: #1E1A26;
+  --sidebar-accent: #C9B5DD;
+  --sidebar-accent-foreground: #1E1A26;
+  --sidebar-border: #4A4550;
+  --sidebar-ring: #B89FD8;
+  --success: #9BADB0;
+  --success-foreground: #1E1A26;
 }
 
 @theme inline {

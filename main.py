@@ -1123,7 +1123,12 @@ def serve_react_index():
 
 @app.route('/imgs/<path:filename>')
 def serve_images(filename):
-    """Serve images from static/imgs folder"""
+    """Serve images - check React build first, then backend static"""
+    # First check React build directory (where Vite copies public/ assets)
+    react_img_path = REACT_BUILD_DIR / 'imgs' / filename
+    if react_img_path.exists():
+        return send_from_directory(REACT_BUILD_DIR / 'imgs', filename)
+    # Fallback to backend static folder
     return send_from_directory(STATIC_DIR / 'imgs', filename)
 
 @app.route('/<path:path>')

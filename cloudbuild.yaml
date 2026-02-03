@@ -40,7 +40,7 @@ steps:
 
 # Substitution variables (can be overridden at build time)
 substitutions:
-  _REGION: us-east4
+  _REGION: us-central1
   _SERVICE_NAME: lingual-app
   _ARTIFACT_REPO: lingual-repo
   _SECRET_NAME: openai-api-key

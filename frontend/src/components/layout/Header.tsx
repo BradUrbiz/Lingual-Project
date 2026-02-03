@@ -17,15 +17,18 @@ export function Header() {
       initial={{ y: -60, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="fixed top-0 left-0 right-0 z-50 h-16 bg-card/95 backdrop-blur-sm border-b border-border"
+      className="fixed top-0 left-0 right-0 z-50 h-20 bg-card border-b-3 border-foreground"
     >
-      <div className="h-full max-w-7xl mx-auto px-4 flex items-center justify-between">
+      <div className="h-full max-w-7xl mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
         <button
           onClick={() => navigate('/')}
-          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+          className="flex items-center gap-4 hover:scale-105 transition-transform"
         >
-          <span className="text-xl font-bold text-accent">Lingual</span>
+          <div className="w-12 h-12 bg-primary rounded-xl border-3 border-foreground shadow-stamp-sm flex items-center justify-center">
+            <span className="text-2xl font-display font-bold text-white">L</span>
+          </div>
+          <span className="text-2xl font-display font-bold text-foreground">Lingu</span>
         </button>
 
         {/* Desktop: User Menu */}

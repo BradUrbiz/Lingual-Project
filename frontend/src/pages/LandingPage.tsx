@@ -307,18 +307,18 @@ export function LandingPage() {
                 accent: 'border-primary',
               },
               {
-                icon: <Zap className="text-accent" size={36} strokeWidth={2.5} />,
+                icon: <Zap className="text-success" size={36} strokeWidth={2.5} />,
                 title: t('landing.features.cards.feedback.title'),
                 desc: t('landing.features.cards.feedback.desc'),
-                color: 'bg-accent/10',
-                accent: 'border-accent',
+                color: 'bg-success/10',
+                accent: 'border-success',
               },
               {
-                icon: <TrendingUp className="text-success" size={36} strokeWidth={2.5} />,
+                icon: <TrendingUp className="text-destructive" size={36} strokeWidth={2.5} />,
                 title: t('landing.features.cards.adaptive.title'),
                 desc: t('landing.features.cards.adaptive.desc'),
-                color: 'bg-success/20',
-                accent: 'border-success',
+                color: 'bg-destructive/10',
+                accent: 'border-destructive',
               },
             ].map((feature, index) => (
               <motion.div

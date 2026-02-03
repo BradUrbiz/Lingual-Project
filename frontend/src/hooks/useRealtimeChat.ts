@@ -16,6 +16,8 @@ interface UseRealtimeChatReturn {
   isConnected: boolean;
   isListening: boolean;
   isSpeaking: boolean;
+  isTranscribing: boolean;
+  pendingTranscript: string | null;
   messages: RealtimeMessage[];
   error: string | null;
   connect: () => Promise<void>;
@@ -30,6 +32,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const [isConnected, setIsConnected] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [pendingTranscript, setPendingTranscript] = useState<string | null>(null);
   const [messages, setMessages] = useState<RealtimeMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -230,9 +234,13 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       case 'conversation.item.input_audio_transcription.completed':
         // User's speech transcribed - use item_id for deduplication
         console.log('User transcript completed:', event.transcript);
+        setIsTranscribing(false);
         if (event.transcript) {
           const itemId = event.item_id || `user-${Date.now()}`;
           addMessage('user', event.transcript, itemId);
+          // Show transcript briefly before clearing
+          setPendingTranscript(event.transcript);
+          setTimeout(() => setPendingTranscript(null), 2000);
         }
         break;
 
@@ -254,6 +262,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
 
       case 'input_audio_buffer.speech_stopped':
         setIsListening(false);
+        setIsTranscribing(true);
         break;
 
       case 'response.audio.delta':
@@ -341,6 +350,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     isConnected,
     isListening,
     isSpeaking,
+    isTranscribing,
+    pendingTranscript,
     messages,
     error,
     connect,

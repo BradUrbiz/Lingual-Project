@@ -23,6 +23,7 @@ import {
   ChatMessage,
   ChatInput,
   ProfileSidebar,
+  TranscriptionStatus,
 } from '../components/chat';
 import type {
   UserProfile,
@@ -80,6 +81,8 @@ export function ChatPage() {
     isConnected,
     isListening,
     isSpeaking,
+    isTranscribing,
+    pendingTranscript,
     messages: realtimeMessages,
     error: realtimeError,
     connect,
@@ -497,61 +500,70 @@ export function ChatPage() {
             </div>
           </motion.div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <AnimatePresence initial={false}>
-              {displayMessages.map((message) => (
-                <motion.div
-                  key={message.id}
-                  variants={messageVariants}
-                  initial="initial"
-                  animate="animate"
-                  layout
-                >
-                  <ChatMessage
-                    role={message.role}
-                    content={message.content}
-                  />
-                </motion.div>
-              ))}
-            </AnimatePresence>
+          {/* Messages - Only show in text mode */}
+          {mode === 'text' && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <AnimatePresence initial={false}>
+                {displayMessages.map((message) => (
+                  <motion.div
+                    key={message.id}
+                    variants={messageVariants}
+                    initial="initial"
+                    animate="animate"
+                    layout
+                  >
+                    <ChatMessage
+                      role={message.role}
+                      content={message.content}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
 
-            <AnimatePresence>
-              {isLoading && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="flex justify-start"
-                >
-                  <div className="bg-muted px-4 py-3 rounded-2xl rounded-bl-md">
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                    >
-                      <Loader2 className="h-5 w-5 text-primary" />
-                    </motion.div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+              <AnimatePresence>
+                {isLoading && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="flex justify-start"
+                  >
+                    <div className="bg-muted px-4 py-3 rounded-2xl rounded-bl-md">
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                      >
+                        <Loader2 className="h-5 w-5 text-primary" />
+                      </motion.div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-            <AnimatePresence>
-              {displayError && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                >
-                  <Alert variant="destructive">
-                    <AlertDescription>{displayError}</AlertDescription>
-                  </Alert>
-                </motion.div>
-              )}
-            </AnimatePresence>
+              <AnimatePresence>
+                {displayError && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                  >
+                    <Alert variant="destructive">
+                      <AlertDescription>{displayError}</AlertDescription>
+                    </Alert>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-            <div ref={messagesEndRef} />
-          </div>
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+
+          {/* Voice Mode - Center voice controls */}
+          {mode === 'realtime' && (
+            <div className="flex-1 flex items-center justify-center p-4">
+              {/* Empty space for voice-only mode - controls are in input area below */}
+            </div>
+          )}
 
           {/* Input Area */}
           <motion.div
@@ -635,6 +647,12 @@ export function ChatPage() {
                         : 'Speak to chat'
                       : 'Press button to start'}
                   </p>
+
+                  {/* Transcription Status */}
+                  <TranscriptionStatus
+                    isTranscribing={isTranscribing}
+                    pendingTranscript={pendingTranscript}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>

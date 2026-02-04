@@ -138,7 +138,7 @@ export function AuthPage() {
         >
           <Card className="p-8 max-w-md w-full mx-auto">
             <div className="flex items-center gap-4 mb-8">
-              <div className="w-12 h-12 rounded-xl bg-primary text-primary-foreground border-2 border-foreground flex items-center justify-center shadow-stamp-sm">
+              <div className="w-12 h-12 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shadow-sm">
                 <Languages size={24} strokeWidth={2.5} />
               </div>
               <div>

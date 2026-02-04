@@ -66,10 +66,10 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 max-w-md w-full text-center"
+          className="bg-card rounded-xl border border-border shadow-lg p-8 max-w-md w-full text-center"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="w-16 h-16 rounded-2xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center mx-auto mb-6 shadow-stamp-sm">
+          <div className="w-16 h-16 rounded-xl bg-accent text-accent-foreground flex items-center justify-center mx-auto mb-6 shadow-sm">
             <Trophy size={32} strokeWidth={2.5} />
           </div>
           <h2 className="text-3xl font-display font-bold text-foreground mb-2">Game Over!</h2>
@@ -102,7 +102,7 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 max-w-md w-full"
+        className="bg-card rounded-xl border border-border shadow-lg p-8 max-w-md w-full"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

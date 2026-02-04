@@ -5,46 +5,46 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-xl text-base font-semibold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center whitespace-nowrap rounded-lg text-base font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
-        // Warm Brutalism primary - stamp effect
+        // Refined primary - clean and elegant
         default:
-          'bg-primary text-primary-foreground border-3 border-foreground shadow-stamp hover:shadow-[6px_6px_0_0_#2D2A26] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_#2D2A26]',
-        // Destructive with brutalist styling
+          'bg-primary text-primary-foreground shadow-sm hover:shadow-md hover:bg-primary/90 active:scale-[0.98]',
+        // Destructive with refined styling
         destructive:
-          'bg-destructive text-destructive-foreground border-3 border-foreground shadow-stamp hover:shadow-[6px_6px_0_0_#2D2A26] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_#2D2A26]',
-        // Outline - visible border, warm hover
+          'bg-destructive text-destructive-foreground shadow-sm hover:shadow-md hover:bg-destructive/90 active:scale-[0.98]',
+        // Outline - clean border
         outline:
-          'bg-card text-foreground border-3 border-foreground hover:bg-secondary active:bg-muted',
-        // Secondary - softer brutalist
+          'bg-card text-foreground border border-border hover:bg-secondary hover:border-primary/50 active:bg-muted',
+        // Secondary - soft and subtle
         secondary:
-          'bg-secondary text-secondary-foreground border-2 border-border hover:border-foreground hover:bg-muted',
-        // Ghost - minimal but warm
+          'bg-secondary text-secondary-foreground border border-border/50 hover:bg-muted hover:border-border',
+        // Ghost - minimal
         ghost:
-          'text-foreground hover:bg-secondary hover:text-foreground',
+          'text-foreground hover:bg-secondary/50 hover:text-foreground',
         // Link - underline style
         link:
           'text-primary underline-offset-4 hover:underline font-medium',
         // Option - for selection buttons
         option:
-          'bg-card text-foreground border-3 border-border hover:border-primary hover:bg-primary/5',
+          'bg-card text-foreground border border-border hover:border-primary hover:bg-primary/5',
         // Google auth button
         google:
-          'bg-card text-foreground border-3 border-foreground gap-3 hover:bg-secondary',
-        // Accent variant - mustard color
+          'bg-card text-foreground border border-border gap-3 hover:bg-secondary hover:border-primary/30',
+        // Accent variant
         accent:
-          'bg-accent text-accent-foreground border-3 border-foreground shadow-stamp hover:shadow-[6px_6px_0_0_#2D2A26] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_#2D2A26]',
-        // Success variant - sage green
+          'bg-accent text-accent-foreground shadow-sm hover:shadow-md hover:bg-accent/90 active:scale-[0.98]',
+        // Success variant
         success:
-          'bg-success text-success-foreground border-3 border-foreground shadow-stamp hover:shadow-[6px_6px_0_0_#2D2A26] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_#2D2A26]',
+          'bg-success text-success-foreground shadow-sm hover:shadow-md hover:bg-success/90 active:scale-[0.98]',
       },
       size: {
-        default: 'h-12 px-6 py-3',
-        sm: 'h-10 px-4 text-sm',
-        lg: 'h-14 px-8 text-lg',
-        icon: 'h-12 w-12',
+        default: 'h-11 px-6 py-2.5',
+        sm: 'h-9 px-4 text-sm',
+        lg: 'h-13 px-8 text-lg',
+        icon: 'h-11 w-11',
       },
       selected: {
         true: '',
@@ -55,7 +55,7 @@ const buttonVariants = cva(
       {
         variant: 'option',
         selected: true,
-        className: 'bg-primary/10 border-primary text-primary border-3',
+        className: 'bg-primary/10 border-primary text-primary',
       },
     ],
     defaultVariants: {

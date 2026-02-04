@@ -75,13 +75,13 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 max-w-2xl w-full relative"
+        className="bg-card rounded-xl border border-border shadow-lg p-8 max-w-2xl w-full relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center shadow-stamp-sm overflow-hidden">
+            <div className="w-12 h-12 rounded-lg bg-accent text-accent-foreground flex items-center justify-center shadow-sm overflow-hidden">
               {wordMatchLogo ? (
                 <img src={wordMatchLogo} alt="Word Match Logo" className="w-full h-full object-cover" />
               ) : (
@@ -118,7 +118,7 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
         {/* Game Over */}
         {gameOver ? (
           <div className="flex flex-col items-center justify-center py-12">
-            <div className="w-20 h-20 rounded-2xl bg-accent text-accent-foreground border-3 border-foreground flex items-center justify-center mb-6 shadow-stamp">
+            <div className="w-20 h-20 rounded-xl bg-accent text-accent-foreground flex items-center justify-center mb-6 shadow-sm">
               <Trophy size={40} strokeWidth={2.5} />
             </div>
             <div className="text-4xl font-display font-bold text-foreground mb-2">Excellent!</div>
@@ -143,10 +143,10 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
                 <button
                   key={i}
                   className={`
-                    px-6 py-3 rounded-xl border-2 text-lg font-display font-bold transition-all
+                    px-6 py-3 rounded-lg border text-lg font-display font-bold transition-all
                     ${matched.left.includes(i) ? 'bg-success/10 text-success border-success cursor-default' : ''}
-                    ${selectedLeft === i && !matched.left.includes(i) ? 'bg-primary/10 text-primary border-primary shadow-stamp-sm' : ''}
-                    ${selectedLeft !== i && !matched.left.includes(i) ? 'bg-card border-border hover:border-foreground hover:shadow-stamp-sm text-foreground' : ''}
+                    ${selectedLeft === i && !matched.left.includes(i) ? 'bg-primary/10 text-primary border-primary shadow-sm' : ''}
+                    ${selectedLeft !== i && !matched.left.includes(i) ? 'bg-card border-border hover:border-primary/50 hover:shadow-sm text-foreground' : ''}
                   `}
                   disabled={matched.left.includes(i)}
                   onClick={() => handleSelect('left', i)}
@@ -170,10 +170,10 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
                 <button
                   key={i}
                   className={`
-                    px-6 py-3 rounded-xl border-2 text-lg font-medium transition-all
+                    px-6 py-3 rounded-lg border text-lg font-medium transition-all
                     ${matched.right.includes(i) ? 'bg-success/10 text-success border-success cursor-default' : ''}
-                    ${selectedRight === i && !matched.right.includes(i) ? 'bg-accent/10 text-accent border-accent shadow-stamp-sm' : ''}
-                    ${selectedRight !== i && !matched.right.includes(i) ? 'bg-card border-border hover:border-foreground hover:shadow-stamp-sm text-foreground' : ''}
+                    ${selectedRight === i && !matched.right.includes(i) ? 'bg-accent/10 text-accent border-accent shadow-sm' : ''}
+                    ${selectedRight !== i && !matched.right.includes(i) ? 'bg-card border-border hover:border-accent/50 hover:shadow-sm text-foreground' : ''}
                   `}
                   disabled={matched.right.includes(i)}
                   onClick={() => handleSelect('right', i)}

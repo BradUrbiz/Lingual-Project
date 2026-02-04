@@ -60,10 +60,10 @@ function SessionItem({
     <div
       onClick={() => onSelect(session.id)}
       className={clsx(
-        'w-full text-left relative flex items-center p-4 rounded-xl border-2 transition-all mb-4 cursor-pointer group',
+        'w-full text-left relative flex items-center p-4 rounded-lg border transition-all mb-4 cursor-pointer group',
         isActive
-          ? 'bg-card border-foreground shadow-stamp'
-          : 'bg-card border-border hover:border-foreground hover:shadow-stamp-sm'
+          ? 'bg-card border-primary shadow-md'
+          : 'bg-card border-border hover:border-primary hover:shadow-sm'
       )}
     >
       <div
@@ -526,7 +526,7 @@ export function AppLearningPage() {
     <div className="grid lg:grid-cols-12 gap-6 h-[calc(100vh-8rem)]">
       <div className="lg:col-span-4 flex flex-col h-full gap-6">
         {/* Learning Path Card */}
-        <div className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-6">
+        <div className="bg-card rounded-xl border border-border shadow-md p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
@@ -609,9 +609,9 @@ export function AppLearningPage() {
         </div>
 
         {/* Minigames Section */}
-        <div className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-6">
+        <div className="bg-card rounded-xl border border-border shadow-md p-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-accent text-accent-foreground flex items-center justify-center">
               <Gamepad2 size={20} strokeWidth={2.5} />
             </div>
             <h3 className="font-display font-bold text-foreground">{t('app.learn.minigames.title') || 'Practice Games'}</h3>
@@ -621,9 +621,9 @@ export function AppLearningPage() {
               onClick={handleFlashcardGame}
               disabled={!currentChatId || loadingFlashcards}
               className={clsx(
-                'p-4 rounded-xl border-2 transition-all text-left',
+                'p-4 rounded-lg border transition-all text-left',
                 currentChatId
-                  ? 'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary hover:shadow-stamp-sm'
+                  ? 'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary hover:shadow-sm'
                   : 'border-border bg-secondary opacity-50 cursor-not-allowed'
               )}
             >
@@ -639,9 +639,9 @@ export function AppLearningPage() {
               onClick={handleWordMatchGame}
               disabled={!currentChatId || loadingWordMatch}
               className={clsx(
-                'p-4 rounded-xl border-2 transition-all text-left',
+                'p-4 rounded-lg border transition-all text-left',
                 currentChatId
-                  ? 'border-accent/30 bg-accent/5 hover:bg-accent/10 hover:border-accent hover:shadow-stamp-sm'
+                  ? 'border-accent/30 bg-accent/5 hover:bg-accent/10 hover:border-accent hover:shadow-sm'
                   : 'border-border bg-secondary opacity-50 cursor-not-allowed'
               )}
             >
@@ -662,8 +662,8 @@ export function AppLearningPage() {
         </div>
 
         {/* Sessions Panel */}
-        <div className="flex-1 min-h-0 bg-card rounded-2xl border-3 border-foreground shadow-stamp overflow-hidden flex flex-col">
-          <div className="p-6 border-b-3 border-foreground bg-secondary flex items-start justify-between gap-4">
+        <div className="flex-1 min-h-0 bg-card rounded-xl border border-border shadow-md overflow-hidden flex flex-col">
+          <div className="p-6 border-b border-border bg-secondary flex items-start justify-between gap-4">
             <div>
               <h2 className="text-xl font-display font-bold text-foreground">
                 {t('app.learn.sessions.title')}
@@ -726,8 +726,8 @@ export function AppLearningPage() {
       </div>
 
       {/* Main Chat Panel */}
-      <div className="lg:col-span-8 flex flex-col h-full bg-card rounded-2xl border-3 border-foreground shadow-stamp overflow-hidden relative">
-        <div className="p-4 border-b-3 border-foreground flex justify-between items-center bg-card z-10">
+      <div className="lg:col-span-8 flex flex-col h-full bg-card rounded-xl border border-border shadow-md overflow-hidden relative">
+        <div className="p-4 border-b border-border flex justify-between items-center bg-card z-10">
           <div>
             <div className="flex items-center space-x-2 text-sm text-primary font-bold mb-0.5">
               <MessageSquare size={16} strokeWidth={2.5} />
@@ -762,15 +762,15 @@ export function AppLearningPage() {
           </div>
           <div className="flex items-center space-x-4">
             {/* Mode Toggle */}
-            <div className="flex bg-secondary rounded-xl p-1 border-2 border-border">
+            <div className="flex bg-secondary rounded-lg p-1 border border-border">
               <button
                 type="button"
                 onClick={() => handleModeChange('text')}
                 className={clsx(
-                  'px-3 py-1.5 rounded-lg text-sm font-bold transition-colors',
+                  'px-3 py-1.5 rounded-md text-sm font-bold transition-colors',
                   mode === 'text'
-                    ? 'bg-card text-primary border-2 border-foreground shadow-stamp-sm'
-                    : 'text-muted-foreground hover:text-foreground border-2 border-transparent'
+                    ? 'bg-card text-primary shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 {t('chat.textMode')}
@@ -779,17 +779,17 @@ export function AppLearningPage() {
                 type="button"
                 onClick={() => handleModeChange('realtime')}
                 className={clsx(
-                  'px-3 py-1.5 rounded-lg text-sm font-bold transition-colors',
+                  'px-3 py-1.5 rounded-md text-sm font-bold transition-colors',
                   mode === 'realtime'
-                    ? 'bg-card text-primary border-2 border-foreground shadow-stamp-sm'
-                    : 'text-muted-foreground hover:text-foreground border-2 border-transparent'
+                    ? 'bg-card text-primary shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 {t('chat.voiceMode')}
               </button>
             </div>
             {mode === 'realtime' && (
-              <div className="hidden sm:flex items-center space-x-2 bg-secondary px-3 py-1.5 rounded-xl border-2 border-border text-sm">
+              <div className="hidden sm:flex items-center space-x-2 bg-secondary px-3 py-1.5 rounded-lg border border-border text-sm">
                 <span className="text-muted-foreground">{t('app.learn.chat.status')}</span>
                 <span className="font-bold text-foreground">{statusLabel}</span>
               </div>
@@ -828,13 +828,13 @@ export function AppLearningPage() {
                     <img
                       src={isUser ? USER_AVATAR : AI_AVATAR}
                       alt={isUser ? 'You' : 'Lingual AI'}
-                      className="w-10 h-10 rounded-xl bg-card border-2 border-foreground"
+                      className="w-10 h-10 rounded-lg bg-card border border-border"
                     />
                     <div
                       className={clsx(
-                        'max-w-[80%] p-4 rounded-2xl text-lg leading-relaxed border-2',
+                        'max-w-[80%] p-4 rounded-xl text-lg leading-relaxed border',
                         isUser
-                          ? 'bg-primary text-primary-foreground border-foreground rounded-tr-none shadow-stamp-sm'
+                          ? 'bg-primary text-primary-foreground border-primary/20 rounded-tr-none shadow-sm'
                           : 'bg-card text-foreground border-border rounded-tl-none'
                       )}
                     >
@@ -874,7 +874,7 @@ export function AppLearningPage() {
                 exit={{ opacity: 0, y: -10 }}
                 className="flex items-center justify-between gap-4"
               >
-                <div className="flex-1 bg-card border-2 border-border rounded-xl px-4 py-3 text-muted-foreground font-medium">
+                <div className="flex-1 bg-card border border-border rounded-lg px-4 py-3 text-muted-foreground font-medium">
                   {isConnected
                     ? t('app.learn.chat.input.connected')
                     : t('app.learn.chat.input.disconnected')}
@@ -883,14 +883,14 @@ export function AppLearningPage() {
                   onClick={handleRecordToggle}
                   disabled={!currentChatId || isConnecting}
                   className={clsx(
-                    'w-14 h-14 rounded-xl flex items-center justify-center border-2 border-foreground transition-all',
+                    'w-14 h-14 rounded-lg flex items-center justify-center transition-all',
                     isConnected
                       ? isSpeaking
-                        ? 'bg-primary text-primary-foreground shadow-stamp'
+                        ? 'bg-primary text-primary-foreground shadow-md'
                         : isListening
-                        ? 'bg-destructive text-white animate-pulse shadow-stamp'
-                        : 'bg-success text-white shadow-stamp'
-                      : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-stamp hover:shadow-[6px_6px_0_0_var(--foreground)]',
+                        ? 'bg-destructive text-white animate-pulse shadow-md'
+                        : 'bg-success text-white shadow-md'
+                      : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm hover:shadow-md',
                     (isConnecting || !currentChatId) && 'opacity-60 cursor-not-allowed'
                   )}
                 >
@@ -921,7 +921,7 @@ export function AppLearningPage() {
       {/* Loading Overlays */}
       {loadingFlashcards && (
         <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-xl border-3 border-foreground shadow-stamp p-6 flex items-center gap-3">
+          <div className="bg-card rounded-lg border border-border shadow-lg p-6 flex items-center gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-primary" strokeWidth={2.5} />
             <span className="font-display font-bold text-foreground">{t('app.learn.minigames.loadingFlashcards') || 'Generating flashcards...'}</span>
           </div>
@@ -929,7 +929,7 @@ export function AppLearningPage() {
       )}
       {loadingWordMatch && (
         <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-xl border-3 border-foreground shadow-stamp p-6 flex items-center gap-3">
+          <div className="bg-card rounded-lg border border-border shadow-lg p-6 flex items-center gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-accent" strokeWidth={2.5} />
             <span className="font-display font-bold text-foreground">{t('app.learn.minigames.loadingWordMatch') || 'Generating word match game...'}</span>
           </div>

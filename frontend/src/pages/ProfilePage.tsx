@@ -316,7 +316,7 @@ export function ProfilePage() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex flex-col items-center text-center">
-                    <Avatar className="h-20 w-20 border-3 border-foreground mb-4">
+                    <Avatar className="h-20 w-20 border-2 border-border mb-4">
                       <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-display font-bold">
                         {getInitials(profile?.displayName, user?.name, user?.email)}
                       </AvatarFallback>

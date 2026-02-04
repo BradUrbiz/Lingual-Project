@@ -82,8 +82,8 @@ export function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background font-body text-foreground">
-      {/* Navigation - Warm Brutalism style */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b-3 border-foreground">
+      {/* Navigation - Refined style */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20 items-center">
             <Link
@@ -91,7 +91,7 @@ export function LandingPage() {
               className="flex items-center gap-3 group"
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             >
-              <div className="w-12 h-12 bg-primary border-3 border-foreground rounded-xl flex items-center justify-center text-primary-foreground shadow-stamp-sm group-hover:shadow-stamp transition-shadow">
+              <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center text-primary-foreground shadow-sm group-hover:shadow-md transition-shadow">
                 <Languages size={26} strokeWidth={2.5} />
               </div>
               <span className="text-2xl font-display font-bold tracking-tight">Lingual</span>
@@ -124,9 +124,9 @@ export function LandingPage() {
               </button>
               <motion.button
                 onClick={handleGetStarted}
-                whileHover={{ y: -2, boxShadow: '6px 6px 0 0 #2D2A26' }}
-                whileTap={{ y: 2, boxShadow: '2px 2px 0 0 #2D2A26' }}
-                className="bg-primary text-primary-foreground font-bold py-3 px-6 rounded-xl border-3 border-foreground shadow-stamp transition-all"
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                className="bg-primary text-primary-foreground font-bold py-3 px-6 rounded-lg shadow-sm hover:shadow-md transition-all"
               >
                 {t('landing.nav.getStarted')}
               </motion.button>
@@ -135,7 +135,7 @@ export function LandingPage() {
             <div className="md:hidden">
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="p-2 text-foreground hover:bg-secondary rounded-lg border-2 border-foreground"
+                className="p-2 text-foreground hover:bg-secondary rounded-lg border border-border"
               >
                 {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
               </button>
@@ -148,7 +148,7 @@ export function LandingPage() {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="md:hidden bg-card border-b-3 border-foreground p-6 space-y-4"
+            className="md:hidden bg-card border-b border-border p-6 space-y-4"
           >
             <a href="#features" className="block text-lg font-medium hover:text-primary" onClick={() => setIsMobileMenuOpen(false)}>
               {t('landing.nav.features')}
@@ -159,11 +159,11 @@ export function LandingPage() {
             <a href="#schools" className="block text-lg font-medium hover:text-primary" onClick={() => setIsMobileMenuOpen(false)}>
               {t('landing.nav.schools')}
             </a>
-            <div className="pt-4 border-t-2 border-border flex flex-col gap-3">
-              <button onClick={handleLogin} className="w-full text-center py-3 font-medium border-2 border-foreground rounded-xl">
+            <div className="pt-4 border-t border-border flex flex-col gap-3">
+              <button onClick={handleLogin} className="w-full text-center py-3 font-medium border border-border rounded-lg">
                 {t('landing.nav.login')}
               </button>
-              <button onClick={handleGetStarted} className="w-full bg-primary text-primary-foreground py-3 rounded-xl font-bold border-3 border-foreground shadow-stamp-sm">
+              <button onClick={handleGetStarted} className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-bold shadow-sm">
                 {t('landing.nav.getStarted')}
               </button>
             </div>
@@ -182,7 +182,7 @@ export function LandingPage() {
             >
               <motion.div
                 variants={staggerItem}
-                className="inline-flex items-center gap-2 bg-accent/20 text-accent-foreground px-4 py-2 rounded-full border-2 border-accent font-medium mb-8"
+                className="inline-flex items-center gap-2 bg-accent/20 text-accent-foreground px-4 py-2 rounded-full border border-accent/50 font-medium mb-8"
               >
                 <Sparkles size={18} className="text-accent" />
                 <span>{t('landing.hero.badge')}</span>
@@ -211,9 +211,9 @@ export function LandingPage() {
               <motion.div variants={staggerItem} className="flex flex-col sm:flex-row gap-4">
                 <motion.button
                   onClick={handleGetStarted}
-                  whileHover={{ y: -3, boxShadow: '8px 8px 0 0 #2D2A26' }}
-                  whileTap={{ y: 2, boxShadow: '2px 2px 0 0 #2D2A26' }}
-                  className="bg-primary text-primary-foreground text-lg font-bold py-4 px-8 rounded-xl border-3 border-foreground shadow-stamp flex items-center justify-center gap-2 transition-all"
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="bg-primary text-primary-foreground text-lg font-bold py-4 px-8 rounded-lg shadow-md hover:shadow-lg flex items-center justify-center gap-2 transition-all"
                 >
                   {t('landing.hero.ctaPrimary')}
                   <ArrowRight size={22} strokeWidth={2.5} />
@@ -221,8 +221,8 @@ export function LandingPage() {
                 <motion.a
                   href="#schools"
                   whileHover={{ y: -2 }}
-                  whileTap={{ y: 1 }}
-                  className="bg-card text-foreground text-lg font-bold py-4 px-8 rounded-xl border-3 border-foreground flex items-center justify-center transition-all hover:bg-secondary"
+                  whileTap={{ scale: 0.98 }}
+                  className="bg-card text-foreground text-lg font-bold py-4 px-8 rounded-lg border border-border flex items-center justify-center transition-all hover:bg-secondary hover:border-primary/50"
                 >
                   {t('landing.hero.ctaSecondary')}
                 </motion.a>
@@ -233,7 +233,7 @@ export function LandingPage() {
                   {AVATAR_IMAGES.map((src, index) => (
                     <div
                       key={src}
-                      className="w-10 h-10 rounded-full border-3 border-background bg-secondary overflow-hidden"
+                      className="w-10 h-10 rounded-full border-2 border-background bg-secondary overflow-hidden"
                       style={{ zIndex: AVATAR_IMAGES.length - index }}
                     >
                       <img src={src} alt={`User avatar ${index + 1}`} className="w-full h-full object-cover" />
@@ -244,16 +244,16 @@ export function LandingPage() {
               </motion.div>
             </motion.div>
 
-            {/* Hero Image - Brutalist frame */}
+            {/* Hero Image - Clean frame */}
             <motion.div
               variants={cardVariants}
               initial="initial"
               animate="animate"
               className="relative"
             >
-              <div className="absolute -inset-3 bg-accent/30 rounded-2xl transform rotate-3"></div>
-              <div className="absolute -inset-3 bg-primary/20 rounded-2xl transform -rotate-2"></div>
-              <div className="relative rounded-2xl overflow-hidden border-4 border-foreground shadow-stamp bg-card">
+              <div className="absolute -inset-3 bg-accent/20 rounded-2xl transform rotate-2"></div>
+              <div className="absolute -inset-3 bg-primary/10 rounded-2xl transform -rotate-1"></div>
+              <div className="relative rounded-xl overflow-hidden border border-border shadow-lg bg-card">
                 <img src={HERO_IMAGE} alt="Student learning" className="w-full h-auto object-cover" />
 
                 {/* Stats card overlay */}
@@ -261,7 +261,7 @@ export function LandingPage() {
                   initial={{ y: 30, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.6, type: 'spring', stiffness: 300 }}
-                  className="absolute bottom-6 left-6 bg-card p-5 rounded-xl border-3 border-foreground shadow-stamp"
+                  className="absolute bottom-6 left-6 bg-card p-5 rounded-lg border border-border shadow-lg backdrop-blur-sm"
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-3 h-3 rounded-full bg-success"></div>
@@ -327,10 +327,10 @@ export function LandingPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1, type: 'spring', stiffness: 300 }}
-                whileHover={{ y: -6, boxShadow: '8px 8px 0 0 #2D2A26' }}
-                className={`bg-card p-8 rounded-2xl border-3 border-foreground shadow-stamp transition-all cursor-default`}
+                whileHover={{ y: -4, boxShadow: '0 8px 24px rgba(45, 38, 57, 0.12)' }}
+                className={`bg-card p-8 rounded-xl border border-border shadow-md transition-all cursor-default`}
               >
-                <div className={`w-16 h-16 ${feature.color} rounded-xl border-2 ${feature.accent} flex items-center justify-center mb-6`}>
+                <div className={`w-16 h-16 ${feature.color} rounded-lg border ${feature.accent} flex items-center justify-center mb-6`}>
                   {feature.icon}
                 </div>
                 <h3 className="text-2xl font-display font-bold mb-4">{feature.title}</h3>
@@ -368,7 +368,7 @@ export function LandingPage() {
                     transition={{ delay: idx * 0.1 }}
                     className="flex gap-5"
                   >
-                    <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-primary text-primary-foreground border-3 border-foreground flex items-center justify-center font-display font-bold text-xl shadow-stamp-sm">
+                    <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-primary text-primary-foreground flex items-center justify-center font-display font-bold text-xl shadow-sm">
                       {idx + 1}
                     </div>
                     <div>
@@ -380,16 +380,16 @@ export function LandingPage() {
               </div>
             </motion.div>
 
-            {/* Chat mockup - Brutalist style */}
+            {/* Chat mockup - Clean style */}
             <motion.div
               initial={{ opacity: 0, x: 30 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
-              className="bg-secondary rounded-3xl p-8 border-3 border-foreground shadow-stamp"
+              className="bg-secondary rounded-2xl p-8 border border-border shadow-md"
             >
-              <div className="bg-card rounded-2xl border-3 border-foreground p-6 space-y-4">
-                <div className="flex items-center gap-4 border-b-2 border-border pb-4">
-                  <div className="w-12 h-12 rounded-xl bg-primary/20 border-2 border-primary flex items-center justify-center text-2xl">
+              <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+                <div className="flex items-center gap-4 border-b border-border pb-4">
+                  <div className="w-12 h-12 rounded-lg bg-primary/20 border border-primary flex items-center justify-center text-2xl">
                     🤖
                   </div>
                   <div>
@@ -401,17 +401,17 @@ export function LandingPage() {
                   </div>
                 </div>
                 <div className="space-y-4 py-2">
-                  <div className="bg-secondary p-4 rounded-xl rounded-tl-none border-2 border-border max-w-[85%]">
+                  <div className="bg-secondary p-4 rounded-lg rounded-tl-none border border-border max-w-[85%]">
                     <div className="h-3 w-3/4 bg-border rounded mb-2"></div>
                     <div className="h-3 w-1/2 bg-border rounded"></div>
                   </div>
-                  <div className="bg-primary/10 p-4 rounded-xl rounded-tr-none ml-auto border-2 border-primary max-w-[85%]">
+                  <div className="bg-primary/10 p-4 rounded-lg rounded-tr-none ml-auto border border-primary max-w-[85%]">
                     <div className="h-3 w-5/6 bg-primary/30 rounded mb-2"></div>
                     <div className="h-3 w-2/3 bg-primary/30 rounded"></div>
                   </div>
                 </div>
                 <div className="pt-4 flex justify-center">
-                  <div className="w-16 h-16 rounded-full bg-destructive border-3 border-foreground shadow-stamp-sm flex items-center justify-center">
+                  <div className="w-16 h-16 rounded-full bg-destructive shadow-sm flex items-center justify-center">
                     <div className="w-5 h-5 bg-destructive-foreground rounded-sm"></div>
                   </div>
                 </div>
@@ -460,15 +460,15 @@ export function LandingPage() {
               </ul>
 
               <motion.button
-                whileHover={{ y: -3, boxShadow: '6px 6px 0 0 #F5F0E8' }}
-                whileTap={{ y: 2 }}
-                className="bg-background text-ink font-bold py-4 px-8 rounded-xl border-3 border-background shadow-[4px_4px_0_0_#F5F0E8] transition-all"
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                className="bg-background text-ink font-bold py-4 px-8 rounded-lg shadow-md hover:shadow-lg transition-all"
               >
                 {t('landing.schools.cta')}
               </motion.button>
             </motion.div>
 
-            {/* Stats grid - brutalist boxes */}
+            {/* Stats grid - clean boxes */}
             <div className="grid grid-cols-2 gap-4">
               {[
                 { value: '3x', label: t('landing.schools.stats.speaking'), color: 'bg-primary' },
@@ -480,7 +480,7 @@ export function LandingPage() {
                   whileInView={{ opacity: 1, scale: 1 }}
                   viewport={{ once: true }}
                   transition={{ delay: idx * 0.1 }}
-                  className={`${stat.color} p-6 rounded-2xl border-3 border-background`}
+                  className={`${stat.color} p-6 rounded-xl border border-background/20`}
                 >
                   <div className="text-4xl font-display font-bold text-background mb-2">{stat.value}</div>
                   <div className="text-background/80 font-medium">{stat.label}</div>
@@ -491,7 +491,7 @@ export function LandingPage() {
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
                 transition={{ delay: 0.2 }}
-                className="col-span-2 bg-success p-6 rounded-2xl border-3 border-background"
+                className="col-span-2 bg-success p-6 rounded-xl border border-background/20"
               >
                 <div className="text-4xl font-display font-bold text-background mb-2">100%</div>
                 <div className="text-background/80 font-medium">
@@ -538,16 +538,16 @@ export function LandingPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: idx * 0.15 }}
-                className="bg-card p-8 rounded-2xl border-3 border-foreground shadow-stamp relative"
+                className="bg-card p-8 rounded-xl border border-border shadow-md relative"
               >
-                <div className="absolute -top-4 -right-4 w-12 h-12 bg-accent rounded-xl border-3 border-foreground flex items-center justify-center rotate-12">
-                  <Star size={24} fill="currentColor" className="text-accent-foreground" />
+                <div className="absolute -top-3 -right-3 w-10 h-10 bg-accent rounded-lg flex items-center justify-center rotate-12 shadow-sm">
+                  <Star size={20} fill="currentColor" className="text-accent-foreground" />
                 </div>
                 <div className="flex items-center gap-4 mb-6">
                   <img
                     src={testimonial.image}
                     alt={testimonial.name}
-                    className="w-16 h-16 rounded-xl object-cover border-3 border-foreground"
+                    className="w-16 h-16 rounded-lg object-cover border border-border"
                   />
                   <div>
                     <div className="font-display font-bold text-xl">{testimonial.name}</div>
@@ -569,7 +569,7 @@ export function LandingPage() {
           <div className="grid md:grid-cols-4 gap-10 mb-12">
             <div>
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-primary border-2 border-background rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
                   <Languages size={22} className="text-primary-foreground" />
                 </div>
                 <span className="text-xl font-display font-bold">Lingual</span>
@@ -613,7 +613,7 @@ export function LandingPage() {
             </div>
           </div>
 
-          <div className="border-t-2 border-background/20 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="border-t border-background/20 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="text-background/50">{t('landing.footer.copyright')}</div>
             <div className="flex gap-6">
               <a href="#" className="text-background/50 hover:text-background transition-colors font-medium">

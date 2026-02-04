@@ -246,7 +246,7 @@ export function AssessmentPage() {
         <div className="border-b-2 border-border pb-6 mb-6 space-y-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center shadow-stamp-sm">
+              <div className="w-12 h-12 rounded-lg bg-accent text-accent-foreground flex items-center justify-center shadow-sm">
                 <BookOpen size={24} strokeWidth={2.5} />
               </div>
               <div>

@@ -69,7 +69,7 @@ export function AppSettingsPage() {
     <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
-        <div className="w-14 h-14 rounded-2xl bg-primary text-primary-foreground border-3 border-foreground flex items-center justify-center shadow-stamp">
+        <div className="w-14 h-14 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-sm">
           <Settings size={28} strokeWidth={2.5} />
         </div>
         <div>
@@ -96,8 +96,8 @@ export function AppSettingsPage() {
               key={tab.value}
               value={tab.value}
               className={clsx(
-                'group flex items-center space-x-3 px-4 py-3 rounded-xl text-left transition-all border-2',
-                'data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-foreground data-[state=active]:shadow-stamp',
+                'group flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-all border',
+                'data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary/20 data-[state=active]:shadow-sm',
                 'text-muted-foreground hover:text-foreground hover:bg-secondary border-transparent data-[state=inactive]:hover:border-border'
               )}
             >
@@ -108,7 +108,7 @@ export function AppSettingsPage() {
         </Tabs.List>
 
         {/* Content Panel */}
-        <div className="flex-1 bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 min-h-[500px]">
+        <div className="flex-1 bg-card rounded-xl border border-border shadow-md p-8 min-h-[500px]">
           {/* Account Tab */}
           <Tabs.Content
             value="account"
@@ -170,7 +170,7 @@ export function AppSettingsPage() {
                 <button
                   onClick={handleSave}
                   disabled={isLoading || isSaving}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 px-6 rounded-xl border-2 border-foreground shadow-stamp hover:shadow-[6px_6px_0_0_var(--foreground)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_var(--foreground)] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:translate-y-0"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-3 px-6 rounded-lg shadow-sm hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:translate-y-0"
                 >
                   {isSaving ? t('app.settings.account.saving') : t('app.settings.account.save')}
                 </button>

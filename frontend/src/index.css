@@ -41,10 +41,10 @@
   --chart-4: #7B8BA0;              /* dusty purple-blue */
   --chart-5: #9A7B8B;              /* warm mauve */
 
-  /* Brutalist sizing */
-  --radius: 1rem;                  /* 16px - chunky corners */
-  --border-thick: 3px;             /* visible borders */
-  --border-chunky: 4px;            /* extra chunky */
+  /* Refined minimalist sizing */
+  --radius: 0.75rem;               /* 12px - softer corners */
+  --border-thick: 1px;             /* clean borders */
+  --border-chunky: 2px;            /* subtle emphasis */
 
   /* Sidebar */
   --sidebar: #E8E3F0;
@@ -141,12 +141,12 @@
   --color-primary-hover: #A84D2E;  /* darker terracotta */
   --color-error: var(--destructive);
 
-  /* Chunky border radius for brutalism */
-  --radius-sm: calc(var(--radius) - 4px);   /* 12px */
-  --radius-md: var(--radius);                /* 16px */
-  --radius-lg: calc(var(--radius) + 4px);    /* 20px */
-  --radius-xl: calc(var(--radius) + 8px);    /* 24px */
-  --radius-2xl: calc(var(--radius) + 16px);  /* 32px */
+  /* Refined border radius */
+  --radius-sm: calc(var(--radius) - 4px);   /* 8px */
+  --radius-md: var(--radius);                /* 12px */
+  --radius-lg: calc(var(--radius) + 4px);    /* 16px */
+  --radius-xl: calc(var(--radius) + 8px);    /* 20px */
+  --radius-2xl: calc(var(--radius) + 16px);  /* 28px */
 
   /* Sidebar */
   --color-sidebar: var(--sidebar);
@@ -333,59 +333,59 @@
   background: var(--primary);
 }
 
-/* Warm Brutalism Utility Classes */
+/* Refined Minimalist Utility Classes */
 
-/* Chunky borders - Tailwind doesn't have border-3 by default */
+/* Clean borders - subtle emphasis */
 .border-3 {
-  border-width: 3px;
+  border-width: 1px;
 }
 
 .border-b-3 {
-  border-bottom-width: 3px;
+  border-bottom-width: 1px;
 }
 
 .border-t-3 {
-  border-top-width: 3px;
+  border-top-width: 1px;
 }
 
 .border-chunky {
-  border-width: 3px;
+  border-width: 1px;
 }
 
 .border-extra-chunky {
-  border-width: 4px;
+  border-width: 2px;
 }
 
-/* Stamp-like shadow effect */
+/* Subtle shadow effects */
 .shadow-stamp {
-  box-shadow: 4px 4px 0 0 var(--foreground);
+  box-shadow: 0 2px 8px rgba(45, 38, 57, 0.08);
 }
 
 .shadow-stamp-sm {
-  box-shadow: 2px 2px 0 0 var(--foreground);
+  box-shadow: 0 1px 4px rgba(45, 38, 57, 0.06);
 }
 
 .shadow-stamp-primary {
-  box-shadow: 4px 4px 0 0 var(--primary);
+  box-shadow: 0 2px 8px rgba(155, 126, 196, 0.15);
 }
 
-/* Brutalist card style */
+/* Refined card style */
 .card-brutalist {
   background: var(--card);
-  border: 3px solid var(--foreground);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 6px 6px 0 0 var(--foreground);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 2px 8px rgba(45, 38, 57, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .card-brutalist:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: 8px 8px 0 0 var(--foreground);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(45, 38, 57, 0.12);
 }
 
 .card-brutalist:active {
-  transform: translate(2px, 2px);
-  box-shadow: 2px 2px 0 0 var(--foreground);
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(45, 38, 57, 0.08);
 }
 
 /* Warm backgrounds */

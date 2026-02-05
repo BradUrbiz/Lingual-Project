@@ -16,6 +16,7 @@ Schema:
         - frequency_unit: str ('day', 'week', 'month')
         - level_objective: str (user's goal description)
         - ui_language: str ('en' or 'ko')
+        - learning_locale: str ('ko-KR', 'es-ES', 'fr-FR')
         - avatar_url: str (profile image URL or data URI)
         - contact_email: str (editable email address for profile)
         - grade_level: str (e.g. "10th Grade")
@@ -77,6 +78,7 @@ def create_user(uid, email, name):
             'frequency_unit': None,
             'level_objective': '',
             'ui_language': 'en',
+            'learning_locale': 'ko-KR',
             'avatar_url': '',
             'contact_email': '',
             'grade_level': '',
@@ -117,7 +119,7 @@ def get_or_create_user(uid, email, name):
 
 def update_user_profile(uid, display_name=None, age=None, gender=None,
                         rigor=None, frequency=None, frequency_unit=None,
-                        level_objective=None, ui_language=None,
+                        level_objective=None, ui_language=None, learning_locale=None,
                         avatar_url=None, contact_email=None, grade_level=None,
                         native_language=None, location=None, school_name=None):
     """Update user profile fields."""
@@ -140,6 +142,8 @@ def update_user_profile(uid, display_name=None, age=None, gender=None,
         updates['profile.level_objective'] = level_objective
     if ui_language is not None:
         updates['profile.ui_language'] = ui_language
+    if learning_locale is not None:
+        updates['profile.learning_locale'] = learning_locale
     if avatar_url is not None:
         updates['profile.avatar_url'] = avatar_url
     if contact_email is not None:
@@ -401,3 +405,98 @@ def get_chat_messages_for_context(uid, chat_id, limit=20):
         messages = session.get('messages', [])
         return messages[-limit:] if len(messages) > limit else messages
     return []
+
+
+# ============================================
+# PRONUNCIATION PRACTICE FUNCTIONS
+# ============================================
+
+def get_pronunciation_sessions_collection(uid):
+    """Get reference to user's pronunciation sessions subcollection."""
+    return get_user_ref(uid).collection('pronunciation_sessions')
+
+
+def create_pronunciation_session(uid, locale, kind='practice', prompt_set_id=None, objective_id=None):
+    """Create a pronunciation practice session."""
+    session_ref = get_pronunciation_sessions_collection(uid).document()
+    session_data = {
+        'kind': kind,
+        'locale': locale,
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP
+    }
+    if prompt_set_id:
+        session_data['prompt_set_id'] = prompt_set_id
+    if objective_id:
+        session_data['objective_id'] = objective_id
+
+    session_ref.set(session_data)
+    return session_ref.id
+
+
+def get_pronunciation_session(uid, session_id):
+    """Get a pronunciation session by id."""
+    session_ref = get_pronunciation_sessions_collection(uid).document(session_id)
+    doc = session_ref.get()
+    if doc.exists:
+        data = doc.to_dict()
+        return {
+            'id': doc.id,
+            'kind': data.get('kind'),
+            'locale': data.get('locale'),
+            'created_at': _timestamp_to_iso(data.get('created_at')),
+            'updated_at': _timestamp_to_iso(data.get('updated_at')),
+            'prompt_set_id': data.get('prompt_set_id'),
+            'objective_id': data.get('objective_id')
+        }
+    return None
+
+
+def add_pronunciation_attempt(uid, session_id, attempt):
+    """Add a pronunciation attempt to a session."""
+    session_ref = get_pronunciation_sessions_collection(uid).document(session_id)
+    attempt_ref = session_ref.collection('attempts').document()
+
+    attempt_data = {
+        'prompt_id': attempt.get('prompt_id'),
+        'objective_id': attempt.get('objective_id'),
+        'reference_text': attempt.get('reference_text'),
+        'recognized_text': attempt.get('recognized_text'),
+        'locale': attempt.get('locale'),
+        'scores': attempt.get('scores', {}),
+        'words': attempt.get('words', []),
+        'raw_result': attempt.get('raw_result'),
+        'audio_url': attempt.get('audio_url'),
+        'created_at': firestore.SERVER_TIMESTAMP
+    }
+
+    session_ref.update({'updated_at': firestore.SERVER_TIMESTAMP})
+    attempt_ref.set(attempt_data)
+    return attempt_ref.id
+
+
+def get_pronunciation_attempts(uid, session_id, limit=50, objective_id=None):
+    """Get pronunciation attempts for a session."""
+    session_ref = get_pronunciation_sessions_collection(uid).document(session_id)
+    attempts_ref = session_ref.collection('attempts')
+    query = attempts_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    if objective_id:
+        query = query.where('objective_id', '==', objective_id)
+    docs = query.limit(limit).stream()
+
+    attempts = []
+    for doc in docs:
+        data = doc.to_dict()
+        attempts.append({
+            'id': doc.id,
+            'promptId': data.get('prompt_id'),
+            'objectiveId': data.get('objective_id'),
+            'referenceText': data.get('reference_text'),
+            'recognizedText': data.get('recognized_text'),
+            'locale': data.get('locale'),
+            'scores': data.get('scores', {}),
+            'words': data.get('words', []),
+            'audioUrl': data.get('audio_url'),
+            'createdAt': _timestamp_to_iso(data.get('created_at'))
+        })
+    return attempts

@@ -1,0 +1,125 @@
+{
+  "curriculum_id": "ko-core-v1",
+  "locale": "ko-KR",
+  "title": "Korean Core Speaking (Example)",
+  "levels": [
+    {
+      "id": "L1",
+      "name": "Survival Basics",
+      "description": "Greetings, simple requests, and everyday phrases."
+    },
+    {
+      "id": "L2",
+      "name": "Everyday Interactions",
+      "description": "Ordering, directions, and common small talk."
+    }
+  ],
+  "objectives": [
+    {
+      "id": "OBJ-GREET-01",
+      "level_id": "L1",
+      "title": "Basic greetings and introductions",
+      "skills": ["greeting", "self-introduction", "politeness"]
+    },
+    {
+      "id": "OBJ-ORDER-01",
+      "level_id": "L2",
+      "title": "Order food and drinks politely",
+      "skills": ["ordering", "politeness", "numbers"]
+    },
+    {
+      "id": "OBJ-DIR-01",
+      "level_id": "L2",
+      "title": "Ask for and confirm directions",
+      "skills": ["directions", "locations", "clarifying"]
+    }
+  ],
+  "practice_scenarios": [
+    {
+      "id": "SCN-GREET-01",
+      "objective_id": "OBJ-GREET-01",
+      "title": "First meeting at a study group",
+      "setting": "Campus lounge",
+      "roles": ["student", "peer"],
+      "difficulty": "easy",
+      "target_phrases": [
+        "안녕하세요. 만나서 반갑습니다.",
+        "저는 민지예요. 저는 학생이에요.",
+        "잘 부탁드립니다."
+      ],
+      "success_criteria": [
+        "Use a polite greeting",
+        "Introduce name",
+        "End with a polite closing"
+      ]
+    },
+    {
+      "id": "SCN-ORDER-01",
+      "objective_id": "OBJ-ORDER-01",
+      "title": "Ordering at a café",
+      "setting": "Coffee shop",
+      "roles": ["customer", "barista"],
+      "difficulty": "medium",
+      "target_phrases": [
+        "아이스 아메리카노 한 잔 주세요.",
+        "여기서 마실게요.",
+        "감사합니다."
+      ],
+      "success_criteria": [
+        "Order a drink with quantity",
+        "Confirm dine-in or takeaway",
+        "Close politely"
+      ]
+    },
+    {
+      "id": "SCN-DIR-01",
+      "objective_id": "OBJ-DIR-01",
+      "title": "Asking for the subway station",
+      "setting": "Street",
+      "roles": ["pedestrian", "local"],
+      "difficulty": "medium",
+      "target_phrases": [
+        "지하철역은 어디에 있어요?",
+        "여기에서 얼마나 걸려요?",
+        "왼쪽으로 가면 되나요?"
+      ],
+      "success_criteria": [
+        "Ask for a location",
+        "Ask for time/distance",
+        "Confirm a direction"
+      ]
+    }
+  ],
+  "pronunciation_prompts": [
+    {
+      "id": "PRON-GREET-01",
+      "objective_id": "OBJ-GREET-01",
+      "text": "안녕하세요. 만나서 반갑습니다."
+    },
+    {
+      "id": "PRON-INTRO-01",
+      "objective_id": "OBJ-GREET-01",
+      "text": "저는 민지예요. 학생이에요."
+    },
+    {
+      "id": "PRON-ORDER-01",
+      "objective_id": "OBJ-ORDER-01",
+      "text": "아이스 아메리카노 한 잔 주세요."
+    },
+    {
+      "id": "PRON-DINE-01",
+      "objective_id": "OBJ-ORDER-01",
+      "text": "여기서 마실게요."
+    },
+    {
+      "id": "PRON-DIR-01",
+      "objective_id": "OBJ-DIR-01",
+      "text": "지하철역은 어디에 있어요?"
+    },
+    {
+      "id": "PRON-DIR-02",
+      "objective_id": "OBJ-DIR-01",
+      "text": "여기에서 얼마나 걸려요?"
+    }
+  ]
+}

@@ -246,6 +246,7 @@ export function ChatPage() {
         setFlashcards(cards);
         setShowFlashcards(true);
       } catch (err) {
+        console.error('Failed to generate flashcards:', err);
         setError('Failed to generate flashcards');
       } finally {
         setLoadingFlashcards(false);
@@ -259,6 +260,7 @@ export function ChatPage() {
         setWordMatchPairs(cards);
         setShowWordMatch(true);
       } catch (err) {
+        console.error('Failed to generate word match pairs:', err);
         setError('Failed to generate word match pairs');
       } finally {
         setLoadingWordMatch(false);

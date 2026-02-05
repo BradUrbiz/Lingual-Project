@@ -1,15 +1,14 @@
-from flask import Flask, request, redirect, session, jsonify, send_file, send_from_directory
+from flask import Flask, request, redirect, session, jsonify, send_from_directory
 from flask_cors import CORS
 from functools import wraps
 import json
 import os
-import tempfile
 from pathlib import Path
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from openai import OpenAI
 import firebase_admin
 from firebase_admin import credentials, auth as firebase_auth
-import io
 import requests
 
 load_dotenv()
@@ -28,6 +27,7 @@ CORS(app, origins=['http://localhost:5173', 'http://localhost:3000'], supports_c
 # Initialize Firebase Admin SDK
 firebase_app = None
 FIREBASE_PROJECT_ID = os.environ.get('GOOGLE_CLOUD_PROJECT', 'lingu-480600')
+ALLOWED_LEARNING_LOCALES = {'ko-KR', 'es-ES', 'fr-FR'}
 
 try:
     # For production: use GOOGLE_APPLICATION_CREDENTIALS or default credentials
@@ -109,7 +109,7 @@ def create_realtime_session():
                 'Content-Type': 'application/json'
             },
             json={
-                'model': 'gpt-4o-realtime-preview-2024-12-17',
+                'model': 'gpt-realtime-mini',
                 'voice': 'coral',
                 'instructions': system_instructions,
                 'input_audio_transcription': {
@@ -343,108 +343,125 @@ def api_chat_reset():
     return jsonify({'success': True, 'message': 'Chat history cleared'})
 
 
-@app.route('/api/chat/voice', methods=['POST'])
+# ============================================
+# PRONUNCIATION PRACTICE API ENDPOINTS
+# ============================================
+
+@app.route('/api/azure/speech-token', methods=['POST'])
 @login_required
-def api_chat_voice():
-    uid = get_current_user_uid()
+def api_speech_token():
+    """Issue a short-lived Azure Speech token for the browser SDK."""
+    speech_key = os.environ.get('AZURE_SPEECH_KEY')
+    speech_region = os.environ.get('AZURE_SPEECH_REGION')
+
+    if not speech_key or not speech_region:
+        return jsonify({'success': False, 'error': 'Azure Speech credentials not configured'}), 500
 
     try:
-        if not os.environ.get('OPENAI_API_KEY'):
-            return jsonify({'error': 'OpenAI API key not configured', 'success': False}), 500
-
-        if 'audio' not in request.files:
-            return jsonify({'error': 'No audio file provided', 'success': False}), 400
-
-        audio_file = request.files['audio']
-
-        temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix='.webm')
-        audio_file.save(temp_audio.name)
-        temp_audio.close()
-
-        client = get_openai_client()
-        if not client:
-            return jsonify({'error': 'OpenAI client not initialized', 'success': False}), 500
-
-        with open(temp_audio.name, 'rb') as audio:
-            transcript_response = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio,
-                language="ko"
-            )
-
-        transcript = transcript_response.text
-
-        os.unlink(temp_audio.name)
-
-        if not transcript or not transcript.strip():
-            return jsonify({'error': 'Could not transcribe audio', 'success': False}), 400
-
-        # Load chat history from database
-        chat_history = db.get_chat_history(uid, limit=20)
-
-        proficiency_context = get_user_proficiency_context()
-        system_prompt = build_system_prompt(proficiency_context)
-
-        messages = [{"role": "system", "content": system_prompt}]
-        for msg in chat_history[-10:]:
-            messages.append({"role": msg["role"], "content": msg["content"]})
-        messages.append({"role": "user", "content": transcript})
-
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            max_tokens=500,
-            temperature=0.7
+        response = requests.post(
+            f'https://{speech_region}.api.cognitive.microsoft.com/sts/v1.0/issueToken',
+            headers={'Ocp-Apim-Subscription-Key': speech_key}
         )
+        if response.status_code != 200:
+            return jsonify({'success': False, 'error': response.text}), response.status_code
 
-        assistant_message = response.choices[0].message.content
-
-        # Save messages to database
-        db.append_chat_message(uid, "user", transcript)
-        db.append_chat_message(uid, "assistant", assistant_message)
-
-        tts_response = client.audio.speech.create(
-            model="tts-1",
-            voice="nova",
-            input=assistant_message,
-            response_format="mp3"
-        )
-
-        if 'tts_audio' not in session:
-            session['tts_audio'] = []
-
-        audio_filename = f"tts_{len(session['tts_audio'])}.mp3"
-        audio_path = os.path.join(tempfile.gettempdir(), audio_filename)
-
-        with open(audio_path, 'wb') as f:
-            f.write(tts_response.content)
-
-        session['tts_audio'].append(audio_path)
+        expires_at = (datetime.utcnow() + timedelta(minutes=9)).isoformat() + 'Z'
 
         return jsonify({
             'success': True,
-            'transcript': transcript,
-            'response': assistant_message,
-            'audio_url': f'/api/audio/{audio_filename}'
+            'token': response.text,
+            'region': speech_region,
+            'expires_at': expires_at
         })
-
     except Exception as e:
-        return jsonify({
-            'error': str(e),
-            'success': False
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/audio/<filename>')
-def serve_audio(filename):
+@app.route('/api/pronunciation/sessions', methods=['POST'])
+@login_required
+def api_create_pronunciation_session():
+    """Create a pronunciation practice session."""
+    uid = get_current_user_uid()
+    data = request.get_json() or {}
+
+    locale = data.get('locale', 'ko-KR')
+    kind = data.get('kind', 'practice')
+    prompt_set_id = data.get('promptSetId')
+    objective_id = data.get('objectiveId')
+
+    if locale not in ALLOWED_LEARNING_LOCALES:
+        return jsonify({'success': False, 'error': 'Invalid locale'}), 400
+
     try:
-        audio_path = os.path.join(tempfile.gettempdir(), filename)
-        if os.path.exists(audio_path):
-            return send_file(audio_path, mimetype='audio/mpeg')
-        else:
-            return jsonify({'error': 'Audio file not found'}), 404
+        session_id = db.create_pronunciation_session(uid, locale, kind, prompt_set_id, objective_id)
+        return jsonify({'success': True, 'sessionId': session_id})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/pronunciation/attempts', methods=['POST'])
+@login_required
+def api_save_pronunciation_attempt():
+    """Save a pronunciation assessment attempt."""
+    uid = get_current_user_uid()
+    data = request.get_json() or {}
+
+    session_id = data.get('sessionId')
+    prompt_id = data.get('promptId')
+    reference_text = data.get('referenceText')
+    recognized_text = data.get('recognizedText', '')
+    locale = data.get('locale')
+    objective_id = data.get('objectiveId')
+    scores = data.get('scores', {})
+    words = data.get('words', [])
+    raw_result = data.get('rawResult')
+    audio_url = data.get('audioUrl')
+
+    if not session_id:
+        return jsonify({'success': False, 'error': 'sessionId is required'}), 400
+    if not prompt_id:
+        return jsonify({'success': False, 'error': 'promptId is required'}), 400
+    if not reference_text:
+        return jsonify({'success': False, 'error': 'referenceText is required'}), 400
+    if not locale or locale not in ALLOWED_LEARNING_LOCALES:
+        return jsonify({'success': False, 'error': 'Invalid locale'}), 400
+
+    try:
+        session = db.get_pronunciation_session(uid, session_id)
+        if not session:
+            return jsonify({'success': False, 'error': 'Session not found'}), 404
+
+        attempt_id = db.add_pronunciation_attempt(uid, session_id, {
+            'prompt_id': prompt_id,
+            'objective_id': objective_id,
+            'reference_text': reference_text,
+            'recognized_text': recognized_text,
+            'locale': locale,
+            'scores': scores,
+            'words': words,
+            'raw_result': raw_result,
+            'audio_url': audio_url
+        })
+        return jsonify({'success': True, 'attemptId': attempt_id})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/pronunciation/sessions/<session_id>/attempts', methods=['GET'])
+@login_required
+def api_get_pronunciation_attempts(session_id):
+    """Get pronunciation attempts for a session."""
+    uid = get_current_user_uid()
+    objective_id = request.args.get('objectiveId')
+    try:
+        session = db.get_pronunciation_session(uid, session_id)
+        if not session:
+            return jsonify({'success': False, 'error': 'Session not found'}), 404
+
+        attempts = db.get_pronunciation_attempts(uid, session_id, limit=50, objective_id=objective_id)
+        return jsonify({'success': True, 'attempts': attempts})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # ============================================
@@ -710,6 +727,7 @@ def api_user_profile():
     contact_email = profile.get('contact_email', '')
     grade_level = profile.get('grade_level', '')
     native_language = profile.get('native_language', '')
+    learning_locale = profile.get('learning_locale', 'ko-KR')
     location = profile.get('location', '')
     school_name = profile.get('school_name', '')
     selected_categories = user_data.get('selected_categories', [])
@@ -734,6 +752,7 @@ def api_user_profile():
         'contact_email': contact_email,
         'grade_level': grade_level,
         'native_language': native_language,
+        'learning_locale': learning_locale,
         'location': location,
         'school_name': school_name
     }
@@ -807,9 +826,13 @@ def api_update_profile():
     contact_email = data.get('contactEmail')
     grade_level = data.get('gradeLevel')
     native_language = data.get('nativeLanguage')
+    learning_locale = data.get('learningLocale')
     location = data.get('location')
     school_name = data.get('schoolName')
     is_edit = data.get('isEdit', False)
+
+    if learning_locale and learning_locale not in ALLOWED_LEARNING_LOCALES:
+        return jsonify({'success': False, 'error': 'Invalid learning locale'}), 400
 
     # Save to database
     db.update_user_profile(
@@ -825,6 +848,7 @@ def api_update_profile():
         contact_email=contact_email,
         grade_level=grade_level,
         native_language=native_language,
+        learning_locale=learning_locale,
         location=location,
         school_name=school_name
     )
@@ -849,6 +873,7 @@ def api_update_profile():
         'contact_email': contact_email,
         'grade_level': grade_level,
         'native_language': native_language,
+        'learning_locale': learning_locale or 'ko-KR',
         'location': location,
         'school_name': school_name
     }
@@ -867,6 +892,7 @@ def api_update_profile():
             'contactEmail': contact_email,
             'gradeLevel': grade_level,
             'nativeLanguage': native_language,
+            'learningLocale': learning_locale or 'ko-KR',
             'location': location,
             'schoolName': school_name
         }

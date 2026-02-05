@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { LearningLocaleProvider } from './contexts/LearningLocaleContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AppProtectedRoute } from './components/layout/AppProtectedRoute';
 import {
@@ -12,8 +13,12 @@ import {
   CategoriesPage,
   ProfilePage,
   AppLearningPage,
+  AppChatPage,
+  AppGamesPage,
+  AppProgressPage,
   AppProfilePage,
   AppSettingsPage,
+  PronunciationPracticePage,
   TeacherDashboardPage,
 } from './pages';
 
@@ -32,14 +37,18 @@ function AnimatedRoutes() {
           <Route path="/general" element={<GeneralPage />} />
           <Route path="/assessment" element={<AssessmentPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
-          <Route path="/chat" element={<Navigate to="/app/learn" replace />} />
+          <Route path="/chat" element={<Navigate to="/app/chat" replace />} />
           <Route path="/profile" element={<ProfilePage />} />
         </Route>
 
-        {/* New App Shell Routes */}
+        {/* App Shell Routes */}
         <Route path="/app" element={<AppProtectedRoute />}>
           <Route index element={<Navigate to="learn" replace />} />
           <Route path="learn" element={<AppLearningPage />} />
+          <Route path="chat" element={<AppChatPage />} />
+          <Route path="games" element={<AppGamesPage />} />
+          <Route path="progress" element={<AppProgressPage />} />
+          <Route path="practice" element={<PronunciationPracticePage />} />
           <Route path="profile" element={<AppProfilePage />} />
           <Route path="settings" element={<AppSettingsPage />} />
           <Route path="teacher" element={<TeacherDashboardPage />} />
@@ -57,7 +66,9 @@ function App() {
     <BrowserRouter basename={basename}>
       <AuthProvider>
         <LanguageProvider>
-          <AnimatedRoutes />
+          <LearningLocaleProvider>
+            <AnimatedRoutes />
+          </LearningLocaleProvider>
         </LanguageProvider>
       </AuthProvider>
     </BrowserRouter>

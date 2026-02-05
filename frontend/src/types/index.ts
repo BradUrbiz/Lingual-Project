@@ -18,6 +18,7 @@ export interface ProfileFormData {
   frequency: number | null;
   frequencyUnit: FrequencyUnit | null;
   levelObjective: string;
+  learningLocale?: LearningLocale;
   avatarUrl?: string;
   contactEmail?: string;
   gradeLevel?: string;
@@ -47,6 +48,7 @@ export interface UserProfile {
   frequency?: number;
   frequencyUnit?: FrequencyUnit;
   levelObjective?: string;
+  learningLocale?: LearningLocale;
 
   // Assessment results
   globalStage?: number;
@@ -147,12 +149,46 @@ export interface ChatResponse {
   error?: string;
 }
 
-export interface VoiceChatResponse {
-  success: boolean;
-  transcript?: string;
-  response?: string;
+// Pronunciation Types
+export type PronunciationScoreSet = {
+  accuracy?: number;
+  fluency?: number;
+  completeness?: number;
+  prosody?: number | null;
+};
+
+export type PronunciationPhoneme = {
+  phoneme: string;
+  accuracy?: number;
+};
+
+export type PronunciationWord = {
+  word: string;
+  accuracy?: number;
+  errorType?: string;
+  phonemes?: PronunciationPhoneme[];
+};
+
+export interface PronunciationAttempt {
+  id?: string;
+  sessionId?: string;
+  promptId: string;
+  objectiveId?: string;
+  referenceText: string;
+  recognizedText: string;
+  locale: LearningLocale;
+  scores: PronunciationScoreSet;
+  words: PronunciationWord[];
   audioUrl?: string;
-  error?: string;
+  createdAt?: string;
+  rawResult?: unknown;
+}
+
+export interface PronunciationSession {
+  id: string;
+  locale: LearningLocale;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // API Response Types
@@ -164,3 +200,4 @@ export interface ApiResponse<T = unknown> {
 
 // Language Type
 export type Language = 'en' | 'ko';
+export type LearningLocale = 'ko-KR' | 'es-ES' | 'fr-FR';

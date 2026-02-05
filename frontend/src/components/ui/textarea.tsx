@@ -15,16 +15,16 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
     const textareaRef =
       (ref as React.RefObject<HTMLTextAreaElement>) || internalRef;
 
-    const handleResize = () => {
+    const handleResize = React.useCallback(() => {
       if (autoResize && textareaRef.current) {
         textareaRef.current.style.height = 'auto';
         textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
       }
-    };
+    }, [autoResize, textareaRef]);
 
     React.useEffect(() => {
       handleResize();
-    }, [props.value]);
+    }, [props.value, handleResize]);
 
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       onChange?.(e);

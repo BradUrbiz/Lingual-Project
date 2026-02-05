@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import * as React from 'react';
 import * as ProgressPrimitive from '@radix-ui/react-progress';
 import { motion } from 'framer-motion';

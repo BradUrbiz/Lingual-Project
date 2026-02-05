@@ -5,15 +5,19 @@ import { clsx } from 'clsx';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { getUserProfile, updateProfile } from '@/api/user';
-import type { UserProfile } from '@/types';
+import type { LearningLocale, UserProfile } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useLearningLocale } from '@/contexts/LearningLocaleContext';
+import { DEFAULT_LEARNING_LOCALE, LEARNING_LOCALES } from '@/lib/learningLocales';
 
 export function AppSettingsPage() {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const { learningLocale, setLearningLocale } = useLearningLocale();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [selectedLocale, setSelectedLocale] = useState<LearningLocale>(learningLocale);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -26,6 +30,7 @@ export function AppSettingsPage() {
         const parts = nameSource.trim().split(/\s+/).filter(Boolean);
         setFirstName(parts[0] || '');
         setLastName(parts.slice(1).join(' '));
+        setSelectedLocale(data.learningLocale || learningLocale || DEFAULT_LEARNING_LOCALE);
       } catch (error) {
         console.error('Failed to load profile:', error);
         toast.error(t('app.settings.toast.loadError'));
@@ -35,7 +40,7 @@ export function AppSettingsPage() {
     };
 
     loadProfile();
-  }, [user?.name, t]);
+  }, [user?.name, t, learningLocale]);
 
   const handleSave = async () => {
     if (!profile) return;
@@ -51,11 +56,17 @@ export function AppSettingsPage() {
           frequency: profile.frequency ?? 3,
           frequencyUnit: profile.frequencyUnit ?? 'week',
           levelObjective: profile.levelObjective ?? '',
+          learningLocale: selectedLocale,
         },
         true
       );
       const refreshed = await getUserProfile();
       setProfile(refreshed);
+      if (refreshed.learningLocale) {
+        setLearningLocale(refreshed.learningLocale);
+      } else {
+        setLearningLocale(selectedLocale);
+      }
       toast.success(t('app.settings.toast.saved'));
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -164,6 +175,27 @@ export function AppSettingsPage() {
                   disabled
                   className="w-full px-4 py-3 rounded-xl border-2 border-border bg-secondary text-muted-foreground font-medium outline-none"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-foreground">
+                  {t('app.settings.learningLocale.label')}
+                </label>
+                <select
+                  value={selectedLocale}
+                  onChange={(event) => setSelectedLocale(event.target.value as LearningLocale)}
+                  disabled={isLoading}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-border bg-card text-foreground font-medium focus:border-primary focus:outline-none transition-all disabled:bg-secondary disabled:text-muted-foreground"
+                >
+                  {LEARNING_LOCALES.map((locale) => (
+                    <option key={locale.value} value={locale.value}>
+                      {locale.flag} {locale.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {t('app.settings.learningLocale.subtitle')}
+                </p>
               </div>
 
               <div className="pt-4 flex justify-end">

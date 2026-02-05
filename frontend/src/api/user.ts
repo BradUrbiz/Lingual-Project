@@ -1,5 +1,5 @@
 import api from './index';
-import type { UserProfile, ProfileFormData, Language, Gender, Rigor, FrequencyUnit } from '../types';
+import type { UserProfile, ProfileFormData, LearningLocale, Language, Gender, Rigor, FrequencyUnit } from '../types';
 
 export interface ProfileResponse {
   profile_completed: boolean;
@@ -15,6 +15,7 @@ export interface ProfileResponse {
   contact_email?: string;
   grade_level?: string;
   native_language?: string;
+  learning_locale?: string;
   location?: string;
   school_name?: string;
   global_stage?: number;
@@ -47,6 +48,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     contactEmail: data.contact_email,
     gradeLevel: data.grade_level,
     nativeLanguage: data.native_language,
+    learningLocale: data.learning_locale as LearningLocale | undefined,
     location: data.location,
     schoolName: data.school_name,
     globalStage: data.global_stage,
@@ -75,6 +77,7 @@ export const updateProfile = async (profile: ProfileFormData, isEdit = false): P
   if (profile.nativeLanguage !== undefined) payload.nativeLanguage = profile.nativeLanguage;
   if (profile.location !== undefined) payload.location = profile.location;
   if (profile.schoolName !== undefined) payload.schoolName = profile.schoolName;
+  if (profile.learningLocale !== undefined) payload.learningLocale = profile.learningLocale;
 
   await api.post('/profile', payload);
 };

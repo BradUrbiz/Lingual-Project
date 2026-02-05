@@ -25,6 +25,28 @@ interface UseRealtimeChatReturn {
   clearMessages: () => void;
 }
 
+type RealtimeContentItem = {
+  type?: string;
+  transcript?: string;
+};
+
+type RealtimeItem = {
+  id?: string;
+  role?: string;
+  type?: string;
+  content?: RealtimeContentItem[];
+};
+
+type RealtimeServerEvent = {
+  type: string;
+  transcript?: string;
+  item_id?: string;
+  item?: RealtimeItem;
+  session?: { input_audio_transcription?: unknown };
+  response?: { id?: string };
+  error?: { message?: string };
+};
+
 export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeChatReturn {
   const onMessageCallback = options?.onMessage;
   const [isConnected, setIsConnected] = useState(false);
@@ -44,13 +66,6 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const currentResponseIdRef = useRef<string | null>(null);
   // Track if we're currently speaking (for interruption)
   const isSpeakingRef = useRef(false);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      disconnect();
-    };
-  }, []);
 
   const addMessage = useCallback((role: 'user' | 'assistant', content: string, itemId?: string) => {
     // If itemId provided, check for duplicates
@@ -76,96 +91,6 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     }
   }, [onMessageCallback]);
 
-  const connect = useCallback(async () => {
-    try {
-      setError(null);
-
-      // Get ephemeral token from our backend
-      const tokenResponse = await api.post('/realtime/session');
-      const { client_secret } = tokenResponse.data;
-
-      if (!client_secret) {
-        throw new Error('Failed to get session token');
-      }
-
-      // Create peer connection
-      const pc = new RTCPeerConnection();
-      peerConnectionRef.current = pc;
-
-      // Create audio element for playback
-      const audioEl = document.createElement('audio');
-      audioEl.autoplay = true;
-      audioElementRef.current = audioEl;
-
-      // Handle incoming audio track
-      pc.ontrack = (event) => {
-        audioEl.srcObject = event.streams[0];
-        setIsSpeaking(true);
-      };
-
-      // Get user's microphone
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-
-      // Add audio track to peer connection
-      stream.getTracks().forEach((track) => {
-        pc.addTrack(track, stream);
-      });
-
-      // Create data channel for events
-      const dc = pc.createDataChannel('oai-events');
-      dataChannelRef.current = dc;
-
-      dc.onopen = () => {
-        console.log('Data channel opened');
-        setIsConnected(true);
-      };
-
-      dc.onmessage = (event) => {
-        handleServerEvent(JSON.parse(event.data));
-      };
-
-      dc.onclose = () => {
-        console.log('Data channel closed');
-        setIsConnected(false);
-      };
-
-      // Create offer
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      // Send offer to OpenAI Realtime API
-      const sdpResponse = await fetch(
-        'https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17',
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${client_secret}`,
-            'Content-Type': 'application/sdp',
-          },
-          body: offer.sdp,
-        }
-      );
-
-      if (!sdpResponse.ok) {
-        throw new Error(`Failed to connect: ${sdpResponse.status}`);
-      }
-
-      // Set remote description
-      const answerSdp = await sdpResponse.text();
-      await pc.setRemoteDescription({
-        type: 'answer',
-        sdp: answerSdp,
-      });
-
-      console.log('Connected to OpenAI Realtime API');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Connection failed';
-      setError(message);
-      console.error('Realtime connection error:', err);
-    }
-  }, []);
-
   // Cancel current response (for interruption)
   const cancelCurrentResponse = useCallback(() => {
     if (dataChannelRef.current && dataChannelRef.current.readyState === 'open') {
@@ -177,7 +102,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     }
   }, []);
 
-  const handleServerEvent = useCallback((event: any) => {
+  const handleServerEvent = useCallback((event: RealtimeServerEvent) => {
     console.log('Server event:', event.type, event);
 
     switch (event.type) {
@@ -212,7 +137,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
         // Alternative: full output item with transcript
         console.log('Output item done:', event.item);
         if (event.item?.type === 'message' && event.item?.content) {
-          const textContent = event.item.content.find((c: any) => c.type === 'audio' && c.transcript);
+          const textContent = event.item.content.find((c) => c.type === 'audio' && c.transcript);
           if (textContent?.transcript) {
             const itemId = event.item.id || `assistant-${Date.now()}`;
             addMessage('assistant', textContent.transcript, itemId);
@@ -278,6 +203,96 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     }
   }, [addMessage, cancelCurrentResponse]);
 
+  const connect = useCallback(async () => {
+    try {
+      setError(null);
+
+      // Get ephemeral token from our backend
+      const tokenResponse = await api.post('/realtime/session');
+      const { client_secret } = tokenResponse.data;
+
+      if (!client_secret) {
+        throw new Error('Failed to get session token');
+      }
+
+      // Create peer connection
+      const pc = new RTCPeerConnection();
+      peerConnectionRef.current = pc;
+
+      // Create audio element for playback
+      const audioEl = document.createElement('audio');
+      audioEl.autoplay = true;
+      audioElementRef.current = audioEl;
+
+      // Handle incoming audio track
+      pc.ontrack = (event) => {
+        audioEl.srcObject = event.streams[0];
+        setIsSpeaking(true);
+      };
+
+      // Get user's microphone
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      // Add audio track to peer connection
+      stream.getTracks().forEach((track) => {
+        pc.addTrack(track, stream);
+      });
+
+      // Create data channel for events
+      const dc = pc.createDataChannel('oai-events');
+      dataChannelRef.current = dc;
+
+      dc.onopen = () => {
+        console.log('Data channel opened');
+        setIsConnected(true);
+      };
+
+      dc.onmessage = (event) => {
+        handleServerEvent(JSON.parse(event.data) as RealtimeServerEvent);
+      };
+
+      dc.onclose = () => {
+        console.log('Data channel closed');
+        setIsConnected(false);
+      };
+
+      // Create offer
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      // Send offer to OpenAI Realtime API
+      const sdpResponse = await fetch(
+        'https://api.openai.com/v1/realtime?model=gpt-realtime-mini',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${client_secret}`,
+            'Content-Type': 'application/sdp',
+          },
+          body: offer.sdp,
+        }
+      );
+
+      if (!sdpResponse.ok) {
+        throw new Error(`Failed to connect: ${sdpResponse.status}`);
+      }
+
+      // Set remote description
+      const answerSdp = await sdpResponse.text();
+      await pc.setRemoteDescription({
+        type: 'answer',
+        sdp: answerSdp,
+      });
+
+      console.log('Connected to OpenAI Realtime API');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Connection failed';
+      setError(message);
+      console.error('Realtime connection error:', err);
+    }
+  }, [handleServerEvent]);
+
   const disconnect = useCallback(() => {
     // Close data channel
     if (dataChannelRef.current) {
@@ -313,6 +328,13 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     currentResponseIdRef.current = null;
     isSpeakingRef.current = false;
   }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      disconnect();
+    };
+  }, [disconnect]);
 
   const startListening = useCallback(() => {
     if (dataChannelRef.current && dataChannelRef.current.readyState === 'open') {

@@ -24,7 +24,9 @@ Set these in Google Cloud Console > Cloud Run > lingual-app > Edit & Deploy > Va
 
 | Variable | Description |
 | -------- | ----------- |
-| `OPENAI_API_KEY` | OpenAI API key for GPT-4o Realtime API |
+| `OPENAI_API_KEY` | OpenAI API key for GPT Realtime API (gpt-realtime-mini) |
+| `AZURE_SPEECH_KEY` | Azure Speech subscription key for pronunciation practice |
+| `AZURE_SPEECH_REGION` | Azure Speech service region (e.g. `eastus`) |
 | `GOOGLE_CLOUD_PROJECT` | Firebase/GCP project ID |
 | `SECRET_KEY` | Flask session secret key |
 
@@ -67,6 +69,8 @@ npm run dev  # Runs on localhost:5173
 
    ```env
    OPENAI_API_KEY=sk-...
+   AZURE_SPEECH_KEY=...
+   AZURE_SPEECH_REGION=eastus
    GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
    GOOGLE_CLOUD_PROJECT=your-project-id
    SECRET_KEY=your-secret-key
@@ -85,6 +89,8 @@ docker build -t lingual .
 # Run locally
 docker run -p 8080:8080 \
   -e OPENAI_API_KEY=sk-... \
+  -e AZURE_SPEECH_KEY=... \
+  -e AZURE_SPEECH_REGION=eastus \
   -e GOOGLE_CLOUD_PROJECT=your-project-id \
   -e SECRET_KEY=your-secret-key \
   -v /path/to/service-account.json:/app/service-account.json \

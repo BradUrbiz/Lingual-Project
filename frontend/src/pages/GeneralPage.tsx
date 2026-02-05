@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, ChevronLeft, ChevronRight, Check, AlertTriangle } from 'lucide-react';
@@ -77,11 +77,7 @@ export function GeneralPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    checkExistingProfile();
-  }, []);
-
-  const checkExistingProfile = async () => {
+  const checkExistingProfile = useCallback(async () => {
     try {
       const profile = await getUserProfile();
 
@@ -112,7 +108,11 @@ export function GeneralPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isEditMode, navigate]);
+
+  useEffect(() => {
+    checkExistingProfile();
+  }, [checkExistingProfile]);
 
   const updateField = <K extends keyof ProfileFormData>(
     field: K,

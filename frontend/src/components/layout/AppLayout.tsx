@@ -11,12 +11,15 @@ import {
   Menu,
   X,
   LayoutDashboard,
+  Mic,
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { motion } from 'motion/react';
 import { Toaster } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useLearningLocale } from '@/contexts/LearningLocaleContext';
+import { LEARNING_LOCALES } from '@/lib/learningLocales';
 
 const USER_AVATAR = '/imgs/landing/student.jpg';
 
@@ -24,10 +27,12 @@ export function AppLayout() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { t } = useLanguage();
+  const { learningLocale } = useLearningLocale();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const displayName = user?.name || 'Student';
   const roleLabel = t('app.layout.role.learner');
+  const localeOption = LEARNING_LOCALES.find((locale) => locale.value === learningLocale);
 
   const handleLogout = async () => {
     await logout();
@@ -60,11 +65,11 @@ export function AppLayout() {
               </span>
             </div>
 
-            {/* Language Selector (Static for now) */}
+            {/* Learning Locale */}
             <div className="hidden md:flex items-center space-x-1 bg-slate-100 rounded-full px-3 py-1.5 ml-6 border border-slate-200 hover:border-purple-200 cursor-pointer transition-colors">
-              <span className="text-lg">🇰🇷</span>
+              <span className="text-lg">{localeOption?.flag || '🌐'}</span>
               <span className="text-sm font-semibold text-slate-700">
-                {t('app.layout.language.korean')}
+                {localeOption?.shortLabel || t('app.layout.language.korean')}
               </span>
             </div>
           </div>
@@ -125,6 +130,12 @@ export function AppLayout() {
                   >
                     <BookOpen size={16} className="mr-2" /> {t('app.layout.nav.learning')}
                   </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    className="flex items-center px-3 py-2 text-sm text-slate-700 rounded-lg hover:bg-purple-50 hover:text-purple-700 cursor-pointer outline-none"
+                    onClick={() => navigate('/app/practice')}
+                  >
+                    <Mic size={16} className="mr-2" /> {t('app.layout.nav.practice')}
+                  </DropdownMenu.Item>
                   <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
                   <DropdownMenu.Item
                     className="flex items-center px-3 py-2 text-sm text-red-600 rounded-lg hover:bg-red-50 cursor-pointer outline-none"
@@ -174,9 +185,10 @@ export function AppLayout() {
             </div>
 
             <nav className="space-y-2">
-              {[
-                { icon: BookOpen, label: t('app.layout.nav.learning'), path: '/app/learn' },
-                { icon: User, label: t('nav.profile'), path: '/app/profile' },
+                {[
+                  { icon: BookOpen, label: t('app.layout.nav.learning'), path: '/app/learn' },
+                  { icon: Mic, label: t('app.layout.nav.practice'), path: '/app/practice' },
+                  { icon: User, label: t('nav.profile'), path: '/app/profile' },
                 { icon: Settings, label: t('nav.settings'), path: '/app/settings' },
                 { icon: LayoutDashboard, label: t('app.layout.nav.teacher'), path: '/app/teacher' },
               ].map((item) => (

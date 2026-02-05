@@ -126,6 +126,7 @@ export function AppProfilePage() {
           frequency: profile.frequency ?? 3,
           frequencyUnit: profile.frequencyUnit ?? 'week',
           levelObjective: profile.levelObjective ?? '',
+          learningLocale: profile.learningLocale,
           avatarUrl: formState.avatarUrl,
           contactEmail: formState.contactEmail,
           gradeLevel: formState.gradeLevel,

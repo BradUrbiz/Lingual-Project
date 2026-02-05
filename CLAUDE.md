@@ -64,7 +64,7 @@ docker run -p 8080:8080 lingual
 ### Backend (`main.py`, `database.py`, `scoring.py`)
 - **Flask** serves API endpoints and static frontend in production
 - **Firestore** stores users, profiles, assessment data, and chat history
-- **OpenAI GPT-4o Realtime API** powers live conversation with ephemeral token auth
+- **OpenAI GPT Realtime API (gpt-realtime-mini)** powers live conversation with ephemeral token auth
 - Authentication via Firebase ID tokens verified server-side
 
 ### Frontend (`frontend/src/`)
@@ -126,7 +126,7 @@ users/{uid}/
 ## Environment Variables
 
 Required in `.env`:
-- `OPENAI_API_KEY` - For GPT-4o Realtime API
+- `OPENAI_API_KEY` - For GPT Realtime API (gpt-realtime-mini)
 - `GOOGLE_APPLICATION_CREDENTIALS` - Path to Firebase service account JSON
 - `GOOGLE_CLOUD_PROJECT` - Firebase project ID
 - `SECRET_KEY` - Flask session secret

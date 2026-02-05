@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { CreateNewScenarioData, CreateNewScenarioVariables, ListScenariosData, UpdateFeedbackSummaryData, UpdateFeedbackSummaryVariables, GetUserConversationSessionsData, GetUserConversationSessionsVariables } from '../';
 import { UseDataConnectQueryResult, useDataConnectQueryOptions, UseDataConnectMutationResult, useDataConnectMutationOptions} from '@tanstack-query-firebase/react/data-connect';
 import { UseQueryResult, UseMutationResult} from '@tanstack/react-query';

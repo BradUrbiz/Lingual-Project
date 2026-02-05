@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import {
   onAuthStateChanged,
@@ -7,7 +8,7 @@ import {
   signOut,
   linkWithPopup,
   unlink,
-  AuthProvider,
+  AuthProvider as FirebaseAuthProvider,
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth, googleProvider, githubProvider, facebookProvider } from '../config/firebase';
@@ -143,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const linkWithProvider = async (provider: AuthProvider) => {
+  const linkWithProvider = async (provider: FirebaseAuthProvider) => {
     if (!auth.currentUser) {
       throw new Error('No authenticated user');
     }

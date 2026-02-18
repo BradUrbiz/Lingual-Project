@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2,
@@ -11,7 +12,7 @@ import {
   Gamepad2,
   Trash2,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { useRealtimeChat } from '@/hooks/useRealtimeChat';
 import {
@@ -30,8 +31,10 @@ import { FlashcardFlip, WordMatch } from '@/components/minigames';
 import type { ChatMessage, ChatSession, AssessmentResults, UserProfile } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 
+
 const USER_AVATAR = '/imgs/landing/student.jpg';
 const AI_AVATAR = '/imgs/avatars/ai.svg';
+
 
 const formatShortDate = (value?: string) => {
   if (!value) return '';
@@ -39,6 +42,7 @@ const formatShortDate = (value?: string) => {
   if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
+
 
 function SessionItem({
   session,
@@ -56,11 +60,12 @@ function SessionItem({
   const hasMessages = session.message_count > 0;
   const lastMessage = session.last_message || t('app.learn.sessions.noMessages');
 
+
   return (
     <div
       onClick={() => onSelect(session.id)}
       className={clsx(
-        'w-full text-left relative flex items-center p-4 rounded-xl border transition-all mb-4 cursor-pointer group',
+        'w-full text-left relative flex items-center p-4 rounded-xl border transition-all mb-2 cursor-pointer group',
         isActive
           ? 'bg-white border-purple-200 shadow-lg ring-2 ring-purple-100'
           : 'bg-white border-slate-100 hover:border-purple-200'
@@ -75,8 +80,9 @@ function SessionItem({
         {hasMessages ? <CheckCircle2 size={20} /> : <Play size={18} fill="currentColor" />}
       </div>
 
+
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
           <h4 className="font-bold text-sm text-slate-900 truncate">
             {session.title || t('app.learn.sessions.newChatTitle')}
           </h4>
@@ -85,11 +91,13 @@ function SessionItem({
         <p className="text-xs text-slate-500 mt-1 truncate">{lastMessage}</p>
       </div>
 
+
       {hasMessages && (
         <div className="ml-3 text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
           {session.message_count}
         </div>
       )}
+
 
       {/* Delete button - shows on hover */}
       <button
@@ -102,6 +110,7 @@ function SessionItem({
     </div>
   );
 }
+
 
 export function AppLearningPage() {
   const { t } = useLanguage();
@@ -116,6 +125,7 @@ export function AppLearningPage() {
   const [profileSummary, setProfileSummary] = useState<UserProfile | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
 
+
   // Minigames state
   const [showFlashcards, setShowFlashcards] = useState(false);
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
@@ -124,19 +134,23 @@ export function AppLearningPage() {
   const [wordMatchPairs, setWordMatchPairs] = useState<Flashcard[]>([]);
   const [loadingWordMatch, setLoadingWordMatch] = useState(false);
 
+
   // Chat mode state
   type Mode = 'text' | 'realtime';
   const [mode, setMode] = useState<Mode>('realtime');
   const [inputValue, setInputValue] = useState('');
   const [isSendingText, setIsSendingText] = useState(false);
 
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentChatIdRef = useRef<string | null>(null);
   currentChatIdRef.current = currentChatId;
 
+
   const handleRealtimeMessage = useCallback((role: 'user' | 'assistant', content: string) => {
     const chatId = currentChatIdRef.current;
     if (!chatId || !content.trim()) return;
+
 
     const message: ChatMessage = {
       id: `${chatId}-${Date.now()}-${role}`,
@@ -144,6 +158,7 @@ export function AppLearningPage() {
       content,
       timestamp: new Date().toISOString(),
     };
+
 
     setHistoryMessages((prev) => [...prev, message]);
     setSessions((prev) => {
@@ -165,10 +180,12 @@ export function AppLearningPage() {
       return [updated, ...prev.filter((session) => session.id !== chatId)];
     });
 
+
     saveMessageToChat(chatId, role, content).catch((err) => {
       console.error('Failed to save realtime message:', err);
     });
   }, []);
+
 
   const {
     isConnected,
@@ -180,6 +197,7 @@ export function AppLearningPage() {
     clearMessages,
   } = useRealtimeChat({ onMessage: handleRealtimeMessage });
 
+
   const statusLabel = useMemo(() => {
     if (isConnecting) return t('app.learn.status.connecting');
     if (!isConnected) return t('app.learn.status.tapToConnect');
@@ -188,11 +206,14 @@ export function AppLearningPage() {
     return t('app.learn.status.ready');
   }, [isConnecting, isConnected, isSpeaking, isListening, t]);
 
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+
   useEffect(scrollToBottom, [historyMessages]);
+
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -203,6 +224,7 @@ export function AppLearningPage() {
     }
   }, []);
 
+
   const scheduleRefreshSessions = useCallback(() => {
     if (refreshTimeoutRef.current) {
       window.clearTimeout(refreshTimeoutRef.current);
@@ -212,11 +234,13 @@ export function AppLearningPage() {
     }, 1000);
   }, [refreshSessions]);
 
+
   const loadChat = useCallback(async (chatId: string) => {
     setLoadingChat(true);
     setError(null);
     clearMessages();
     disconnect();
+
 
     try {
       const chat = await getChatSession(chatId);
@@ -235,11 +259,13 @@ export function AppLearningPage() {
     }
   }, [clearMessages, disconnect]);
 
+
   const createNewChat = useCallback(async () => {
     setLoadingChat(true);
     setError(null);
     clearMessages();
     disconnect();
+
 
     try {
       const { chatId, title } = await createChatSession();
@@ -261,8 +287,10 @@ export function AppLearningPage() {
     }
   }, [clearMessages, disconnect]);
 
+
   useEffect(() => {
     let isActive = true;
+
 
     const init = async () => {
       setLoadingSessions(true);
@@ -271,6 +299,7 @@ export function AppLearningPage() {
         const chatSessions = await getChatSessions();
         if (!isActive) return;
         setSessions(chatSessions);
+
 
         if (chatSessions.length > 0) {
           await loadChat(chatSessions[0].id);
@@ -285,6 +314,7 @@ export function AppLearningPage() {
       }
     };
 
+
     init();
     return () => {
       isActive = false;
@@ -295,14 +325,17 @@ export function AppLearningPage() {
     };
   }, [createNewChat, disconnect, loadChat]);
 
+
   useEffect(() => {
     let isActive = true;
+
 
     const loadSummary = async () => {
       try {
         const profile = await getUserProfile();
         if (!isActive) return;
         setProfileSummary(profile);
+
 
         if (profile.assessed) {
           try {
@@ -318,26 +351,31 @@ export function AppLearningPage() {
       }
     };
 
+
     loadSummary();
     return () => {
       isActive = false;
     };
   }, []);
 
+
   const handleSelectSession = (chatId: string) => {
     if (chatId === currentChatId) return;
     loadChat(chatId);
   };
 
+
   const handleRecordToggle = async () => {
     setError(null);
     if (!currentChatId) return;
+
 
     try {
       if (isConnected) {
         disconnect();
         return;
       }
+
 
       setIsConnecting(true);
       await connect();
@@ -347,6 +385,7 @@ export function AppLearningPage() {
       setIsConnecting(false);
     }
   };
+
 
   // Minigame handlers
   const handleFlashcardGame = async () => {
@@ -363,6 +402,7 @@ export function AppLearningPage() {
     }
   };
 
+
   const handleWordMatchGame = async () => {
     if (!currentChatId) return;
     setLoadingWordMatch(true);
@@ -377,6 +417,7 @@ export function AppLearningPage() {
     }
   };
 
+
   // Mode change handler
   const handleModeChange = (newMode: Mode) => {
     if (mode === 'realtime' && isConnected && newMode !== 'realtime') {
@@ -385,14 +426,17 @@ export function AppLearningPage() {
     setMode(newMode);
   };
 
+
   // Text message handler
   const handleSendText = async () => {
     if (!inputValue.trim() || isSendingText || !currentChatId) return;
+
 
     const message = inputValue.trim();
     setInputValue('');
     setIsSendingText(true);
     setError(null);
+
 
     // Add user message immediately
     const userMessage: ChatMessage = {
@@ -402,6 +446,7 @@ export function AppLearningPage() {
       timestamp: new Date().toISOString(),
     };
     setHistoryMessages((prev) => [...prev, userMessage]);
+
 
     // Update session in sidebar
     setSessions((prev) => {
@@ -417,6 +462,7 @@ export function AppLearningPage() {
       return [updated, ...prev.filter((s) => s.id !== currentChatId)];
     });
 
+
     try {
       const response = await sendChatMessage(currentChatId, message);
       const assistantMessage: ChatMessage = {
@@ -426,6 +472,7 @@ export function AppLearningPage() {
         timestamp: new Date().toISOString(),
       };
       setHistoryMessages((prev) => [...prev, assistantMessage]);
+
 
       // Update session again for assistant message
       setSessions((prev) => {
@@ -445,6 +492,7 @@ export function AppLearningPage() {
       setIsSendingText(false);
     }
   };
+
 
   // Delete chat handler
   const handleDeleteChat = async (chatId: string, e: React.MouseEvent) => {
@@ -473,6 +521,7 @@ export function AppLearningPage() {
       setError('Failed to delete chat');
     }
   };
+
 
   const currentSession = sessions.find((session) => session.id === currentChatId);
   const mostRecentSession = sessions[0];
@@ -517,23 +566,25 @@ export function AppLearningPage() {
     ? domainBadgeStyles[focusAreas[0]] || 'bg-slate-100 text-slate-600'
     : 'bg-slate-100 text-slate-600';
 
+
   useEffect(() => {
     if (!currentChatId || historyMessages.length === 0) return;
     scheduleRefreshSessions();
   }, [currentChatId, historyMessages.length, scheduleRefreshSessions]);
 
+
   return (
-    <div className="grid lg:grid-cols-12 gap-8 h-[calc(100vh-8rem)]">
-      <div className="lg:col-span-4 flex flex-col h-full gap-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center justify-between mb-4">
+  <div className="grid lg:grid-cols-12 gap-8 h-full">
+      <div className="lg:col-span-4 flex flex-col h-full gap-2">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-2">
+          <div className="flex items-center justify-between mb-2">
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400">
                 {t('app.learn.path.label')}
               </p>
-              <h2 className="text-lg font-bold text-slate-900">
+              <p className="text-sm font-bold text-slate-900">
                 {t('app.learn.path.title')}
-              </h2>
+              </p>
             </div>
             {assessmentResults?.sklcLevel ? (
               <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-3 py-1 rounded-full">
@@ -546,9 +597,9 @@ export function AppLearningPage() {
             )}
           </div>
           {assessmentResults?.sklcDescription ? (
-            <p className="text-sm text-slate-500 mb-4">{assessmentResults.sklcDescription}</p>
+            <p className="text-sm text-slate-500 mb-2">{assessmentResults.sklcDescription}</p>
           ) : (
-            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
               <p className="text-sm font-semibold text-slate-900">
                 {t('app.learn.path.empty.title')}
               </p>
@@ -564,8 +615,9 @@ export function AppLearningPage() {
             </div>
           )}
 
+
           {focusAreas.length > 0 && (
-            <div className="mb-4">
+            <div className="mb-2">
               <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">
                 {t('app.learn.path.focus')}
               </p>
@@ -581,6 +633,7 @@ export function AppLearningPage() {
               </div>
             </div>
           )}
+
 
           {domainEntries.length > 0 && (
             <div className="space-y-3">
@@ -607,13 +660,14 @@ export function AppLearningPage() {
           )}
         </div>
 
+
         {/* Minigames Section */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center gap-2 mb-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-1">
+          <div className="flex items-center gap-2 mb-2">
             <Gamepad2 size={18} className="text-purple-600" />
-            <h3 className="font-bold text-slate-900">{t('app.learn.minigames.title') || 'Practice Games'}</h3>
+            <p className="font-bold text-xs text-slate-900">{t('app.learn.minigames.title') || 'Practice Games'}</p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-1">
             <button
               onClick={handleFlashcardGame}
               disabled={!currentChatId || loadingFlashcards}
@@ -625,7 +679,7 @@ export function AppLearningPage() {
               )}
             >
               <span className="text-2xl mb-2 block">🃏</span>
-              <span className="text-sm font-semibold text-slate-900">
+              <span className="text-xs font-semibold text-slate-900">
                 {t('app.learn.minigames.flashcards') || 'Flashcard Flip'}
               </span>
               <p className="text-xs text-slate-500 mt-1">
@@ -643,7 +697,7 @@ export function AppLearningPage() {
               )}
             >
               <span className="text-2xl mb-2 block">🔗</span>
-              <span className="text-sm font-semibold text-slate-900">
+              <span className="text-xs font-semibold text-slate-900">
                 {t('app.learn.minigames.wordMatch') || 'Word Match'}
               </span>
               <p className="text-xs text-slate-500 mt-1">
@@ -658,32 +712,35 @@ export function AppLearningPage() {
           )}
         </div>
 
+
         <div className="flex-1 min-h-0 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-          <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-start justify-between gap-4">
+          <div className="p-2 border-b border-slate-100 bg-slate-50 flex items-start justify-between gap-1">
             <div>
-              <h2 className="text-xl font-bold text-slate-900">
+              <p className="text-xs font-bold text-slate-900">
                 {t('app.learn.sessions.title')}
-              </h2>
-              <p className="text-sm text-slate-500 mt-1">
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
                 {t('app.learn.sessions.subtitle')}
               </p>
             </div>
             <button
               onClick={createNewChat}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-purple-600 bg-white border border-purple-100 hover:bg-purple-50"
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-semibold text-purple-600 bg-white border border-purple-100 hover:bg-purple-50"
             >
               <Plus size={16} />
               {t('app.learn.sessions.new')}
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6">
+
+          {/* Practice Sessions */}
+          <div className="flex-1 overflow-y-auto p-2">
             {showResume && mostRecentSession ? (
               <button
                 onClick={() => handleSelectSession(mostRecentSession.id)}
-                className="w-full mb-4 p-4 rounded-xl border border-purple-100 bg-purple-50 text-left hover:bg-purple-100 transition-colors"
+                className="w-full mb-2 p-2 rounded-xl border border-purple-100 bg-purple-50 text-left hover:bg-purple-100 transition-colors"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <span className="w-10 h-10 rounded-full bg-white text-purple-600 flex items-center justify-center shadow-sm">
                     <History size={18} />
                   </span>
@@ -691,7 +748,7 @@ export function AppLearningPage() {
                   <p className="text-xs text-purple-600 font-semibold uppercase tracking-wide">
                     {t('app.learn.sessions.resume')}
                   </p>
-                  <p className="text-sm font-semibold text-slate-900 truncate">
+                  <p className="text-xs font-semibold text-slate-900 truncate">
                     {mostRecentSession.title || t('app.learn.sessions.latest')}
                   </p>
                     {mostRecentSession.last_message ? (
@@ -702,9 +759,9 @@ export function AppLearningPage() {
               </button>
           ) : null}
           {loadingSessions ? (
-            <div className="text-sm text-slate-500">{t('app.learn.sessions.loading')}</div>
+            <div className="text-xs text-slate-500">{t('app.learn.sessions.loading')}</div>
           ) : sessions.length === 0 ? (
-            <div className="text-sm text-slate-500">{t('app.learn.sessions.empty')}</div>
+            <div className="text-xs text-slate-500">{t('app.learn.sessions.empty')}</div>
           ) : (
             sessions.map((session) => (
               <SessionItem
@@ -721,12 +778,13 @@ export function AppLearningPage() {
         </div>
       </div>
 
+
       <div className="lg:col-span-8 flex flex-col h-full bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white z-10 shadow-sm">
           <div>
             <div className="flex items-center space-x-2 text-sm text-purple-600 font-medium mb-0.5">
               <MessageSquare size={16} />
-              <span>{t('app.learn.chat.label')}</span>
+              <span className="text-xs">{t('app.learn.chat.label')}</span>
             </div>
             <h2 className="text-lg font-bold text-slate-900">
               {currentSession?.title || t('app.learn.chat.title')}
@@ -786,7 +844,7 @@ export function AppLearningPage() {
             {mode === 'realtime' && (
               <div className="hidden sm:flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-lg text-sm">
                 <span className="text-slate-500">{t('app.learn.chat.status')}</span>
-                <span className="font-semibold text-slate-800">{statusLabel}</span>
+                <span className="font-semibold text-xs text-slate-800">{statusLabel}</span>
               </div>
             )}
             <button
@@ -798,12 +856,14 @@ export function AppLearningPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 relative">
+
+        <div className="flex-1 overflow-y-auto p-2 bg-slate-50/50 relative">
           {error || realtimeError ? (
-            <div className="mb-4 p-3 rounded-lg border border-red-100 bg-red-50 text-sm text-red-600">
+            <div className="mb-2 p-2 rounded-lg border border-red-100 bg-red-50 text-sm text-red-600">
               {error || realtimeError}
             </div>
           ) : null}
+
 
           {loadingChat ? (
             <div className="text-sm text-slate-500">{t('app.learn.chat.loading')}</div>
@@ -818,7 +878,7 @@ export function AppLearningPage() {
                     key={msg.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className={clsx('flex gap-4', isUser ? 'flex-row-reverse' : 'flex-row')}
+                    className={clsx('flex gap-2', isUser ? 'flex-row-reverse' : 'flex-row')}
                   >
                     <img
                       src={isUser ? USER_AVATAR : AI_AVATAR}
@@ -839,12 +899,14 @@ export function AppLearningPage() {
                 );
               })}
 
+
               <div ref={messagesEndRef} />
             </div>
           )}
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-white via-white to-transparent">
+
+        <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-white via-white to-transparent">
           <AnimatePresence mode="wait">
             {mode === 'text' ? (
               <motion.div
@@ -867,7 +929,7 @@ export function AppLearningPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="flex items-center justify-between gap-4"
+                className="flex items-center justify-between gap-2"
               >
                 <div className="flex-1 bg-white border border-slate-200 rounded-2xl px-4 py-3 text-slate-400">
                   {isConnected
@@ -897,6 +959,7 @@ export function AppLearningPage() {
         </div>
       </div>
 
+
       {/* Minigame Modals */}
       <AnimatePresence>
         {showFlashcards && flashcards.length > 0 && (
@@ -913,10 +976,11 @@ export function AppLearningPage() {
         )}
       </AnimatePresence>
 
+
       {/* Loading Overlays */}
       {loadingFlashcards && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 flex items-center gap-3">
+          <div className="bg-white rounded-xl p-2 flex items-center gap-2">
             <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
             <span>{t('app.learn.minigames.loadingFlashcards') || 'Generating flashcards...'}</span>
           </div>
@@ -924,7 +988,7 @@ export function AppLearningPage() {
       )}
       {loadingWordMatch && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 flex items-center gap-3">
+          <div className="bg-white rounded-xl p-2 flex items-center gap-2">
             <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
             <span>{t('app.learn.minigames.loadingWordMatch') || 'Generating word match game...'}</span>
           </div>

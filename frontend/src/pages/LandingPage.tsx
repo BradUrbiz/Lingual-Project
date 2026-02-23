@@ -460,6 +460,7 @@ export function LandingPage() {
               </ul>
 
               <motion.button
+                onClick={() => navigate('/app/teacher')}
                 whileHover={{ y: -3, boxShadow: '6px 6px 0 0 #F5F0E8' }}
                 whileTap={{ y: 2 }}
                 className="bg-background text-ink font-bold py-4 px-8 rounded-xl border-3 border-background shadow-[4px_4px_0_0_#F5F0E8] transition-all"

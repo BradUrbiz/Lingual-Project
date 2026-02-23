@@ -15,7 +15,7 @@
 ### Deploy Command
 
 ```bash
-gcloud run deploy lingual-app --source . --region us-central1 --allow-unauthenticated
+gcloud run deploy lingual-app --source . --region us-east4 --allow-unauthenticated
 ```
 
 ### Environment Variables (Cloud Run)

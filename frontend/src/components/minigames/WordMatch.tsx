@@ -75,7 +75,7 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 max-w-2xl w-full relative"
+        className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 max-w-2xl w-full relative max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

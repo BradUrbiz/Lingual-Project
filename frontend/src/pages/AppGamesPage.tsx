@@ -249,7 +249,7 @@ export function AppGamesPage() {
     setError(null);
     try {
       const cards = await generateFlashcards(selectedChatSessionId);
-      setWordMatchPairs(cards);
+      setWordMatchPairs(cards.slice(0,6));
       setShowWordMatch(true);
     } catch (loadError) {
       console.error('Failed to generate word match pairs:', loadError);

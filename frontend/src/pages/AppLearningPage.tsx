@@ -62,7 +62,7 @@ export function AppLearningPage() {
             description={t('app.dashboard.card.curriculum.description') || 'Sample AP French units and guided voice practice'}
             icon={<BookOpen size={22} strokeWidth={2.5} />}
             href="/app/curriculum"
-            color="secondary"
+            color="success"
           />
           <ServiceNavigationCard
             title={t('app.dashboard.card.games.title') || 'Practice Games'}
@@ -83,7 +83,7 @@ export function AppLearningPage() {
             description={t('app.dashboard.card.progress.description') || 'Track your skills and learning path'}
             icon={<TrendingUp size={22} strokeWidth={2.5} />}
             href="/app/progress"
-            color="secondary"
+            color="primary"
           />
         </div>
       </section>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
   Languages,
@@ -23,8 +23,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useLearningLocale } from '@/contexts/LearningLocaleContext';
 import { LEARNING_LOCALES } from '@/lib/learningLocales';
+import { getUserProfile } from '@/api/user';
+import type { UserProfile } from '@/types';
 
-const USER_AVATAR = '/imgs/landing/student.jpg';
+const FALLBACK_AVATAR = '/imgs/landing/student.jpg';
 
 export function AppLayout() {
   const navigate = useNavigate();
@@ -32,9 +34,18 @@ export function AppLayout() {
   const { t } = useLanguage();
   const { learningLocale } = useLearningLocale();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
 
-  const displayName = user?.name || 'Student';
-  const roleLabel = t('app.layout.role.learner');
+  useEffect(() => {
+    if (!user) return;
+    getUserProfile().then(setProfile).catch(() => {});
+  }, [user]);
+
+  const displayName = profile?.displayName || user?.name || 'Student';
+  const userAvatar = profile?.avatarUrl || FALLBACK_AVATAR;
+  const roleLabel = profile?.gradeLevel
+    ? `${t('app.layout.role.learner')} · ${profile.gradeLevel}`
+    : t('app.layout.role.learner');
   const localeOption = LEARNING_LOCALES.find((locale) => locale.value === learningLocale);
   const mobilePrimaryNav = [
     { icon: BookOpen, label: t('app.layout.nav.learning'), path: '/app/learn' },
@@ -117,7 +128,7 @@ export function AppLayout() {
               <DropdownMenu.Trigger asChild>
                 <button className="flex items-center gap-2 pl-2 rounded-full hover:bg-secondary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30">
                   <img
-                    src={USER_AVATAR}
+                    src={userAvatar}
                     alt="User"
                     className="w-10 h-10 rounded-full border-2 border-border object-cover"
                   />

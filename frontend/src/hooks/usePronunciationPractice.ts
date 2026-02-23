@@ -9,6 +9,9 @@ import type {
 } from '@/types';
 
 type PracticeStatus = 'idle' | 'listening' | 'processing';
+type AssessOptions = {
+  debugPhonemePayload?: boolean;
+};
 
 const TOKEN_REFRESH_BUFFER_MS = 60_000;
 
@@ -29,8 +32,49 @@ const pickFirstString = (...values: unknown[]): string => {
   return '';
 };
 
-const getPhonemeLabel = (entry: Record<string, unknown>): string =>
-  pickFirstString(
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const getNBestPhonemeCandidates = (entry: Record<string, unknown>): Record<string, unknown>[] => {
+  const topLevel = entry['NBestPhonemes'] ?? entry['nBestPhonemes'];
+  if (Array.isArray(topLevel) && topLevel.length) {
+    return topLevel
+      .map((candidate) => asRecord(candidate))
+      .filter((candidate): candidate is Record<string, unknown> => Boolean(candidate));
+  }
+
+  const pronunciationAssessment = asRecord(
+    entry['PronunciationAssessment'] ?? entry['pronunciationAssessment']
+  );
+  if (!pronunciationAssessment) return [];
+
+  const nested = pronunciationAssessment['NBestPhonemes'] ?? pronunciationAssessment['nBestPhonemes'];
+  if (!Array.isArray(nested) || !nested.length) return [];
+
+  return nested
+    .map((candidate) => asRecord(candidate))
+    .filter((candidate): candidate is Record<string, unknown> => Boolean(candidate));
+};
+
+const getNBestPhonemeLabel = (entry: Record<string, unknown>): string => {
+  const [firstNBest] = getNBestPhonemeCandidates(entry);
+  if (!firstNBest) return '';
+
+  return pickFirstString(
+    firstNBest['Phoneme'],
+    firstNBest['phoneme'],
+    firstNBest['Symbol'],
+    firstNBest['symbol']
+  );
+};
+
+const getPhonemeLabel = (entry: Record<string, unknown>): string => {
+  const nestedNBestLabel = getNBestPhonemeLabel(entry);
+  if (nestedNBestLabel) return nestedNBestLabel;
+
+  return pickFirstString(
     entry['Phoneme'],
     entry['phoneme'],
     entry['Syllable'],
@@ -40,6 +84,7 @@ const getPhonemeLabel = (entry: Record<string, unknown>): string =>
     entry['Symbol'],
     entry['symbol']
   );
+};
 
 const spreadLabelsToLength = (labels: string[], targetLength: number): string[] => {
   if (!labels.length || targetLength <= 0) return [];
@@ -113,6 +158,66 @@ const parseWords = (words: Array<Record<string, unknown>> = []): PronunciationWo
     };
   });
 
+const getNBestPhonemeLabels = (entry: Record<string, unknown>): string[] => {
+  return getNBestPhonemeCandidates(entry)
+    .map((candidate) => {
+      return pickFirstString(
+        candidate['Phoneme'],
+        candidate['phoneme'],
+        candidate['Symbol'],
+        candidate['symbol']
+      );
+    })
+    .filter(Boolean);
+};
+
+const getPhonemeAccuracy = (entry: Record<string, unknown>): number | undefined => {
+  const pronunciationAssessment = asRecord(
+    entry['PronunciationAssessment'] ?? entry['pronunciationAssessment']
+  );
+  const accuracy = pronunciationAssessment?.['AccuracyScore'];
+  return typeof accuracy === 'number' ? accuracy : undefined;
+};
+
+const logRawWordPhonemePayload = (
+  wordsRaw: Array<Record<string, unknown>>,
+  locale: LearningLocale,
+  promptId: string
+) => {
+  console.groupCollapsed(`[Pronunciation Debug] ${locale} ${promptId} raw Words/Phonemes`);
+  wordsRaw.forEach((word, wordIndex) => {
+    const wordText = pickFirstString(word['Word'], word['word']) || `word-${wordIndex + 1}`;
+    const rawPhonemes = Array.isArray(word['Phonemes']) ? word['Phonemes'] : [];
+
+    const phonemeRows = rawPhonemes.map((entry, phonemeIndex) => {
+      const phoneme = asRecord(entry) || {};
+      return {
+        index: phonemeIndex,
+        topLevelLabel: pickFirstString(
+          phoneme['Phoneme'],
+          phoneme['phoneme'],
+          phoneme['Symbol'],
+          phoneme['symbol'],
+          phoneme['Syllable'],
+          phoneme['syllable'],
+          phoneme['Grapheme'],
+          phoneme['grapheme']
+        ),
+        nBestLabels: getNBestPhonemeLabels(phoneme),
+        accuracy: getPhonemeAccuracy(phoneme),
+      };
+    });
+
+    console.log({
+      wordIndex,
+      word: wordText,
+      phonemeCount: phonemeRows.length,
+      phonemes: phonemeRows,
+    });
+  });
+  console.groupEnd();
+};
+
 const formatNoMatchReason = (reason: number | string | undefined) => {
   if (reason === undefined || reason === null) return '';
   if (typeof reason === 'string') return reason;
@@ -164,7 +269,8 @@ export function usePronunciationPractice() {
     async (
       referenceText: string,
       locale: LearningLocale,
-      promptId: string
+      promptId: string,
+      options: AssessOptions = {}
     ): Promise<{ attempt: PronunciationAttempt; audioBlob: Blob | null }> => {
       setError(null);
       setStatus('listening');
@@ -285,7 +391,11 @@ export function usePronunciationPractice() {
         const rawResult = jsonString ? JSON.parse(jsonString) : null;
         const nBest = rawResult?.NBest?.[0] ?? rawResult ?? {};
         const assessment = nBest?.PronunciationAssessment ?? {};
-        const words = parseWords(nBest?.Words || []);
+        const wordsRaw = (nBest?.Words || []) as Array<Record<string, unknown>>;
+        if (options.debugPhonemePayload) {
+          logRawWordPhonemePayload(wordsRaw, locale, promptId);
+        }
+        const words = parseWords(wordsRaw);
         const recognizedText =
           typeof nBest?.Display === 'string'
             ? nBest.Display

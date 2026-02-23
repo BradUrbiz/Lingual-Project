@@ -1,0 +1,346 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lingual.curriculum_package.v1",
+  "title": "Lingual CurriculumPackageV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "curriculum", "taxonomies", "rubrics", "units", "modules", "objectives", "templates"],
+  "properties": {
+    "schemaVersion": { "const": "lingual.curriculum_package.v1" },
+    "curriculum": { "$ref": "#/$defs/curriculum" },
+    "taxonomies": { "$ref": "#/$defs/taxonomies" },
+    "rubrics": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rubric" } },
+    "units": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/unit" } },
+    "modules": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/module" } },
+    "objectives": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/objective" } },
+    "templates": { "$ref": "#/$defs/templates" },
+    "glossary": { "type": "object", "additionalProperties": true }
+  },
+  "$defs": {
+    "bcp47Locale": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 35,
+      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    "i18nText": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$" },
+      "additionalProperties": { "type": "string" }
+    },
+    "tag": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "unitId": { "type": "string", "pattern": "^unit\\.[1-9][0-9]*$" },
+    "moduleId": { "type": "string", "pattern": "^mod\\.[1-9][0-9]*\\.[1-9][0-9]*$" },
+    "rubricId": { "type": "string", "pattern": "^rub\\.[a-z_]+\\.v[0-9]+$" },
+    "templateId": { "type": "string", "pattern": "^tpl\\.[a-z0-9_.-]+\\.v[0-9]+$" },
+    "register": { "type": "string", "enum": ["informal", "formal", "mixed"] },
+    "mode": {
+      "type": "string",
+      "enum": ["interpretive_listening", "interpersonal_speaking", "presentational_speaking"]
+    },
+    "foundationDomain": {
+      "type": "string",
+      "enum": [
+        "comprehension",
+        "comprehensibility",
+        "vocabulary_usage",
+        "language_control",
+        "communication_strategies",
+        "cultural_awareness"
+      ]
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["docId", "locator"],
+      "properties": {
+        "docId": { "type": "string", "minLength": 1 },
+        "locator": { "type": "string", "minLength": 1 },
+        "unitNumber": { "type": "integer", "minimum": 1 },
+        "section": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    },
+    "curriculum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "learningLocale", "levelBand", "version", "createdAt", "source", "license"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "$ref": "#/$defs/i18nText" },
+        "learningLocale": { "$ref": "#/$defs/bcp47Locale" },
+        "levelBand": { "type": "string", "minLength": 2 },
+        "version": { "type": "string", "minLength": 1 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "name", "effective", "docIds"],
+          "properties": {
+            "type": { "type": "string", "enum": ["import", "native"] },
+            "name": { "type": "string", "minLength": 1 },
+            "effective": { "type": "string", "minLength": 1 },
+            "docIds": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+          }
+        },
+        "license": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["owner", "notes"],
+          "properties": {
+            "owner": { "type": "string", "minLength": 1 },
+            "notes": { "type": "string", "minLength": 1 }
+          }
+        },
+        "sortOrder": { "type": "integer" }
+      }
+    },
+    "taxonomies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contextTags", "communicativeFunctions", "discourseMoves", "taskModels", "foundationDomains"],
+      "properties": {
+        "contextTags": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/tag" } },
+        "communicativeFunctions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/tag" } },
+        "discourseMoves": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/tag" } },
+        "taskModels": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "foundationDomains": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/foundationDomain" } }
+      }
+    },
+    "templates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activityTemplateIds"],
+      "properties": {
+        "activityTemplateIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/templateId" }
+        }
+      }
+    },
+    "rubric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "scale", "dimensions"],
+      "properties": {
+        "id": { "$ref": "#/$defs/rubricId" },
+        "title": { "$ref": "#/$defs/i18nText" },
+        "scale": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min", "max"],
+          "properties": {
+            "min": { "type": "integer" },
+            "max": { "type": "integer" },
+            "step": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "dimensions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rubricDimension" } },
+        "notes": { "type": "string" }
+      }
+    },
+    "rubricDimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "description"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "$ref": "#/$defs/i18nText" },
+        "description": { "$ref": "#/$defs/i18nText" }
+      }
+    },
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "ap", "essentialQuestions", "contextTags", "moduleIds", "sourceRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/unitId" },
+        "title": { "$ref": "#/$defs/i18nText" },
+        "ap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["unitNumber", "title"],
+          "properties": {
+            "unitNumber": { "type": "integer", "minimum": 1 },
+            "title": { "type": "string", "minLength": 1 },
+            "primaryTheme": { "type": "string" }
+          }
+        },
+        "essentialQuestions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/i18nText" } },
+        "contextTags": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/tag" } },
+        "moduleIds": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/moduleId" } },
+        "sourceRefs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/sourceRef" } }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "unitId", "title", "moduleGoal", "situations", "supportTargets", "objectiveIds", "sourceRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/moduleId" },
+        "unitId": { "$ref": "#/$defs/unitId" },
+        "title": { "$ref": "#/$defs/i18nText" },
+        "moduleGoal": { "$ref": "#/$defs/i18nText" },
+        "capstone": { "$ref": "#/$defs/capstone" },
+        "situations": { "$ref": "#/$defs/moduleSituations" },
+        "supportTargets": { "$ref": "#/$defs/moduleSupportTargets" },
+        "objectiveIds": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "sourceRefs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/sourceRef" } }
+      }
+    },
+    "capstone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "taskModel", "situationId"],
+      "properties": {
+        "mode": { "$ref": "#/$defs/mode" },
+        "taskModel": { "type": "string", "minLength": 1 },
+        "situationId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "moduleSituations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interpretive_listening", "interpersonal_speaking", "presentational_speaking"],
+      "properties": {
+        "interpretive_listening": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/situation" } },
+        "interpersonal_speaking": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/situation" } },
+        "presentational_speaking": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/situation" } }
+      }
+    },
+    "situation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "seed", "objectiveIds"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "$ref": "#/$defs/mode" },
+        "seed": { "$ref": "#/$defs/situationSeed" },
+        "objectiveIds": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "situationSeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["setting", "roles", "contextTags", "register"],
+      "properties": {
+        "setting": { "type": "string", "minLength": 1 },
+        "roles": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "contextTags": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/tag" } },
+        "register": { "$ref": "#/$defs/register" },
+        "constraints": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "timeLimitSec": { "type": "integer", "minimum": 10 },
+            "minTurns": { "type": "integer", "minimum": 1 },
+            "maxTurns": { "type": "integer", "minimum": 1 },
+            "maxReplays": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "moduleSupportTargets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "comprehension",
+        "comprehensibility",
+        "vocabulary_usage",
+        "language_control",
+        "communication_strategies",
+        "cultural_awareness"
+      ],
+      "properties": {
+        "comprehension": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/supportTarget" } },
+        "comprehensibility": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/supportTarget" } },
+        "vocabulary_usage": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/supportTarget" } },
+        "language_control": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/supportTarget" } },
+        "communication_strategies": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/supportTarget" } },
+        "cultural_awareness": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/supportTarget" } }
+      }
+    },
+    "supportTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "$ref": "#/$defs/i18nText" },
+        "notes": { "type": "string" },
+        "examples": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "unitId",
+        "moduleId",
+        "mode",
+        "canDo",
+        "contextTags",
+        "communicativeFunctions",
+        "discourseMoves",
+        "foundationDomains",
+        "register",
+        "mastery",
+        "evidenceModel",
+        "templateRefs",
+        "sourceRefs"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "unitId": { "$ref": "#/$defs/unitId" },
+        "moduleId": { "$ref": "#/$defs/moduleId" },
+        "mode": { "$ref": "#/$defs/mode" },
+        "canDo": { "$ref": "#/$defs/i18nText" },
+        "contextTags": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/tag" } },
+        "communicativeFunctions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/tag" } },
+        "discourseMoves": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/tag" } },
+        "foundationDomains": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/foundationDomain" } },
+        "register": { "$ref": "#/$defs/register" },
+        "mastery": { "$ref": "#/$defs/mastery" },
+        "evidenceModel": { "$ref": "#/$defs/evidenceModel" },
+        "templateRefs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/templateId" } },
+        "sourceRefs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/sourceRef" } }
+      }
+    },
+    "mastery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rubricId", "threshold"],
+      "properties": {
+        "rubricId": { "$ref": "#/$defs/rubricId" },
+        "threshold": { "type": "integer", "minimum": 0, "maximum": 4 }
+      }
+    },
+    "evidenceModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskModel"],
+      "properties": {
+        "taskModel": { "type": "string", "minLength": 1 },
+        "timeLimitSec": { "type": "integer", "minimum": 10 },
+        "minTurns": { "type": "integer", "minimum": 1 },
+        "inputProfile": { "$ref": "#/$defs/inputProfile" }
+      }
+    },
+    "inputProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["speakerCount", "speechRate", "overlap"],
+      "properties": {
+        "speakerCount": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "speechRate": { "type": "string", "enum": ["slow", "normal", "fast"] },
+        "noiseLevel": { "type": "string", "enum": ["clean", "low", "medium", "high"] },
+        "accentProfile": { "type": "string", "enum": ["standard", "regional", "mixed"] },
+        "overlap": { "type": "string", "enum": ["none", "some", "frequent"] }
+      }
+    }
+  }
+}

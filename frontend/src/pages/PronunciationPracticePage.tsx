@@ -69,6 +69,7 @@ export function PronunciationPracticePage() {
   const [selectedWordIndex, setSelectedWordIndex] = useState<number>(0);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debugPhonemePayload, setDebugPhonemePayload] = useState(false);
 
   const curriculum = curriculumExampleKo as Curriculum;
   const curriculumMatchesLocale = curriculum.locale === learningLocale;
@@ -218,6 +219,7 @@ export function PronunciationPracticePage() {
     '{{n}}',
     String(phonemeLowThreshold)
   );
+  const fallbackPhonemeLabel = t('app.practice.words.phonemes.fallback') || 'Sound {{n}}';
 
   const resetSession = useCallback(() => {
     setAttempts([]);
@@ -246,7 +248,8 @@ export function PronunciationPracticePage() {
       const { attempt, audioBlob } = await assess(
         currentPrompt.text,
         learningLocale,
-        currentPrompt.id
+        currentPrompt.id,
+        { debugPhonemePayload }
       );
       let audioUrl: string | undefined;
       if (audioBlob) {
@@ -278,7 +281,7 @@ export function PronunciationPracticePage() {
     } finally {
       setIsSaving(false);
     }
-  }, [assess, currentPrompt, learningLocale, sessionId, t, selectedScenario]);
+  }, [assess, currentPrompt, debugPhonemePayload, learningLocale, sessionId, t, selectedScenario]);
 
   const isBusy = status !== 'idle' || isSaving;
 
@@ -434,43 +437,55 @@ export function PronunciationPracticePage() {
               ) : null}
             </div>
           </div>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={handlePractice}
-              disabled={isBusy}
-              className={clsx(
-                'flex h-11 items-center gap-2 px-5 rounded-xl border-2 border-foreground font-bold shadow-stamp transition-all',
-                'bg-primary text-primary-foreground hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--foreground)]',
-                'disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:translate-y-0'
-              )}
-            >
-              {status === 'listening' ? (
-                <>
-                  <Loader2 className="animate-spin" size={18} />
-                  {t('app.practice.listening')}
-                </>
-              ) : status === 'processing' ? (
-                <>
-                  <Loader2 className="animate-spin" size={18} />
-                  {t('app.practice.processing')}
-                </>
-              ) : (
-                <>
-                  <Mic size={18} />
-                  {t('app.practice.start')}
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={nextPrompt}
-              disabled={isBusy}
-              className="flex min-h-11 items-center gap-2 px-4 rounded-xl border-2 border-border text-muted-foreground font-bold hover:text-foreground hover:border-foreground transition-all"
-            >
-              <SkipForward size={18} />
-              {t('app.practice.next')}
-            </button>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handlePractice}
+                disabled={isBusy}
+                className={clsx(
+                  'flex h-11 items-center gap-2 px-5 rounded-xl border-2 border-foreground font-bold shadow-stamp transition-all',
+                  'bg-primary text-primary-foreground hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--foreground)]',
+                  'disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:translate-y-0'
+                )}
+              >
+                {status === 'listening' ? (
+                  <>
+                    <Loader2 className="animate-spin" size={18} />
+                    {t('app.practice.listening')}
+                  </>
+                ) : status === 'processing' ? (
+                  <>
+                    <Loader2 className="animate-spin" size={18} />
+                    {t('app.practice.processing')}
+                  </>
+                ) : (
+                  <>
+                    <Mic size={18} />
+                    {t('app.practice.start')}
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={nextPrompt}
+                disabled={isBusy}
+                className="flex min-h-11 items-center gap-2 px-4 rounded-xl border-2 border-border text-muted-foreground font-bold hover:text-foreground hover:border-foreground transition-all"
+              >
+                <SkipForward size={18} />
+                {t('app.practice.next')}
+              </button>
+            </div>
+
+            <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground select-none">
+              <input
+                type="checkbox"
+                checked={debugPhonemePayload}
+                onChange={(event) => setDebugPhonemePayload(event.target.checked)}
+                className="h-3.5 w-3.5 rounded border border-border accent-foreground"
+              />
+              Debug phoneme payload
+            </label>
           </div>
         </div>
 
@@ -558,7 +573,7 @@ export function PronunciationPracticePage() {
                           type="button"
                           key={`${word.word}-${index}`}
                           onClick={() => setSelectedWordIndex(index)}
-                          aria-pressed={isSelected}
+                          aria-label={`${word.word}${isSelected ? ' selected' : ''}`}
                           className={clsx(
                             'px-3 py-1 rounded-lg border-2 text-sm font-semibold transition-all',
                             isSelected
@@ -615,6 +630,9 @@ export function PronunciationPracticePage() {
                             {selectedWord.phonemes.map((phoneme, index) => {
                               const score = phoneme.accuracy;
                               const isLow = typeof score === 'number' && score < phonemeLowThreshold;
+                              const label =
+                                phoneme.phoneme ||
+                                fallbackPhonemeLabel.replace('{{n}}', String(index + 1));
                               return (
                                 <span
                                   key={`${phoneme.phoneme}-${index}`}
@@ -626,11 +644,11 @@ export function PronunciationPracticePage() {
                                   )}
                                   title={
                                     typeof score === 'number'
-                                      ? `${phoneme.phoneme} • ${Math.round(score)}`
-                                      : phoneme.phoneme
+                                      ? `${label} • ${Math.round(score)}`
+                                      : label
                                   }
                                 >
-                                  {phoneme.phoneme}
+                                  {label}
                                   {typeof score === 'number' ? (
                                     <span className="ml-1.5 text-[11px] opacity-80">{Math.round(score)}</span>
                                   ) : null}

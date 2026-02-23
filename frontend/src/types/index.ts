@@ -235,3 +235,21 @@ export interface ApiResponse<T = unknown> {
 // Language Type
 export type Language = 'en' | 'ko';
 export type LearningLocale = 'ko-KR' | 'es-ES' | 'fr-FR';
+
+// Curriculum Types
+export type {
+  I18nText,
+  CurriculumMode,
+  SupportDomain,
+  SourceRef,
+  Unit,
+  SituationSeedConstraints,
+  SituationSeed,
+  Situation,
+  SupportTarget,
+  ModuleSupportTargets,
+  Capstone,
+  Module,
+  Objective,
+  CurriculumPackageV1,
+} from './curriculum';

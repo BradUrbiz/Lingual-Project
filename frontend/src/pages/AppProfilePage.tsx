@@ -311,6 +311,7 @@ export function AppProfilePage() {
                 type="file"
                 accept="image/*"
                 className="hidden"
+                aria-label={t('app.profile.changePhoto') || 'Change profile photo'}
                 onChange={handleAvatarChange}
               />
             </div>
@@ -344,10 +345,7 @@ export function AppProfilePage() {
                   <span className="text-muted-foreground">{t('app.profile.level')} A2</span>
                 </div>
                 <div className="h-2.5 rounded-full bg-secondary">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: '65%', backgroundColor: 'var(--color-primary)' }}
-                  />
+                  <div className="h-full w-[65%] rounded-full bg-primary" />
                 </div>
               </div>
               <div>
@@ -356,10 +354,7 @@ export function AppProfilePage() {
                   <span className="text-muted-foreground">{t('app.profile.level')} A1</span>
                 </div>
                 <div className="h-2.5 rounded-full bg-secondary">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: '20%', backgroundColor: 'var(--color-chart-4)' }}
-                  />
+                  <div className="h-full w-[20%] rounded-full bg-[var(--color-chart-4)]" />
                 </div>
               </div>
             </div>

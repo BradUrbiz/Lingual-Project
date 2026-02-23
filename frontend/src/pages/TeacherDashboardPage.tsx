@@ -153,7 +153,13 @@ export function TeacherDashboardPage() {
             <h3 className="text-xl font-display font-bold text-foreground">
               {t('app.teacher.activity')}
             </h3>
-            <select className="h-11 rounded-xl border-2 border-border bg-secondary px-3 text-sm font-semibold text-foreground focus:border-primary focus:outline-none">
+            <label htmlFor="teacher-activity-range" className="sr-only">
+              {t('app.teacher.range.label') || 'Activity range'}
+            </label>
+            <select
+              id="teacher-activity-range"
+              className="h-11 rounded-xl border-2 border-border bg-secondary px-3 text-sm font-semibold text-foreground focus:border-primary focus:outline-none"
+            >
               <option>{t('app.teacher.range.week')}</option>
               <option>{t('app.teacher.range.month')}</option>
             </select>
@@ -324,6 +330,7 @@ export function TeacherDashboardPage() {
                   <td className="px-6 py-4 text-right">
                     <button
                       type="button"
+                      aria-label={`${t('app.teacher.students.actions') || 'Student actions'}: ${student.name}`}
                       className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:border-primary hover:bg-primary/10 hover:text-primary"
                     >
                       <MoreHorizontal size={16} />

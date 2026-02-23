@@ -324,10 +324,14 @@ export function AppGamesPage() {
         <>
           <section className={`${surfaceClass} space-y-5 p-6`}>
             <div>
-              <label className="mb-2 block text-sm font-semibold text-foreground">
+              <label
+                htmlFor="games-objective-select"
+                className="mb-2 block text-sm font-semibold text-foreground"
+              >
                 {t('app.games.objectiveLabel') || 'Learning objective'}
               </label>
               <select
+                id="games-objective-select"
                 value={selectedObjectiveId || ''}
                 onChange={(event) => setSelectedObjectiveId(event.target.value)}
                 className={selectClass}
@@ -465,10 +469,14 @@ export function AppGamesPage() {
         ) : (
           <div className="space-y-4">
             <div>
-              <label className="mb-2 block text-sm font-semibold text-foreground">
+              <label
+                htmlFor="games-chat-session-select"
+                className="mb-2 block text-sm font-semibold text-foreground"
+              >
                 {t('app.games.selectSession') || 'Select a conversation'}
               </label>
               <select
+                id="games-chat-session-select"
                 value={selectedChatSessionId || ''}
                 onChange={(event) => setSelectedChatSessionId(event.target.value)}
                 className={selectClass}

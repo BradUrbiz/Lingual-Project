@@ -139,10 +139,11 @@ export function AppSettingsPage() {
             <div className="grid gap-6">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-foreground">
+                  <label htmlFor="settings-first-name" className="text-sm font-bold text-foreground">
                     {t('app.settings.account.firstName')}
                   </label>
                   <input
+                    id="settings-first-name"
                     type="text"
                     value={firstName}
                     onChange={(event) => setFirstName(event.target.value)}
@@ -152,10 +153,11 @@ export function AppSettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-foreground">
+                  <label htmlFor="settings-last-name" className="text-sm font-bold text-foreground">
                     {t('app.settings.account.lastName')}
                   </label>
                   <input
+                    id="settings-last-name"
                     type="text"
                     value={lastName}
                     onChange={(event) => setLastName(event.target.value)}
@@ -167,10 +169,11 @@ export function AppSettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground">
+                <label htmlFor="settings-email" className="text-sm font-bold text-foreground">
                   {t('app.settings.account.email')}
                 </label>
                 <input
+                  id="settings-email"
                   type="email"
                   value={user?.email || ''}
                   readOnly
@@ -180,10 +183,11 @@ export function AppSettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-foreground">
+                <label htmlFor="settings-learning-locale" className="text-sm font-bold text-foreground">
                   {t('app.settings.learningLocale.label')}
                 </label>
                 <select
+                  id="settings-learning-locale"
                   value={selectedLocale}
                   onChange={(event) => setSelectedLocale(event.target.value as LearningLocale)}
                   disabled={isLoading}
@@ -243,7 +247,12 @@ export function AppSettingsPage() {
                     <div className="text-sm text-muted-foreground">{t(setting.descKey)}</div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" defaultChecked={setting.default} className="sr-only peer" />
+                    <input
+                      type="checkbox"
+                      defaultChecked={setting.default}
+                      className="sr-only peer"
+                      aria-label={t(setting.labelKey)}
+                    />
                     <div className="w-12 h-7 bg-secondary border-2 border-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-foreground after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-card after:border-2 after:border-border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary peer-checked:border-foreground"></div>
                   </label>
                 </div>
@@ -274,7 +283,12 @@ export function AppSettingsPage() {
                     {t('app.settings.privacy.audio')}
                   </span>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" defaultChecked className="sr-only peer" />
+                    <input
+                      type="checkbox"
+                      defaultChecked
+                      className="sr-only peer"
+                      aria-label={t('app.settings.privacy.audio')}
+                    />
                     <div className="w-12 h-7 bg-secondary border-2 border-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-foreground after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-card after:border-2 after:border-border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-success peer-checked:border-foreground"></div>
                   </label>
                 </div>

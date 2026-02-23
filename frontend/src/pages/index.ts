@@ -6,6 +6,8 @@ export { CategoriesPage } from './CategoriesPage';
 export { ChatPage } from './ChatPage';
 export { ProfilePage } from './ProfilePage';
 export { AppLearningPage } from './AppLearningPage';
+export { AppCurriculumPage } from './AppCurriculumPage';
+export { AppCurriculumModulePage } from './AppCurriculumModulePage';
 export { AppChatPage } from './AppChatPage';
 export { AppGamesPage } from './AppGamesPage';
 export { AppProgressPage } from './AppProgressPage';

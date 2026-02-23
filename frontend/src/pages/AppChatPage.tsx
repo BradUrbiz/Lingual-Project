@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   RefreshCcw,
   MessageSquare,
@@ -45,6 +46,8 @@ const domainBadgeStyles: Record<string, string> = {
 
 export function AppChatPage() {
   const { t } = useLanguage();
+  const [searchParams] = useSearchParams();
+  const requestedChatId = searchParams.get('chatId');
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [historyMessages, setHistoryMessages] = useState<ChatMessage[]>([]);
@@ -212,7 +215,13 @@ export function AppChatPage() {
         if (!isActive) return;
         setSessions(chatSessions);
 
-        if (chatSessions.length > 0) {
+        const requestedSession = requestedChatId
+          ? chatSessions.find((session) => session.id === requestedChatId)
+          : null;
+
+        if (requestedSession) {
+          await loadChat(requestedSession.id);
+        } else if (chatSessions.length > 0) {
           await loadChat(chatSessions[0].id);
         } else {
           await createNewChat();
@@ -233,7 +242,7 @@ export function AppChatPage() {
         window.clearTimeout(refreshTimeoutRef.current);
       }
     };
-  }, [createNewChat, disconnect, loadChat]);
+  }, [createNewChat, disconnect, loadChat, requestedChatId]);
 
   useEffect(() => {
     let isActive = true;
@@ -613,7 +622,6 @@ export function AppChatPage() {
                   onClick={handleRecordToggle}
                   disabled={!currentChatId || isConnecting}
                   aria-label={micButtonLabel}
-                  aria-pressed={isConnected}
                   title={micButtonLabel}
                   className={clsx(
                     'w-14 h-14 rounded-xl flex items-center justify-center border-2 border-foreground transition-all',

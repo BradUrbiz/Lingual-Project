@@ -13,6 +13,8 @@ import {
   CategoriesPage,
   ProfilePage,
   AppLearningPage,
+  AppCurriculumPage,
+  AppCurriculumModulePage,
   AppChatPage,
   AppGamesPage,
   AppProgressPage,
@@ -45,6 +47,8 @@ function AnimatedRoutes() {
         <Route path="/app" element={<AppProtectedRoute />}>
           <Route index element={<Navigate to="learn" replace />} />
           <Route path="learn" element={<AppLearningPage />} />
+          <Route path="curriculum" element={<AppCurriculumPage />} />
+          <Route path="curriculum/:moduleId" element={<AppCurriculumModulePage />} />
           <Route path="chat" element={<AppChatPage />} />
           <Route path="games" element={<AppGamesPage />} />
           <Route path="progress" element={<AppProgressPage />} />

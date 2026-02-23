@@ -10,6 +10,7 @@ interface RealtimeMessage {
 
 interface UseRealtimeChatOptions {
   onMessage?: (role: 'user' | 'assistant', content: string) => void;
+  sessionParams?: unknown;
 }
 
 interface UseRealtimeChatReturn {
@@ -49,6 +50,7 @@ type RealtimeServerEvent = {
 
 export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeChatReturn {
   const onMessageCallback = options?.onMessage;
+  const sessionParams = options?.sessionParams;
   const [isConnected, setIsConnected] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -208,7 +210,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       setError(null);
 
       // Get ephemeral token from our backend
-      const tokenResponse = await api.post('/realtime/session');
+      const tokenResponse = await api.post('/realtime/session', sessionParams ?? {});
       const { client_secret } = tokenResponse.data;
 
       if (!client_secret) {
@@ -291,7 +293,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       setError(message);
       console.error('Realtime connection error:', err);
     }
-  }, [handleServerEvent]);
+  }, [handleServerEvent, sessionParams]);
 
   const disconnect = useCallback(() => {
     // Close data channel

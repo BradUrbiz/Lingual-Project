@@ -1,0 +1,1239 @@
+{
+  "schemaVersion": "lingual.curriculum.v1",
+  "curriculum": {
+    "id": "cur.fr.ap.ced2025.units1-3.draft",
+    "title": {
+      "en": "AP French (CED 2025) Units 1-3 for Lingual (Draft)",
+      "ko": "Lingual용 AP 프랑스어(Unit 1-3) 커리큘럼 초안"
+    },
+    "language": "fr",
+    "version": "0.1.0-draft",
+    "source": {
+      "name": "College Board",
+      "document": "AP French Language and Culture Course and Exam Description (CED)",
+      "documentYear": 2025,
+      "extractedOn": "2026-02-18",
+      "notes": "This package paraphrases and maps AP CED concepts; it does not include proprietary passages."
+    },
+    "scope": {
+      "externalCurriculum": "AP French Language and Culture",
+      "unitsIncluded": [1, 2, 3],
+      "modalitiesIncluded": ["interpretive_listening", "interpersonal_speaking", "presentational_speaking"]
+    }
+  },
+  "taxonomies": {
+    "lingualSkillTags": [
+      "listening_comprehension",
+      "spoken_interaction",
+      "spoken_production",
+      "pronunciation",
+      "vocabulary",
+      "grammar",
+      "culture"
+    ],
+    "modes": ["interpretive_listening", "interpersonal_speaking", "presentational_speaking"]
+  },
+  "rubrics": [
+    {
+      "id": "rub.fr.ap.interpretive_listening",
+      "name": { "en": "Interpretive Listening (AP-aligned)", "ko": "듣고 이해하기(Interpretive) 루브릭" },
+      "scale": { "min": 1, "max": 5, "unit": "ALD" },
+      "dimensions": [
+        {
+          "id": "main_idea_details",
+          "name": { "en": "Main Idea + Details", "ko": "핵심 + 세부" },
+          "apSkillTags": ["1.A.1", "1.A.2"]
+        },
+        {
+          "id": "summarize_narrative",
+          "name": { "en": "Summarize (Narrative)", "ko": "요약(서술형)" },
+          "apSkillTags": ["1.A.3"]
+        },
+        {
+          "id": "data_description",
+          "name": { "en": "Describe Data", "ko": "데이터 설명" },
+          "apSkillTags": ["1.B.1", "1.B.2"]
+        },
+        {
+          "id": "distinguishing_features",
+          "name": { "en": "Audience / Purpose / POV", "ko": "대상/목적/관점" },
+          "apSkillTags": ["3.A.1", "3.A.2", "3.A.3"]
+        },
+        {
+          "id": "inference_implied_meaning",
+          "name": { "en": "Inference + Implied Meaning", "ko": "추론 + 함의" },
+          "apSkillTags": ["3.B.2"]
+        },
+        {
+          "id": "vocab_in_context",
+          "name": { "en": "Vocabulary in Context", "ko": "맥락 어휘" },
+          "apSkillTags": ["4.A.2", "4.B.2"]
+        },
+        {
+          "id": "cultural_connections",
+          "name": { "en": "Cultural Connections", "ko": "문화 연결" },
+          "apSkillTags": ["2.A.1", "2.A.3", "2.A.4"]
+        }
+      ],
+      "recommendedCuts": {
+        "emerging": { "minAldLevel": 2 },
+        "proficient": { "minAldLevel": 3 },
+        "advanced": { "minAldLevel": 4 }
+      }
+    },
+    {
+      "id": "rub.fr.ap.interpersonal_speaking",
+      "name": { "en": "Interpersonal Speaking (AP-aligned)", "ko": "상호작용 말하기(Interpersonal) 루브릭" },
+      "scale": { "min": 1, "max": 5, "unit": "ALD" },
+      "dimensions": [
+        {
+          "id": "exchange_management",
+          "name": { "en": "Initiate / Maintain / Close", "ko": "시작/유지/마무리" },
+          "apSkillTags": ["5.A.1"]
+        },
+        {
+          "id": "comprehension_response",
+          "name": { "en": "Comprehend + Respond", "ko": "이해 + 응답" },
+          "apSkillTags": ["5.A.2"]
+        },
+        {
+          "id": "info_exchange",
+          "name": { "en": "Provide / Obtain Information", "ko": "정보 제공/획득" },
+          "apSkillTags": ["5.A.3"]
+        },
+        {
+          "id": "register_pragmatics",
+          "name": { "en": "Register + Greetings", "ko": "레지스터 + 인사/예절" },
+          "apSkillTags": ["5.A.4"]
+        },
+        {
+          "id": "pronunciation_intelligibility",
+          "name": { "en": "Comprehensible Pronunciation", "ko": "이해 가능한 발음" },
+          "apSkillTags": ["5.A.5"]
+        },
+        {
+          "id": "delivery_fluency",
+          "name": { "en": "Intonation / Pacing / Delivery", "ko": "억양/속도/전달" },
+          "apSkillTags": ["5.A.6"]
+        },
+        {
+          "id": "strategies_repair",
+          "name": { "en": "Strategies (Repair)", "ko": "전략(수정/유지)" },
+          "apSkillTags": ["5.A.7"]
+        },
+        {
+          "id": "syntax_variety",
+          "name": { "en": "Grammar + Syntax Variety", "ko": "문법/구문 다양성" },
+          "apSkillTags": ["5.B.1", "5.B.3"]
+        },
+        {
+          "id": "cohesion",
+          "name": { "en": "Transitions + Cohesion", "ko": "전환/결속" },
+          "apSkillTags": ["5.B.2"]
+        },
+        {
+          "id": "self_monitoring",
+          "name": { "en": "Monitor + Self-correct", "ko": "모니터링/자가수정" },
+          "apSkillTags": ["5.B.4"]
+        }
+      ],
+      "recommendedCuts": {
+        "emerging": { "minAldLevel": 2 },
+        "proficient": { "minAldLevel": 3 },
+        "advanced": { "minAldLevel": 4 }
+      }
+    },
+    {
+      "id": "rub.fr.ap.presentational_speaking",
+      "name": { "en": "Presentational Speaking (AP-aligned)", "ko": "발표 말하기(Presentational) 루브릭" },
+      "scale": { "min": 1, "max": 5, "unit": "ALD" },
+      "dimensions": [
+        {
+          "id": "organization",
+          "name": { "en": "Structure (Intro-Dev-Conclusion)", "ko": "구성(도입-전개-결론)" },
+          "apSkillTags": ["7.B.1"]
+        },
+        {
+          "id": "cohesion_transitions",
+          "name": { "en": "Transitions + Cohesion", "ko": "전환/결속" },
+          "apSkillTags": ["7.B.2"]
+        },
+        {
+          "id": "pronunciation_delivery",
+          "name": { "en": "Pronunciation + Delivery", "ko": "발음/전달" },
+          "apSkillTags": ["7.B.3", "7.B.4"]
+        },
+        {
+          "id": "language_range_accuracy",
+          "name": { "en": "Language Range (Grammar/Time Frames)", "ko": "언어 범위(문법/시제)" },
+          "apSkillTags": ["7.C.1", "7.C.2"]
+        },
+        {
+          "id": "supporting_examples",
+          "name": { "en": "Perspective + Examples", "ko": "관점 + 예시/근거" },
+          "apSkillTags": ["7.D.1"]
+        },
+        {
+          "id": "cultural_comparison",
+          "name": { "en": "Cultural Comparison (3Ps)", "ko": "문화 비교(3P)" },
+          "apSkillTags": ["7.D.2"]
+        },
+        {
+          "id": "self_monitoring",
+          "name": { "en": "Monitor + Self-correct", "ko": "모니터링/자가수정" },
+          "apSkillTags": ["7.C.3"]
+        }
+      ],
+      "recommendedCuts": {
+        "emerging": { "minAldLevel": 2 },
+        "proficient": { "minAldLevel": 3 },
+        "advanced": { "minAldLevel": 4 }
+      }
+    }
+  ],
+  "units": [
+    {
+      "id": "unit.fr.ap.01",
+      "title": { "en": "Families in Different Societies", "ko": "서로 다른 사회의 가족" },
+      "alignment": { "apUnit": 1, "primaryTheme": "Families and Communities" },
+      "essentialQuestions": [
+        { "en": "What constitutes a family in Francophone societies?", "ko": "프랑스어권에서 가족은 무엇으로 구성되는가?" },
+        {
+          "en": "What are important aspects of family values and family life in Francophone societies?",
+          "ko": "프랑스어권에서 가족 가치와 가족 생활의 중요한 측면은 무엇인가?"
+        },
+        { "en": "What challenges do families face in today’s world?", "ko": "오늘날 가족이 직면한 도전은 무엇인가?" }
+      ],
+      "recommendedContexts": [
+        "rites_of_passage",
+        "holidays_and_celebrations",
+        "education",
+        "housing_and_shelter",
+        "multiculturalism",
+        "alienation_and_assimilation",
+        "beliefs_and_values",
+        "diversity_issues",
+        "economic_issues",
+        "human_rights"
+      ],
+      "moduleIds": ["mod.fr.ap.01.01", "mod.fr.ap.01.02"]
+    },
+    {
+      "id": "unit.fr.ap.02",
+      "title": { "en": "The Influence of Language and Culture on Identity", "ko": "언어와 문화가 정체성에 미치는 영향" },
+      "alignment": { "apUnit": 2, "primaryTheme": "Personal and Public Identities" },
+      "essentialQuestions": [
+        { "en": "How does identity evolve over time?", "ko": "정체성은 시간에 따라 어떻게 변화하는가?" },
+        { "en": "How does language shape our cultural identity?", "ko": "언어는 문화적 정체성을 어떻게 형성하는가?" },
+        {
+          "en": "How does technology influence the development of personal and public identity?",
+          "ko": "기술은 개인/공적 정체성의 형성에 어떤 영향을 주는가?"
+        }
+      ],
+      "recommendedContexts": [
+        "language_and_identity",
+        "nationalism_and_patriotism",
+        "gender_and_sexuality",
+        "new_media",
+        "social_impacts_of_technologies",
+        "advertising_and_marketing",
+        "education",
+        "travel",
+        "intellectual_property"
+      ],
+      "moduleIds": ["mod.fr.ap.02.01", "mod.fr.ap.02.02"]
+    },
+    {
+      "id": "unit.fr.ap.03",
+      "title": { "en": "Influences of Beauty and Art", "ko": "미와 예술의 영향" },
+      "alignment": { "apUnit": 3, "primaryTheme": "Beauty and Aesthetics" },
+      "essentialQuestions": [
+        {
+          "en": "How do ideals of beauty and aesthetics influence daily life?",
+          "ko": "미/미적 이상은 일상생활에 어떤 영향을 주는가?"
+        },
+        { "en": "How does art both challenge and reflect cultural perspectives?", "ko": "예술은 문화 관점을 어떻게 반영하고 도전하는가?" },
+        { "en": "How do communities value beauty and art?", "ko": "공동체는 미와 예술을 어떻게 가치 있게 여기는가?" },
+        { "en": "How is art used to record history?", "ko": "예술은 역사를 기록하는 데 어떻게 활용되는가?" }
+      ],
+      "recommendedContexts": [
+        "architecture",
+        "ideals_of_beauty",
+        "performing_arts",
+        "music",
+        "literature",
+        "visual_arts",
+        "advertising_and_marketing",
+        "holidays_and_celebrations",
+        "travel"
+      ],
+      "moduleIds": ["mod.fr.ap.03.01", "mod.fr.ap.03.02"]
+    }
+  ],
+  "focusItems": [
+    {
+      "id": "fx.fr.core.register_tu_vous",
+      "type": "culture",
+      "title": { "en": "Register: tu/vous + greetings/closings", "ko": "레지스터: tu/vous + 인사/마무리" },
+      "source": { "type": "ap_alignment", "notes": "Aligns to AP interpersonal register expectations (5.A.4)." }
+    },
+    {
+      "id": "fx.fr.core.discourse_connectors",
+      "type": "grammar",
+      "title": { "en": "Cohesive devices and transitions", "ko": "결속 장치/전환 표현" },
+      "source": { "type": "ap_alignment", "notes": "AP emphasizes cohesive devices in interpersonal/presentational (5.B.2, 7.B.2)." }
+    },
+    {
+      "id": "fx.fr.core.question_forms",
+      "type": "grammar",
+      "title": { "en": "Question forms for spontaneous exchanges", "ko": "즉흥 대화를 위한 질문 형식" },
+      "source": { "type": "lingual_recommended", "notes": "Not explicitly enumerated by AP; required for spoken interaction." }
+    },
+    {
+      "id": "fx.fr.core.time_frames",
+      "type": "grammar",
+      "title": { "en": "Time frames (present/past/near future) for speaking", "ko": "말하기용 시제(현재/과거/가까운 미래)" },
+      "source": { "type": "ap_alignment", "notes": "AP expects sentence control across time frames (5.B.3, 7.C.2)." }
+    },
+    {
+      "id": "fx.fr.core.pron_intelligibility",
+      "type": "pronunciation",
+      "title": { "en": "Intelligible pronunciation + liaison awareness", "ko": "명료 발음 + liaison 인지" },
+      "source": { "type": "ap_alignment", "notes": "AP includes comprehensible pronunciation and delivery (5.A.5, 7.B.3)." }
+    },
+    {
+      "id": "fx.fr.core.prosody_delivery",
+      "type": "pronunciation",
+      "title": { "en": "Prosody: intonation, pacing, pauses", "ko": "운율: 억양/속도/멈춤" },
+      "source": { "type": "ap_alignment", "notes": "AP explicitly targets intonation/pacing/delivery (5.A.6, 7.B.4)." }
+    },
+    {
+      "id": "fx.fr.u1.family_vocab",
+      "type": "vocabulary",
+      "title": { "en": "Family, relationships, community life vocabulary", "ko": "가족/관계/공동체 어휘" },
+      "source": { "type": "ap_alignment", "notes": "Contextualized vocabulary around unit themes." }
+    },
+    {
+      "id": "fx.fr.u1.data_vocab",
+      "type": "vocabulary",
+      "title": { "en": "Data/infographic vocabulary for charts and trends", "ko": "차트/추세 데이터 어휘" },
+      "source": { "type": "ap_alignment", "notes": "Unit 1 emphasizes interpreting charts/graphs." }
+    },
+    {
+      "id": "fx.fr.u2.identity_media_vocab",
+      "type": "vocabulary",
+      "title": { "en": "Identity, media, technology, advertising vocabulary", "ko": "정체성/미디어/기술/광고 어휘" },
+      "source": { "type": "ap_alignment", "notes": "Unit 2 recommended contexts include media and identity." }
+    },
+    {
+      "id": "fx.fr.u3.art_aesthetics_vocab",
+      "type": "vocabulary",
+      "title": { "en": "Art, aesthetics, critique and evaluation vocabulary", "ko": "예술/미학/비평·평가 어휘" },
+      "source": { "type": "ap_alignment", "notes": "Unit 3 theme and contexts focus on art/aesthetics." }
+    },
+    {
+      "id": "fx.fr.core.culture_3ps",
+      "type": "culture",
+      "title": { "en": "Culture lens: products, practices, perspectives (3Ps)", "ko": "문화 관점: 산물/관행/관점(3P)" },
+      "source": { "type": "ap_alignment", "notes": "AP presentational speaking includes cultural comparison (7.D.2)." }
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod.fr.ap.01.01",
+      "unitId": "unit.fr.ap.01",
+      "title": { "en": "Family structures and values", "ko": "가족 구성과 가치" },
+      "goalObjectiveIds": ["obj.fr.ap.u01.m01.int.01", "obj.fr.ap.u01.m01.lis.01", "obj.fr.ap.u01.m01.prs.01"],
+      "situationBlueprints": {
+        "listening": [
+          {
+            "id": "sit.u01.m01.lis.01",
+            "inputType": "recorded_conversation",
+            "scenario": { "setting": "home_or_school", "roles": ["peer", "peer"] },
+            "task": "Identify main idea, relevant details, and culturally specific references about family life."
+          },
+          {
+            "id": "sit.u01.m01.lis.02",
+            "inputType": "infographic_or_chart_explanation",
+            "scenario": { "setting": "class_discussion", "roles": ["teacher", "students"] },
+            "task": "Describe household data and connect it to cultural topics (family structures, living arrangements)."
+          }
+        ],
+        "conversing": [
+          {
+            "id": "sit.u01.m01.con.01",
+            "scenario": { "setting": "first_meetup", "roles": ["student", "host_student"] },
+            "task": "Exchange information about family members, routines, and values using appropriate register."
+          }
+        ],
+        "presenting": [
+          {
+            "id": "sit.u01.m01.pre.01",
+            "durationSec": 60,
+            "scenario": { "setting": "class_presentation", "roles": ["presenter", "audience"] },
+            "task": "Deliver a one-minute cultural presentation about a Francophone community’s family-related practice."
+          }
+        ],
+        "interpersonal_speaking": [
+          {
+            "id": "sit.u01.m01.ips.01",
+            "scenario": { "setting": "spontaneous_chat", "roles": ["student", "peer"] },
+            "task": "Initiate, maintain, and close a spontaneous exchange about family traditions and values."
+          }
+        ]
+      },
+      "focusItemIds": ["fx.fr.u1.family_vocab", "fx.fr.core.register_tu_vous", "fx.fr.core.pron_intelligibility"]
+    },
+    {
+      "id": "mod.fr.ap.01.02",
+      "unitId": "unit.fr.ap.01",
+      "title": { "en": "Family challenges and community support", "ko": "가족의 도전과 공동체 지원" },
+      "goalObjectiveIds": ["obj.fr.ap.u01.m02.lis.02", "obj.fr.ap.u01.m02.int.01", "obj.fr.ap.u01.m02.prs.01"],
+      "situationBlueprints": {
+        "listening": [
+          {
+            "id": "sit.u01.m02.lis.01",
+            "inputType": "audio_report_or_interview",
+            "scenario": { "setting": "news_or_podcast", "roles": ["reporter", "guest"] },
+            "task": "Identify point of view, purpose, key details, and implied meanings about family challenges."
+          }
+        ],
+        "conversing": [
+          {
+            "id": "sit.u01.m02.con.01",
+            "scenario": { "setting": "community_context", "roles": ["student", "adult"] },
+            "task": "Discuss challenges (education, housing, work) and ask follow-up questions; request clarification as needed."
+          }
+        ],
+        "presenting": [
+          {
+            "id": "sit.u01.m02.pre.01",
+            "durationSec": 90,
+            "scenario": { "setting": "class_presentation", "roles": ["presenter", "audience"] },
+            "task": "Make a short cultural comparison about a family-related issue between the learner’s community and a target community."
+          }
+        ],
+        "interpersonal_speaking": [
+          {
+            "id": "sit.u01.m02.ips.01",
+            "scenario": { "setting": "problem_solving_chat", "roles": ["student", "peer"] },
+            "task": "Negotiate meaning, propose solutions, and maintain the exchange using repair strategies."
+          }
+        ]
+      },
+      "focusItemIds": ["fx.fr.u1.data_vocab", "fx.fr.core.time_frames", "fx.fr.core.discourse_connectors"]
+    },
+    {
+      "id": "mod.fr.ap.02.01",
+      "unitId": "unit.fr.ap.02",
+      "title": { "en": "Language and identity", "ko": "언어와 정체성" },
+      "goalObjectiveIds": ["obj.fr.ap.u02.m01.lis.01", "obj.fr.ap.u02.m01.int.02", "obj.fr.ap.u02.m01.prs.01"],
+      "situationBlueprints": {
+        "listening": [
+          {
+            "id": "sit.u02.m01.lis.01",
+            "inputType": "audio_report_or_interview",
+            "scenario": { "setting": "news_or_podcast", "roles": ["host", "speaker"] },
+            "task": "Identify perspectives and tone about linguistic diversity and identity."
+          }
+        ],
+        "conversing": [
+          {
+            "id": "sit.u02.m01.con.01",
+            "scenario": { "setting": "peer_discussion", "roles": ["student", "peer"] },
+            "task": "Share personal experiences about language use (accent, dialect, multilingualism) and ask for clarification."
+          }
+        ],
+        "presenting": [
+          {
+            "id": "sit.u02.m01.pre.01",
+            "durationSec": 60,
+            "scenario": { "setting": "class_presentation", "roles": ["presenter", "audience"] },
+            "task": "Deliver a one-minute cultural comparison on language and identity with specific examples."
+          }
+        ],
+        "interpersonal_speaking": [
+          {
+            "id": "sit.u02.m01.ips.01",
+            "scenario": { "setting": "sensitive_topic_chat", "roles": ["student", "peer"] },
+            "task": "Maintain respectful, appropriate register while negotiating meaning on identity-related topics."
+          }
+        ]
+      },
+      "focusItemIds": ["fx.fr.u2.identity_media_vocab", "fx.fr.core.register_tu_vous", "fx.fr.core.prosody_delivery"]
+    },
+    {
+      "id": "mod.fr.ap.02.02",
+      "unitId": "unit.fr.ap.02",
+      "title": { "en": "Media and technology shaping identity", "ko": "미디어/기술과 정체성" },
+      "goalObjectiveIds": ["obj.fr.ap.u02.m02.lis.01", "obj.fr.ap.u02.m02.int.01", "obj.fr.ap.u02.m02.prs.02"],
+      "situationBlueprints": {
+        "listening": [
+          {
+            "id": "sit.u02.m02.lis.01",
+            "inputType": "podcast_or_panel_clip",
+            "scenario": { "setting": "media_discussion", "roles": ["host", "guest"] },
+            "task": "Identify intended audience, purpose, and implied meaning about social media and advertising."
+          },
+          {
+            "id": "sit.u02.m02.lis.02",
+            "inputType": "chart_or_survey_summary",
+            "scenario": { "setting": "class_discussion", "roles": ["teacher", "students"] },
+            "task": "Describe data trends and connect them to societal impacts of technologies."
+          }
+        ],
+        "conversing": [
+          {
+            "id": "sit.u02.m02.con.01",
+            "scenario": { "setting": "debate", "roles": ["student", "peer"] },
+            "task": "Debate technology’s impact on public identity; paraphrase, request clarification, and support claims."
+          }
+        ],
+        "presenting": [
+          {
+            "id": "sit.u02.m02.pre.01",
+            "durationSec": 120,
+            "scenario": { "setting": "class_presentation", "roles": ["presenter", "audience"] },
+            "task": "Present an opinion with examples about how technology influences personal/public identity."
+          }
+        ],
+        "interpersonal_speaking": [
+          {
+            "id": "sit.u02.m02.ips.01",
+            "scenario": { "setting": "spontaneous_exchange", "roles": ["student", "peer"] },
+            "task": "Maintain spontaneous spoken exchanges with repair strategies when discussing media habits."
+          }
+        ]
+      },
+      "focusItemIds": ["fx.fr.u2.identity_media_vocab", "fx.fr.core.discourse_connectors", "fx.fr.core.time_frames"]
+    },
+    {
+      "id": "mod.fr.ap.03.01",
+      "unitId": "unit.fr.ap.03",
+      "title": { "en": "Beauty ideals in daily life", "ko": "일상 속 미의 기준" },
+      "goalObjectiveIds": ["obj.fr.ap.u03.m01.lis.01", "obj.fr.ap.u03.m01.int.01", "obj.fr.ap.u03.m01.prs.01"],
+      "situationBlueprints": {
+        "listening": [
+          {
+            "id": "sit.u03.m01.lis.01",
+            "inputType": "ad_or_review_audio",
+            "scenario": { "setting": "media_clip", "roles": ["narrator", "audience"] },
+            "task": "Identify main idea and purpose; infer implied messages about beauty and aesthetics."
+          }
+        ],
+        "conversing": [
+          {
+            "id": "sit.u03.m01.con.01",
+            "scenario": { "setting": "friends_chat", "roles": ["student", "peer"] },
+            "task": "Compare preferences and discuss how beauty ideals influence daily choices using cohesive devices."
+          }
+        ],
+        "presenting": [
+          {
+            "id": "sit.u03.m01.pre.01",
+            "durationSec": 120,
+            "scenario": { "setting": "class_presentation", "roles": ["presenter", "audience"] },
+            "task": "Explain an opinion with examples about beauty ideals’ influence on daily life."
+          }
+        ],
+        "interpersonal_speaking": [
+          {
+            "id": "sit.u03.m01.ips.01",
+            "scenario": { "setting": "spontaneous_opinion_exchange", "roles": ["student", "peer"] },
+            "task": "Respond spontaneously with comprehensible pronunciation, intonation, and pacing."
+          }
+        ]
+      },
+      "focusItemIds": ["fx.fr.u3.art_aesthetics_vocab", "fx.fr.core.discourse_connectors", "fx.fr.core.prosody_delivery"]
+    },
+    {
+      "id": "mod.fr.ap.03.02",
+      "unitId": "unit.fr.ap.03",
+      "title": { "en": "Art, cultural perspectives, and comparison", "ko": "예술, 문화 관점, 그리고 비교" },
+      "goalObjectiveIds": ["obj.fr.ap.u03.m02.lis.01", "obj.fr.ap.u03.m02.int.01", "obj.fr.ap.u03.m02.prs.01"],
+      "situationBlueprints": {
+        "listening": [
+          {
+            "id": "sit.u03.m02.lis.01",
+            "inputType": "interview_or_discussion",
+            "scenario": { "setting": "culture_program", "roles": ["host", "artist_or_critic"] },
+            "task": "Summarize content and infer theme/perspective about art’s role in society and history."
+          }
+        ],
+        "conversing": [
+          {
+            "id": "sit.u03.m02.con.01",
+            "scenario": { "setting": "seminar_discussion", "roles": ["student", "peer"] },
+            "task": "Discuss and compare cultural perspectives about art; use paraphrasing and clarification strategies."
+          }
+        ],
+        "presenting": [
+          {
+            "id": "sit.u03.m02.pre.01",
+            "durationSec": 120,
+            "scenario": { "setting": "class_presentation", "roles": ["presenter", "audience"] },
+            "task": "Deliver a two-minute cultural comparison on the value/role of art across communities using the 3Ps lens."
+          }
+        ],
+        "interpersonal_speaking": [
+          {
+            "id": "sit.u03.m02.ips.01",
+            "scenario": { "setting": "collaborative_planning", "roles": ["student", "peer"] },
+            "task": "Maintain exchanges, negotiate meaning, and self-correct when needed during complex comparisons."
+          }
+        ]
+      },
+      "focusItemIds": ["fx.fr.u3.art_aesthetics_vocab", "fx.fr.core.culture_3ps", "fx.fr.core.pron_intelligibility"]
+    }
+  ],
+  "objectives": [
+    {
+      "id": "obj.fr.ap.u01.m01.lis.01",
+      "unitId": "unit.fr.ap.01",
+      "moduleId": "mod.fr.ap.01.01",
+      "mode": "interpretive_listening",
+      "canDo": {
+        "en": "I can understand a recorded conversation about family structures/values by identifying the main idea and key details.",
+        "ko": "가족 구성/가치에 대한 녹음 대화를 듣고 핵심과 주요 세부 정보를 파악할 수 있다."
+      },
+      "skillTags": ["listening_comprehension", "vocabulary", "culture"],
+      "apSkillTags": ["1.A.1", "1.A.2", "2.A.1"],
+      "discourseFunctions": ["identify_main_idea", "extract_details"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpretive_listening",
+        "dimensionIds": ["main_idea_details", "cultural_connections", "vocab_in_context"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u01.m01.lis.02",
+      "unitId": "unit.fr.ap.01",
+      "moduleId": "mod.fr.ap.01.01",
+      "mode": "interpretive_listening",
+      "canDo": {
+        "en": "I can describe information from a chart/infographic about households and connect it to a cultural topic.",
+        "ko": "가구 관련 차트/인포그래픽 정보를 설명하고 이를 문화적 주제와 연결할 수 있다."
+      },
+      "skillTags": ["listening_comprehension", "vocabulary", "culture"],
+      "apSkillTags": ["1.B.2", "2.A.2", "2.A.3"],
+      "discourseFunctions": ["describe_data", "connect_culture"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpretive_listening",
+        "dimensionIds": ["data_description", "cultural_connections", "vocab_in_context"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u01.m01.int.01",
+      "unitId": "unit.fr.ap.01",
+      "moduleId": "mod.fr.ap.01.01",
+      "mode": "interpersonal_speaking",
+      "canDo": {
+        "en": "I can initiate, maintain, and close a spoken exchange about family using appropriate greetings and register.",
+        "ko": "가족을 주제로 적절한 인사/레지스터를 사용해 대화를 시작-유지-마무리할 수 있다."
+      },
+      "skillTags": ["spoken_interaction", "vocabulary", "culture"],
+      "apSkillTags": ["5.A.1", "5.A.4"],
+      "discourseFunctions": ["exchange_management", "ask_answer_questions"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpersonal_speaking",
+        "dimensionIds": ["exchange_management", "register_pragmatics", "info_exchange"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u01.m01.int.02",
+      "unitId": "unit.fr.ap.01",
+      "moduleId": "mod.fr.ap.01.01",
+      "mode": "interpersonal_speaking",
+      "canDo": {
+        "en": "I can maintain a conversation about family traditions by using repair strategies and intelligible pronunciation.",
+        "ko": "가족 전통에 대해 이야기하며 되묻기/바꿔말하기 등 전략을 쓰고 이해 가능한 발음으로 대화를 유지할 수 있다."
+      },
+      "skillTags": ["spoken_interaction", "pronunciation", "grammar", "vocabulary", "culture"],
+      "apSkillTags": ["5.A.5", "5.A.6", "5.A.7", "5.B.1"],
+      "discourseFunctions": ["repair", "clarify", "describe"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpersonal_speaking",
+        "dimensionIds": ["strategies_repair", "pronunciation_intelligibility", "delivery_fluency", "syntax_variety"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u01.m01.prs.01",
+      "unitId": "unit.fr.ap.01",
+      "moduleId": "mod.fr.ap.01.01",
+      "mode": "presentational_speaking",
+      "canDo": {
+        "en": "I can deliver a one-minute cultural presentation about a Francophone community’s family-related practice with a clear structure.",
+        "ko": "프랑스어권 공동체의 가족 관련 관행을 1분 발표로 구조 있게 전달할 수 있다."
+      },
+      "skillTags": ["spoken_production", "pronunciation", "vocabulary", "culture"],
+      "apSkillTags": ["7.B.1", "7.B.3"],
+      "discourseFunctions": ["present", "describe"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.presentational_speaking",
+        "dimensionIds": ["organization", "pronunciation_delivery", "language_range_accuracy"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u01.m01.prs.02",
+      "unitId": "unit.fr.ap.01",
+      "moduleId": "mod.fr.ap.01.01",
+      "mode": "presentational_speaking",
+      "canDo": {
+        "en": "I can support a short presentation with specific cultural details and use transitions to connect ideas.",
+        "ko": "짧은 발표에서 구체적인 문화적 디테일을 근거로 제시하고 전환 표현으로 아이디어를 연결할 수 있다."
+      },
+      "skillTags": ["spoken_production", "grammar", "vocabulary", "culture"],
+      "apSkillTags": ["7.D.1", "7.B.2", "7.D.2"],
+      "discourseFunctions": ["support_with_examples", "connect_ideas", "compare"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.presentational_speaking",
+        "dimensionIds": ["supporting_examples", "cohesion_transitions", "cultural_comparison"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u01.m02.lis.01",
+      "unitId": "unit.fr.ap.01",
+      "moduleId": "mod.fr.ap.01.02",
+      "mode": "interpretive_listening",
+      "canDo": {
+        "en": "I can understand an audio report about family challenges by identifying purpose, point of view, and key details.",
+        "ko": "가족의 도전을 다룬 오디오 리포트를 듣고 목적/관점과 핵심 세부 정보를 파악할 수 있다."
+      },
+      "skillTags": ["listening_comprehension", "vocabulary", "culture"],
+      "apSkillTags": ["1.A.2", "3.A.2", "3.A.3"],
+      "discourseFunctions": ["identify_details", "identify_purpose", "identify_pov"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpretive_listening",
+        "dimensionIds": ["main_idea_details", "distinguishing_features", "vocab_in_context"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u01.m02.lis.02",
+      "unitId": "unit.fr.ap.01",
+      "moduleId": "mod.fr.ap.01.02",
+      "mode": "interpretive_listening",
+      "canDo": {
+        "en": "I can summarize what I heard about a family-related issue and infer implied meaning from context.",
+        "ko": "가족 관련 이슈에 대해 들은 내용을 요약하고 맥락을 바탕으로 함의를 추론할 수 있다."
+      },
+      "skillTags": ["listening_comprehension", "vocabulary"],
+      "apSkillTags": ["1.A.3", "3.B.2", "4.A.2"],
+      "discourseFunctions": ["summarize", "infer"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpretive_listening",
+        "dimensionIds": ["summarize_narrative", "inference_implied_meaning", "vocab_in_context"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u01.m02.int.01",
+      "unitId": "unit.fr.ap.01",
+      "moduleId": "mod.fr.ap.01.02",
+      "mode": "interpersonal_speaking",
+      "canDo": {
+        "en": "I can discuss family challenges and community support by providing and obtaining relevant information and asking for clarification.",
+        "ko": "가족의 도전과 공동체 지원에 대해 관련 정보를 주고받고, 필요 시 확인/되묻기를 하며 대화할 수 있다."
+      },
+      "skillTags": ["spoken_interaction", "vocabulary", "culture"],
+      "apSkillTags": ["5.A.2", "5.A.3", "5.A.7"],
+      "discourseFunctions": ["explain", "ask_follow_up", "clarify"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpersonal_speaking",
+        "dimensionIds": ["comprehension_response", "info_exchange", "strategies_repair"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u01.m02.int.02",
+      "unitId": "unit.fr.ap.01",
+      "moduleId": "mod.fr.ap.01.02",
+      "mode": "interpersonal_speaking",
+      "canDo": {
+        "en": "I can describe family experiences and changes using a range of sentence types and time frames in conversation.",
+        "ko": "대화에서 가족 경험과 변화를 다양한 문장 유형과 시제로 설명할 수 있다."
+      },
+      "skillTags": ["spoken_interaction", "grammar", "vocabulary"],
+      "apSkillTags": ["5.B.1", "5.B.3"],
+      "discourseFunctions": ["narrate", "describe_change"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpersonal_speaking",
+        "dimensionIds": ["syntax_variety", "cohesion"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u01.m02.prs.01",
+      "unitId": "unit.fr.ap.01",
+      "moduleId": "mod.fr.ap.01.02",
+      "mode": "presentational_speaking",
+      "canDo": {
+        "en": "I can present a short cultural comparison about a family-related issue between my community and a Francophone community.",
+        "ko": "가족 관련 이슈를 주제로 내 공동체와 프랑스어권 공동체를 짧게 비교 발표할 수 있다."
+      },
+      "skillTags": ["spoken_production", "grammar", "vocabulary", "culture"],
+      "apSkillTags": ["7.B.1", "7.D.2"],
+      "discourseFunctions": ["compare", "present"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.presentational_speaking",
+        "dimensionIds": ["organization", "cultural_comparison", "cohesion_transitions"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u01.m02.prs.02",
+      "unitId": "unit.fr.ap.01",
+      "moduleId": "mod.fr.ap.01.02",
+      "mode": "presentational_speaking",
+      "canDo": {
+        "en": "I can explain an opinion about how families are changing, using examples and appropriate register for an audience.",
+        "ko": "가족의 변화에 대한 의견을 예시로 설명하고 청중에 맞는 말투로 발표할 수 있다."
+      },
+      "skillTags": ["spoken_production", "grammar", "vocabulary", "culture"],
+      "apSkillTags": ["7.D.1", "7.C.1", "7.B.4"],
+      "discourseFunctions": ["express_opinion", "support_with_examples"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.presentational_speaking",
+        "dimensionIds": ["supporting_examples", "language_range_accuracy", "pronunciation_delivery"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u02.m01.lis.01",
+      "unitId": "unit.fr.ap.02",
+      "moduleId": "mod.fr.ap.02.01",
+      "mode": "interpretive_listening",
+      "canDo": {
+        "en": "I can interpret an audio source about language and identity by identifying perspectives, tone, and key points.",
+        "ko": "언어와 정체성에 관한 오디오 자료를 듣고 관점/톤과 핵심 내용을 파악할 수 있다."
+      },
+      "skillTags": ["listening_comprehension", "vocabulary", "culture"],
+      "apSkillTags": ["3.A.3", "1.A.1", "1.A.2"],
+      "discourseFunctions": ["identify_pov", "identify_tone", "extract_details"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpretive_listening",
+        "dimensionIds": ["distinguishing_features", "main_idea_details", "vocab_in_context"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u02.m01.lis.02",
+      "unitId": "unit.fr.ap.02",
+      "moduleId": "mod.fr.ap.02.01",
+      "mode": "interpretive_listening",
+      "canDo": {
+        "en": "I can deduce the meaning of unfamiliar words/expressions from context and explain how the information relates to cultural identity.",
+        "ko": "낯선 단어/표현의 의미를 맥락으로 추론하고 그 정보가 문화적 정체성과 어떻게 연결되는지 설명할 수 있다."
+      },
+      "skillTags": ["listening_comprehension", "vocabulary", "culture"],
+      "apSkillTags": ["4.A.2", "2.A.3", "2.A.4"],
+      "discourseFunctions": ["infer_vocab", "connect_culture"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpretive_listening",
+        "dimensionIds": ["vocab_in_context", "cultural_connections", "inference_implied_meaning"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u02.m01.int.01",
+      "unitId": "unit.fr.ap.02",
+      "moduleId": "mod.fr.ap.02.01",
+      "mode": "interpersonal_speaking",
+      "canDo": {
+        "en": "I can share personal experiences about language use (accent, dialect, multilingualism) in a spoken exchange with appropriate register.",
+        "ko": "억양/방언/다언어 사용 경험을 적절한 레지스터로 말하며 상호작용 대화를 할 수 있다."
+      },
+      "skillTags": ["spoken_interaction", "vocabulary", "culture"],
+      "apSkillTags": ["5.A.1", "5.A.4", "5.A.3"],
+      "discourseFunctions": ["share_experience", "ask_answer_questions"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpersonal_speaking",
+        "dimensionIds": ["exchange_management", "register_pragmatics", "info_exchange"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u02.m01.int.02",
+      "unitId": "unit.fr.ap.02",
+      "moduleId": "mod.fr.ap.02.01",
+      "mode": "interpersonal_speaking",
+      "canDo": {
+        "en": "I can maintain a discussion about identity by paraphrasing, asking for repetition/clarification, and using cohesive devices.",
+        "ko": "정체성 주제 토론에서 바꿔말하기/되묻기/확인하기를 활용하고 결속 표현으로 대화를 유지할 수 있다."
+      },
+      "skillTags": ["spoken_interaction", "grammar", "vocabulary", "culture"],
+      "apSkillTags": ["5.A.7", "5.B.2", "5.A.2"],
+      "discourseFunctions": ["negotiate_meaning", "paraphrase", "clarify"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpersonal_speaking",
+        "dimensionIds": ["strategies_repair", "cohesion", "comprehension_response"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u02.m01.prs.01",
+      "unitId": "unit.fr.ap.02",
+      "moduleId": "mod.fr.ap.02.01",
+      "mode": "presentational_speaking",
+      "canDo": {
+        "en": "I can deliver a one-minute cultural comparison about language and identity between my community and a Francophone community.",
+        "ko": "언어와 정체성을 주제로 내 공동체와 프랑스어권 공동체를 1분 문화 비교 발표할 수 있다."
+      },
+      "skillTags": ["spoken_production", "vocabulary", "culture"],
+      "apSkillTags": ["7.B.1", "7.D.2"],
+      "discourseFunctions": ["compare", "present_thesis"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.presentational_speaking",
+        "dimensionIds": ["organization", "cultural_comparison", "supporting_examples"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u02.m01.prs.02",
+      "unitId": "unit.fr.ap.02",
+      "moduleId": "mod.fr.ap.02.01",
+      "mode": "presentational_speaking",
+      "canDo": {
+        "en": "I can organize a short comparison with transitions and deliver it with comprehensible pronunciation and pacing.",
+        "ko": "전환 표현으로 비교 발표를 조직하고 이해 가능한 발음과 속도로 전달할 수 있다."
+      },
+      "skillTags": ["spoken_production", "pronunciation", "grammar"],
+      "apSkillTags": ["7.B.2", "7.B.3", "7.B.4"],
+      "discourseFunctions": ["connect_ideas", "deliver"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.presentational_speaking",
+        "dimensionIds": ["cohesion_transitions", "pronunciation_delivery", "organization"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u02.m02.lis.01",
+      "unitId": "unit.fr.ap.02",
+      "moduleId": "mod.fr.ap.02.02",
+      "mode": "interpretive_listening",
+      "canDo": {
+        "en": "I can interpret a media audio source by identifying the intended audience, purpose, and implied meaning about identity.",
+        "ko": "미디어 오디오 자료를 듣고 대상/목적/함의를 파악해 정체성과의 연결을 이해할 수 있다."
+      },
+      "skillTags": ["listening_comprehension", "vocabulary", "culture"],
+      "apSkillTags": ["3.A.1", "3.A.2", "3.B.2"],
+      "discourseFunctions": ["identify_audience", "identify_purpose", "infer"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpretive_listening",
+        "dimensionIds": ["distinguishing_features", "inference_implied_meaning", "vocab_in_context"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u02.m02.lis.02",
+      "unitId": "unit.fr.ap.02",
+      "moduleId": "mod.fr.ap.02.02",
+      "mode": "interpretive_listening",
+      "canDo": {
+        "en": "I can describe patterns and trends in a chart about technology/media use and connect them to social impacts.",
+        "ko": "기술/미디어 사용 관련 차트의 패턴과 추세를 설명하고 사회적 영향과 연결할 수 있다."
+      },
+      "skillTags": ["listening_comprehension", "vocabulary", "culture"],
+      "apSkillTags": ["1.B.1", "1.B.2", "2.B.2"],
+      "discourseFunctions": ["describe_trends", "connect_interdisciplinary"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpretive_listening",
+        "dimensionIds": ["data_description", "cultural_connections", "vocab_in_context"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u02.m02.int.01",
+      "unitId": "unit.fr.ap.02",
+      "moduleId": "mod.fr.ap.02.02",
+      "mode": "interpersonal_speaking",
+      "canDo": {
+        "en": "I can debate technology’s impact on identity by exchanging information, using appropriate register, and applying repair strategies.",
+        "ko": "기술이 정체성에 미치는 영향에 대해 정보를 주고받고, 적절한 레지스터와 수리 전략을 사용해 토론할 수 있다."
+      },
+      "skillTags": ["spoken_interaction", "grammar", "vocabulary", "culture"],
+      "apSkillTags": ["5.A.3", "5.A.4", "5.A.7"],
+      "discourseFunctions": ["argue", "agree_disagree", "clarify"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpersonal_speaking",
+        "dimensionIds": ["info_exchange", "register_pragmatics", "strategies_repair", "cohesion"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u02.m02.int.02",
+      "unitId": "unit.fr.ap.02",
+      "moduleId": "mod.fr.ap.02.02",
+      "mode": "interpersonal_speaking",
+      "canDo": {
+        "en": "I can monitor my spoken production and attempt self-correction during spontaneous exchanges about media and identity.",
+        "ko": "미디어/정체성 주제의 즉흥 대화에서 내 발화를 모니터링하고 스스로 수정할 수 있다."
+      },
+      "skillTags": ["spoken_interaction", "grammar", "pronunciation"],
+      "apSkillTags": ["5.B.4", "5.A.6"],
+      "discourseFunctions": ["self_correct", "maintain_exchange"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpersonal_speaking",
+        "dimensionIds": ["self_monitoring", "delivery_fluency"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u02.m02.prs.01",
+      "unitId": "unit.fr.ap.02",
+      "moduleId": "mod.fr.ap.02.02",
+      "mode": "presentational_speaking",
+      "canDo": {
+        "en": "I can present an opinion with examples about how technology shapes public identity, using appropriate vocabulary and time frames.",
+        "ko": "기술이 공적 정체성을 형성하는 방식에 대해 적절한 어휘와 시제로 예시를 들어 의견 발표를 할 수 있다."
+      },
+      "skillTags": ["spoken_production", "grammar", "vocabulary", "culture"],
+      "apSkillTags": ["7.D.1", "7.C.2", "7.B.1"],
+      "discourseFunctions": ["express_opinion", "support_with_examples", "present"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.presentational_speaking",
+        "dimensionIds": ["supporting_examples", "language_range_accuracy", "organization"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u02.m02.prs.02",
+      "unitId": "unit.fr.ap.02",
+      "moduleId": "mod.fr.ap.02.02",
+      "mode": "presentational_speaking",
+      "canDo": {
+        "en": "I can incorporate evidence from sources into a short spoken presentation by paraphrasing and keeping a clear structure.",
+        "ko": "출처의 정보를 그대로 인용하지 않고 바꿔말해 근거로 포함하며 구조 있는 짧은 발표를 할 수 있다."
+      },
+      "skillTags": ["spoken_production", "grammar", "vocabulary"],
+      "apSkillTags": ["7.A.2", "7.B.5", "7.B.1"],
+      "discourseFunctions": ["paraphrase", "integrate_evidence", "maintain_presentation"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.presentational_speaking",
+        "dimensionIds": ["organization", "supporting_examples", "cohesion_transitions"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u03.m01.lis.01",
+      "unitId": "unit.fr.ap.03",
+      "moduleId": "mod.fr.ap.03.01",
+      "mode": "interpretive_listening",
+      "canDo": {
+        "en": "I can understand a promotional or review audio source about beauty ideals by identifying the main idea and purpose.",
+        "ko": "미의 기준을 다룬 홍보물/리뷰 오디오를 듣고 핵심과 목적을 파악할 수 있다."
+      },
+      "skillTags": ["listening_comprehension", "vocabulary", "culture"],
+      "apSkillTags": ["1.A.1", "3.A.2", "3.A.3"],
+      "discourseFunctions": ["identify_main_idea", "identify_purpose"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpretive_listening",
+        "dimensionIds": ["main_idea_details", "distinguishing_features", "vocab_in_context"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u03.m01.lis.02",
+      "unitId": "unit.fr.ap.03",
+      "moduleId": "mod.fr.ap.03.01",
+      "mode": "interpretive_listening",
+      "canDo": {
+        "en": "I can infer implied meaning and interpret idiomatic or culturally authentic expressions in context when listening to opinions about art/beauty.",
+        "ko": "예술/미에 대한 의견을 듣고 함의를 추론하며 관용적/문화적으로 자연스러운 표현을 맥락에서 해석할 수 있다."
+      },
+      "skillTags": ["listening_comprehension", "vocabulary", "culture"],
+      "apSkillTags": ["3.B.2", "4.A.2", "4.B.2"],
+      "discourseFunctions": ["infer", "interpret_idiom"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpretive_listening",
+        "dimensionIds": ["inference_implied_meaning", "vocab_in_context"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u03.m01.int.01",
+      "unitId": "unit.fr.ap.03",
+      "moduleId": "mod.fr.ap.03.01",
+      "mode": "interpersonal_speaking",
+      "canDo": {
+        "en": "I can exchange opinions about beauty ideals and daily life, using transitions and cohesive devices to connect ideas.",
+        "ko": "미의 기준과 일상에 대해 의견을 주고받으며 전환/결속 표현으로 내용을 연결할 수 있다."
+      },
+      "skillTags": ["spoken_interaction", "grammar", "vocabulary", "culture"],
+      "apSkillTags": ["5.A.3", "5.B.2", "5.B.1"],
+      "discourseFunctions": ["express_opinion", "compare", "connect_ideas"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpersonal_speaking",
+        "dimensionIds": ["info_exchange", "cohesion", "syntax_variety"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u03.m01.int.02",
+      "unitId": "unit.fr.ap.03",
+      "moduleId": "mod.fr.ap.03.01",
+      "mode": "interpersonal_speaking",
+      "canDo": {
+        "en": "I can respond spontaneously with intelligible pronunciation and effective intonation/pacing in spoken exchanges about art and aesthetics.",
+        "ko": "예술/미학 대화에서 명료한 발음과 효과적인 억양/속도로 즉흥 응답을 할 수 있다."
+      },
+      "skillTags": ["spoken_interaction", "pronunciation", "vocabulary"],
+      "apSkillTags": ["5.A.5", "5.A.6", "5.A.1"],
+      "discourseFunctions": ["spontaneous_response", "maintain_exchange"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpersonal_speaking",
+        "dimensionIds": ["pronunciation_intelligibility", "delivery_fluency", "exchange_management"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u03.m01.prs.01",
+      "unitId": "unit.fr.ap.03",
+      "moduleId": "mod.fr.ap.03.01",
+      "mode": "presentational_speaking",
+      "canDo": {
+        "en": "I can deliver an organized short talk explaining how beauty ideals influence daily life, supported by examples.",
+        "ko": "미의 기준이 일상에 미치는 영향을 예시로 뒷받침하며 조직적으로 짧은 발표를 할 수 있다."
+      },
+      "skillTags": ["spoken_production", "grammar", "vocabulary", "culture"],
+      "apSkillTags": ["7.B.1", "7.D.1"],
+      "discourseFunctions": ["explain", "support_with_examples", "present"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.presentational_speaking",
+        "dimensionIds": ["organization", "supporting_examples", "language_range_accuracy"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u03.m01.prs.02",
+      "unitId": "unit.fr.ap.03",
+      "moduleId": "mod.fr.ap.03.01",
+      "mode": "presentational_speaking",
+      "canDo": {
+        "en": "I can use transitions and audience-appropriate vocabulary/register to make my spoken presentation cohesive and clear.",
+        "ko": "청중에 맞는 어휘/레지스터와 전환 표현을 사용해 발표를 결속력 있고 명확하게 만들 수 있다."
+      },
+      "skillTags": ["spoken_production", "grammar", "vocabulary"],
+      "apSkillTags": ["7.B.2", "7.C.1", "7.B.4"],
+      "discourseFunctions": ["connect_ideas", "deliver"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.presentational_speaking",
+        "dimensionIds": ["cohesion_transitions", "language_range_accuracy", "pronunciation_delivery"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u03.m02.lis.01",
+      "unitId": "unit.fr.ap.03",
+      "moduleId": "mod.fr.ap.03.02",
+      "mode": "interpretive_listening",
+      "canDo": {
+        "en": "I can summarize an interview/discussion about art’s role in society and infer perspectives and implied meaning.",
+        "ko": "예술의 역할에 대한 인터뷰/토론을 듣고 요약하며 관점과 함의를 추론할 수 있다."
+      },
+      "skillTags": ["listening_comprehension", "vocabulary", "culture"],
+      "apSkillTags": ["1.A.3", "3.A.3", "3.B.2"],
+      "discourseFunctions": ["summarize", "infer", "identify_pov"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpretive_listening",
+        "dimensionIds": ["summarize_narrative", "distinguishing_features", "inference_implied_meaning"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u03.m02.lis.02",
+      "unitId": "unit.fr.ap.03",
+      "moduleId": "mod.fr.ap.03.02",
+      "mode": "interpretive_listening",
+      "canDo": {
+        "en": "I can compare perspectives across sources and make cultural connections about how art reflects history and values.",
+        "ko": "여러 자료의 관점을 비교하고 예술이 역사/가치를 반영하는 방식을 문화적으로 연결해 이해할 수 있다."
+      },
+      "skillTags": ["listening_comprehension", "culture", "vocabulary"],
+      "apSkillTags": ["3.B.1", "2.A.4", "2.A.3"],
+      "discourseFunctions": ["compare_sources", "connect_culture"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpretive_listening",
+        "dimensionIds": ["cultural_connections", "inference_implied_meaning", "distinguishing_features"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u03.m02.int.01",
+      "unitId": "unit.fr.ap.03",
+      "moduleId": "mod.fr.ap.03.02",
+      "mode": "interpersonal_speaking",
+      "canDo": {
+        "en": "I can discuss cultural perspectives on art by asking for clarification, paraphrasing, and using circumlocution to maintain the exchange.",
+        "ko": "예술에 대한 문화적 관점을 토론하며 확인/바꿔말하기/우회 표현으로 대화를 유지할 수 있다."
+      },
+      "skillTags": ["spoken_interaction", "grammar", "vocabulary", "culture"],
+      "apSkillTags": ["5.A.7", "5.A.3", "5.B.2"],
+      "discourseFunctions": ["negotiate_meaning", "paraphrase", "clarify"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpersonal_speaking",
+        "dimensionIds": ["strategies_repair", "info_exchange", "cohesion"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u03.m02.int.02",
+      "unitId": "unit.fr.ap.03",
+      "moduleId": "mod.fr.ap.03.02",
+      "mode": "interpersonal_speaking",
+      "canDo": {
+        "en": "I can use a range of grammar and time frames to discuss how art records history and reflects social values.",
+        "ko": "예술이 역사를 기록하고 사회적 가치를 반영하는 방식을 다양한 문법/시제로 말할 수 있다."
+      },
+      "skillTags": ["spoken_interaction", "grammar", "vocabulary", "culture"],
+      "apSkillTags": ["5.B.1", "5.B.3"],
+      "discourseFunctions": ["explain", "narrate"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.interpersonal_speaking",
+        "dimensionIds": ["syntax_variety", "cohesion"],
+        "minAldLevel": 3
+      }
+    },
+    {
+      "id": "obj.fr.ap.u03.m02.prs.01",
+      "unitId": "unit.fr.ap.03",
+      "moduleId": "mod.fr.ap.03.02",
+      "mode": "presentational_speaking",
+      "canDo": {
+        "en": "I can deliver a two-minute cultural comparison about the value/role of art across communities using a clear thesis and supporting evidence.",
+        "ko": "예술의 가치/역할을 주제로 명확한 논지와 근거로 2분 문화 비교 발표를 할 수 있다."
+      },
+      "skillTags": ["spoken_production", "grammar", "vocabulary", "culture"],
+      "apSkillTags": ["7.D.2", "7.B.1", "7.D.1"],
+      "discourseFunctions": ["compare", "present_thesis", "support_with_examples"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.presentational_speaking",
+        "dimensionIds": ["organization", "cultural_comparison", "supporting_examples", "cohesion_transitions"],
+        "minAldLevel": 4
+      }
+    },
+    {
+      "id": "obj.fr.ap.u03.m02.prs.02",
+      "unitId": "unit.fr.ap.03",
+      "moduleId": "mod.fr.ap.03.02",
+      "mode": "presentational_speaking",
+      "canDo": {
+        "en": "I can deliver the comparison with effective intonation/pacing, intelligible pronunciation, and self-correction when needed.",
+        "ko": "효과적인 억양/속도와 명료한 발음으로 문화 비교를 전달하고 필요 시 자가수정을 할 수 있다."
+      },
+      "skillTags": ["spoken_production", "pronunciation", "grammar"],
+      "apSkillTags": ["7.B.4", "7.B.3", "7.C.3"],
+      "discourseFunctions": ["deliver", "self_correct"],
+      "mastery": {
+        "rubricId": "rub.fr.ap.presentational_speaking",
+        "dimensionIds": ["pronunciation_delivery", "self_monitoring"],
+        "minAldLevel": 4
+      }
+    }
+  ]
+}

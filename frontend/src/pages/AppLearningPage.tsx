@@ -49,13 +49,20 @@ export function AppLearningPage() {
             {t('app.dashboard.nextStep') || 'Pick your next practice route.'}
           </p>
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
           <ServiceNavigationCard
             title={t('app.dashboard.card.chat.title') || 'AI Chat'}
             description={t('app.dashboard.card.chat.description') || 'Practice conversation with your AI tutor'}
             icon={<MessageSquare size={22} strokeWidth={2.5} />}
             href="/app/chat"
             color="primary"
+          />
+          <ServiceNavigationCard
+            title={t('app.dashboard.card.curriculum.title') || 'Curriculum'}
+            description={t('app.dashboard.card.curriculum.description') || 'Sample AP French units and guided voice practice'}
+            icon={<BookOpen size={22} strokeWidth={2.5} />}
+            href="/app/curriculum"
+            color="secondary"
           />
           <ServiceNavigationCard
             title={t('app.dashboard.card.games.title') || 'Practice Games'}

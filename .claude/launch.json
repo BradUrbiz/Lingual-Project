@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "/usr/local/bin/node",
+      "runtimeArgs": [
+        "/Users/new/Documents/GitHub/Lingual-U/Lingual-Project/frontend/node_modules/.bin/vite",
+        "/Users/new/Documents/GitHub/Lingual-U/Lingual-Project/frontend"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "/usr/local/bin/python3",
+      "runtimeArgs": ["/Users/new/Documents/GitHub/Lingual-U/Lingual-Project/main.py"],
+      "port": 5001
+    }
+  ]
+}

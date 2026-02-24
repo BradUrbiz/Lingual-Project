@@ -6,7 +6,8 @@
       "runtimeExecutable": "/usr/local/bin/node",
       "runtimeArgs": [
         "/Users/new/Documents/GitHub/Lingual-U/Lingual-Project/frontend/node_modules/.bin/vite",
-        "/Users/new/Documents/GitHub/Lingual-U/Lingual-Project/frontend"
+        "/Users/new/Documents/GitHub/Lingual-U/Lingual-Project/frontend",
+        "--host"
       ],
       "port": 5173
     },

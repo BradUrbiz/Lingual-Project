@@ -268,21 +268,6 @@ export function AuthPage() {
               </button>
             </motion.p>
 
-            {/* Testimonial - Brutalist style */}
-            <div className="mt-8 p-5 bg-secondary rounded-xl border-2 border-border">
-              <p className="text-foreground/80 italic leading-relaxed">
-                "{t('auth.testimonial.quote')}"
-              </p>
-              <div className="mt-4 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center text-sm font-bold">
-                  SR
-                </div>
-                <div>
-                  <p className="font-display font-bold">{t('auth.testimonial.name')}</p>
-                  <p className="text-sm text-muted-foreground">{t('auth.testimonial.role')}</p>
-                </div>
-              </div>
-            </div>
           </Card>
         </motion.div>
       </div>

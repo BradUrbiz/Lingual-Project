@@ -118,7 +118,7 @@ export function LandingPage() {
               </a>
               <button
                 onClick={handleLogin}
-                className="font-medium text-foreground/70 hover:text-primary transition-colors"
+                className="font-medium text-foreground/70 hover:text-primary transition-colors border-b-2 border-transparent hover:border-primary pb-1"
               >
                 {t('landing.nav.login')}
               </button>
@@ -148,15 +148,15 @@ export function LandingPage() {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="md:hidden bg-card border-b-3 border-foreground p-6 space-y-4"
+            className="md:hidden bg-card border-b-3 border-foreground p-6"
           >
-            <a href="#features" className="block text-lg font-medium hover:text-primary" onClick={() => setIsMobileMenuOpen(false)}>
+            <a href="#features" className="block text-lg font-medium py-3 hover:text-primary"  onClick={() => setIsMobileMenuOpen(false)}>
               {t('landing.nav.features')}
             </a>
-            <a href="#how-it-works" className="block text-lg font-medium hover:text-primary" onClick={() => setIsMobileMenuOpen(false)}>
+            <a href="#how-it-works" className="block text-lg font-medium py-3 hover:text-primary"  onClick={() => setIsMobileMenuOpen(false)}>
               {t('landing.nav.how')}
             </a>
-            <a href="#schools" className="block text-lg font-medium hover:text-primary" onClick={() => setIsMobileMenuOpen(false)}>
+            <a href="#schools"  className="block text-lg font-medium py-3 hover:text-primary" onClick={() => setIsMobileMenuOpen(false)}>
               {t('landing.nav.schools')}
             </a>
             <div className="pt-4 border-t-2 border-border flex flex-col gap-3">

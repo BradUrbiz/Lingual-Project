@@ -17,6 +17,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getUserProfile, updateProfile } from '@/api/user';
 import { Button, Input } from '@/components/ui';
 import type { UserProfile } from '@/types';
+import { GraduationCap } from "lucide-react";
 
 const USER_AVATAR = '/imgs/landing/student.jpg';
 
@@ -84,6 +85,318 @@ export function AppProfilePage() {
 
     loadProfile();
   }, [t, user?.email, user?.name]);
+
+
+const countries = [
+  "Afghanistan",
+  "Albania",
+  "Algeria",
+  "Andorra",
+  "Angola",
+  "Antigua and Barbuda",
+  "Argentina",
+  "Armenia",
+  "Australia",
+  "Austria",
+  "Azerbaijan",
+  "Bahamas",
+  "Bahrain",
+  "Bangladesh",
+  "Barbados",
+  "Belarus",
+  "Belgium",
+  "Belize",
+  "Benin",
+  "Bhutan",
+  "Bolivia",
+  "Bosnia and Herzegovina",
+  "Botswana",
+  "Brazil",
+  "Brunei",
+  "Bulgaria",
+  "Burkina Faso",
+  "Burundi",
+  "Cabo Verde",
+  "Cambodia",
+  "Cameroon",
+  "Canada",
+  "Central African Republic",
+  "Chad",
+  "Chile",
+  "China",
+  "Colombia",
+  "Comoros",
+  "Congo",
+  "Costa Rica",
+  "Croatia",
+  "Cuba",
+  "Cyprus",
+  "Czech Republic",
+  "Democratic Republic of the Congo",
+  "Denmark",
+  "Djibouti",
+  "Dominica",
+  "Dominican Republic",
+  "Ecuador",
+  "Egypt",
+  "El Salvador",
+  "Equatorial Guinea",
+  "Eritrea",
+  "Estonia",
+  "Eswatini",
+  "Ethiopia",
+  "Fiji",
+  "Finland",
+  "France",
+  "Gabon",
+  "Gambia",
+  "Georgia",
+  "Germany",
+  "Ghana",
+  "Greece",
+  "Grenada",
+  "Guatemala",
+  "Guinea",
+  "Guinea-Bissau",
+  "Guyana",
+  "Haiti",
+  "Honduras",
+  "Hungary",
+  "Iceland",
+  "India",
+  "Indonesia",
+  "Iran",
+  "Iraq",
+  "Ireland",
+  "Israel",
+  "Italy",
+  "Jamaica",
+  "Japan",
+  "Jordan",
+  "Kazakhstan",
+  "Kenya",
+  "Kiribati",
+  "Kuwait",
+  "Kyrgyzstan",
+  "Laos",
+  "Latvia",
+  "Lebanon",
+  "Lesotho",
+  "Liberia",
+  "Libya",
+  "Liechtenstein",
+  "Lithuania",
+  "Luxembourg",
+  "Madagascar",
+  "Malawi",
+  "Malaysia",
+  "Maldives",
+  "Mali",
+  "Malta",
+  "Marshall Islands",
+  "Mauritania",
+  "Mauritius",
+  "Mexico",
+  "Micronesia",
+  "Moldova",
+  "Monaco",
+  "Mongolia",
+  "Montenegro",
+  "Morocco",
+  "Mozambique",
+  "Myanmar",
+  "Namibia",
+  "Nauru",
+  "Nepal",
+  "Netherlands",
+  "New Zealand",
+  "Nicaragua",
+  "Niger",
+  "Nigeria",
+  "North Korea",
+  "North Macedonia",
+  "Norway",
+  "Oman",
+  "Pakistan",
+  "Palau",
+  "Palestine",
+  "Panama",
+  "Papua New Guinea",
+  "Paraguay",
+  "Peru",
+  "Philippines",
+  "Poland",
+  "Portugal",
+  "Qatar",
+  "Romania",
+  "Russia",
+  "Rwanda",
+  "Saint Kitts and Nevis",
+  "Saint Lucia",
+  "Saint Vincent and the Grenadines",
+  "Samoa",
+  "San Marino",
+  "Sao Tome and Principe",
+  "Saudi Arabia",
+  "Senegal",
+  "Serbia",
+  "Seychelles",
+  "Sierra Leone",
+  "Singapore",
+  "Slovakia",
+  "Slovenia",
+  "Solomon Islands",
+  "Somalia",
+  "South Africa",
+  "South Korea",
+  "South Sudan",
+  "Spain",
+  "Sri Lanka",
+  "Sudan",
+  "Suriname",
+  "Sweden",
+  "Switzerland",
+  "Syria",
+  "Taiwan",
+  "Tajikistan",
+  "Tanzania",
+  "Thailand",
+  "Timor-Leste",
+  "Togo",
+  "Tonga",
+  "Trinidad and Tobago",
+  "Tunisia",
+  "Turkey",
+  "Turkmenistan",
+  "Tuvalu",
+  "Uganda",
+  "Ukraine",
+  "United Arab Emirates",
+  "United Kingdom",
+  "United States",
+  "Uruguay",
+  "Uzbekistan",
+  "Vanuatu",
+  "Vatican City",
+  "Venezuela",
+  "Vietnam",
+  "Yemen",
+  "Zambia",
+  "Zimbabwe",
+].sort();
+
+const languages = [
+  "Afrikaans",
+  "Albanian",
+  "Amharic",
+  "Arabic",
+  "Armenian",
+  "Azerbaijani",
+  "Basque",
+  "Belarusian",
+  "Bengali",
+  "Bosnian",
+  "Bulgarian",
+  "Burmese",
+  "Catalan",
+  "Cebuano",
+  "Chinese (Cantonese)",
+  "Chinese (Mandarin)",
+  "Corsican",
+  "Croatian",
+  "Czech",
+  "Danish",
+  "Dutch",
+  "English",
+  "Esperanto",
+  "Estonian",
+  "Filipino",
+  "Finnish",
+  "French",
+  "Frisian",
+  "Galician",
+  "Georgian",
+  "German",
+  "Greek",
+  "Gujarati",
+  "Haitian Creole",
+  "Hausa",
+  "Hawaiian",
+  "Hebrew",
+  "Hindi",
+  "Hmong",
+  "Hungarian",
+  "Icelandic",
+  "Igbo",
+  "Indonesian",
+  "Irish",
+  "Italian",
+  "Japanese",
+  "Javanese",
+  "Kannada",
+  "Kazakh",
+  "Khmer",
+  "Kinyarwanda",
+  "Korean",
+  "Kurdish",
+  "Kyrgyz",
+  "Lao",
+  "Latin",
+  "Latvian",
+  "Lithuanian",
+  "Luxembourgish",
+  "Macedonian",
+  "Malagasy",
+  "Malay",
+  "Malayalam",
+  "Maltese",
+  "Maori",
+  "Marathi",
+  "Mongolian",
+  "Nepali",
+  "Norwegian",
+  "Nyanja",
+  "Odia",
+  "Pashto",
+  "Persian",
+  "Polish",
+  "Portuguese",
+  "Punjabi",
+  "Romanian",
+  "Russian",
+  "Samoan",
+  "Scots Gaelic",
+  "Serbian",
+  "Sesotho",
+  "Shona",
+  "Sindhi",
+  "Sinhala",
+  "Slovak",
+  "Slovenian",
+  "Somali",
+  "Spanish",
+  "Sundanese",
+  "Swahili",
+  "Swedish",
+  "Tagalog",
+  "Tajik",
+  "Tamil",
+  "Tatar",
+  "Telugu",
+  "Thai",
+  "Turkish",
+  "Turkmen",
+  "Ukrainian",
+  "Urdu",
+  "Uyghur",
+  "Uzbek",
+  "Vietnamese",
+  "Welsh",
+  "Xhosa",
+  "Yiddish",
+  "Yoruba",
+  "Zulu",
+].sort();
 
   const handleAvatarClick = () => {
     fileInputRef.current?.click();
@@ -159,6 +472,13 @@ export function AppProfilePage() {
     }
   };
 
+  const gradeOptions = [
+  'Kindergarten',
+  ...Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`),
+  'College',
+  'Out of School',
+]
+
   const providerData = firebaseUser?.providerData ?? [];
   const connectionEmail = formState.contactEmail || user?.email || '';
 
@@ -231,7 +551,7 @@ export function AppProfilePage() {
   const inputsDisabled = isLoading || !profile || isSaving;
   const studentLabel = t('app.profile.student') || 'Student';
   const gradeSummary = formState.gradeLevel
-    ? `${studentLabel} - ${formState.gradeLevel}`
+    ? `${formState.gradeLevel}`
     : studentLabel;
 
   const providers: ProviderConfig[] = [
@@ -239,10 +559,10 @@ export function AppProfilePage() {
       key: 'google' as ProviderKey,
       label: 'Google Classroom',
       providerId: 'google.com',
-      iconType: 'image' as const,
-      iconSrc: '/imgs/branding/google-g.svg',
+      iconType: 'icon' as const,
+      icon: GraduationCap,
       iconAlt: 'Google',
-      iconClassName: 'bg-slate-100',
+      iconClassName: 'bg-[#0F9D58] text-white',
     },
     {
       key: 'github' as ProviderKey,
@@ -400,32 +720,66 @@ export function AppProfilePage() {
                 disabled={inputsDisabled}
               />
 
-              <Input
-                label={t('app.profile.gradeLevel')}
-                type="text"
+              <div className="flex flex-col gap-2">
+                <label className="text-base font-medium">
+                  {t('app.profile.student') || 'Education Level'}
+                </label>
+              
+
+              <select
                 value={formState.gradeLevel}
-                onChange={(event) => handleFieldChange('gradeLevel', event.target.value)}
-                placeholder={t('app.profile.gradeLevel') || 'Grade Level'}
+                onChange={(e) => handleFieldChange('gradeLevel', e.target.value)}
                 disabled={inputsDisabled}
-              />
+                className="h-11 rounded-xl border-2 border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
+              >
+                <option value="">Select Education Level</option>
+                {gradeOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              </div>
 
-              <Input
-                label={t('app.profile.nativeLanguage')}
-                type="text"
+              <div className="flex flex-col gap-2">
+              <label className="text-base font-medium">
+                {t('app.profile.nativeLanguage') || 'Native Language'}
+              </label>
+
+              <select
                 value={formState.nativeLanguage}
-                onChange={(event) => handleFieldChange('nativeLanguage', event.target.value)}
-                placeholder={t('app.profile.nativeLanguage') || 'Native Language'}
+                onChange={(e) => handleFieldChange('nativeLanguage', e.target.value)}
                 disabled={inputsDisabled}
-              />
+                className="h-11 rounded-xl border-2 border-border bg-background pl-3 px-3 text-sm focus:border-primary focus:outline-none"
+              >
+                <option value="">Select Native Language</option>
+                {languages.map((language) => (
+                  <option key={language} value={language}>
+                    {language}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <Input
-                label={t('app.profile.location')}
-                type="text"
+             <div className="flex flex-col gap-2">
+              <label className="text-base font-medium">
+                {t('app.profile.location') || 'Location'}
+              </label>
+
+              <select
                 value={formState.location}
-                onChange={(event) => handleFieldChange('location', event.target.value)}
-                placeholder={t('app.profile.location') || 'Location'}
+                onChange={(e) => handleFieldChange('location', e.target.value)}
                 disabled={inputsDisabled}
-              />
+                className="h-11 rounded-xl border-2 border-border bg-background pl-3 px-3 text-sm focus:border-primary focus:outline-none"
+              >
+                <option value="">Select Country</option>
+                {countries.map((country) => (
+                  <option key={country} value={country}>
+                    {country}
+                  </option>
+                ))}
+              </select>
+            </div>
 
               <Input
                 label={t('app.profile.school')}

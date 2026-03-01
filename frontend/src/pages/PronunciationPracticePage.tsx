@@ -69,7 +69,6 @@ export function PronunciationPracticePage() {
   const [selectedWordIndex, setSelectedWordIndex] = useState<number>(0);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [debugPhonemePayload, setDebugPhonemePayload] = useState(false);
 
   const curriculum = curriculumExampleKo as Curriculum;
   const curriculumMatchesLocale = curriculum.locale === learningLocale;
@@ -249,7 +248,6 @@ export function PronunciationPracticePage() {
         currentPrompt.text,
         learningLocale,
         currentPrompt.id,
-        { debugPhonemePayload }
       );
       let audioUrl: string | undefined;
       if (audioBlob) {
@@ -281,7 +279,7 @@ export function PronunciationPracticePage() {
     } finally {
       setIsSaving(false);
     }
-  }, [assess, currentPrompt, debugPhonemePayload, learningLocale, sessionId, t, selectedScenario]);
+  }, [assess, currentPrompt, learningLocale, sessionId, t, selectedScenario]);
 
   const isBusy = status !== 'idle' || isSaving;
 
@@ -476,16 +474,6 @@ export function PronunciationPracticePage() {
                 {t('app.practice.next')}
               </button>
             </div>
-
-            <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground select-none">
-              <input
-                type="checkbox"
-                checked={debugPhonemePayload}
-                onChange={(event) => setDebugPhonemePayload(event.target.checked)}
-                className="h-3.5 w-3.5 rounded border border-border accent-foreground"
-              />
-              Debug phoneme payload
-            </label>
           </div>
         </div>
 

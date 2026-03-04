@@ -28,7 +28,10 @@ Lingual is an AI-powered platform for learning colloquial/spoken language throug
   - `functions/`: serverless functions (Python) used by the Firebase/GCP deployment.
   - `dataconnect/`: Firebase Data Connect config/schema (optional/experimental).
   - `docs/`: internal documentation.
-  - `templates/`: legacy Flask templates (not used by the React SPA).
+  - `archive/legacy/templates/`: legacy Flask templates (not used by the React SPA).
+  - `archive/legacy/Figma/`: archived Figma export sandbox.
+  - `archive/legacy/design-system/`: archived design-system docs/artifacts.
+  - `archive/legacy/minigames/`, `archive/legacy/minigamelogos/`: archived prototype minigame scripts/assets.
 
 ## Dev commands
 Backend (from repo root):

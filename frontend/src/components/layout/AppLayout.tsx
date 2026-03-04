@@ -76,15 +76,29 @@ export function AppLayout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           {/* Left: Logo & Mobile Menu */}
           <div className="flex items-center gap-4">
-            <button
-              type="button"
-              className="md:hidden p-2 -ml-2 text-foreground hover:bg-secondary rounded-lg border-2 border-foreground transition-colors"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
-              aria-expanded={isMobileMenuOpen}
-            >
-              {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
+            {isMobileMenuOpen ? (
+              <button
+                type="button"
+                className="md:hidden p-2 -ml-2 text-foreground hover:bg-secondary rounded-lg border-2 border-foreground transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+                aria-label="Close navigation menu"
+                aria-expanded="true"
+                aria-controls="mobile-nav-drawer"
+              >
+                <X size={20} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="md:hidden p-2 -ml-2 text-foreground hover:bg-secondary rounded-lg border-2 border-foreground transition-colors"
+                onClick={() => setIsMobileMenuOpen(true)}
+                aria-label="Open navigation menu"
+                aria-expanded="false"
+                aria-controls="mobile-nav-drawer"
+              >
+                <Menu size={20} />
+              </button>
+            )}
             <button
               type="button"
               className="flex items-center gap-3 cursor-pointer"
@@ -224,6 +238,7 @@ export function AppLayout() {
           onClick={() => setIsMobileMenuOpen(false)}
         >
           <motion.div
+            id="mobile-nav-drawer"
             initial={{ x: '-100%' }}
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}

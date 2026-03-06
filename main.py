@@ -71,7 +71,7 @@ def get_openai_client():
         openai_client = OpenAI(api_key=api_key)
     return openai_client
 
-from scoring import load_assessment_data, compute_results, get_sklc_description, SKLC_LEVEL_DESCRIPTIONS
+from scoring import load_assessment_data, compute_results, get_actfl_description
 import database as db
 from backend.route_deps import RouteDeps
 from backend.routes.auth import create_auth_blueprint
@@ -225,10 +225,44 @@ def get_user_proficiency_context():
         return "The user has not completed their assessment yet. Assume beginner level."
 
     global_stage = results.get('global_stage', 0)
+    framework = results.get('framework', 'ACTFL')
     domain_bands = results.get('domain_bands', {})
     domain_scores = results.get('domain_raw_scores', {})
+    band_scale = results.get('band_scale')
+    if band_scale is None:
+        max_band = max(domain_bands.values(), default=0)
+        band_scale = 5 if max_band <= 5 and global_stage <= 5 else 10
 
-    sklc_info = SKLC_LEVEL_DESCRIPTIONS.get(global_stage, SKLC_LEVEL_DESCRIPTIONS[0])
+    proficiency_level = results.get('proficiency_level') or results.get('actfl_level')
+    proficiency_description = (
+        results.get('proficiency_description_en')
+        or results.get('actfl_description_en')
+    )
+    if not proficiency_level or not proficiency_description:
+        proficiency_info = get_actfl_description(global_stage, lang='en')
+        proficiency_level = proficiency_info['level']
+        proficiency_description = proficiency_info['description']
+
+    domain_label_map = {
+        'interpretive_comprehension': 'Interpretive Comprehension',
+        'interpersonal_communication': 'Interpersonal Communication',
+        'presentational_communication': 'Presentational Communication',
+        'language_control': 'Language Control',
+        'pronunciation': 'Pronunciation',
+        # Backward-compatible labels for older stored results.
+        'grammar': 'Grammar',
+        'vocabulary': 'Vocabulary',
+        'pragmatics': 'Pragmatics',
+    }
+
+    domain_lines = []
+    for domain, band in sorted(domain_bands.items(), key=lambda entry: entry[1], reverse=True):
+        label = domain_label_map.get(domain, domain.replace('_', ' ').title())
+        score = float(domain_scores.get(domain, 0.0))
+        domain_lines.append(f"- {label}: Band {band}/{band_scale} (Score: {score:.2f})")
+
+    if not domain_lines:
+        domain_lines = ['- No domain data available.']
 
     # Format frequency string
     frequency_str = f"{frequency} times per {frequency_unit}" if frequency and frequency_unit else 'Not specified'
@@ -237,14 +271,11 @@ def get_user_proficiency_context():
 USER PROFICIENCY PROFILE:
 - Name: {display_name if display_name else 'Not specified'}
 - Age: {age if age else 'Not specified'}
-- Overall Level: {sklc_info['level']} (Stage {global_stage}/5)
-- Description: {sklc_info['description_en']}
+- Overall Level: {proficiency_level} ({framework}, Stage {global_stage}/{band_scale})
+- Description: {proficiency_description}
 
 DOMAIN BREAKDOWN:
-- Grammar: Band {domain_bands.get('grammar', 0)}/5 (Score: {domain_scores.get('grammar', 0):.2f})
-- Vocabulary: Band {domain_bands.get('vocabulary', 0)}/5 (Score: {domain_scores.get('vocabulary', 0):.2f})
-- Pragmatics: Band {domain_bands.get('pragmatics', 0)}/5 (Score: {domain_scores.get('pragmatics', 0):.2f})
-- Pronunciation: Band {domain_bands.get('pronunciation', 0)}/5 (Score: {domain_scores.get('pronunciation', 0):.2f})
+{chr(10).join(domain_lines)}
 
 USER LEARNING PREFERENCES:
 - Learning Intensity: {rigor.capitalize() if rigor else 'Not specified'}
@@ -381,14 +412,15 @@ def build_system_prompt(proficiency_context):
 {proficiency_context}
 
 TEACHING GUIDELINES:
-1. ADAPT to the user's level - use simpler Korean for beginners, more complex for advanced
-2. ALWAYS provide Korean text with romanization for beginners (levels 0-2)
-3. For intermediate+ users (levels 3-5), you can use more Korean with less romanization
-4. CORRECT mistakes gently and explain why
-5. ENCOURAGE the user and celebrate their progress
-6. Mix Korean and English based on their level - more English for beginners
-7. Focus on their WEAK areas based on the domain scores above
-8. Keep responses conversational and not too long
+1. ADAPT to the user's ACTFL level and use only as much complexity as they can handle
+2. For ACTFL Novice learners, keep output short, high-frequency, and include romanization when helpful
+3. For ACTFL Intermediate learners, use mostly Korean with brief English scaffolding as needed
+4. For ACTFL Advanced+ learners, prioritize sustained Korean interaction with nuanced vocabulary
+5. CORRECT mistakes gently and explain why
+6. ENCOURAGE the user and celebrate their progress
+7. Mix Korean and English by proficiency - more English at Novice, less at higher levels
+8. Focus on their WEAK areas based on the domain scores above
+9. Keep responses conversational and not too long
 
 RESPONSE FORMAT:
 - Use natural conversation style
@@ -407,7 +439,7 @@ def register_domain_blueprints():
         get_openai_client=get_openai_client,
         get_assessment=get_assessment,
         compute_results=compute_results,
-        get_sklc_description=get_sklc_description,
+        get_proficiency_description=get_actfl_description,
         login_required=login_required,
         get_user_proficiency_context=get_user_proficiency_context,
         build_system_prompt=build_system_prompt,

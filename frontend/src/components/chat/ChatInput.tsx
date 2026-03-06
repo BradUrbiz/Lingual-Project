@@ -35,7 +35,7 @@ export function ChatInput({
         disabled={disabled}
         autoResize
         rows={1}
-        className="flex-1 min-h-[48px]"
+        className="flex-1 min-h-[48px] text-[10.4px] leading-[1.45]"
       />
       <button
         onClick={onSend}

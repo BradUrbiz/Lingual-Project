@@ -1,10 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   RefreshCcw,
   MessageSquare,
   Mic,
   Loader2,
+  Menu,
+  ChevronLeft,
+  ChevronRight,
+  BookOpen,
+  History,
+  MonitorPlay,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx } from 'clsx';
@@ -20,7 +26,7 @@ import {
 import { ChatInput } from '@/components/chat';
 import { getUserProfile } from '@/api/user';
 import { getAssessmentResults } from '@/api/assessment';
-import { LearningPathCard, ChatSessionsSidebar } from '@/components/learning';
+import { ChatSessionsSidebar } from '@/components/learning';
 import {
   Button,
   Dialog,
@@ -36,6 +42,9 @@ import { useAuth } from '@/hooks/useAuth';
 
 const FALLBACK_AVATAR = '/imgs/landing/student.jpg';
 const AI_AVATAR = '/imgs/avatars/ai.svg';
+const CHAT_AVATAR_ENABLED_KEY = 'lingual:chat:avatarEnabled';
+
+const VrmAvatarPanel = lazy(() => import('@/components/avatar/VrmAvatarPanel'));
 
 const domainBadgeStyles: Record<string, string> = {
   grammar: 'bg-primary/10 text-primary border border-primary/20',
@@ -43,6 +52,10 @@ const domainBadgeStyles: Record<string, string> = {
   cultural: 'bg-secondary text-foreground border border-border',
   pragmatics: 'bg-success/10 text-success border border-success/20',
   pronunciation: 'bg-foreground/10 text-foreground border border-foreground/20',
+  interpretive_comprehension: 'bg-primary/10 text-primary border border-primary/20',
+  interpersonal_communication: 'bg-accent/10 text-accent border border-accent/20',
+  presentational_communication: 'bg-success/10 text-success border border-success/20',
+  language_control: 'bg-foreground/10 text-foreground border border-foreground/20',
 };
 
 export function AppChatPage() {
@@ -60,7 +73,6 @@ export function AppChatPage() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [assessmentResults, setAssessmentResults] = useState<AssessmentResults | null>(null);
   const [profileSummary, setProfileSummary] = useState<UserProfile | null>(null);
-  const refreshTimeoutRef = useRef<number | null>(null);
 
   // Chat mode state
   type Mode = 'text' | 'realtime';
@@ -69,23 +81,36 @@ export function AppChatPage() {
   const [isSendingText, setIsSendingText] = useState(false);
   const [deleteDialogChatId, setDeleteDialogChatId] = useState<string | null>(null);
   const [isDeletingChat, setIsDeletingChat] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+  const [isSidebarDialogOpen, setIsSidebarDialogOpen] = useState(false);
+  const [isAvatarEnabled, setIsAvatarEnabled] = useState(() => {
+    try {
+      const stored = window.localStorage.getItem(CHAT_AVATAR_ENABLED_KEY);
+      if (stored === null) return true;
+      return stored === 'true';
+    } catch {
+      return true;
+    }
+  });
+  const [isDesktop, setIsDesktop] = useState(() => {
+    try {
+      return window.matchMedia?.('(min-width: 1024px)')?.matches ?? false;
+    } catch {
+      return false;
+    }
+  });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentChatIdRef = useRef<string | null>(null);
+  const previousMessageCountRef = useRef(0);
   currentChatIdRef.current = currentChatId;
 
   const handleRealtimeMessage = useCallback((role: 'user' | 'assistant', content: string) => {
     const chatId = currentChatIdRef.current;
     if (!chatId || !content.trim()) return;
 
-    const message: ChatMessage = {
-      id: `${chatId}-${Date.now()}-${role}`,
-      role,
-      content,
-      timestamp: new Date().toISOString(),
-    };
+    const timestamp = new Date().toISOString();
 
-    setHistoryMessages((prev) => [...prev, message]);
     setSessions((prev) => {
       const target = prev.find((session) => session.id === chatId);
       if (!target) return prev;
@@ -98,27 +123,49 @@ export function AppChatPage() {
       const updated = {
         ...target,
         title: updatedTitle,
-        updated_at: message.timestamp,
+        updated_at: timestamp,
         message_count: target.message_count + 1,
         last_message: content,
       };
       return [updated, ...prev.filter((session) => session.id !== chatId)];
     });
 
-    saveMessageToChat(chatId, role, content).catch((err) => {
-      console.error('Failed to save realtime message:', err);
-    });
+    saveMessageToChat(chatId, role, content)
+      .then((response) => {
+        const resolvedTitle = response.title?.trim();
+        if (!resolvedTitle) return;
+        setSessions((prev) => prev.map((session) => (
+          session.id === chatId
+            ? { ...session, title: resolvedTitle }
+            : session
+        )));
+      })
+      .catch((err) => {
+        console.error('Failed to save realtime message:', err);
+      });
   }, []);
 
   const {
     isConnected,
     isListening,
     isSpeaking,
+    messages: realtimeMessages,
+    remoteAudioStream,
     error: realtimeError,
     connect,
     disconnect,
     clearMessages,
   } = useRealtimeChat({ onMessage: handleRealtimeMessage });
+
+  const displayMessages = useMemo(
+    () => [...historyMessages, ...realtimeMessages].sort((a, b) => {
+      const first = Date.parse(a.timestamp);
+      const second = Date.parse(b.timestamp);
+      if (Number.isNaN(first) || Number.isNaN(second)) return 0;
+      return first - second;
+    }),
+    [historyMessages, realtimeMessages]
+  );
 
   const statusLabel = useMemo(() => {
     if (isConnecting) return t('app.learn.status.connecting');
@@ -134,29 +181,17 @@ export function AppChatPage() {
     return t('app.learn.chat.input.disconnected');
   }, [isConnecting, isConnected, t]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(scrollToBottom, [historyMessages]);
-
-  const refreshSessions = useCallback(async () => {
-    try {
-      const updatedSessions = await getChatSessions();
-      setSessions(updatedSessions);
-    } catch (err) {
-      console.error('Failed to refresh sessions:', err);
-    }
+  const scrollToBottom = useCallback((behavior: ScrollBehavior) => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   }, []);
 
-  const scheduleRefreshSessions = useCallback(() => {
-    if (refreshTimeoutRef.current) {
-      window.clearTimeout(refreshTimeoutRef.current);
-    }
-    refreshTimeoutRef.current = window.setTimeout(() => {
-      refreshSessions();
-    }, 1000);
-  }, [refreshSessions]);
+  useEffect(() => {
+    const previousCount = previousMessageCountRef.current;
+    const nextCount = displayMessages.length;
+    const behavior = previousCount === 0 ? 'auto' : nextCount > previousCount ? 'smooth' : 'auto';
+    scrollToBottom(behavior);
+    previousMessageCountRef.current = nextCount;
+  }, [displayMessages, scrollToBottom]);
 
   const loadChat = useCallback(async (chatId: string) => {
     setLoadingChat(true);
@@ -241,9 +276,6 @@ export function AppChatPage() {
     return () => {
       isActive = false;
       disconnect();
-      if (refreshTimeoutRef.current) {
-        window.clearTimeout(refreshTimeoutRef.current);
-      }
     };
   }, [createNewChat, disconnect, loadChat, requestedChatId]);
 
@@ -277,8 +309,14 @@ export function AppChatPage() {
   }, []);
 
   const handleSelectSession = (chatId: string) => {
+    setIsSidebarDialogOpen(false);
     if (chatId === currentChatId) return;
     loadChat(chatId);
+  };
+
+  const handleCreateChatFromSidebar = () => {
+    setIsSidebarDialogOpen(false);
+    createNewChat();
   };
 
   const handleRecordToggle = async () => {
@@ -323,16 +361,16 @@ export function AppChatPage() {
     };
     setHistoryMessages((prev) => [...prev, userMessage]);
 
-    setSessions((prev) => {
-      const target = prev.find((s) => s.id === currentChatId);
-      if (!target) return prev;
-      const updated = {
-        ...target,
-        title: target.message_count === 0 ? (message.length > 30 ? `${message.slice(0, 30)}...` : message) : target.title,
-        updated_at: userMessage.timestamp,
-        message_count: target.message_count + 1,
-        last_message: message,
-      };
+      setSessions((prev) => {
+        const target = prev.find((s) => s.id === currentChatId);
+        if (!target) return prev;
+        const updated = {
+          ...target,
+          title: target.message_count === 0 ? (message.length > 30 ? `${message.slice(0, 30)}...` : message) : target.title,
+          updated_at: userMessage.timestamp,
+          message_count: target.message_count + 1,
+          last_message: message,
+        };
       return [updated, ...prev.filter((s) => s.id !== currentChatId)];
     });
 
@@ -351,6 +389,7 @@ export function AppChatPage() {
         if (!target) return prev;
         const updated = {
           ...target,
+          title: response.title || target.title,
           updated_at: assistantMessage.timestamp,
           message_count: target.message_count + 1,
           last_message: response.response,
@@ -413,6 +452,14 @@ export function AppChatPage() {
   const domainEntries = assessmentResults?.domainBands
     ? Object.entries(assessmentResults.domainBands).sort((a, b) => b[1] - a[1])
     : [];
+  const levelLabel =
+    assessmentResults?.proficiencyLevel ||
+    assessmentResults?.actflLevel ||
+    assessmentResults?.sklcLevel;
+  const levelDescription =
+    assessmentResults?.proficiencyDescription ||
+    assessmentResults?.actflDescription ||
+    assessmentResults?.sklcDescription;
   const getCategoryLabel = (area: string) => {
     const key = `categories.${area}`;
     const translated = t(key);
@@ -434,163 +481,292 @@ export function AppChatPage() {
     : 'bg-slate-100 text-slate-600';
 
   useEffect(() => {
-    if (!currentChatId || historyMessages.length === 0) return;
-    scheduleRefreshSessions();
-  }, [currentChatId, historyMessages.length, scheduleRefreshSessions]);
+    try {
+      window.localStorage.setItem(CHAT_AVATAR_ENABLED_KEY, String(isAvatarEnabled));
+    } catch {
+      // ignore storage failures
+    }
+  }, [isAvatarEnabled]);
+
+  useEffect(() => {
+    let mediaQueryList: MediaQueryList | null = null;
+
+    try {
+      mediaQueryList = window.matchMedia?.('(min-width: 1024px)') ?? null;
+    } catch {
+      mediaQueryList = null;
+    }
+
+    if (!mediaQueryList) return;
+
+    setIsDesktop(mediaQueryList.matches);
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsDesktop(event.matches);
+    };
+
+    if (mediaQueryList.addEventListener) {
+      mediaQueryList.addEventListener('change', handleChange);
+      return () => mediaQueryList?.removeEventListener('change', handleChange);
+    }
+
+    mediaQueryList.addListener(handleChange);
+    return () => mediaQueryList?.removeListener(handleChange);
+  }, []);
 
   return (
-    <div className="grid h-[calc(100vh-8rem)] gap-6 lg:grid-cols-12">
-      <div className="flex h-full min-h-0 flex-col gap-6 lg:col-span-4">
-        {/* Learning Path Card */}
-        <LearningPathCard
-          assessmentResults={assessmentResults}
-          profileSummary={profileSummary}
-          t={t}
-        />
-
-        {/* Sessions Panel */}
-        <ChatSessionsSidebar
-          sessions={sessions}
-          currentChatId={currentChatId}
-          mostRecentSession={mostRecentSession}
-          showResume={showResume}
-          loading={loadingSessions}
-          onSelectSession={handleSelectSession}
-          onCreateNew={createNewChat}
-          onDelete={handleDeleteChat}
-          t={t}
-        />
+    <div className="relative flex h-[calc(100vh-7rem)] min-h-0 gap-3 -mx-2 sm:-mx-3 lg:-mx-3">
+      {/* Sidebar: icon bar is in-flow, expanded panel overlays */}
+      <div className="hidden h-full shrink-0 lg:block w-14">
+        <div className="flex h-full w-14 flex-col items-center gap-3 rounded-2xl border-3 border-foreground bg-card py-3 shadow-stamp">
+          <button
+            type="button"
+            onClick={() => setIsSidebarExpanded((prev) => !prev)}
+            aria-label={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            title={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-foreground transition-colors hover:bg-secondary"
+          >
+            {isSidebarExpanded ? <ChevronLeft size={18} strokeWidth={2.5} /> : <ChevronRight size={18} strokeWidth={2.5} />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsSidebarExpanded(true)}
+            aria-label={t('app.learn.path.title')}
+            title={t('app.learn.path.title')}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <BookOpen size={18} strokeWidth={2.5} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsSidebarExpanded(true)}
+            aria-label={t('app.learn.sessions.title')}
+            title={t('app.learn.sessions.title')}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <History size={18} strokeWidth={2.5} />
+          </button>
+        </div>
       </div>
 
-      {/* Main Chat Panel */}
-      <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border-3 border-foreground bg-card shadow-stamp lg:col-span-8">
-        <div className="z-10 flex items-center justify-between border-b-3 border-foreground bg-card p-4">
-          <div>
-            <div className="flex items-center space-x-2 text-sm text-primary font-bold mb-0.5">
-              <MessageSquare size={16} strokeWidth={2.5} />
-              <span>{t('app.learn.chat.label')}</span>
-            </div>
-            <h2 className="text-lg font-display font-bold text-foreground">
-              {currentSession?.title || t('app.learn.chat.title')}
-            </h2>
-            {(assessmentResults?.sklcLevel || focusBadge || topDomain) && (
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                {assessmentResults?.sklcLevel && (
-                  <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg border border-primary/20">
-                    {t('app.learn.chat.badges.level')} {assessmentResults.sklcLevel}
-                  </span>
-                )}
-                {focusBadge && (
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${focusBadgeClass}`}>
-                    {t('app.learn.chat.badges.focus')} {focusBadge}
-                  </span>
-                )}
-                {topDomain && (
-                  <span
-                    className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
-                      domainBadgeStyles[topDomain[0]] || 'bg-secondary text-muted-foreground border border-border'
-                    }`}
-                  >
-                    {t('app.learn.chat.badges.strength')} {getDomainLabel(topDomain[0])} &bull; {topDomain[1]}/10
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="flex bg-secondary rounded-xl p-1 border-2 border-border">
-              <button
-                type="button"
-                onClick={() => handleModeChange('text')}
-                className={clsx(
-                  'h-10 px-3 rounded-lg text-sm font-bold transition-colors',
-                  mode === 'text'
-                    ? 'bg-card text-primary border-2 border-foreground shadow-stamp-sm'
-                    : 'text-muted-foreground hover:text-foreground border-2 border-transparent'
-                )}
-              >
-                {t('chat.textMode')}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleModeChange('realtime')}
-                className={clsx(
-                  'h-10 px-3 rounded-lg text-sm font-bold transition-colors',
-                  mode === 'realtime'
-                    ? 'bg-card text-primary border-2 border-foreground shadow-stamp-sm'
-                    : 'text-muted-foreground hover:text-foreground border-2 border-transparent'
-                )}
-              >
-                {t('chat.voiceMode')}
-              </button>
-            </div>
-            {mode === 'realtime' && (
-              <div className="hidden sm:flex items-center space-x-2 bg-secondary px-3 py-1.5 rounded-xl border-2 border-border text-sm">
-                <span className="text-muted-foreground">{t('app.learn.chat.status')}</span>
-                <span className="font-bold text-foreground">{statusLabel}</span>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={createNewChat}
-              aria-label={t('app.learn.sessions.newChatTitle')}
-              title={t('app.learn.sessions.newChatTitle')}
-              className="h-10 w-10 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-xl border-2 border-transparent hover:border-border transition-colors"
+      {/* Sidebar expanded overlay panel */}
+      <AnimatePresence initial={false}>
+        {isSidebarExpanded ? (
+          <>
+            <motion.div
+              key="sidebar-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-20 hidden lg:block"
+              onClick={() => setIsSidebarExpanded(false)}
+            />
+            <motion.div
+              key="desktop-sidebar-content"
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -12 }}
+              className="absolute left-[calc(3.5rem+0.75rem)] top-0 z-30 hidden h-full w-[22rem] flex-col gap-4 overflow-hidden lg:flex"
             >
-              <RefreshCcw size={20} strokeWidth={2.5} />
-            </button>
-          </div>
-        </div>
+              <ChatSessionsSidebar
+                sessions={sessions}
+                currentChatId={currentChatId}
+                mostRecentSession={mostRecentSession}
+                showResume={showResume}
+                loading={loadingSessions}
+                onSelectSession={handleSelectSession}
+                onCreateNew={handleCreateChatFromSidebar}
+                onDelete={handleDeleteChat}
+                t={t}
+              />
+            </motion.div>
+          </>
+        ) : null}
+      </AnimatePresence>
 
-        <div className="flex-1 overflow-y-auto p-6 bg-secondary/50 relative">
-          {error || realtimeError ? (
-            <div className="mb-4 p-4 rounded-xl border-2 border-destructive bg-destructive/10 text-sm text-destructive font-medium">
-              {error || realtimeError}
-            </div>
-          ) : null}
-
-          {loadingChat ? (
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {t('app.learn.chat.loading')}
-            </div>
-          ) : historyMessages.length === 0 ? (
-            <div className="text-sm text-muted-foreground">{t('app.learn.chat.empty')}</div>
-          ) : (
-            <div className="space-y-6 max-w-3xl mx-auto pb-32">
-              {historyMessages.map((msg) => {
-                const isUser = msg.role === 'user';
-                return (
-                  <motion.div
-                    key={msg.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={clsx('flex gap-4', isUser ? 'flex-row-reverse' : 'flex-row')}
-                  >
-                    <img
-                      src={isUser ? userAvatar : AI_AVATAR}
-                      alt={isUser ? 'You' : 'Lingual AI'}
-                      className="w-10 h-10 rounded-xl bg-card border-2 border-foreground"
-                    />
-                    <div
-                      className={clsx(
-                        'max-w-[80%] p-4 rounded-2xl text-lg leading-relaxed border-2',
-                        isUser
-                          ? 'bg-primary text-primary-foreground border-foreground rounded-tr-none shadow-stamp-sm'
-                          : 'bg-card text-foreground border-border rounded-tl-none'
-                      )}
-                    >
-                      {msg.content}
+      {/* Main Content: Avatar (5) + Chat (3) */}
+      <div className="flex h-full min-h-0 min-w-0 flex-1 gap-3">
+        {/* Virtual Avatar Panel */}
+        {isAvatarEnabled && isDesktop && (
+          <div className="hidden h-full min-h-0 flex-[5] overflow-hidden rounded-2xl border-3 border-foreground bg-card shadow-stamp lg:flex lg:flex-col">
+            <Suspense
+              fallback={
+                <div className="flex flex-1 items-center justify-center">
+                  <div className="text-center text-muted-foreground">
+                    <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-2xl border-3 border-border bg-secondary">
+                      <span className="text-3xl">🧑‍🏫</span>
                     </div>
-                  </motion.div>
-                );
-              })}
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-        </div>
+                    <p className="text-sm font-bold">{t('app.learn.chat.title')}</p>
+                    <p className="mt-1 text-xs">Loading avatar…</p>
+                  </div>
+                </div>
+              }
+            >
+              <VrmAvatarPanel
+                enabled={isAvatarEnabled}
+                mode={mode}
+                isSpeaking={isSpeaking}
+                isListening={isListening}
+                remoteAudioStream={remoteAudioStream}
+                fallbackSrc={AI_AVATAR}
+                title={t('app.learn.chat.title')}
+              />
+            </Suspense>
+          </div>
+        )}
 
-        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-card via-card to-transparent">
+        {/* Chat Panel */}
+        <div className={clsx(
+          'relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border-3 border-foreground bg-card shadow-stamp',
+          isAvatarEnabled ? 'flex-[3]' : 'flex-1'
+        )}>
+          <div className="z-10 flex items-center justify-between border-b-3 border-foreground bg-card p-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center space-x-2 text-sm text-primary font-bold mb-0.5">
+                <MessageSquare size={16} strokeWidth={2.5} />
+                <span>{t('app.learn.chat.label')}</span>
+              </div>
+              <h2 className="text-base font-display font-bold text-foreground truncate">
+                {currentSession?.title || t('app.learn.chat.title')}
+              </h2>
+              {levelDescription && (
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{levelDescription}</p>
+              )}
+              {(levelLabel || focusBadge || topDomain) && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  {levelLabel && (
+                    <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-lg border border-primary/20">
+                      {levelLabel}
+                    </span>
+                  )}
+                  {focusBadge && (
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${focusBadgeClass}`}>
+                      {focusBadge}
+                    </span>
+                  )}
+                  {topDomain && (
+                    <span
+                      className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
+                        domainBadgeStyles[topDomain[0]] || 'bg-secondary text-muted-foreground border border-border'
+                      }`}
+                    >
+                      {getDomainLabel(topDomain[0])} {topDomain[1]}/10
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center space-x-2 shrink-0 ml-3">
+              <div className="flex bg-secondary rounded-xl p-1 border-2 border-border">
+                <button
+                  type="button"
+                  onClick={() => handleModeChange('text')}
+                  className={clsx(
+                    'h-8 px-2.5 rounded-lg text-xs font-bold transition-colors',
+                    mode === 'text'
+                      ? 'bg-card text-primary border-2 border-foreground shadow-stamp-sm'
+                      : 'text-muted-foreground hover:text-foreground border-2 border-transparent'
+                  )}
+                >
+                  {t('chat.textMode')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleModeChange('realtime')}
+                  className={clsx(
+                    'h-8 px-2.5 rounded-lg text-xs font-bold transition-colors',
+                    mode === 'realtime'
+                      ? 'bg-card text-primary border-2 border-foreground shadow-stamp-sm'
+                      : 'text-muted-foreground hover:text-foreground border-2 border-transparent'
+                  )}
+                >
+                  {t('chat.voiceMode')}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSidebarDialogOpen(true)}
+                aria-label={t('app.learn.sessions.title')}
+                title={t('app.learn.sessions.title')}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-xl border-2 border-border bg-card text-foreground transition-colors hover:bg-secondary lg:hidden"
+              >
+                <Menu size={14} strokeWidth={2.5} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAvatarEnabled((prev) => !prev)}
+                aria-label={isAvatarEnabled ? 'Hide avatar' : 'Show avatar'}
+                title={isAvatarEnabled ? 'Hide avatar' : 'Show avatar'}
+                className={clsx(
+                  'hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-xl border-2 transition-colors',
+                  isAvatarEnabled
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary hover:border-border'
+                )}
+              >
+                <MonitorPlay size={16} strokeWidth={2.5} />
+              </button>
+              <button
+                type="button"
+                onClick={createNewChat}
+                aria-label={t('app.learn.sessions.newChatTitle')}
+                title={t('app.learn.sessions.newChatTitle')}
+                className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-xl border-2 border-transparent hover:border-border transition-colors"
+              >
+                <RefreshCcw size={16} strokeWidth={2.5} />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 bg-secondary/50 relative">
+            {error || realtimeError ? (
+              <div className="mb-4 p-3 rounded-xl border-2 border-destructive bg-destructive/10 text-sm text-destructive font-medium">
+                {error || realtimeError}
+              </div>
+            ) : null}
+
+            {loadingChat ? (
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {t('app.learn.chat.loading')}
+              </div>
+            ) : displayMessages.length === 0 ? (
+              <div className="text-sm text-muted-foreground">{t('app.learn.chat.empty')}</div>
+            ) : (
+              <div className="space-y-3 pb-20">
+                {displayMessages.map((msg) => {
+                  const isUser = msg.role === 'user';
+                  return (
+                    <motion.div
+                      key={msg.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={clsx('flex gap-3', isUser ? 'flex-row-reverse' : 'flex-row')}
+                    >
+                      <img
+                        src={isUser ? userAvatar : AI_AVATAR}
+                        alt={isUser ? 'You' : 'Lingual AI'}
+                        className="w-10 h-10 shrink-0 rounded-xl bg-card border-2 border-foreground object-cover object-center"
+                      />
+                      <div
+                        className={clsx(
+                          'max-w-[85%] px-3 py-2.5 rounded-xl text-[11.7px] leading-[1.45] border-2',
+                          isUser
+                            ? 'bg-primary text-primary-foreground border-foreground rounded-tr-none shadow-stamp-sm'
+                            : 'bg-card text-foreground border-border rounded-tl-none'
+                        )}
+                      >
+                        {msg.content}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+
+          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-card via-card to-transparent">
           <AnimatePresence mode="wait">
             {mode === 'text' ? (
               <motion.div
@@ -616,9 +792,7 @@ export function AppChatPage() {
                 className="flex items-center justify-between gap-4"
               >
                 <div className="flex-1 bg-card border-2 border-border rounded-xl px-4 py-3 text-muted-foreground font-medium">
-                  {isConnected
-                    ? t('app.learn.chat.input.connected')
-                    : t('app.learn.chat.input.disconnected')}
+                  {statusLabel}
                 </div>
                 <button
                   type="button"
@@ -645,6 +819,35 @@ export function AppChatPage() {
           </AnimatePresence>
         </div>
       </div>
+      </div>
+
+      <Dialog open={isSidebarDialogOpen} onOpenChange={setIsSidebarDialogOpen}>
+        <DialogContent className="grid h-[calc(100vh-2rem)] w-[calc(100vw-1.5rem)] max-w-[34rem] grid-rows-[auto_minmax(0,1fr)] gap-4 rounded-2xl border-3 border-foreground bg-background p-4 shadow-stamp lg:hidden">
+          <DialogHeader className="pr-8 text-left">
+            <DialogTitle className="font-display text-lg text-foreground">
+              {t('app.learn.sessions.title')}
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              {t('app.learn.sessions.subtitle')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex min-h-0 flex-col gap-4 overflow-hidden">
+            <div className="min-h-0 flex-1">
+              <ChatSessionsSidebar
+                sessions={sessions}
+                currentChatId={currentChatId}
+                mostRecentSession={mostRecentSession}
+                showResume={showResume}
+                loading={loadingSessions}
+                onSelectSession={handleSelectSession}
+                onCreateNew={handleCreateChatFromSidebar}
+                onDelete={handleDeleteChat}
+                t={t}
+              />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(deleteDialogChatId)}

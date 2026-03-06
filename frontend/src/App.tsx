@@ -9,6 +9,7 @@ import {
   LandingPage,
   AuthPage,
   GeneralPage,
+  InitialOnboardingPage,
   AssessmentPage,
   CategoriesPage,
   ProfilePage,
@@ -37,6 +38,7 @@ function AnimatedRoutes() {
         {/* Protected Routes */}
         <Route element={<ProtectedRoute />}>
           <Route path="/general" element={<GeneralPage />} />
+          <Route path="/onboarding" element={<InitialOnboardingPage />} />
           <Route path="/assessment" element={<AssessmentPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/chat" element={<Navigate to="/app/chat" replace />} />

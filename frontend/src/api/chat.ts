@@ -1,19 +1,5 @@
 import api from './index';
-import type { ChatResponse, ChatSession, ChatSessionDetail } from '../types';
-
-// Legacy single-chat API (kept for compatibility)
-export const sendMessage = async (message: string): Promise<ChatResponse> => {
-  const response = await api.post<ChatResponse>('/chat', { message });
-  return response.data;
-};
-
-export const resetChat = async (): Promise<void> => {
-  await api.post('/chat/reset');
-};
-
-// ============================================
-// Chat Session API (Multi-chat support)
-// ============================================
+import type { ChatSession, ChatSessionDetail } from '../types';
 
 interface GetChatsResponse {
   success: boolean;
@@ -39,6 +25,14 @@ interface SendMessageResponse {
   response: string;
   userMessage: { role: string; content: string; timestamp: string };
   assistantMessage: { role: string; content: string; timestamp: string };
+  title?: string | null;
+  error?: string;
+}
+
+interface SaveMessageResponse {
+  success: boolean;
+  message: { role: string; content: string; timestamp: string };
+  title?: string | null;
   error?: string;
 }
 
@@ -93,12 +87,16 @@ export const saveMessageToChat = async (
   chatId: string,
   role: 'user' | 'assistant',
   content: string
-): Promise<void> => {
-  const response = await api.post<{ success: boolean; error?: string }>(
+): Promise<SaveMessageResponse> => {
+  const response = await api.post<SaveMessageResponse>(
     `/chats/${chatId}/messages/save`,
     { role, content }
   );
+  if (response.data.success) {
+    return response.data;
+  }
   if (!response.data.success) {
     throw new Error(response.data.error || 'Failed to save message');
   }
+  throw new Error('Failed to save message');
 };

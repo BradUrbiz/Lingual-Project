@@ -1,5 +1,14 @@
 import api from './index';
-import type { UserProfile, ProfileFormData, LearningLocale, Language, Gender, Rigor, FrequencyUnit } from '../types';
+import type {
+  UserProfile,
+  ProfileFormData,
+  LearningLocale,
+  Language,
+  Gender,
+  Rigor,
+  FrequencyUnit,
+  AssessmentPreference,
+} from '../types';
 
 export interface ProfileResponse {
   profile_completed: boolean;
@@ -11,6 +20,7 @@ export interface ProfileResponse {
   frequency?: number;
   frequency_unit?: string;
   level_objective?: string;
+  assessment_preference?: AssessmentPreference;
   avatar_url?: string;
   contact_email?: string;
   grade_level?: string;
@@ -19,20 +29,30 @@ export interface ProfileResponse {
   location?: string;
   school_name?: string;
   global_stage?: number;
+  framework?: string;
+  proficiency_level?: string;
+  proficiency_description?: string;
+  actfl_level?: string;
+  actfl_description?: string;
   sklc_level?: string;
   sklc_description?: string;
-  domain_bands?: {
-    grammar: number;
-    vocabulary: number;
-    pragmatics: number;
-    pronunciation: number;
-  };
+  domain_bands?: Record<string, number>;
   selected_categories?: string[];
 }
 
 export const getUserProfile = async (): Promise<UserProfile> => {
   const response = await api.get<ProfileResponse>('/user/profile');
   const data = response.data;
+
+  const proficiencyLevel =
+    data.proficiency_level ||
+    data.actfl_level ||
+    data.sklc_level;
+
+  const proficiencyDescription =
+    data.proficiency_description ||
+    data.actfl_description ||
+    data.sklc_description;
 
   return {
     profileCompleted: data.profile_completed,
@@ -44,6 +64,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     frequency: data.frequency,
     frequencyUnit: data.frequency_unit as FrequencyUnit | undefined,
     levelObjective: data.level_objective,
+    assessmentPreference: data.assessment_preference,
     avatarUrl: data.avatar_url,
     contactEmail: data.contact_email,
     gradeLevel: data.grade_level,
@@ -51,9 +72,14 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     learningLocale: data.learning_locale as LearningLocale | undefined,
     location: data.location,
     schoolName: data.school_name,
+    framework: data.framework || 'ACTFL',
     globalStage: data.global_stage,
-    sklcLevel: data.sklc_level,
-    sklcDescription: data.sklc_description,
+    proficiencyLevel,
+    proficiencyDescription,
+    actflLevel: data.actfl_level || proficiencyLevel,
+    actflDescription: data.actfl_description || proficiencyDescription,
+    sklcLevel: data.sklc_level || proficiencyLevel,
+    sklcDescription: data.sklc_description || proficiencyDescription,
     domainBands: data.domain_bands,
     selectedCategories: data.selected_categories,
   };
@@ -68,6 +94,7 @@ export const updateProfile = async (profile: ProfileFormData, isEdit = false): P
     frequency: profile.frequency,
     frequencyUnit: profile.frequencyUnit,
     levelObjective: profile.levelObjective,
+    assessmentPreference: profile.assessmentPreference,
     isEdit,
   };
 
@@ -84,4 +111,25 @@ export const updateProfile = async (profile: ProfileFormData, isEdit = false): P
 
 export const setLanguage = async (language: Language): Promise<void> => {
   await api.post('/set-language', { language });
+};
+
+export const saveInitialOnboarding = async (
+  learningLocale: LearningLocale,
+  assessmentPreference: AssessmentPreference
+): Promise<void> => {
+  try {
+    await api.post('/onboarding/initial', { learningLocale, assessmentPreference });
+  } catch (error: unknown) {
+    const status = (error as { response?: { status?: number } })?.response?.status;
+    if (status !== 404 && status !== 405) {
+      throw error;
+    }
+
+    // Backward-compatible fallback for backend versions without /api/onboarding/initial.
+    await api.post('/profile', {
+      learningLocale,
+      assessmentPreference,
+      isEdit: false,
+    });
+  }
 };

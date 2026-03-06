@@ -39,24 +39,53 @@ export const skipAssessmentQuestion = async (itemId: string): Promise<SubmitResp
 export const getAssessmentResults = async (): Promise<AssessmentResults> => {
   const response = await api.get<{
     success: boolean;
+    framework?: string;
     results: {
+      framework?: string;
+      band_scale?: number;
       global_stage: number;
-      domain_bands: {
-        grammar: number;
-        vocabulary: number;
-        pragmatics: number;
-        pronunciation: number;
-      };
+      domain_bands: Record<string, number>;
+      proficiency_level?: string;
+      proficiency_description_en?: string;
+      actfl_level?: string;
+      actfl_description_en?: string;
     };
-    sklcLevel: string;
-    sklcDescription: string;
+    proficiencyLevel?: string;
+    proficiencyDescription?: string;
+    actflLevel?: string;
+    actflDescription?: string;
+    sklcLevel?: string;
+    sklcDescription?: string;
   }>('/assessment/results');
 
+  const proficiencyLevel =
+    response.data.proficiencyLevel ||
+    response.data.actflLevel ||
+    response.data.results.proficiency_level ||
+    response.data.results.actfl_level ||
+    response.data.sklcLevel ||
+    '';
+
+  const proficiencyDescription =
+    response.data.proficiencyDescription ||
+    response.data.actflDescription ||
+    response.data.results.proficiency_description_en ||
+    response.data.results.actfl_description_en ||
+    response.data.sklcDescription ||
+    '';
+
   return {
+    framework: response.data.framework || response.data.results.framework || 'ACTFL',
+    bandScale: response.data.results.band_scale,
     globalStage: response.data.results.global_stage,
     domainBands: response.data.results.domain_bands,
-    sklcLevel: response.data.sklcLevel,
-    sklcDescription: response.data.sklcDescription,
+    proficiencyLevel,
+    proficiencyDescription,
+    actflLevel: response.data.actflLevel || response.data.results.actfl_level || proficiencyLevel,
+    actflDescription:
+      response.data.actflDescription || response.data.results.actfl_description_en || proficiencyDescription,
+    sklcLevel: response.data.sklcLevel || proficiencyLevel,
+    sklcDescription: response.data.sklcDescription || proficiencyDescription,
   };
 };
 

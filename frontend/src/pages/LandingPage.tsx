@@ -57,8 +57,12 @@ export function LandingPage() {
       if (profile.profileCompleted) {
         if (profile.assessed) {
           navigate('/app/learn');
-        } else {
+        } else if (profile.assessmentPreference === 'skip') {
+          navigate('/app/learn');
+        } else if (profile.assessmentPreference === 'take') {
           navigate('/assessment');
+        } else {
+          navigate('/onboarding');
         }
       } else {
         navigate('/general');

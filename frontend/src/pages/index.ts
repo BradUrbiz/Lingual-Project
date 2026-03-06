@@ -1,6 +1,7 @@
 export { LandingPage } from './LandingPage';
 export { AuthPage } from './AuthPage';
 export { GeneralPage } from './GeneralPage';
+export { InitialOnboardingPage } from './InitialOnboardingPage';
 export { AssessmentPage } from './AssessmentPage';
 export { CategoriesPage } from './CategoriesPage';
 export { ChatPage } from './ChatPage';

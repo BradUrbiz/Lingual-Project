@@ -12,7 +12,7 @@ class RouteDeps:
     get_openai_client: Callable[[], Any]
     get_assessment: Callable[[], dict]
     compute_results: Callable[[dict, dict], dict]
-    get_sklc_description: Callable[[int], Mapping[str, str]]
+    get_proficiency_description: Callable[..., Mapping[str, str]]
     login_required: Callable[[Callable[..., Any]], Callable[..., Any]]
     get_user_proficiency_context: Callable[[], str]
     build_system_prompt: Callable[[str], str]

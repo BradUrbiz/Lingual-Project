@@ -9,6 +9,7 @@ export interface User {
 export type Gender = 'male' | 'female' | 'other' | 'prefer_not_to_say';
 export type Rigor = 'light' | 'casual' | 'moderate' | 'serious' | 'intense';
 export type FrequencyUnit = 'day' | 'week' | 'month';
+export type AssessmentPreference = 'take' | 'skip';
 
 export interface ProfileFormData {
   displayName: string;
@@ -19,6 +20,7 @@ export interface ProfileFormData {
   frequencyUnit: FrequencyUnit | null;
   levelObjective: string;
   learningLocale?: LearningLocale;
+  assessmentPreference?: AssessmentPreference;
   avatarUrl?: string;
   contactEmail?: string;
   gradeLevel?: string;
@@ -49,17 +51,19 @@ export interface UserProfile {
   frequencyUnit?: FrequencyUnit;
   levelObjective?: string;
   learningLocale?: LearningLocale;
+  assessmentPreference?: AssessmentPreference;
 
   // Assessment results
+  framework?: string;
   globalStage?: number;
+  proficiencyLevel?: string;
+  proficiencyDescription?: string;
+  actflLevel?: string;
+  actflDescription?: string;
+  // Backward-compatible aliases.
   sklcLevel?: string;
   sklcDescription?: string;
-  domainBands?: {
-    grammar: number;
-    vocabulary: number;
-    pragmatics: number;
-    pronunciation: number;
-  };
+  domainBands?: Record<string, number>;
   selectedCategories?: string[];
 }
 
@@ -100,15 +104,17 @@ export interface AssessmentState {
 }
 
 export interface AssessmentResults {
+  framework?: string;
+  bandScale?: number;
   globalStage: number;
-  domainBands: {
-    grammar: number;
-    vocabulary: number;
-    pragmatics: number;
-    pronunciation: number;
-  };
-  sklcLevel: string;
-  sklcDescription: string;
+  domainBands: Record<string, number>;
+  proficiencyLevel: string;
+  proficiencyDescription: string;
+  actflLevel?: string;
+  actflDescription?: string;
+  // Backward-compatible aliases.
+  sklcLevel?: string;
+  sklcDescription?: string;
 }
 
 // Chat Types
@@ -141,12 +147,6 @@ export interface ChatSessionDetail {
   created_at: string;
   updated_at: string;
   messages: RawChatMessage[];
-}
-
-export interface ChatResponse {
-  success: boolean;
-  response?: string;
-  error?: string;
 }
 
 // Pronunciation Types

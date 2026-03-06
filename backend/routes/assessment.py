@@ -103,13 +103,26 @@ def create_assessment_blueprint(deps: RouteDeps) -> Blueprint:
 
         if results:
             global_stage = results.get('global_stage', 0)
-            sklc_info = deps.get_sklc_description(global_stage)
+
+            proficiency_level = results.get('proficiency_level')
+            proficiency_description = results.get('proficiency_description_en')
+
+            if not proficiency_level or not proficiency_description:
+                fallback_info = deps.get_proficiency_description(global_stage)
+                proficiency_level = fallback_info['level']
+                proficiency_description = fallback_info['description']
 
             return jsonify({
                 'success': True,
                 'results': results,
-                'sklcLevel': sklc_info['level'],
-                'sklcDescription': sklc_info['description'],
+                'framework': results.get('framework', 'ACTFL'),
+                'proficiencyLevel': proficiency_level,
+                'proficiencyDescription': proficiency_description,
+                'actflLevel': results.get('actfl_level', proficiency_level),
+                'actflDescription': results.get('actfl_description_en', proficiency_description),
+                # Backward-compatible aliases for existing frontend consumers.
+                'sklcLevel': proficiency_level,
+                'sklcDescription': proficiency_description,
             })
 
         return jsonify({'success': False, 'error': 'No results available'}), 404

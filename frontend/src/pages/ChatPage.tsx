@@ -676,7 +676,7 @@ export function ChatPage() {
           className="hidden lg:flex lg:flex-col w-72 h-full"
         >
           <ProfileSidebar
-            level={profile?.sklcLevel}
+            level={profile?.proficiencyLevel || profile?.actflLevel || profile?.sklcLevel}
             goals={profile?.levelObjective}
             onClearChat={handleBackToList}
             onMinigameSelect={handleMinigameCommand}

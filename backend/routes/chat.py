@@ -1,7 +1,7 @@
 import os
 
 import requests
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, request
 
 from backend.route_deps import RouteDeps
 
@@ -86,7 +86,8 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                         'type': 'server_vad',
                         'threshold': 0.5,
                         'prefix_padding_ms': 300,
-                        'silence_duration_ms': 500,
+                        'silence_duration_ms': 350,
+                        'interrupt_response': True,
                     },
                 },
             )
@@ -107,57 +108,6 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
 
         except Exception as e:
             return jsonify({'error': str(e), 'success': False}), 500
-
-    @bp.route('/api/chat', methods=['POST'])
-    @deps.login_required
-    def api_chat():
-        uid = deps.get_current_user_uid()
-        data = request.get_json() or {}
-        user_message = data.get('message', '').strip()
-
-        if not user_message:
-            return jsonify({'error': 'Message is required'}), 400
-
-        if not os.environ.get('OPENAI_API_KEY'):
-            return jsonify({'error': 'OpenAI API key not configured'}), 500
-
-        chat_history = deps.db.get_chat_history(uid, limit=20)
-        proficiency_context = deps.get_user_proficiency_context()
-        system_prompt = deps.build_system_prompt(proficiency_context)
-
-        messages = [{'role': 'system', 'content': system_prompt}]
-        for msg in chat_history[-10:]:
-            messages.append({'role': msg['role'], 'content': msg['content']})
-        messages.append({'role': 'user', 'content': user_message})
-
-        try:
-            client = deps.get_openai_client()
-            if not client:
-                return jsonify({'error': 'OpenAI API key not configured', 'success': False}), 500
-
-            response = client.chat.completions.create(
-                model='gpt-4o-mini',
-                messages=messages,
-                max_tokens=500,
-                temperature=0.7,
-            )
-
-            assistant_message = response.choices[0].message.content
-            deps.db.append_chat_message(uid, 'user', user_message)
-            deps.db.append_chat_message(uid, 'assistant', assistant_message)
-
-            return jsonify({'response': assistant_message, 'success': True})
-
-        except Exception as e:
-            return jsonify({'error': str(e), 'success': False}), 500
-
-    @bp.route('/api/chat/reset', methods=['POST'])
-    @deps.login_required
-    def api_chat_reset():
-        uid = deps.get_current_user_uid()
-        session.pop('chat_history', None)
-        deps.db.clear_chat_history(uid)
-        return jsonify({'success': True, 'message': 'Chat history cleared'})
 
     @bp.route('/api/chats', methods=['GET'])
     @deps.login_required
@@ -246,6 +196,7 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 return jsonify({'success': False, 'error': 'Chat not found'}), 404
 
             message = deps.db.add_message_to_chat(uid, chat_id, role, content)
+            resolved_title = None
 
             chat_messages = chat.get('messages', [])
             if len(chat_messages) == 0 and role == 'user':
@@ -253,7 +204,7 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     client = deps.get_openai_client()
                     if client:
                         title_response = client.chat.completions.create(
-                            model='gpt-4o-mini',
+                            model='gpt-5-mini-2025-08-07',
                             messages=[
                                 {
                                     'role': 'system',
@@ -261,16 +212,15 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                                 },
                                 {'role': 'user', 'content': f'User message: {content}'},
                             ],
-                            max_tokens=30,
-                            temperature=0.5,
-                        )
-                        title = title_response.choices[0].message.content.strip()[:40]
-                        deps.db.update_chat_title(uid, chat_id, title)
+                            max_completion_tokens=1024,
+                            )
+                        resolved_title = title_response.choices[0].message.content.strip()[:40]
+                        deps.db.update_chat_title(uid, chat_id, resolved_title)
                 except Exception:
-                    title = content[:30] + ('...' if len(content) > 30 else '')
-                    deps.db.update_chat_title(uid, chat_id, title)
+                    resolved_title = content[:30] + ('...' if len(content) > 30 else '')
+                    deps.db.update_chat_title(uid, chat_id, resolved_title)
 
-            return jsonify({'success': True, 'message': message})
+            return jsonify({'success': True, 'message': message, 'title': resolved_title})
 
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
@@ -308,20 +258,20 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 return jsonify({'success': False, 'error': 'OpenAI client not initialized'}), 500
 
             response = client.chat.completions.create(
-                model='gpt-4o-mini',
+                model='gpt-5-mini-2025-08-07',
                 messages=messages,
-                max_tokens=500,
-                temperature=0.7,
+                max_completion_tokens=8192,
             )
 
             assistant_message = response.choices[0].message.content
             user_msg = deps.db.add_message_to_chat(uid, chat_id, 'user', user_message)
             assistant_msg = deps.db.add_message_to_chat(uid, chat_id, 'assistant', assistant_message)
+            resolved_title = None
 
             if len(chat_messages) == 0:
                 try:
                     title_response = client.chat.completions.create(
-                        model='gpt-4o-mini',
+                        model='gpt-5-mini-2025-08-07',
                         messages=[
                             {
                                 'role': 'system',
@@ -332,19 +282,19 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                                 'content': f'User: {user_message}\nAssistant: {assistant_message[:200]}',
                             },
                         ],
-                        max_tokens=30,
-                        temperature=0.5,
+                        max_completion_tokens=1024,
                     )
-                    title = title_response.choices[0].message.content.strip()[:40]
+                    resolved_title = title_response.choices[0].message.content.strip()[:40]
                 except Exception:
-                    title = user_message[:30] + ('...' if len(user_message) > 30 else '')
-                deps.db.update_chat_title(uid, chat_id, title)
+                    resolved_title = user_message[:30] + ('...' if len(user_message) > 30 else '')
+                deps.db.update_chat_title(uid, chat_id, resolved_title)
 
             return jsonify({
                 'success': True,
                 'response': assistant_message,
                 'userMessage': user_msg,
                 'assistantMessage': assistant_msg,
+                'title': resolved_title,
             })
 
         except Exception as e:

@@ -73,32 +73,19 @@ export function AppLayout() {
       <Toaster position="top-right" richColors />
       {/* Top Navigation */}
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b-3 border-foreground">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-6 h-20 flex items-center justify-between">
           {/* Left: Logo & Mobile Menu */}
           <div className="flex items-center gap-4">
-            {isMobileMenuOpen ? (
-              <button
-                type="button"
-                className="md:hidden p-2 -ml-2 text-foreground hover:bg-secondary rounded-lg border-2 border-foreground transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-                aria-label="Close navigation menu"
-                aria-expanded="true"
-                aria-controls="mobile-nav-drawer"
-              >
-                <X size={20} />
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="md:hidden p-2 -ml-2 text-foreground hover:bg-secondary rounded-lg border-2 border-foreground transition-colors"
-                onClick={() => setIsMobileMenuOpen(true)}
-                aria-label="Open navigation menu"
-                aria-expanded="false"
-                aria-controls="mobile-nav-drawer"
-              >
-                <Menu size={20} />
-              </button>
-            )}
+            <button
+              type="button"
+              className="md:hidden p-2 -ml-2 text-foreground hover:bg-secondary rounded-lg border-2 border-foreground transition-colors"
+              onClick={() => setIsMobileMenuOpen((open) => !open)}
+              aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-nav-drawer"
+            >
+              {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
             <button
               type="button"
               className="flex items-center gap-3 cursor-pointer"
@@ -203,7 +190,7 @@ export function AppLayout() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 md:pb-8">
+      <main className="flex-1 max-w-screen-2xl w-full mx-auto px-4 sm:px-6 lg:px-6 py-6 pb-28 md:pb-6">
         <Outlet />
       </main>
 

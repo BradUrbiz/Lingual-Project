@@ -85,8 +85,12 @@ export function GeneralPage() {
       if (profile.profileCompleted && !isEditMode) {
         if (profile.assessed) {
           navigate('/chat', { replace: true });
-        } else {
+        } else if (profile.assessmentPreference === 'skip') {
+          navigate('/app/learn', { replace: true });
+        } else if (profile.assessmentPreference === 'take') {
           navigate('/assessment', { replace: true });
+        } else {
+          navigate('/onboarding', { replace: true });
         }
         return;
       }
@@ -168,7 +172,7 @@ export function GeneralPage() {
       if (isEditMode) {
         navigate('/profile');
       } else {
-        navigate('/assessment');
+        navigate('/onboarding');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save profile');

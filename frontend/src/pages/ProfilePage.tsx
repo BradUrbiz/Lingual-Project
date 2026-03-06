@@ -174,6 +174,10 @@ export function ProfilePage() {
     vocabulary: t('profile.vocabulary') || 'Vocabulary',
     pragmatics: t('profile.pragmatics') || 'Pragmatics',
     pronunciation: t('profile.pronunciation') || 'Pronunciation',
+    interpretive_comprehension: 'Interpretive Comprehension',
+    interpersonal_communication: 'Interpersonal Communication',
+    presentational_communication: 'Presentational Communication',
+    language_control: 'Language Control',
   };
 
   const genderLabels: Record<string, string> = {
@@ -221,8 +225,20 @@ export function ProfilePage() {
   const displayName = profile?.displayName || user?.name || 'User';
   const selectedCategories = profile?.selectedCategories ?? [];
   const resolvedDomainBands = assessmentResults?.domainBands || profile?.domainBands;
-  const resolvedSklcLevel = assessmentResults?.sklcLevel || profile?.sklcLevel;
-  const resolvedSklcDescription = assessmentResults?.sklcDescription || profile?.sklcDescription;
+  const resolvedProficiencyLevel =
+    assessmentResults?.proficiencyLevel ||
+    assessmentResults?.actflLevel ||
+    assessmentResults?.sklcLevel ||
+    profile?.proficiencyLevel ||
+    profile?.actflLevel ||
+    profile?.sklcLevel;
+  const resolvedProficiencyDescription =
+    assessmentResults?.proficiencyDescription ||
+    assessmentResults?.actflDescription ||
+    assessmentResults?.sklcDescription ||
+    profile?.proficiencyDescription ||
+    profile?.actflDescription ||
+    profile?.sklcDescription;
   const hasAssessment = Boolean(profile?.assessed || assessmentResults);
   const categoryLabelMap: Record<string, string> = {
     grammar: 'Grammar',
@@ -262,6 +278,10 @@ export function ProfilePage() {
     vocabulary: { bar: 'bg-accent', chip: 'bg-accent/10 text-accent', icon: BookOpen },
     pragmatics: { bar: 'bg-success', chip: 'bg-success/10 text-success', icon: MessageCircle },
     pronunciation: { bar: 'bg-destructive', chip: 'bg-destructive/10 text-destructive', icon: Mic },
+    interpretive_comprehension: { bar: 'bg-primary', chip: 'bg-primary/10 text-primary', icon: BookOpen },
+    interpersonal_communication: { bar: 'bg-accent', chip: 'bg-accent/10 text-accent', icon: MessageCircle },
+    presentational_communication: { bar: 'bg-success', chip: 'bg-success/10 text-success', icon: Type },
+    language_control: { bar: 'bg-destructive', chip: 'bg-destructive/10 text-destructive', icon: Mic },
   };
 
   const personalInfoItems = [
@@ -349,12 +369,12 @@ export function ProfilePage() {
                         </div>
                       )}
                     </div>
-                    {(resolvedSklcLevel || hasAssessment || getFrequencyText() || focusLabel) && (
+                    {(resolvedProficiencyLevel || hasAssessment || getFrequencyText() || focusLabel) && (
                       <div className="mt-4 flex flex-wrap justify-center gap-2">
-                        {resolvedSklcLevel && (
+                        {resolvedProficiencyLevel && (
                           <Badge variant="default">
                             <Star className="h-3 w-3 mr-1" />
-                            Level {resolvedSklcLevel}
+                            Level {resolvedProficiencyLevel}
                           </Badge>
                         )}
                         {hasAssessment && (
@@ -561,17 +581,17 @@ export function ProfilePage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6 pt-6">
-                    {resolvedSklcLevel && (
+                    {resolvedProficiencyLevel && (
                       <div className="text-center p-6 bg-primary/10 border-2 border-primary rounded-xl">
                         <p className="text-sm text-muted-foreground mb-1 font-semibold">
                           {t('profile.yourLevel') || 'Your Level'}
                         </p>
                         <p className="text-3xl font-display font-bold text-primary">
-                          {resolvedSklcLevel}
+                          {resolvedProficiencyLevel}
                         </p>
-                        {resolvedSklcDescription && (
+                        {resolvedProficiencyDescription && (
                           <p className="text-sm text-muted-foreground mt-2">
-                            {resolvedSklcDescription}
+                            {resolvedProficiencyDescription}
                           </p>
                         )}
                       </div>

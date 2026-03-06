@@ -17,6 +17,14 @@ interface LearningPathCardProps {
 
 export function LearningPathCard({ assessmentResults, profileSummary, t }: LearningPathCardProps) {
   const focusAreas = profileSummary?.selectedCategories ?? [];
+  const levelLabel =
+    assessmentResults?.proficiencyLevel ||
+    assessmentResults?.actflLevel ||
+    assessmentResults?.sklcLevel;
+  const levelDescription =
+    assessmentResults?.proficiencyDescription ||
+    assessmentResults?.actflDescription ||
+    assessmentResults?.sklcDescription;
   const domainEntries = assessmentResults?.domainBands
     ? Object.entries(assessmentResults.domainBands).sort((a, b) => b[1] - a[1])
     : [];
@@ -29,7 +37,7 @@ export function LearningPathCard({ assessmentResults, profileSummary, t }: Learn
   };
 
   return (
-    <div className="shrink-0 bg-card rounded-2xl border-3 border-foreground shadow-stamp p-4">
+    <div className="shrink-0 overflow-hidden bg-card rounded-2xl border-3 border-foreground shadow-stamp p-4">
       <div className="flex items-center justify-between mb-2">
         <div>
           <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
@@ -39,9 +47,9 @@ export function LearningPathCard({ assessmentResults, profileSummary, t }: Learn
             {t('app.learn.path.title')}
           </h2>
         </div>
-        {assessmentResults?.sklcLevel ? (
+        {levelLabel ? (
           <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg border border-primary/20">
-            {t('app.learn.path.level')} {assessmentResults.sklcLevel}
+            {t('app.learn.path.level')} {levelLabel}
           </span>
         ) : (
           <span className="text-xs font-bold text-muted-foreground bg-secondary px-2.5 py-1 rounded-lg border border-border">
@@ -49,8 +57,8 @@ export function LearningPathCard({ assessmentResults, profileSummary, t }: Learn
           </span>
         )}
       </div>
-      {assessmentResults?.sklcDescription ? (
-        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{assessmentResults.sklcDescription}</p>
+      {levelDescription ? (
+        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{levelDescription}</p>
       ) : (
         <div className="mb-3 rounded-xl border-2 border-border bg-secondary p-3">
           <p className="text-sm font-display font-bold text-foreground">

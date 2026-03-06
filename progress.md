@@ -61,3 +61,52 @@ Original prompt: "read and understand our app's purpose (both PRD and AGENTS.md 
 - `npm run lint` (frontend): pass
 - `npm run test` (frontend): pass
 - `npm run build` (frontend): pass (warnings only: CSS @import order, large bundle chunk)
+
+---
+
+## 2026-03-05 - /app/chat 레이아웃 대폭 개선
+
+### 문제
+채팅 페이지의 여백이 과도하게 많아 화면 공간을 비효율적으로 사용하고 있었음. 글자 크기를 줄인 후 여백이 더 눈에 띄게 됨.
+
+### 변경 사항
+
+#### 1. 여백/패딩 최적화 (AppChatPage + AppLayout)
+- **AppLayout 전역**: `max-w-7xl` (1280px) -> `max-w-screen-2xl` (1536px), `px-8` -> `px-6`
+- **AppLayout 수직**: `py-8` -> `py-6`
+- **채팅 메시지 영역**: `p-6` -> `p-4`
+- **메시지 간 간격**: `space-y-6` -> `space-y-3`
+- **플로팅 인풋 하단 여백**: `pb-32` -> `pb-20`, `p-6` -> `p-4`
+- **메시지 컨테이너**: `max-w-3xl mx-auto` 제거 (개별 버블에 `max-w-[85%]`로 충분)
+- **음수 마진**: `-mx-2 sm:-mx-3 lg:-mx-3`으로 부모 패딩 부분 상쇄
+
+#### 2. 사이드바 오버레이 전환
+- **Before**: 사이드바 확장 시 다른 컴포넌트를 밀어내는 방식 (`transition-[width]`)
+- **After**: 아이콘 바(`w-14`)는 레이아웃 고정, 확장 패널은 `absolute` + `z-30`으로 오버레이
+- 투명 백드롭 클릭으로 사이드바 닫기 지원
+
+#### 3. LearningPathCard 통합
+- 사이드바에서 LearningPathCard 위젯 제거 (데스크톱 + 모바일 다이얼로그)
+- 해당 정보(레벨, 포커스 영역, 도메인 점수)는 이미 채팅 헤더 뱃지에 표시됨
+- 채팅 헤더에 `levelDescription` 한 줄 추가 (`line-clamp-1`)
+
+#### 4. 버추얼 아바타 공간 (5:3 분할)
+- 메인 채팅 영역을 **아바타(flex-[5])** + **채팅(flex-[3])** 으로 분할
+- 아바타 패널: placeholder UI (추후 3D/2D 아바타 연동)
+- 아바타 on/off 토글 버튼 (`MonitorPlay` 아이콘) 추가
+  - ON: 5:3 비율, 아바타 패널 표시
+  - OFF: 채팅이 `flex-1`로 전체 너비 차지
+- 데스크톱에서만 표시 (`hidden lg:inline-flex`)
+
+### 수정된 파일
+- `frontend/src/pages/AppChatPage.tsx` - 레이아웃, 사이드바 오버레이, 아바타 분할
+- `frontend/src/components/layout/AppLayout.tsx` - max-width, padding 조정
+- `frontend/src/components/learning/LearningPathCard.tsx` - overflow-hidden 추가
+
+### 검증
+- TypeScript 컴파일: pass (`tsc --noEmit`)
+
+### TODO
+- 아바타 패널에 실제 3D/2D 버추얼 아바타 연동
+- 아바타 on/off 상태 localStorage 저장 (세션 유지)
+- 모바일 레이아웃에서 아바타 패널 처리 (현재 `hidden lg:flex`)

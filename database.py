@@ -15,6 +15,7 @@ Schema:
         - frequency: int (how many times)
         - frequency_unit: str ('day', 'week', 'month')
         - level_objective: str (user's goal description)
+        - assessment_preference: str ('take' | 'skip' | None)
         - ui_language: str ('en' or 'ko')
         - learning_locale: str ('ko-KR', 'es-ES', 'fr-FR')
         - avatar_url: str (profile image URL or data URI)
@@ -29,9 +30,12 @@ Schema:
         - completed: bool
         - completed_at: timestamp (optional)
     - results:
-        - global_stage: int (0-5)
+        - framework: str (e.g., "ACTFL")
+        - global_stage: int (normalized proficiency index, typically 0-10)
         - domain_bands: dict (domain -> band)
         - domain_raw_scores: dict (domain -> score)
+        - proficiency_level: str (e.g., "Intermediate Mid")
+        - proficiency_description_en: str
         - item_scores: dict (item_id -> score)
     - selected_categories: list[str]
     - chat_history: list[dict] (role, content) [DEPRECATED - kept for migration]
@@ -90,6 +94,7 @@ def create_user(uid, email, name):
             'frequency': None,
             'frequency_unit': None,
             'level_objective': '',
+            'assessment_preference': None,
             'ui_language': 'en',
             'learning_locale': 'ko-KR',
             'avatar_url': '',
@@ -132,7 +137,8 @@ def get_or_create_user(uid, email, name):
 
 def update_user_profile(uid, display_name=None, age=None, gender=None,
                         rigor=None, frequency=None, frequency_unit=None,
-                        level_objective=None, ui_language=None, learning_locale=None,
+                        level_objective=None, assessment_preference=None,
+                        ui_language=None, learning_locale=None,
                         avatar_url=None, contact_email=None, grade_level=None,
                         native_language=None, location=None, school_name=None):
     """Update user profile fields."""
@@ -153,6 +159,8 @@ def update_user_profile(uid, display_name=None, age=None, gender=None,
         updates['profile.frequency_unit'] = frequency_unit
     if level_objective is not None:
         updates['profile.level_objective'] = level_objective
+    if assessment_preference is not None:
+        updates['profile.assessment_preference'] = assessment_preference
     if ui_language is not None:
         updates['profile.ui_language'] = ui_language
     if learning_locale is not None:
@@ -237,56 +245,6 @@ def update_selected_categories(uid, categories):
     })
 
 
-def get_chat_history(uid, limit=20):
-    """Get user's recent chat history."""
-    user = get_user(uid)
-    if user:
-        history = user.get('chat_history', [])
-        return history[-limit:] if len(history) > limit else history
-    return []
-
-
-def append_chat_message(uid, role, content):
-    """Append a message to chat history."""
-    user_ref = get_user_ref(uid)
-    user_ref.update({
-        'chat_history': firestore.ArrayUnion([{
-            'role': role,
-            'content': content,
-            'timestamp': datetime.utcnow().isoformat()
-        }]),
-        'updated_at': firestore.SERVER_TIMESTAMP
-    })
-
-
-def save_chat_history(uid, messages):
-    """Save full chat history (for bulk updates)."""
-    user_ref = get_user_ref(uid)
-    # Add timestamps to messages if not present
-    timestamped_messages = []
-    for msg in messages:
-        if 'timestamp' not in msg:
-            msg_copy = msg.copy()
-            msg_copy['timestamp'] = datetime.utcnow().isoformat()
-            timestamped_messages.append(msg_copy)
-        else:
-            timestamped_messages.append(msg)
-
-    user_ref.update({
-        'chat_history': timestamped_messages,
-        'updated_at': firestore.SERVER_TIMESTAMP
-    })
-
-
-def clear_chat_history(uid):
-    """Clear user's chat history."""
-    user_ref = get_user_ref(uid)
-    user_ref.update({
-        'chat_history': [],
-        'updated_at': firestore.SERVER_TIMESTAMP
-    })
-
-
 def get_user_profile_context(uid):
     """Get user profile data for AI context."""
     user = get_user(uid)
@@ -300,6 +258,7 @@ def get_user_profile_context(uid):
             'frequency': profile.get('frequency'),
             'frequency_unit': profile.get('frequency_unit'),
             'level_objective': profile.get('level_objective', ''),
+            'assessment_preference': profile.get('assessment_preference'),
             'results': user.get('results'),
             'selected_categories': user.get('selected_categories', [])
         }

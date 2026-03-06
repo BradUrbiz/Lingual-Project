@@ -22,6 +22,10 @@ export function AssessmentPage() {
     vocabulary: 'Vocabulary',
     pragmatics: 'Pragmatics',
     pronunciation: 'Pronunciation',
+    interpretive_comprehension: 'Interpretive Comprehension',
+    interpersonal_communication: 'Interpersonal Communication',
+    presentational_communication: 'Presentational Communication',
+    language_control: 'Language Control',
   };
 
   const [items, setItems] = useState<AssessmentItem[]>([]);

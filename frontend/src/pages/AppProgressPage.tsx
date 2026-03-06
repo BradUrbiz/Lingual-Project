@@ -13,6 +13,10 @@ const domainStyles: Record<string, string> = {
   vocabulary: 'bg-accent',
   pragmatics: 'bg-success',
   pronunciation: 'bg-foreground',
+  interpretive_comprehension: 'bg-primary',
+  interpersonal_communication: 'bg-accent',
+  presentational_communication: 'bg-success',
+  language_control: 'bg-foreground',
 };
 
 const domainBadgeStyles: Record<string, string> = {
@@ -21,6 +25,10 @@ const domainBadgeStyles: Record<string, string> = {
   cultural: 'bg-secondary text-foreground border-border',
   pragmatics: 'bg-success/10 text-success border-success/20',
   pronunciation: 'bg-foreground/10 text-foreground border-foreground/20',
+  interpretive_comprehension: 'bg-primary/10 text-primary border-primary/20',
+  interpersonal_communication: 'bg-accent/10 text-accent border-accent/20',
+  presentational_communication: 'bg-success/10 text-success border-success/20',
+  language_control: 'bg-foreground/10 text-foreground border-foreground/20',
 };
 
 const scoreWidthClasses: Record<number, string> = {
@@ -82,6 +90,10 @@ export function AppProgressPage() {
   const domainEntries = assessmentResults?.domainBands
     ? Object.entries(assessmentResults.domainBands).sort((a, b) => b[1] - a[1])
     : [];
+  const levelLabel =
+    assessmentResults?.proficiencyLevel ||
+    assessmentResults?.actflLevel ||
+    assessmentResults?.sklcLevel;
   const topDomain = domainEntries[0] ?? null;
 
   const getDomainLabel = (domain: string) => {
@@ -145,7 +157,7 @@ export function AppProgressPage() {
               {t('app.learn.path.level') || 'Level'}
             </p>
             <p className="mt-1 text-xl font-display font-bold text-foreground">
-              {assessmentResults?.sklcLevel || '—'}
+              {levelLabel || '—'}
             </p>
           </div>
           <div className="rounded-xl border-2 border-border bg-secondary/70 p-3">

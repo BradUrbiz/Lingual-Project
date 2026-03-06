@@ -70,6 +70,7 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
         grade_level = profile.get('grade_level', '')
         native_language = profile.get('native_language', '')
         learning_locale = profile.get('learning_locale', 'ko-KR')
+        assessment_preference = profile.get('assessment_preference')
         location = profile.get('location', '')
         school_name = profile.get('school_name', '')
         selected_categories = user_data.get('selected_categories', [])
@@ -92,6 +93,7 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
             'grade_level': grade_level,
             'native_language': native_language,
             'learning_locale': learning_locale,
+            'assessment_preference': assessment_preference,
             'location': location,
             'school_name': school_name,
         }
@@ -104,14 +106,26 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
             })
 
         global_stage = results.get('global_stage', 0)
-        sklc_info = deps.get_sklc_description(global_stage)
+
+        proficiency_level = results.get('proficiency_level')
+        proficiency_description = results.get('proficiency_description_en')
+        if not proficiency_level or not proficiency_description:
+            fallback_info = deps.get_proficiency_description(global_stage)
+            proficiency_level = fallback_info['level']
+            proficiency_description = fallback_info['description']
 
         return jsonify({
             **base_response,
             'assessed': True,
             'global_stage': global_stage,
-            'sklc_level': sklc_info['level'],
-            'sklc_description': sklc_info['description'],
+            'framework': results.get('framework', 'ACTFL'),
+            'proficiency_level': proficiency_level,
+            'proficiency_description': proficiency_description,
+            'actfl_level': results.get('actfl_level', proficiency_level),
+            'actfl_description': results.get('actfl_description_en', proficiency_description),
+            # Backward-compatible aliases for existing frontend consumers.
+            'sklc_level': proficiency_level,
+            'sklc_description': proficiency_description,
             'domain_bands': results.get('domain_bands', {}),
         })
 
@@ -143,6 +157,7 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
         frequency = data.get('frequency')
         frequency_unit = data.get('frequencyUnit')
         level_objective = data.get('levelObjective')
+        assessment_preference = data.get('assessmentPreference')
         avatar_url = data.get('avatarUrl')
         contact_email = data.get('contactEmail')
         grade_level = data.get('gradeLevel')
@@ -154,6 +169,8 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
 
         if learning_locale and learning_locale not in deps.allowed_learning_locales:
             return jsonify({'success': False, 'error': 'Invalid learning locale'}), 400
+        if assessment_preference and assessment_preference not in {'take', 'skip'}:
+            return jsonify({'success': False, 'error': 'Invalid assessment preference'}), 400
 
         deps.db.update_user_profile(
             uid,
@@ -164,6 +181,7 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
             frequency=frequency,
             frequency_unit=frequency_unit,
             level_objective=level_objective,
+            assessment_preference=assessment_preference,
             avatar_url=avatar_url,
             contact_email=contact_email,
             grade_level=grade_level,
@@ -186,6 +204,7 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
                 'frequency': frequency,
                 'frequencyUnit': frequency_unit,
                 'levelObjective': level_objective,
+                'assessmentPreference': assessment_preference,
                 'avatarUrl': avatar_url,
                 'contactEmail': contact_email,
                 'gradeLevel': grade_level,
@@ -194,6 +213,35 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
                 'location': location,
                 'schoolName': school_name,
             },
+        })
+
+    @bp.route('/api/onboarding/initial', methods=['POST'])
+    @deps.login_required
+    def api_initial_onboarding():
+        """Save initial onboarding choices (learning locale + assessment choice)."""
+        uid = deps.get_current_user_uid()
+        data = request.get_json() or {}
+
+        learning_locale = data.get('learningLocale')
+        assessment_preference = data.get('assessmentPreference')
+
+        if learning_locale and learning_locale not in deps.allowed_learning_locales:
+            return jsonify({'success': False, 'error': 'Invalid learning locale'}), 400
+        if assessment_preference not in {'take', 'skip'}:
+            return jsonify({'success': False, 'error': 'Invalid assessment preference'}), 400
+
+        # Keep onboarding decision explicit and clear stale results/progress.
+        deps.db.update_user_profile(
+            uid,
+            learning_locale=learning_locale,
+            assessment_preference=assessment_preference,
+        )
+        deps.db.reset_assessment(uid)
+
+        return jsonify({
+            'success': True,
+            'learningLocale': learning_locale,
+            'assessmentPreference': assessment_preference,
         })
 
     return bp

@@ -1,0 +1,569 @@
+{
+  "test_id": "actfl_speaking_placement_v1",
+  "version": "2.0.0",
+  "framework": "ACTFL",
+  "title": "ACTFL Speaking Placement Check-in (v1)",
+  "description": "Language-agnostic placement diagnostic aligned to ACTFL proficiency descriptors.",
+  "domains": [
+    "interpretive_comprehension",
+    "interpersonal_communication",
+    "presentational_communication",
+    "language_control",
+    "pronunciation"
+  ],
+  "items": [
+    {
+      "id": "ACTFL-S1-Q1",
+      "section": "self_assessment",
+      "item_type": "mcq_single",
+      "order": 1,
+      "domains": {
+        "interpretive_comprehension": 0.2,
+        "interpersonal_communication": 0.2,
+        "presentational_communication": 0.2,
+        "language_control": 0.2,
+        "pronunciation": 0.2
+      },
+      "ui": {
+        "prompt_en": "Which statement best matches your current speaking ability in your target language?",
+        "prompt_ko": "현재 목표 언어 말하기 능력을 가장 잘 설명하는 문장을 고르세요.",
+        "context": "Choose the closest match, not a perfect one.",
+        "instructions_en": "Select one option.",
+        "instructions_ko": "하나를 선택하세요."
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "I can only use isolated words or memorized expressions." },
+          { "id": "2", "text": "I can handle basic needs with short, practiced phrases." },
+          { "id": "3", "text": "I can form simple sentences about familiar topics." },
+          { "id": "4", "text": "I can sustain simple conversations in everyday situations." },
+          { "id": "5", "text": "I can explain and describe in connected sentences with some detail." },
+          { "id": "6", "text": "I can discuss less familiar topics and support opinions at length." },
+          { "id": "7", "text": "I can discuss complex or abstract topics with precision and flexibility." }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id": "1" }, "score": 0.08 },
+          { "condition": { "selected_option_id": "2" }, "score": 0.22 },
+          { "condition": { "selected_option_id": "3" }, "score": 0.34 },
+          { "condition": { "selected_option_id": "4" }, "score": 0.48 },
+          { "condition": { "selected_option_id": "5" }, "score": 0.62 },
+          { "condition": { "selected_option_id": "6" }, "score": 0.78 },
+          { "condition": { "selected_option_id": "7" }, "score": 0.93 }
+        ]
+      }
+    },
+    {
+      "id": "ACTFL-S2-Q1",
+      "section": "interpersonal",
+      "item_type": "mcq_single",
+      "order": 2,
+      "domains": {
+        "interpretive_comprehension": 0.1,
+        "interpersonal_communication": 0.7,
+        "presentational_communication": 0.0,
+        "language_control": 0.2,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_en": "In an unplanned conversation, what can you usually do?",
+        "prompt_ko": "즉흥 대화 상황에서 보통 어느 정도까지 할 수 있나요?",
+        "context": "Example: meeting someone new, handling a simple issue, or making plans.",
+        "instructions_en": "Choose the best match.",
+        "instructions_ko": "가장 가까운 항목을 선택하세요."
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "Ask/answer only very simple questions with pauses." },
+          { "id": "2", "text": "Handle short exchanges on familiar daily topics." },
+          { "id": "3", "text": "Keep a conversation going with basic follow-up questions." },
+          { "id": "4", "text": "Manage most routine social/professional interactions." },
+          { "id": "5", "text": "Discuss and defend opinions with extended responses." },
+          { "id": "6", "text": "Navigate nuanced discussions and adjust style by context." }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id": "1" }, "score": 0.16 },
+          { "condition": { "selected_option_id": "2" }, "score": 0.32 },
+          { "condition": { "selected_option_id": "3" }, "score": 0.46 },
+          { "condition": { "selected_option_id": "4" }, "score": 0.62 },
+          { "condition": { "selected_option_id": "5" }, "score": 0.79 },
+          { "condition": { "selected_option_id": "6" }, "score": 0.93 }
+        ]
+      }
+    },
+    {
+      "id": "ACTFL-S2-Q2",
+      "section": "reflective_output",
+      "item_type": "text_short",
+      "order": 3,
+      "domains": {
+        "interpretive_comprehension": 0.0,
+        "interpersonal_communication": 0.25,
+        "presentational_communication": 0.35,
+        "language_control": 0.3,
+        "pronunciation": 0.1
+      },
+      "ui": {
+        "prompt_en": "In your target language, write 3-5 sentences about what you can currently do in conversations and what you still find difficult.",
+        "prompt_ko": "목표 언어로 현재 대화에서 가능한 것과 아직 어려운 점을 3-5문장으로 써 보세요.",
+        "context": "Include at least one concrete example if possible.",
+        "instructions_en": "Write in your target language.",
+        "instructions_ko": "목표 언어로 작성하세요."
+      },
+      "content": {},
+      "scoring": {
+        "response_type": "text",
+        "method": "heuristic_can_do_reflection_v1",
+        "params": {
+          "min_words": 22,
+          "min_sentences": 3,
+          "weights": {
+            "length": 0.45,
+            "sentences": 0.35,
+            "connectors": 0.2
+          },
+          "connector_terms": [
+            "and",
+            "but",
+            "because",
+            "so",
+            "then",
+            "also",
+            "however",
+            "그리고",
+            "하지만",
+            "그래서",
+            "porque",
+            "pero",
+            "entonces",
+            "y",
+            "et",
+            "mais",
+            "parce que",
+            "donc"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ACTFL-S3-Q1",
+      "section": "interpretive",
+      "item_type": "mcq_single",
+      "order": 4,
+      "domains": {
+        "interpretive_comprehension": 0.8,
+        "interpersonal_communication": 0.0,
+        "presentational_communication": 0.0,
+        "language_control": 0.2,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_en": "How well do you usually understand spoken language at natural speed?",
+        "prompt_ko": "자연스러운 속도의 말하기를 보통 어느 정도 이해하나요?",
+        "context": "Think of class discussions, podcasts, videos, or peer conversations.",
+        "instructions_en": "Select one option.",
+        "instructions_ko": "하나를 선택하세요."
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "I catch only a few words and need repeated support." },
+          { "id": "2", "text": "I understand main ideas in very familiar contexts." },
+          { "id": "3", "text": "I follow most routine conversations with occasional gaps." },
+          { "id": "4", "text": "I understand detailed points on familiar and some new topics." },
+          { "id": "5", "text": "I understand extended discourse, including implicit meaning." }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id": "1" }, "score": 0.14 },
+          { "condition": { "selected_option_id": "2" }, "score": 0.31 },
+          { "condition": { "selected_option_id": "3" }, "score": 0.5 },
+          { "condition": { "selected_option_id": "4" }, "score": 0.72 },
+          { "condition": { "selected_option_id": "5" }, "score": 0.9 }
+        ]
+      }
+    },
+    {
+      "id": "ACTFL-S3-Q2",
+      "section": "presentational",
+      "item_type": "mcq_single",
+      "order": 5,
+      "domains": {
+        "interpretive_comprehension": 0.0,
+        "interpersonal_communication": 0.0,
+        "presentational_communication": 0.8,
+        "language_control": 0.2,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_en": "If you give a 2-3 minute explanation in your target language, what is most accurate?",
+        "prompt_ko": "목표 언어로 2-3분 설명을 한다면 가장 가까운 설명은 무엇인가요?",
+        "context": "Example topics: your routine, a project, a local issue, or personal opinion.",
+        "instructions_en": "Pick the closest statement.",
+        "instructions_ko": "가장 가까운 문장을 고르세요."
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "I can produce a few short phrases, but not sustained speech." },
+          { "id": "2", "text": "I can give basic information using simple connected sentences." },
+          { "id": "3", "text": "I can organize ideas with examples and basic transitions." },
+          { "id": "4", "text": "I can present clear, structured explanations with supporting detail." },
+          { "id": "5", "text": "I can present nuanced arguments and adapt language to audience/formality." }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id": "1" }, "score": 0.18 },
+          { "condition": { "selected_option_id": "2" }, "score": 0.37 },
+          { "condition": { "selected_option_id": "3" }, "score": 0.56 },
+          { "condition": { "selected_option_id": "4" }, "score": 0.75 },
+          { "condition": { "selected_option_id": "5" }, "score": 0.92 }
+        ]
+      }
+    },
+    {
+      "id": "ACTFL-S4-Q1",
+      "section": "interaction_management",
+      "item_type": "mcq_single",
+      "order": 6,
+      "domains": {
+        "interpretive_comprehension": 0.1,
+        "interpersonal_communication": 0.55,
+        "presentational_communication": 0.0,
+        "language_control": 0.2,
+        "pronunciation": 0.15
+      },
+      "ui": {
+        "prompt_en": "When communication breaks down, what do you typically do?",
+        "prompt_ko": "대화가 잘 안 통할 때 보통 어떻게 대처하나요?",
+        "context": "Think of clarification, paraphrasing, confirming meaning, or reformulating.",
+        "instructions_en": "Choose one.",
+        "instructions_ko": "하나를 선택하세요."
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "I mostly stop or switch to my first language quickly." },
+          { "id": "2", "text": "I ask for repetition and use very simple rephrasing." },
+          { "id": "3", "text": "I can clarify meaning with short follow-up questions." },
+          { "id": "4", "text": "I can reformulate ideas and negotiate meaning with confidence." },
+          { "id": "5", "text": "I can manage misunderstandings strategically and maintain flow." }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id": "1" }, "score": 0.12 },
+          { "condition": { "selected_option_id": "2" }, "score": 0.3 },
+          { "condition": { "selected_option_id": "3" }, "score": 0.49 },
+          { "condition": { "selected_option_id": "4" }, "score": 0.71 },
+          { "condition": { "selected_option_id": "5" }, "score": 0.9 }
+        ]
+      }
+    },
+    {
+      "id": "ACTFL-S4-Q2",
+      "section": "language_control",
+      "item_type": "mcq_single",
+      "order": 7,
+      "domains": {
+        "interpretive_comprehension": 0.0,
+        "interpersonal_communication": 0.1,
+        "presentational_communication": 0.2,
+        "language_control": 0.7,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_en": "Which statement best describes your grammar and vocabulary control when speaking spontaneously?",
+        "prompt_ko": "즉흥적으로 말할 때 문법/어휘 통제 수준을 가장 잘 설명하는 문장을 고르세요.",
+        "context": "Focus on consistency under real-time pressure.",
+        "instructions_en": "Select one statement.",
+        "instructions_ko": "하나를 선택하세요."
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "Frequent errors make my message hard to follow." },
+          { "id": "2", "text": "I can control basic patterns but often need to simplify." },
+          { "id": "3", "text": "I generally control common structures with occasional breakdowns." },
+          { "id": "4", "text": "I control a broad range of structures with mostly clear output." },
+          { "id": "5", "text": "I can adjust language precisely for complexity and register." }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id": "1" }, "score": 0.14 },
+          { "condition": { "selected_option_id": "2" }, "score": 0.35 },
+          { "condition": { "selected_option_id": "3" }, "score": 0.55 },
+          { "condition": { "selected_option_id": "4" }, "score": 0.76 },
+          { "condition": { "selected_option_id": "5" }, "score": 0.93 }
+        ]
+      }
+    },
+    {
+      "id": "ACTFL-S5-Q1",
+      "section": "pronunciation_comprehensibility",
+      "item_type": "mcq_single",
+      "order": 8,
+      "domains": {
+        "interpretive_comprehension": 0.0,
+        "interpersonal_communication": 0.2,
+        "presentational_communication": 0.0,
+        "language_control": 0.0,
+        "pronunciation": 0.8
+      },
+      "ui": {
+        "prompt_en": "How understandable is your pronunciation to native or highly proficient speakers?",
+        "prompt_ko": "원어민 또는 고숙련 화자에게 당신의 발음은 어느 정도 이해되나요?",
+        "context": "Consider clarity, rhythm, stress/intonation, and consistency.",
+        "instructions_en": "Choose one option.",
+        "instructions_ko": "하나를 선택하세요."
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "Often hard to understand without repetition." },
+          { "id": "2", "text": "Usually understandable in familiar topics with some effort from listeners." },
+          { "id": "3", "text": "Generally understandable with occasional pronunciation interference." },
+          { "id": "4", "text": "Clear and natural in most situations." },
+          { "id": "5", "text": "Very clear and flexible across formal/informal contexts." }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id": "1" }, "score": 0.16 },
+          { "condition": { "selected_option_id": "2" }, "score": 0.36 },
+          { "condition": { "selected_option_id": "3" }, "score": 0.58 },
+          { "condition": { "selected_option_id": "4" }, "score": 0.79 },
+          { "condition": { "selected_option_id": "5" }, "score": 0.94 }
+        ]
+      }
+    },
+    {
+      "id": "ACTFL-S5-Q2",
+      "section": "register_and_audience",
+      "item_type": "mcq_single",
+      "order": 9,
+      "domains": {
+        "interpretive_comprehension": 0.0,
+        "interpersonal_communication": 0.45,
+        "presentational_communication": 0.1,
+        "language_control": 0.45,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_en": "How well can you adjust tone/register based on audience (friend, teacher, professional setting)?",
+        "prompt_ko": "상대(친구/교사/전문가)에 따라 말투와 레지스터를 얼마나 조절할 수 있나요?",
+        "context": "Think about politeness, phrasing choices, and appropriateness.",
+        "instructions_en": "Choose the most accurate option.",
+        "instructions_ko": "가장 정확한 항목을 고르세요."
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "I rarely adjust register and may sound inappropriate." },
+          { "id": "2", "text": "I can make basic formal/informal distinctions." },
+          { "id": "3", "text": "I usually adapt tone appropriately in common situations." },
+          { "id": "4", "text": "I can shift register effectively for varied audiences." },
+          { "id": "5", "text": "I can fine-tune style strategically for nuance and impact." }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id": "1" }, "score": 0.15 },
+          { "condition": { "selected_option_id": "2" }, "score": 0.34 },
+          { "condition": { "selected_option_id": "3" }, "score": 0.56 },
+          { "condition": { "selected_option_id": "4" }, "score": 0.78 },
+          { "condition": { "selected_option_id": "5" }, "score": 0.93 }
+        ]
+      }
+    },
+    {
+      "id": "ACTFL-S6-Q1",
+      "section": "integrated_performance",
+      "item_type": "mcq_single",
+      "order": 10,
+      "domains": {
+        "interpretive_comprehension": 0.4,
+        "interpersonal_communication": 0.1,
+        "presentational_communication": 0.3,
+        "language_control": 0.2,
+        "pronunciation": 0.0
+      },
+      "ui": {
+        "prompt_en": "After reading/listening to new information, what can you usually do when summarizing and responding?",
+        "prompt_ko": "새로운 정보를 읽거나 들은 뒤, 요약하고 반응할 때 보통 어느 수준까지 가능한가요?",
+        "context": "Consider comprehension + re-expression + opinion support.",
+        "instructions_en": "Select one option.",
+        "instructions_ko": "하나를 선택하세요."
+      },
+      "content": {
+        "options": [
+          { "id": "1", "text": "I can repeat isolated facts but struggle to connect ideas." },
+          { "id": "2", "text": "I can summarize the main point with simple language." },
+          { "id": "3", "text": "I can summarize key details and give a short response." },
+          { "id": "4", "text": "I can synthesize details and explain implications with support." },
+          { "id": "5", "text": "I can integrate multiple viewpoints and build a well-supported argument." }
+        ]
+      },
+      "scoring": {
+        "response_type": "single_choice",
+        "rules": [
+          { "condition": { "selected_option_id": "1" }, "score": 0.17 },
+          { "condition": { "selected_option_id": "2" }, "score": 0.37 },
+          { "condition": { "selected_option_id": "3" }, "score": 0.58 },
+          { "condition": { "selected_option_id": "4" }, "score": 0.79 },
+          { "condition": { "selected_option_id": "5" }, "score": 0.94 }
+        ]
+      }
+    }
+  ],
+  "aggregation": {
+    "domains": {
+      "interpretive_comprehension": {
+        "method": "weighted_average",
+        "item_weight_source": "item.domains.interpretive_comprehension"
+      },
+      "interpersonal_communication": {
+        "method": "weighted_average",
+        "item_weight_source": "item.domains.interpersonal_communication"
+      },
+      "presentational_communication": {
+        "method": "weighted_average",
+        "item_weight_source": "item.domains.presentational_communication"
+      },
+      "language_control": {
+        "method": "weighted_average",
+        "item_weight_source": "item.domains.language_control"
+      },
+      "pronunciation": {
+        "method": "weighted_average",
+        "item_weight_source": "item.domains.pronunciation"
+      }
+    },
+    "banding": {
+      "bands": [
+        { "band": 0, "min_score": 0.0, "max_score": 0.099999 },
+        { "band": 1, "min_score": 0.1, "max_score": 0.199999 },
+        { "band": 2, "min_score": 0.2, "max_score": 0.299999 },
+        { "band": 3, "min_score": 0.3, "max_score": 0.399999 },
+        { "band": 4, "min_score": 0.4, "max_score": 0.499999 },
+        { "band": 5, "min_score": 0.5, "max_score": 0.599999 },
+        { "band": 6, "min_score": 0.6, "max_score": 0.699999 },
+        { "band": 7, "min_score": 0.7, "max_score": 0.799999 },
+        { "band": 8, "min_score": 0.8, "max_score": 0.899999 },
+        { "band": 9, "min_score": 0.9, "max_score": 0.949999 },
+        { "band": 10, "min_score": 0.95, "max_score": 1.0 }
+      ]
+    },
+    "global_stage": {
+      "method": "average_domain_bands",
+      "included_domains": [
+        "interpretive_comprehension",
+        "interpersonal_communication",
+        "presentational_communication",
+        "language_control",
+        "pronunciation"
+      ],
+      "rounding": "nearest_int",
+      "min_stage": 0,
+      "max_stage": 10
+    },
+    "actfl_levels": [
+      {
+        "code": "novice_low",
+        "label": "Novice Low",
+        "min_score": 0.0,
+        "max_score": 0.12,
+        "description_en": "Can communicate with isolated words and memorized expressions in highly predictable contexts.",
+        "description_ko": "매우 예측 가능한 상황에서 단어와 암기 표현 중심으로 의사소통할 수 있습니다."
+      },
+      {
+        "code": "novice_mid",
+        "label": "Novice Mid",
+        "min_score": 0.13,
+        "max_score": 0.24,
+        "description_en": "Can handle simple, practiced exchanges using words and short phrases.",
+        "description_ko": "짧은 구와 문장을 활용해 익숙한 주제에서 기본 상호작용이 가능합니다."
+      },
+      {
+        "code": "novice_high",
+        "label": "Novice High",
+        "min_score": 0.25,
+        "max_score": 0.34,
+        "description_en": "Can create short sentences on familiar topics with limited consistency.",
+        "description_ko": "익숙한 주제에서 짧은 문장을 만들 수 있으나 일관성은 제한적입니다."
+      },
+      {
+        "code": "intermediate_low",
+        "label": "Intermediate Low",
+        "min_score": 0.35,
+        "max_score": 0.44,
+        "description_en": "Can manage simple conversations and basic question-answer exchanges.",
+        "description_ko": "기본 질문-응답 중심의 간단한 대화를 수행할 수 있습니다."
+      },
+      {
+        "code": "intermediate_mid",
+        "label": "Intermediate Mid",
+        "min_score": 0.45,
+        "max_score": 0.54,
+        "description_en": "Can sustain straightforward conversations in connected sentences on familiar topics.",
+        "description_ko": "익숙한 주제에서 연결된 문장으로 대화를 비교적 안정적으로 이어갈 수 있습니다."
+      },
+      {
+        "code": "intermediate_high",
+        "label": "Intermediate High",
+        "min_score": 0.55,
+        "max_score": 0.64,
+        "description_en": "Can handle uncomplicated tasks and begin discussing less familiar topics with support.",
+        "description_ko": "단순 과제를 자립적으로 수행하고 덜 익숙한 주제도 보조가 있으면 다룰 수 있습니다."
+      },
+      {
+        "code": "advanced_low",
+        "label": "Advanced Low",
+        "min_score": 0.65,
+        "max_score": 0.74,
+        "description_en": "Can narrate and describe in major time frames with paragraph-length language.",
+        "description_ko": "주요 시제를 활용해 단락 길이의 서술과 묘사가 가능합니다."
+      },
+      {
+        "code": "advanced_mid",
+        "label": "Advanced Mid",
+        "min_score": 0.75,
+        "max_score": 0.84,
+        "description_en": "Can participate effectively in most informal and some formal conversations.",
+        "description_ko": "대부분의 비격식 상황과 일부 격식 상황에서 효과적으로 의사소통할 수 있습니다."
+      },
+      {
+        "code": "advanced_high",
+        "label": "Advanced High",
+        "min_score": 0.85,
+        "max_score": 0.9,
+        "description_en": "Can discuss broad topics and support opinions through extended discourse.",
+        "description_ko": "다양한 주제를 길게 설명하고 의견을 근거와 함께 제시할 수 있습니다."
+      },
+      {
+        "code": "superior",
+        "label": "Superior",
+        "min_score": 0.91,
+        "max_score": 0.97,
+        "description_en": "Can discuss abstract issues and support hypotheses with structured language.",
+        "description_ko": "추상적 이슈를 구조화된 언어로 다루고 가설을 근거와 함께 제시할 수 있습니다."
+      },
+      {
+        "code": "distinguished",
+        "label": "Distinguished",
+        "min_score": 0.98,
+        "max_score": 1.0,
+        "description_en": "Can use language strategically and persuasively in complex professional and academic contexts.",
+        "description_ko": "복합적인 학술·전문 맥락에서 전략적이고 설득력 있게 언어를 구사할 수 있습니다."
+      }
+    ]
+  }
+}

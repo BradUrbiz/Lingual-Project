@@ -1,9 +1,201 @@
 import os
+from typing import Any
 
 import requests
 from flask import Blueprint, jsonify, request
+from openai import APIStatusError, RateLimitError
 
 from backend.route_deps import RouteDeps
+from backend.services.assignment_resolver import (
+    build_assignment_system_prompt,
+    resolve_assignment_bootstrap_for_user,
+)
+
+
+AVATAR_EMOTION_KEYS = [
+    'neutral',
+    'anger',
+    'disgust',
+    'fear',
+    'joy',
+    'smirk',
+    'sadness',
+    'surprise',
+]
+
+AVATAR_EXPRESSION_IDS = [
+    'neutral_primary',
+    'neutral_soft',
+    'warm_smile',
+    'warm_bright',
+    'curious_lift',
+    'curious_smile',
+    'corrective_focus',
+    'corrective_soft',
+    'apology_soft',
+    'surprised_open',
+    'playful_smirk',
+    'affirm_soft',
+]
+
+AVATAR_MOTION_REFS = [
+    'idle_base',
+    'listening_attentive',
+    'thinking_soft',
+    'speaking_base',
+    'speaking_question',
+    'speaking_affirm',
+    'speaking_corrective',
+    'speaking_apology',
+    'react_head_curious',
+    'react_face_curious',
+    'react_body_affirm',
+    'post_speaking_soft',
+]
+
+AVATAR_REACTION_INTENTS = [
+    'none',
+    'tap_head_notice',
+    'tap_face_focus',
+    'tap_body_affirm',
+    'tap_hand_wave',
+    'tap_chest_reassure',
+]
+
+
+def build_avatar_directive_tool() -> dict[str, Any]:
+    return {
+        'type': 'function',
+        'name': 'emit_avatar_directive',
+        'description': 'Emit a non-spoken Live2D avatar acting directive for the current tutor turn.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'emotionKey': {'type': 'string', 'enum': AVATAR_EMOTION_KEYS},
+                'expressionId': {'type': 'string', 'enum': AVATAR_EXPRESSION_IDS},
+                'motionRef': {'type': 'string', 'enum': AVATAR_MOTION_REFS},
+                'reactionIntent': {'type': 'string', 'enum': AVATAR_REACTION_INTENTS},
+                'intensity': {'type': 'number', 'minimum': 0, 'maximum': 1},
+                'holdMs': {'type': 'integer', 'minimum': 120, 'maximum': 4000},
+                'subtitleText': {'type': 'string'},
+            },
+            'additionalProperties': False,
+        },
+    }
+
+
+def build_avatar_realtime_instructions() -> str:
+    return """
+
+Avatar acting contract:
+- You may call emit_avatar_directive to control the Live2D tutor's expression and motion.
+- Use a directive when your speaking intent changes meaningfully: question, encouragement, correction, apology, surprise, or contextual tap reaction.
+- Keep the spoken tutoring response natural. Never mention internal tool names, schemas, or tags.
+- Prefer one concise directive near the start of a turn instead of spamming repeated directives.
+- Use only the provided symbolic expressionId and motionRef values. Do not invent new ones.
+- If there is no meaningful acting change, do not call the tool.
+""".strip()
+
+
+def build_avatar_context_payload(area: str, mode: str, practice: Any = None) -> dict[str, str]:
+    normalized_area = (area or 'body').strip().lower() or 'body'
+    normalized_mode = (mode or 'realtime').strip().lower() or 'realtime'
+
+    reaction_map = {
+        'head': {
+            'reactionIntent': 'tap_head_notice',
+            'subtitleText': 'Oh?',
+            'seed': 'The learner tapped your head. Briefly acknowledge it with curious, light surprise before continuing as a calm tutor.',
+        },
+        'face': {
+            'reactionIntent': 'tap_face_focus',
+            'subtitleText': 'I see.',
+            'seed': 'The learner tapped your face. React with attentive curiosity and then continue the tutoring flow.',
+        },
+        'body': {
+            'reactionIntent': 'tap_body_affirm',
+            'subtitleText': 'Ready.',
+            'seed': 'The learner tapped your body. Respond warmly and affirm that you are ready to continue.',
+        },
+        'hand': {
+            'reactionIntent': 'tap_hand_wave',
+            'subtitleText': 'Hi.',
+            'seed': 'The learner tapped your hand. Respond with a short, friendly acknowledgement before returning to tutoring.',
+        },
+        'chest': {
+            'reactionIntent': 'tap_chest_reassure',
+            'subtitleText': "It's okay.",
+            'seed': 'The learner tapped your chest. React with a brief reassuring tone, then continue tutoring calmly.',
+        },
+    }
+    reaction = reaction_map.get(normalized_area, reaction_map['body'])
+
+    practice_hint = ''
+    if isinstance(practice, dict) and practice.get('type') == 'curriculum_module':
+        module_id = practice.get('moduleId')
+        situation_id = practice.get('situationId')
+        if module_id and situation_id:
+            practice_hint = f' Keep the acknowledgement aligned with curriculum module {module_id} and situation {situation_id}.'
+
+    system_message = (
+        f'{reaction["seed"]} '
+        f'The current voice mode is {normalized_mode}. '
+        'If you answer immediately, keep it to one short sentence.'
+        f'{practice_hint}'
+    )
+
+    return {
+        'systemMessage': system_message,
+        'reactionIntent': reaction['reactionIntent'],
+        'subtitleText': reaction['subtitleText'],
+    }
+
+
+def realtime_avatar_directives_enabled() -> bool:
+    return os.environ.get('ENABLE_REALTIME_AVATAR_DIRECTIVES', '').strip().lower() in {
+        '1',
+        'true',
+        'yes',
+        'on',
+    }
+
+
+def build_realtime_session_request(system_instructions: str) -> dict[str, Any]:
+    request_payload: dict[str, Any] = {
+        'model': 'gpt-realtime-mini',
+        'voice': 'coral',
+        'instructions': system_instructions,
+        'input_audio_transcription': {'model': 'whisper-1'},
+        'turn_detection': {
+            'type': 'server_vad',
+            'threshold': 0.5,
+            'prefix_padding_ms': 300,
+            'silence_duration_ms': 350,
+            'interrupt_response': True,
+        },
+    }
+
+    if realtime_avatar_directives_enabled():
+        request_payload['instructions'] = (
+            f'{system_instructions}\n\n{build_avatar_realtime_instructions()}'
+        )
+        request_payload['tool_choice'] = 'auto'
+        request_payload['tools'] = [build_avatar_directive_tool()]
+
+    return request_payload
+
+
+def _extract_assignment_id(payload: dict[str, Any]) -> str | None:
+    assignment_id = payload.get('assignmentId')
+    if isinstance(assignment_id, str) and assignment_id.strip():
+        return assignment_id.strip()
+
+    practice = payload.get('practice')
+    if isinstance(practice, dict):
+        practice_assignment_id = practice.get('assignmentId')
+        if isinstance(practice_assignment_id, str) and practice_assignment_id.strip():
+            return practice_assignment_id.strip()
+    return None
 
 
 def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
@@ -33,43 +225,56 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
             if ui_language not in deps.supported_ui_languages:
                 ui_language = 'en'
 
-            practice = payload.get('practice')
-            if isinstance(practice, dict) and practice.get('type') == 'curriculum_module':
-                curriculum_id = practice.get('curriculumId')
-                module_id = practice.get('moduleId')
-                situation_id = practice.get('situationId')
-
-                if not module_id or not situation_id:
-                    return jsonify({
-                        'success': False,
-                        'error': 'moduleId and situationId are required for curriculum practice.',
-                    }), 400
-
-                package = deps.load_sample_curriculum_package()
-                sample_curriculum_id = package.get('curriculum', {}).get('id')
-                if curriculum_id and curriculum_id != sample_curriculum_id:
-                    return jsonify({'success': False, 'error': 'Unsupported curriculumId.'}), 400
-
-                try:
-                    package, unit, module, situation, mode, objectives = deps.get_curriculum_practice_context(
-                        module_id=module_id,
-                        situation_id=situation_id,
-                    )
-                except ValueError as e:
-                    return jsonify({'success': False, 'error': str(e)}), 400
-
-                system_instructions = deps.build_curriculum_system_prompt(
-                    package=package,
-                    unit=unit,
-                    module=module,
-                    situation=situation,
-                    mode=mode,
-                    objectives=objectives,
+            assignment_id = _extract_assignment_id(payload)
+            if assignment_id:
+                uid = deps.get_current_user_uid()
+                context = deps.get_school_request_context()
+                bootstrap = resolve_assignment_bootstrap_for_user(
+                    deps,
+                    uid=uid,
+                    context=context,
+                    assignment_id=assignment_id,
                     ui_language=ui_language,
                 )
+                system_instructions = build_assignment_system_prompt(bootstrap)
             else:
-                proficiency_context = deps.get_user_proficiency_context()
-                system_instructions = deps.build_system_prompt(proficiency_context)
+                practice = payload.get('practice')
+                if isinstance(practice, dict) and practice.get('type') == 'curriculum_module':
+                    curriculum_id = practice.get('curriculumId')
+                    module_id = practice.get('moduleId')
+                    situation_id = practice.get('situationId')
+
+                    if not module_id or not situation_id:
+                        return jsonify({
+                            'success': False,
+                            'error': 'moduleId and situationId are required for curriculum practice.',
+                        }), 400
+
+                    package = deps.load_sample_curriculum_package()
+                    sample_curriculum_id = package.get('curriculum', {}).get('id')
+                    if curriculum_id and curriculum_id != sample_curriculum_id:
+                        return jsonify({'success': False, 'error': 'Unsupported curriculumId.'}), 400
+
+                    try:
+                        package, unit, module, situation, mode, objectives = deps.get_curriculum_practice_context(
+                            module_id=module_id,
+                            situation_id=situation_id,
+                        )
+                    except ValueError as e:
+                        return jsonify({'success': False, 'error': str(e)}), 400
+
+                    system_instructions = deps.build_curriculum_system_prompt(
+                        package=package,
+                        unit=unit,
+                        module=module,
+                        situation=situation,
+                        mode=mode,
+                        objectives=objectives,
+                        ui_language=ui_language,
+                    )
+                else:
+                    proficiency_context = deps.get_user_proficiency_context()
+                    system_instructions = deps.build_system_prompt(proficiency_context)
 
             response = requests.post(
                 'https://api.openai.com/v1/realtime/sessions',
@@ -77,19 +282,7 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     'Authorization': f'Bearer {api_key}',
                     'Content-Type': 'application/json',
                 },
-                json={
-                    'model': 'gpt-realtime-mini',
-                    'voice': 'coral',
-                    'instructions': system_instructions,
-                    'input_audio_transcription': {'model': 'whisper-1'},
-                    'turn_detection': {
-                        'type': 'server_vad',
-                        'threshold': 0.5,
-                        'prefix_padding_ms': 300,
-                        'silence_duration_ms': 350,
-                        'interrupt_response': True,
-                    },
-                },
+                json=build_realtime_session_request(system_instructions),
             )
 
             if response.status_code != 200:
@@ -106,6 +299,29 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 'expires_at': data.get('client_secret', {}).get('expires_at'),
             })
 
+        except PermissionError as e:
+            return jsonify({'error': str(e), 'success': False}), 403
+        except ValueError as e:
+            error = str(e)
+            status_code = 404 if 'not found' in error.lower() else 400
+            return jsonify({'error': error, 'success': False}), status_code
+        except Exception as e:
+            return jsonify({'error': str(e), 'success': False}), 500
+
+    @bp.route('/api/realtime/avatar-context', methods=['POST'])
+    @deps.login_required
+    def create_realtime_avatar_context():
+        try:
+            payload = request.get_json(silent=True) or {}
+            area = payload.get('area', 'body')
+            mode = payload.get('mode', 'realtime')
+            practice = payload.get('practice')
+
+            if not isinstance(area, str) or not area.strip():
+                return jsonify({'success': False, 'error': 'area is required'}), 400
+
+            context = build_avatar_context_payload(area=area, mode=mode, practice=practice)
+            return jsonify({'success': True, **context})
         except Exception as e:
             return jsonify({'error': str(e), 'success': False}), 500
 
@@ -285,11 +501,22 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
             if not client:
                 return jsonify({'success': False, 'error': 'OpenAI client not initialized'}), 500
 
-            response = client.chat.completions.create(
-                model='gpt-5.3-chat-latest',
-                messages=messages,
-                max_completion_tokens=8192,
-            )
+            try:
+                response = client.chat.completions.create(
+                    model='gpt-5.3-chat-latest',
+                    messages=messages,
+                    max_completion_tokens=8192,
+                )
+            except RateLimitError:
+                return jsonify({
+                    'success': False,
+                    'error': 'OpenAI quota exceeded for the configured API key. Update billing/quota or replace OPENAI_API_KEY.',
+                }), 429
+            except APIStatusError as e:
+                return jsonify({
+                    'success': False,
+                    'error': str(e),
+                }), e.status_code or 500
 
             assistant_message = response.choices[0].message.content
             user_msg = deps.db.add_message_to_chat(uid, chat_id, 'user', user_message)

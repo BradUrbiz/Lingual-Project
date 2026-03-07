@@ -3,6 +3,19 @@ from flask import Blueprint, jsonify, request, session
 from backend.route_deps import RouteDeps
 
 
+def build_auth_user_payload(uid, email, name, school_context):
+    """Build the auth payload returned to the frontend."""
+    return {
+        'uid': uid,
+        'email': email,
+        'name': name,
+        'memberships': school_context.get('memberships', []),
+        'activeMembershipId': school_context.get('active_membership_id'),
+        'activeOrganizationId': school_context.get('active_organization_id'),
+        'activeRoles': school_context.get('active_roles', []),
+    }
+
+
 def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
     bp = Blueprint('auth_routes', __name__)
 
@@ -27,14 +40,26 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
             email = decoded_token.get('email', '')
             name = decoded_token.get('name', email.split('@')[0] if email else 'User')
 
+            deps.db.get_or_create_user(uid, email, name)
+
+            preferred_active_membership_id = (session.get('user') or {}).get('active_membership_id')
+            school_context = deps.db.resolve_user_school_context(
+                uid,
+                preferred_active_membership_id=preferred_active_membership_id,
+            )
+            deps.db.set_user_last_active_membership(uid, school_context.get('active_membership_id'))
+
             session['user'] = {
                 'uid': uid,
                 'email': email,
                 'name': name,
+                'active_membership_id': school_context.get('active_membership_id'),
             }
 
-            deps.db.get_or_create_user(uid, email, name)
-            return jsonify({'success': True, 'user': session['user']})
+            return jsonify({
+                'success': True,
+                'user': build_auth_user_payload(uid, email, name, school_context),
+            })
 
         except deps.firebase_auth.InvalidIdTokenError:
             return jsonify({'success': False, 'error': 'Invalid token'}), 401

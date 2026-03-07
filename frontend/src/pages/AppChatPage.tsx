@@ -85,7 +85,7 @@ function getClientNow(): number {
 }
 
 export function AppChatPage() {
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
   const { avatarUrl } = useAuth();
   const userAvatar = avatarUrl || FALLBACK_AVATAR;
   const [searchParams] = useSearchParams();
@@ -221,7 +221,11 @@ export function AppChatPage() {
       });
   }, []);
 
-  const legacyRealtimeSession = useRealtimeChat({ onMessage: handleRealtimeMessage });
+  const realtimeSessionParams = useMemo(() => ({ uiLanguage: lang }), [lang]);
+  const legacyRealtimeSession = useRealtimeChat({
+    onMessage: handleRealtimeMessage,
+    sessionParams: realtimeSessionParams,
+  });
   const {
     isConnected,
     isListening,
@@ -231,6 +235,7 @@ export function AppChatPage() {
     connect,
     disconnect,
     clearMessages,
+    queueAvatarHit,
   } = legacyRealtimeSession;
   const remoteAudioStream = legacyRealtimeSession.remoteAudioStream;
 
@@ -251,6 +256,7 @@ export function AppChatPage() {
         assistantTranscriptFinal: legacyRealtimeSession.assistantTranscriptFinal,
         assistantSpeechStartedAt: legacyRealtimeSession.assistantSpeechStartedAt,
         assistantSpeechEndedAt: legacyRealtimeSession.assistantSpeechEndedAt,
+        avatarDirective: legacyRealtimeSession.avatarDirective,
       };
     }
 
@@ -267,8 +273,10 @@ export function AppChatPage() {
       assistantTranscriptFinal: textAssistantTranscriptFinal,
       assistantSpeechStartedAt: textAssistantSpeechStartedAt,
       assistantSpeechEndedAt: textAssistantSpeechEndedAt,
+      avatarDirective: null,
     };
   }, [
+    legacyRealtimeSession.avatarDirective,
     legacyRealtimeSession.assistantSpeechEndedAt,
     legacyRealtimeSession.assistantSpeechStartedAt,
     legacyRealtimeSession.assistantTranscriptDelta,
@@ -289,6 +297,17 @@ export function AppChatPage() {
   const live2dAvatarState = useMemo(
     () => buildLive2DAvatarStateFromPerformance(live2dPerformance),
     [live2dPerformance]
+  );
+  const live2dDiagnostics = useMemo(
+    () => ({
+      ...legacyRealtimeSession.avatarDiagnostics,
+      audioLevel: live2dPerformance.debug.audioLevel,
+      rmsLevel: live2dPerformance.debug.rmsLevel,
+      mouthTarget: live2dPerformance.debug.mouthTarget,
+      source: live2dPerformance.debug.directiveSource,
+      lastExplicitDirective: live2dPerformance.debug.lastExplicitDirective,
+    }),
+    [legacyRealtimeSession.avatarDiagnostics, live2dPerformance.debug]
   );
 
   const statusLabel = useMemo(() => {
@@ -792,9 +811,11 @@ export function AppChatPage() {
                   avatarReaction={null}
                   performanceFrame={live2dPerformance}
                   audioLevel={live2dPerformance.debug.audioLevel}
+                  avatarDiagnostics={live2dDiagnostics}
                   fallbackSrc={AI_AVATAR}
                   statusLabel={avatarStatusLabel}
                   title={t('app.learn.chat.title')}
+                  onAvatarHit={mode === 'realtime' ? queueAvatarHit : undefined}
                 />
               ) : (
                 <AvatarPerformancePanel

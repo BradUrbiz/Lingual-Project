@@ -10,6 +10,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@cubism': path.resolve(__dirname, '../CubismSdkForWeb-5-r.4/Framework/dist'),
     },
   },
   test: {

@@ -1,8 +1,13 @@
 import type {
   AvatarAffect,
   AvatarDialogueState,
-  AvatarMotionGroup,
+  AvatarMotionGroup
 } from '@/types/avatarChat';
+import type {
+  AvatarExpressionId,
+  AvatarMotionRef,
+  AvatarEmotionKey,
+} from './types';
 
 export type Live2DEmotionKey =
   | 'neutral'
@@ -18,6 +23,18 @@ export type Live2DMotionRef = {
   group: string;
   index?: number;
   weight?: number;
+};
+
+export type Live2DNamedExpressionBank = {
+  candidates: string[];
+  cooldownMs: number;
+  weights?: number[];
+};
+
+export type Live2DNamedMotionBank = {
+  candidates: Live2DMotionRef[];
+  cooldownMs: number;
+  weights?: number[];
 };
 
 export type Live2DParameterMap = {
@@ -61,13 +78,16 @@ export type Live2DManifest = {
   modelJsonPath: string;
   coreScriptUrl: string;
   scale: number;
+  logicalViewHeight?: number;
   anchor: { x: number; y: number };
   position: { x: number; y: number };
   hitAreas: Record<string, string[]>;
   defaultExpression?: string;
-  defaultMotionGroups: Partial<Record<AvatarMotionGroup | AvatarDialogueState, Live2DMotionRef[]>>;
-  tapMotions: Partial<Record<'head' | 'face' | 'body' | 'hand' | 'chest', Live2DMotionRef[]>>;
-  expressionMap: Partial<Record<AvatarAffect | Live2DEmotionKey, string[]>>;
+  namedExpressions: Record<AvatarExpressionId, Live2DNamedExpressionBank>;
+  namedMotions: Record<AvatarMotionRef, Live2DNamedMotionBank>;
+  defaultMotionGroups: Partial<Record<AvatarMotionGroup | AvatarDialogueState, AvatarMotionRef[]>>;
+  tapMotions: Partial<Record<'head' | 'face' | 'body' | 'hand' | 'chest', AvatarMotionRef[]>>;
+  expressionMap: Partial<Record<AvatarAffect | AvatarEmotionKey | Live2DEmotionKey, AvatarExpressionId[]>>;
   parameterMap: Live2DParameterMap;
 };
 
@@ -76,6 +96,7 @@ export const LINGUAL_TUTOR_LIVE2D_MANIFEST: Live2DManifest = {
   modelJsonPath: '/avatars/live2d/mao-pro-en/mao_pro.model3.json',
   coreScriptUrl: '/live2d/core/live2dcubismcore.min.js',
   scale: 0.16,
+  logicalViewHeight: 1.55,
   anchor: { x: 0.5, y: 0.18 },
   position: { x: 0.5, y: 0.34 },
   hitAreas: {
@@ -86,105 +107,196 @@ export const LINGUAL_TUTOR_LIVE2D_MANIFEST: Live2DManifest = {
     chest: ['Chest', 'HitAreaChest', 'chest'],
   },
   defaultExpression: 'exp_01',
+  namedExpressions: {
+    neutral_primary: {
+      candidates: ['exp_01'],
+      cooldownMs: 240,
+      weights: [1],
+    },
+    neutral_soft: {
+      candidates: ['exp_01', 'exp_03'],
+      cooldownMs: 420,
+      weights: [3, 1],
+    },
+    warm_smile: {
+      candidates: ['exp_04', 'exp_06'],
+      cooldownMs: 900,
+      weights: [2, 1],
+    },
+    warm_bright: {
+      candidates: ['exp_06', 'exp_02', 'exp_04'],
+      cooldownMs: 1100,
+      weights: [2, 1, 1],
+    },
+    curious_lift: {
+      candidates: ['exp_07', 'exp_04'],
+      cooldownMs: 950,
+      weights: [2, 1],
+    },
+    curious_smile: {
+      candidates: ['exp_04', 'exp_07'],
+      cooldownMs: 900,
+      weights: [2, 1],
+    },
+    corrective_focus: {
+      candidates: ['exp_08', 'exp_05'],
+      cooldownMs: 980,
+      weights: [2, 1],
+    },
+    corrective_soft: {
+      candidates: ['exp_05', 'exp_08'],
+      cooldownMs: 980,
+      weights: [2, 1],
+    },
+    apology_soft: {
+      candidates: ['exp_05', 'exp_03'],
+      cooldownMs: 1080,
+      weights: [2, 1],
+    },
+    surprised_open: {
+      candidates: ['exp_07', 'exp_04'],
+      cooldownMs: 960,
+      weights: [2, 1],
+    },
+    playful_smirk: {
+      candidates: ['exp_04', 'exp_08'],
+      cooldownMs: 1200,
+      weights: [3, 1],
+    },
+    affirm_soft: {
+      candidates: ['exp_06', 'exp_04', 'exp_02'],
+      cooldownMs: 960,
+      weights: [2, 2, 1],
+    },
+  },
+  namedMotions: {
+    idle_base: {
+      candidates: [{ group: 'Idle', index: 0, weight: 100 }],
+      cooldownMs: 240,
+    },
+    listening_attentive: {
+      candidates: [
+        { group: 'Idle', index: 0, weight: 70 },
+        { group: '', index: 0, weight: 20 },
+        { group: '', index: 1, weight: 10 },
+      ],
+      cooldownMs: 900,
+    },
+    thinking_soft: {
+      candidates: [
+        { group: 'Idle', index: 0, weight: 60 },
+        { group: '', index: 1, weight: 25 },
+        { group: '', index: 2, weight: 15 },
+      ],
+      cooldownMs: 950,
+    },
+    speaking_base: {
+      candidates: [
+        { group: '', index: 0, weight: 38 },
+        { group: '', index: 1, weight: 28 },
+        { group: '', index: 2, weight: 24 },
+        { group: 'Idle', index: 0, weight: 10 },
+      ],
+      cooldownMs: 700,
+    },
+    speaking_question: {
+      candidates: [
+        { group: '', index: 3, weight: 45 },
+        { group: '', index: 1, weight: 35 },
+        { group: '', index: 2, weight: 20 },
+      ],
+      cooldownMs: 880,
+    },
+    speaking_affirm: {
+      candidates: [
+        { group: '', index: 0, weight: 35 },
+        { group: '', index: 5, weight: 35 },
+        { group: '', index: 1, weight: 30 },
+      ],
+      cooldownMs: 860,
+    },
+    speaking_corrective: {
+      candidates: [
+        { group: '', index: 2, weight: 40 },
+        { group: '', index: 4, weight: 35 },
+        { group: '', index: 3, weight: 25 },
+      ],
+      cooldownMs: 920,
+    },
+    speaking_apology: {
+      candidates: [
+        { group: '', index: 4, weight: 45 },
+        { group: '', index: 2, weight: 35 },
+        { group: 'Idle', index: 0, weight: 20 },
+      ],
+      cooldownMs: 920,
+    },
+    react_head_curious: {
+      candidates: [
+        { group: '', index: 3, weight: 55 },
+        { group: '', index: 5, weight: 45 },
+      ],
+      cooldownMs: 1200,
+    },
+    react_face_curious: {
+      candidates: [
+        { group: '', index: 3, weight: 45 },
+        { group: '', index: 2, weight: 30 },
+        { group: '', index: 5, weight: 25 },
+      ],
+      cooldownMs: 1200,
+    },
+    react_body_affirm: {
+      candidates: [
+        { group: '', index: 4, weight: 45 },
+        { group: '', index: 5, weight: 35 },
+        { group: '', index: 0, weight: 20 },
+      ],
+      cooldownMs: 1200,
+    },
+    post_speaking_soft: {
+      candidates: [
+        { group: 'Idle', index: 0, weight: 75 },
+        { group: '', index: 0, weight: 25 },
+      ],
+      cooldownMs: 580,
+    },
+  },
   defaultMotionGroups: {
-    idle: [{ group: 'Idle', index: 0, weight: 100 }],
-    listening: [
-      { group: 'Idle', index: 0, weight: 70 },
-      { group: '', index: 0, weight: 20 },
-      { group: '', index: 1, weight: 10 },
-    ],
-    think: [
-      { group: 'Idle', index: 0, weight: 60 },
-      { group: '', index: 1, weight: 25 },
-      { group: '', index: 2, weight: 15 },
-    ],
-    thinking: [
-      { group: 'Idle', index: 0, weight: 60 },
-      { group: '', index: 1, weight: 25 },
-      { group: '', index: 2, weight: 15 },
-    ],
-    talk: [
-      { group: '', index: 0, weight: 38 },
-      { group: '', index: 1, weight: 28 },
-      { group: '', index: 2, weight: 24 },
-      { group: 'Idle', index: 0, weight: 10 },
-    ],
-    speaking: [
-      { group: '', index: 0, weight: 38 },
-      { group: '', index: 1, weight: 28 },
-      { group: '', index: 2, weight: 24 },
-      { group: 'Idle', index: 0, weight: 10 },
-    ],
-    question: [
-      { group: '', index: 3, weight: 45 },
-      { group: '', index: 1, weight: 35 },
-      { group: '', index: 2, weight: 20 },
-    ],
-    affirm: [
-      { group: '', index: 0, weight: 35 },
-      { group: '', index: 5, weight: 35 },
-      { group: '', index: 1, weight: 30 },
-    ],
-    corrective: [
-      { group: '', index: 2, weight: 40 },
-      { group: '', index: 4, weight: 35 },
-      { group: '', index: 3, weight: 25 },
-    ],
-    apology: [
-      { group: '', index: 4, weight: 45 },
-      { group: '', index: 2, weight: 35 },
-      { group: 'Idle', index: 0, weight: 20 },
-    ],
-    react_head: [
-      { group: '', index: 3, weight: 55 },
-      { group: '', index: 5, weight: 45 },
-    ],
-    react_face: [
-      { group: '', index: 3, weight: 45 },
-      { group: '', index: 2, weight: 30 },
-      { group: '', index: 5, weight: 25 },
-    ],
-    react_body: [
-      { group: '', index: 4, weight: 45 },
-      { group: '', index: 5, weight: 35 },
-      { group: '', index: 0, weight: 20 },
-    ],
-    post_speaking: [
-      { group: 'Idle', index: 0, weight: 75 },
-      { group: '', index: 0, weight: 25 },
-    ],
+    idle: ['idle_base'],
+    listening: ['listening_attentive'],
+    think: ['thinking_soft'],
+    thinking: ['thinking_soft'],
+    talk: ['speaking_base'],
+    speaking: ['speaking_base'],
+    question: ['speaking_question'],
+    affirm: ['speaking_affirm'],
+    corrective: ['speaking_corrective'],
+    apology: ['speaking_apology'],
+    react_head: ['react_head_curious'],
+    react_face: ['react_face_curious'],
+    react_body: ['react_body_affirm'],
+    post_speaking: ['post_speaking_soft'],
   },
   tapMotions: {
-    head: [
-      { group: '', index: 3, weight: 40 },
-      { group: '', index: 5, weight: 35 },
-      { group: '', index: 1, weight: 25 },
-    ],
-    face: [
-      { group: '', index: 3, weight: 35 },
-      { group: '', index: 2, weight: 35 },
-      { group: '', index: 5, weight: 30 },
-    ],
-    body: [
-      { group: '', index: 4, weight: 40 },
-      { group: '', index: 5, weight: 35 },
-      { group: '', index: 0, weight: 25 },
-    ],
+    head: ['react_head_curious'],
+    face: ['react_face_curious'],
+    body: ['react_body_affirm'],
   },
   expressionMap: {
-    neutral: ['exp_01'],
-    joy: ['exp_04', 'exp_06', 'exp_02'],
-    smirk: ['exp_04', 'exp_08'],
-    sadness: ['exp_05', 'exp_03'],
-    anger: ['exp_08', 'exp_05'],
-    disgust: ['exp_08'],
-    fear: ['exp_07', 'exp_05'],
-    surprise: ['exp_07', 'exp_04'],
-    encouraging: ['exp_04', 'exp_06', 'exp_02'],
-    curious: ['exp_07', 'exp_04'],
-    corrective: ['exp_08', 'exp_05'],
-    affirming: ['exp_04', 'exp_06'],
-    apologetic: ['exp_05', 'exp_03'],
+    neutral: ['neutral_primary', 'neutral_soft'],
+    joy: ['warm_smile', 'warm_bright'],
+    smirk: ['playful_smirk', 'warm_smile'],
+    sadness: ['apology_soft', 'neutral_soft'],
+    anger: ['corrective_focus', 'corrective_soft'],
+    disgust: ['corrective_focus'],
+    fear: ['surprised_open', 'apology_soft'],
+    surprise: ['surprised_open', 'curious_lift'],
+    encouraging: ['warm_smile', 'warm_bright'],
+    curious: ['curious_lift', 'curious_smile'],
+    corrective: ['corrective_focus', 'corrective_soft'],
+    affirming: ['affirm_soft', 'warm_smile'],
+    apologetic: ['apology_soft', 'neutral_soft'],
   },
   parameterMap: {
     mouthOpen: ['ParamA'],

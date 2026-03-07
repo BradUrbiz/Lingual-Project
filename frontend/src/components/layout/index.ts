@@ -1,6 +1,7 @@
 export { AnimatedPage } from './AnimatedPage';
 export { ProtectedRoute } from './ProtectedRoute';
 export { AppProtectedRoute } from './AppProtectedRoute';
+export { TeacherRoute } from './TeacherRoute';
 export { AppLayout } from './AppLayout';
 export { LegacyAppLayout } from './LegacyAppLayout';
 export { Header } from './Header';

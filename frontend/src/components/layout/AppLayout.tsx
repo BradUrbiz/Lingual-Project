@@ -20,6 +20,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { motion } from 'motion/react';
 import { Toaster } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { useMembership } from '@/contexts/MembershipContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useLearningLocale } from '@/contexts/LearningLocaleContext';
 import { LEARNING_LOCALES } from '@/lib/learningLocales';
@@ -31,6 +32,7 @@ const FALLBACK_AVATAR = '/imgs/landing/student.jpg';
 export function AppLayout() {
   const navigate = useNavigate();
   const { user, logout, avatarUrl, updateAvatarUrl } = useAuth();
+  const { hasAnyRole, activeMembership } = useMembership();
   const { t } = useLanguage();
   const { learningLocale } = useLearningLocale();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -46,7 +48,12 @@ export function AppLayout() {
 
   const displayName = profile?.displayName || user?.name || 'Student';
   const userAvatar = avatarUrl || profile?.avatarUrl || FALLBACK_AVATAR;
-  const roleLabel = profile?.gradeLevel
+  const canAccessTeacherView = hasAnyRole(['teacher', 'school_admin']);
+  const roleLabel = canAccessTeacherView
+    ? activeMembership?.orgName
+      ? `${t('app.layout.nav.teacher')} · ${activeMembership.orgName}`
+      : t('app.layout.nav.teacher')
+    : profile?.gradeLevel
     ? `${t('app.layout.role.learner')} · ${profile.gradeLevel}`
     : t('app.layout.role.learner');
   const localeOption = LEARNING_LOCALES.find((locale) => locale.value === learningLocale);
@@ -60,7 +67,9 @@ export function AppLayout() {
   const mobileMenuNav = [
     { icon: User, label: t('nav.profile'), path: '/app/profile' },
     { icon: Settings, label: t('nav.settings'), path: '/app/settings' },
-    { icon: LayoutDashboard, label: t('app.layout.nav.teacher'), path: '/app/teacher' },
+    ...(canAccessTeacherView
+      ? [{ icon: LayoutDashboard, label: t('app.layout.nav.teacher'), path: '/app/teacher' }]
+      : []),
   ];
 
   const handleLogout = async () => {
@@ -175,6 +184,14 @@ export function AppLayout() {
                   >
                     <Mic size={16} className="mr-2" /> {t('app.layout.nav.practice')}
                   </DropdownMenu.Item>
+                  {canAccessTeacherView ? (
+                    <DropdownMenu.Item
+                      className="flex items-center px-3 py-2.5 text-sm font-medium text-foreground rounded-xl hover:bg-secondary cursor-pointer outline-none"
+                      onClick={() => navigate('/app/teacher')}
+                    >
+                      <LayoutDashboard size={16} className="mr-2" /> {t('app.layout.nav.teacher')}
+                    </DropdownMenu.Item>
+                  ) : null}
                   <DropdownMenu.Separator className="h-px bg-border my-1" />
                   <DropdownMenu.Item
                     className="flex items-center px-3 py-2.5 text-sm font-medium text-destructive rounded-xl hover:bg-destructive/10 cursor-pointer outline-none"

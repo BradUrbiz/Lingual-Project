@@ -12,10 +12,12 @@ type WebkitWindow = Window & {
 
 export function useAudioRms(remoteAudioStream: MediaStream | null, enabled: boolean) {
   const rmsLevelRef = useRef(0);
+  const rawRmsRef = useRef(0);
 
   useEffect(() => {
     if (!enabled || !remoteAudioStream) {
       rmsLevelRef.current = 0;
+      rawRmsRef.current = 0;
       return;
     }
 
@@ -24,6 +26,7 @@ export function useAudioRms(remoteAudioStream: MediaStream | null, enabled: bool
 
     if (!AudioContextCtor) {
       rmsLevelRef.current = 0;
+      rawRmsRef.current = 0;
       return;
     }
 
@@ -46,6 +49,7 @@ export function useAudioRms(remoteAudioStream: MediaStream | null, enabled: bool
       const level = rmsToLevel(rms);
       const smoothed = smoothLevel(rmsLevelRef.current, level);
 
+      rawRmsRef.current = rms;
       rmsLevelRef.current = smoothed;
 
       rafId = window.requestAnimationFrame(tick);
@@ -61,6 +65,7 @@ export function useAudioRms(remoteAudioStream: MediaStream | null, enabled: bool
       }
 
       rmsLevelRef.current = 0;
+      rawRmsRef.current = 0;
 
       try {
         source.disconnect();
@@ -78,5 +83,5 @@ export function useAudioRms(remoteAudioStream: MediaStream | null, enabled: bool
     };
   }, [enabled, remoteAudioStream]);
 
-  return { rmsLevelRef };
+  return { rawRmsRef, rmsLevelRef };
 }

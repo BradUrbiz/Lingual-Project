@@ -5,6 +5,7 @@ Schema:
 - users/{uid}
     - email: str
     - name: str
+    - last_active_membership_id: str | null
     - created_at: timestamp
     - updated_at: timestamp
     - profile:
@@ -62,10 +63,135 @@ Schema:
     - duration_seconds: int (optional)
     - metadata: dict (optional)
     - created_at: timestamp
+
+- organizations/{org_id}
+    - name: str
+    - type: str ('school' | 'district' | 'program')
+    - status: str ('active' | 'inactive')
+    - pilot_stage: str
+    - default_modality_policy: str
+    - default_retention_policy: str
+    - lms_capabilities: list[str]
+    - created_at: timestamp
+    - updated_at: timestamp
+
+- memberships/{membership_id}
+    - org_id: str
+    - uid: str
+    - roles: list[str] ('school_admin' | 'teacher' | 'student')
+    - status: str ('active' | 'invited' | 'inactive')
+    - primary_class_ids: list[str]
+    - created_at: timestamp
+    - updated_at: timestamp
+
+- classes/{class_id}
+    - org_id: str
+    - name: str
+    - term: str
+    - subject: str
+    - learning_locale: str
+    - teacher_membership_ids: list[str]
+    - grade_band: str
+    - status: str
+    - created_at: timestamp
+    - updated_at: timestamp
+
+- enrollments/{enrollment_id}
+    - class_id: str
+    - student_uid: str
+    - student_membership_id: str (optional)
+    - status: str
+    - join_source: str
+    - student_number: str (optional)
+    - guardian_contact_required: bool
+    - created_at: timestamp
+    - updated_at: timestamp
+
+- curriculum_mappings/{mapping_id}
+    - org_id: str
+    - class_id: str
+    - package_id: str
+    - module_id: str
+    - objective_ids: list[str]
+    - situation_ids: list[str]
+    - target_expressions: list[str]
+    - focus_grammar: list[str]
+    - allowed_context_tags: list[str]
+    - feedback_policy: dict
+    - scaffold_policy: dict
+    - modality_policy: dict
+    - rubric_focus: list[str]
+    - teacher_notes: str
+    - created_by_uid: str
+    - created_at: timestamp
+    - updated_at: timestamp
+
+- assignments/{assignment_id}
+    - org_id: str
+    - class_id: str
+    - mapping_id: str
+    - title: str
+    - description: str
+    - status: str ('draft' | 'published' | 'archived')
+    - release_at: str (ISO datetime, optional)
+    - due_at: str (ISO datetime, optional)
+    - modality_override: dict
+    - max_attempts: int | None
+    - task_type: str
+    - success_criteria: list[str]
+    - created_by_uid: str
+    - created_at: timestamp
+    - updated_at: timestamp
+
+- practice_sessions/{session_id}
+    - org_id: str
+    - class_id: str
+    - assignment_id: str
+    - student_uid: str
+    - mapping_snapshot: dict
+    - assignment_snapshot: dict
+    - curriculum_snapshot: dict
+    - modality: str
+    - voice_enabled: bool
+    - text_enabled: bool
+    - status: str ('active' | 'completed' | 'abandoned')
+    - started_at: timestamp
+    - ended_at: timestamp | None
+    - prompt_version: str
+    - transcript_ref: dict
+    - cost_summary: dict
+    - session_summary: dict
+    - teacher_preview: bool
+    - ui_language: str
+    - created_at: timestamp
+    - updated_at: timestamp
+
+- learning_events/{event_id}
+    - org_id: str
+    - class_id: str
+    - assignment_id: str
+    - session_id: str
+    - student_uid: str
+    - event_type: str
+    - turn_index: int | None
+    - payload: dict
+    - created_at: timestamp
 """
 
+from datetime import UTC, datetime
+
 from firebase_admin import firestore
-from datetime import datetime
+
+SCHOOL_ROLE_PRIORITY = {
+    'school_admin': 0,
+    'teacher': 1,
+    'student': 2,
+}
+ACTIVE_MEMBERSHIP_STATUSES = {'active', 'invited'}
+
+
+def _utc_now():
+    return datetime.now(UTC)
 
 
 def get_db():
@@ -79,12 +205,93 @@ def get_user_ref(uid):
     return db.collection('users').document(uid)
 
 
+def get_organizations_collection():
+    """Get organizations collection."""
+    return get_db().collection('organizations')
+
+
+def get_memberships_collection():
+    """Get memberships collection."""
+    return get_db().collection('memberships')
+
+
+def get_classes_collection():
+    """Get classes collection."""
+    return get_db().collection('classes')
+
+
+def get_enrollments_collection():
+    """Get enrollments collection."""
+    return get_db().collection('enrollments')
+
+
+def get_curriculum_mappings_collection():
+    """Get curriculum mappings collection."""
+    return get_db().collection('curriculum_mappings')
+
+
+def get_assignments_collection():
+    """Get assignments collection."""
+    return get_db().collection('assignments')
+
+
+def get_practice_sessions_collection():
+    """Get practice sessions collection."""
+    return get_db().collection('practice_sessions')
+
+
+def get_learning_events_collection():
+    """Get learning events collection."""
+    return get_db().collection('learning_events')
+
+
+def get_organization_ref(org_id):
+    """Get organization document reference."""
+    return get_organizations_collection().document(org_id)
+
+
+def get_membership_ref(membership_id):
+    """Get membership document reference."""
+    return get_memberships_collection().document(membership_id)
+
+
+def get_class_ref(class_id):
+    """Get class document reference."""
+    return get_classes_collection().document(class_id)
+
+
+def get_enrollment_ref(enrollment_id):
+    """Get enrollment document reference."""
+    return get_enrollments_collection().document(enrollment_id)
+
+
+def get_curriculum_mapping_ref(mapping_id):
+    """Get curriculum mapping document reference."""
+    return get_curriculum_mappings_collection().document(mapping_id)
+
+
+def get_assignment_ref(assignment_id):
+    """Get assignment document reference."""
+    return get_assignments_collection().document(assignment_id)
+
+
+def get_practice_session_ref(session_id):
+    """Get practice session document reference."""
+    return get_practice_sessions_collection().document(session_id)
+
+
+def get_learning_event_ref(event_id):
+    """Get learning event document reference."""
+    return get_learning_events_collection().document(event_id)
+
+
 def create_user(uid, email, name):
     """Create a new user document."""
     user_ref = get_user_ref(uid)
     user_data = {
         'email': email,
         'name': name,
+        'last_active_membership_id': None,
         'created_at': firestore.SERVER_TIMESTAMP,
         'updated_at': firestore.SERVER_TIMESTAMP,
         'profile': {
@@ -246,6 +453,15 @@ def update_selected_categories(uid, categories):
     })
 
 
+def set_user_last_active_membership(uid, membership_id):
+    """Persist the user's active membership for direct client access rules."""
+    user_ref = get_user_ref(uid)
+    user_ref.set({
+        'last_active_membership_id': membership_id,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    }, merge=True)
+
+
 def get_user_profile_context(uid):
     """Get user profile data for AI context."""
     user = get_user(uid)
@@ -264,6 +480,520 @@ def get_user_profile_context(uid):
             'selected_categories': user.get('selected_categories', [])
         }
     return None
+
+
+def _normalize_string_list(values):
+    if not isinstance(values, list):
+        return []
+    normalized = []
+    seen = set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        cleaned = value.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        normalized.append(cleaned)
+        seen.add(cleaned)
+    return normalized
+
+
+def _membership_sort_key(membership):
+    roles = membership.get('roles', [])
+    role_priority = min((SCHOOL_ROLE_PRIORITY.get(role, 99) for role in roles), default=99)
+    org_name = (membership.get('orgName') or '').lower()
+    membership_id = membership.get('id') or ''
+    return role_priority, org_name, membership_id
+
+
+# ============================================
+# SCHOOL INTEGRATION FUNCTIONS
+# ============================================
+
+
+def create_organization(
+    name,
+    org_type='school',
+    status='active',
+    pilot_stage='internal',
+    default_modality_policy='hybrid',
+    default_retention_policy='standard_school',
+    lms_capabilities=None,
+    org_id=None,
+):
+    """Create an organization document."""
+    doc_ref = get_organization_ref(org_id) if org_id else get_organizations_collection().document()
+    org_data = {
+        'name': name,
+        'type': org_type,
+        'status': status,
+        'pilot_stage': pilot_stage,
+        'default_modality_policy': default_modality_policy,
+        'default_retention_policy': default_retention_policy,
+        'lms_capabilities': _normalize_string_list(lms_capabilities or []),
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    }
+    doc_ref.set(org_data)
+    return doc_ref.id
+
+
+def get_organization(org_id):
+    """Get an organization by id."""
+    doc = get_organization_ref(org_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict()
+    data['id'] = doc.id
+    return data
+
+
+def create_membership(
+    org_id,
+    uid,
+    roles,
+    status='active',
+    primary_class_ids=None,
+    membership_id=None,
+):
+    """Create a membership document."""
+    doc_ref = get_membership_ref(membership_id) if membership_id else get_memberships_collection().document()
+    membership_data = {
+        'org_id': org_id,
+        'uid': uid,
+        'roles': _normalize_string_list(roles),
+        'status': status,
+        'primary_class_ids': _normalize_string_list(primary_class_ids or []),
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    }
+    doc_ref.set(membership_data)
+    return doc_ref.id
+
+
+def get_membership(membership_id):
+    """Get a membership by id."""
+    doc = get_membership_ref(membership_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict()
+    data['id'] = doc.id
+    return data
+
+
+def get_user_memberships(uid):
+    """Get active or invited memberships for a user, enriched with organization info."""
+    docs = (
+        get_memberships_collection()
+        .where('uid', '==', uid)
+        .where('status', 'in', sorted(ACTIVE_MEMBERSHIP_STATUSES))
+        .stream()
+    )
+    memberships = []
+
+    for doc in docs:
+        data = doc.to_dict() or {}
+        status = data.get('status', 'active')
+        org_id = data.get('org_id')
+        org = get_organization(org_id) if isinstance(org_id, str) and org_id else None
+        memberships.append({
+            'id': doc.id,
+            'orgId': org_id,
+            'orgName': (org or {}).get('name', ''),
+            'orgType': (org or {}).get('type'),
+            'roles': _normalize_string_list(data.get('roles', [])),
+            'status': status,
+            'primaryClassIds': _normalize_string_list(data.get('primary_class_ids', [])),
+        })
+
+    memberships.sort(key=_membership_sort_key)
+    return memberships
+
+
+def resolve_user_school_context(uid, preferred_active_membership_id=None):
+    """Resolve membership context for auth and route protection."""
+    memberships = get_user_memberships(uid)
+    active_membership = None
+
+    if preferred_active_membership_id:
+        active_membership = next(
+            (membership for membership in memberships if membership.get('id') == preferred_active_membership_id),
+            None,
+        )
+
+    if active_membership is None and memberships:
+        active_membership = memberships[0]
+
+    active_roles = active_membership.get('roles', []) if active_membership else []
+
+    return {
+        'memberships': memberships,
+        'active_membership': active_membership,
+        'active_membership_id': active_membership.get('id') if active_membership else None,
+        'active_organization_id': active_membership.get('orgId') if active_membership else None,
+        'active_roles': active_roles,
+    }
+
+
+def create_class(
+    org_id,
+    name,
+    learning_locale='ko-KR',
+    term='',
+    subject='',
+    teacher_membership_ids=None,
+    grade_band='',
+    status='active',
+    class_id=None,
+):
+    """Create a class document."""
+    doc_ref = get_class_ref(class_id) if class_id else get_classes_collection().document()
+    class_data = {
+        'org_id': org_id,
+        'name': name,
+        'term': term,
+        'subject': subject,
+        'learning_locale': learning_locale,
+        'teacher_membership_ids': _normalize_string_list(teacher_membership_ids or []),
+        'grade_band': grade_band,
+        'status': status,
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    }
+    doc_ref.set(class_data)
+    return doc_ref.id
+
+
+def add_primary_class_to_membership(membership_id, class_id):
+    """Attach a class to a membership's primary class list."""
+    membership_ref = get_membership_ref(membership_id)
+    membership_ref.update({
+        'primary_class_ids': firestore.ArrayUnion([class_id]),
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    })
+
+
+def get_class(class_id):
+    """Get a class by id."""
+    doc = get_class_ref(class_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict()
+    data['id'] = doc.id
+    return data
+
+
+def list_teacher_classes(membership_id, status='active'):
+    """List classes attached to a teacher membership."""
+    query = get_classes_collection().where('teacher_membership_ids', 'array_contains', membership_id)
+    if status:
+        query = query.where('status', '==', status)
+    docs = query.order_by('updated_at', direction=firestore.Query.DESCENDING).stream()
+    classes = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        classes.append(data)
+    return classes
+
+
+def list_org_classes(org_id, status='active'):
+    """List classes for an organization."""
+    query = get_classes_collection().where('org_id', '==', org_id)
+    if status:
+        query = query.where('status', '==', status)
+    docs = query.order_by('updated_at', direction=firestore.Query.DESCENDING).stream()
+
+    classes = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        classes.append(data)
+    return classes
+
+
+def create_enrollment(
+    class_id,
+    student_uid,
+    student_membership_id=None,
+    status='active',
+    join_source='manual',
+    student_number='',
+    guardian_contact_required=False,
+    enrollment_id=None,
+):
+    """Create an enrollment document."""
+    deterministic_enrollment_id = enrollment_id or f'{class_id}_{student_uid}'
+    doc_ref = get_enrollment_ref(deterministic_enrollment_id)
+    enrollment_data = {
+        'class_id': class_id,
+        'student_uid': student_uid,
+        'student_membership_id': student_membership_id,
+        'status': status,
+        'join_source': join_source,
+        'student_number': student_number,
+        'guardian_contact_required': bool(guardian_contact_required),
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    }
+    doc_ref.set(enrollment_data)
+    return doc_ref.id
+
+
+def list_student_enrollments(student_uid, status='active'):
+    """List enrollments for a student."""
+    query = get_enrollments_collection().where('student_uid', '==', student_uid)
+    if status:
+        query = query.where('status', '==', status)
+    docs = query.order_by('updated_at', direction=firestore.Query.DESCENDING).stream()
+    enrollments = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        enrollments.append(data)
+    return enrollments
+
+
+def list_class_enrollments(class_id, status='active'):
+    """List enrollments for a class."""
+    query = get_enrollments_collection().where('class_id', '==', class_id)
+    if status:
+        query = query.where('status', '==', status)
+    docs = query.order_by('updated_at', direction=firestore.Query.DESCENDING).stream()
+
+    enrollments = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        enrollments.append(data)
+    return enrollments
+
+
+def create_curriculum_mapping(
+    org_id,
+    class_id,
+    package_id,
+    module_id,
+    objective_ids=None,
+    situation_ids=None,
+    target_expressions=None,
+    focus_grammar=None,
+    allowed_context_tags=None,
+    feedback_policy=None,
+    scaffold_policy=None,
+    modality_policy=None,
+    rubric_focus=None,
+    teacher_notes='',
+    created_by_uid='',
+    mapping_id=None,
+):
+    """Create a curriculum mapping document."""
+    doc_ref = get_curriculum_mapping_ref(mapping_id) if mapping_id else get_curriculum_mappings_collection().document()
+    mapping_data = {
+        'org_id': org_id,
+        'class_id': class_id,
+        'package_id': package_id,
+        'module_id': module_id,
+        'objective_ids': _normalize_string_list(objective_ids or []),
+        'situation_ids': _normalize_string_list(situation_ids or []),
+        'target_expressions': _normalize_string_list(target_expressions or []),
+        'focus_grammar': _normalize_string_list(focus_grammar or []),
+        'allowed_context_tags': _normalize_string_list(allowed_context_tags or []),
+        'feedback_policy': feedback_policy or {},
+        'scaffold_policy': scaffold_policy or {},
+        'modality_policy': modality_policy or {},
+        'rubric_focus': _normalize_string_list(rubric_focus or []),
+        'teacher_notes': teacher_notes or '',
+        'created_by_uid': created_by_uid,
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    }
+    doc_ref.set(mapping_data)
+    return doc_ref.id
+
+
+def get_curriculum_mapping(mapping_id):
+    """Get a curriculum mapping by id."""
+    doc = get_curriculum_mapping_ref(mapping_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict() or {}
+    data['id'] = doc.id
+    return data
+
+
+def list_class_curriculum_mappings(class_id):
+    """List curriculum mappings for a class."""
+    docs = get_curriculum_mappings_collection().where('class_id', '==', class_id).stream()
+    mappings = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        mappings.append(data)
+    return mappings
+
+
+def create_assignment(
+    org_id,
+    class_id,
+    mapping_id,
+    title,
+    description='',
+    status='draft',
+    release_at='',
+    due_at='',
+    modality_override=None,
+    max_attempts=None,
+    task_type='decision_making',
+    success_criteria=None,
+    created_by_uid='',
+    assignment_id=None,
+):
+    """Create an assignment document."""
+    doc_ref = get_assignment_ref(assignment_id) if assignment_id else get_assignments_collection().document()
+    assignment_data = {
+        'org_id': org_id,
+        'class_id': class_id,
+        'mapping_id': mapping_id,
+        'title': title,
+        'description': description or '',
+        'status': status,
+        'release_at': release_at or '',
+        'due_at': due_at or '',
+        'modality_override': modality_override or {},
+        'max_attempts': max_attempts,
+        'task_type': task_type,
+        'success_criteria': _normalize_string_list(success_criteria or []),
+        'created_by_uid': created_by_uid,
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    }
+    doc_ref.set(assignment_data)
+    return doc_ref.id
+
+
+def get_assignment(assignment_id):
+    """Get an assignment by id."""
+    doc = get_assignment_ref(assignment_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict() or {}
+    data['id'] = doc.id
+    return data
+
+
+def list_class_assignments(class_id, statuses=None):
+    """List assignments for a class."""
+    docs = get_assignments_collection().where('class_id', '==', class_id).stream()
+    allowed_statuses = set(_normalize_string_list(statuses or []))
+    assignments = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        if allowed_statuses and data.get('status') not in allowed_statuses:
+            continue
+        data['id'] = doc.id
+        assignments.append(data)
+    return assignments
+
+
+def get_student_class_enrollment(class_id, student_uid):
+    """Get a student's enrollment for a class if it exists."""
+    enrollment_doc = get_enrollment_ref(f'{class_id}_{student_uid}').get()
+    if not enrollment_doc.exists:
+        return None
+    data = enrollment_doc.to_dict() or {}
+    data['id'] = enrollment_doc.id
+    return data
+
+
+def list_student_assignments(student_uid, statuses=None):
+    """List assignments available to a student through active enrollments."""
+    enrollments = list_student_enrollments(student_uid)
+    assignments = []
+    seen_assignment_ids = set()
+    for enrollment in enrollments:
+        class_id = enrollment.get('class_id')
+        if not isinstance(class_id, str) or not class_id:
+            continue
+        for assignment in list_class_assignments(class_id, statuses=statuses):
+            assignment_id = assignment.get('id')
+            if assignment_id in seen_assignment_ids:
+                continue
+            assignments.append(assignment)
+            seen_assignment_ids.add(assignment_id)
+    return assignments
+
+
+def create_practice_session(session_data, session_id=None):
+    """Create a practice session document."""
+    doc_ref = get_practice_session_ref(session_id) if session_id else get_practice_sessions_collection().document()
+    payload = dict(session_data or {})
+    payload.setdefault('created_at', _utc_now())
+    payload['updated_at'] = _utc_now()
+    doc_ref.set(payload)
+    return doc_ref.id
+
+
+def get_practice_session(session_id):
+    """Get a practice session by id."""
+    doc = get_practice_session_ref(session_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict() or {}
+    data['id'] = doc.id
+    return data
+
+
+def update_practice_session(session_id, updates):
+    """Update a practice session."""
+    payload = dict(updates or {})
+    payload['updated_at'] = _utc_now()
+    get_practice_session_ref(session_id).update(payload)
+
+
+def list_assignment_practice_sessions(assignment_id):
+    """List practice sessions for an assignment."""
+    docs = get_practice_sessions_collection().where('assignment_id', '==', assignment_id).stream()
+    sessions = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        sessions.append(data)
+    return sessions
+
+
+def create_learning_event(event_data, event_id=None):
+    """Create a learning event."""
+    doc_ref = get_learning_event_ref(event_id) if event_id else get_learning_events_collection().document()
+    payload = dict(event_data or {})
+    payload.setdefault('created_at', _utc_now())
+    doc_ref.set(payload)
+    return doc_ref.id
+
+
+def list_session_learning_events(session_id):
+    """List learning events for a session."""
+    docs = get_learning_events_collection().where('session_id', '==', session_id).stream()
+    events = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        events.append(data)
+    return events
+
+
+def list_assignment_learning_events(assignment_id, event_types=None):
+    """List learning events for an assignment."""
+    docs = get_learning_events_collection().where('assignment_id', '==', assignment_id).stream()
+    allowed_event_types = set(_normalize_string_list(event_types or []))
+    events = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        if allowed_event_types and data.get('event_type') not in allowed_event_types:
+            continue
+        data['id'] = doc.id
+        events.append(data)
+    return events
 
 
 # ============================================
@@ -381,7 +1111,7 @@ def add_message_to_chat(uid, chat_id, role, content, timestamp=None, sort_order=
     message = {
         'role': role,
         'content': content,
-        'timestamp': timestamp or datetime.utcnow().isoformat()
+        'timestamp': timestamp or _utc_now().isoformat()
     }
     normalized_sort_order = _coerce_sort_order(sort_order)
     if normalized_sort_order is not None:

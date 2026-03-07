@@ -1,9 +1,13 @@
 import { clamp01 } from './rms';
 import type {
   AvatarAffect,
+  AvatarDirective,
+  AvatarDirectiveSource,
   AvatarDialogueState,
+  AvatarEmotionKey,
   AvatarPerformanceFrame,
   AvatarPerformanceSource,
+  AvatarReactionIntent,
 } from './types';
 
 type DialogueStateContext = {
@@ -50,7 +54,54 @@ const CURIOUS_PATTERNS = [
 ];
 
 function getActiveTranscript(source: AvatarPerformanceSource): string {
-  return source.assistantTranscriptDelta.trim() || source.assistantTranscriptFinal.trim();
+  return (
+    source.avatarDirective?.subtitleText?.trim()
+    || source.assistantTranscriptDelta.trim()
+    || source.assistantTranscriptFinal.trim()
+  );
+}
+
+function resolveDirectiveAffectFromEmotion(emotionKey: AvatarEmotionKey | null | undefined): AvatarAffect | null {
+  switch (emotionKey) {
+    case 'joy':
+    case 'smirk':
+      return 'encouraging';
+    case 'surprise':
+      return 'curious';
+    case 'anger':
+    case 'disgust':
+      return 'corrective';
+    case 'sadness':
+    case 'fear':
+      return 'apologetic';
+    case 'neutral':
+      return 'neutral';
+    default:
+      return null;
+  }
+}
+
+function resolveDirectiveAffectFromReaction(reactionIntent: AvatarReactionIntent | null | undefined): AvatarAffect | null {
+  switch (reactionIntent) {
+    case 'tap_head_notice':
+    case 'tap_face_focus':
+      return 'curious';
+    case 'tap_body_affirm':
+    case 'tap_chest_reassure':
+      return 'affirming';
+    case 'tap_hand_wave':
+      return 'encouraging';
+    default:
+      return null;
+  }
+}
+
+function resolveDirectiveAffect(directive: AvatarDirective | null): AvatarAffect | null {
+  if (!directive) return null;
+  return (
+    resolveDirectiveAffectFromEmotion(directive.emotionKey)
+    ?? resolveDirectiveAffectFromReaction(directive.reactionIntent)
+  );
 }
 
 function getAffectBase(affect: AvatarAffect) {
@@ -225,6 +276,8 @@ export function buildAvatarPerformanceFrame({
   let headRoll = Math.sin(t * 0.65) * 0.008;
   let neckPitch = breathLift * 0.8;
   let chestPitch = breathLift * 1.1;
+  const explicitIntensity = clamp01(source.avatarDirective?.intensity ?? intensity);
+  const directiveSource: AvatarDirectiveSource = source.avatarDirective ? 'directive' : 'fallback';
 
   switch (dialogueState) {
     case 'listening':
@@ -316,7 +369,7 @@ export function buildAvatarPerformanceFrame({
   return {
     dialogueState,
     affect,
-    intensity,
+    intensity: explicitIntensity,
     jawOpen: clamp01(jawOpen),
     mouthRound: clamp01(mouthRound),
     mouthSpread: clamp01(mouthSpread),
@@ -332,11 +385,32 @@ export function buildAvatarPerformanceFrame({
     headRoll,
     neckPitch,
     chestPitch,
+    directive: source.avatarDirective,
+    directiveSource,
     debug: {
       audioLevel: clamp01(audioLevel),
+      rmsLevel: clamp01(audioLevel),
       transcript,
       hasRemoteAudio: Boolean(source.remoteAudioStream),
-      detectedExpressionKeys: [],
+      speakingEventState: source.isSpeaking
+        ? 'speaking'
+        : source.isListening
+          ? 'listening'
+          : dialogueState === 'thinking' || dialogueState === 'pre_speaking'
+            ? 'thinking'
+            : 'idle',
+      mouthTarget: clamp01(jawOpen),
+      detectedExpressionKeys: [
+        source.avatarDirective?.expressionId ?? '',
+        source.avatarDirective?.emotionKey ?? '',
+        source.avatarDirective?.motionRef ?? '',
+      ].filter(Boolean),
+      directiveSource,
+      lastExplicitDirective: source.avatarDirective,
     },
   };
+}
+
+export function resolveAvatarAffect(source: AvatarPerformanceSource): AvatarAffect {
+  return resolveDirectiveAffect(source.avatarDirective) ?? inferAvatarAffect(getActiveTranscript(source));
 }

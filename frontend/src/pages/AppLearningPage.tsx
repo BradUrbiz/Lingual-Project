@@ -1,6 +1,11 @@
-import { BookOpen, MessageSquare, Gamepad2, Mic, TrendingUp } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen, MessageSquare, Gamepad2, Mic, TrendingUp, GraduationCap, Loader2 } from 'lucide-react';
+import { getStudentAssignments } from '@/api/assignments';
+import { Alert, AlertDescription, Badge, Button } from '@/components/ui';
 import { DashboardStatsBar, ServiceNavigationCard } from '@/components/dashboard';
 import { useLanguage } from '@/contexts/LanguageContext';
+import type { StudentAssignmentSummary } from '@/types';
 
 // Mock stats — will be replaced with real backend data later
 const MOCK_STATS = {
@@ -11,8 +16,35 @@ const MOCK_STATS = {
 };
 
 export function AppLearningPage() {
+  const navigate = useNavigate();
   const { t } = useLanguage();
   const surfaceClass = 'rounded-2xl border-3 border-foreground bg-card shadow-stamp';
+  const [assignments, setAssignments] = useState<StudentAssignmentSummary[]>([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(true);
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadAssignments = async () => {
+      try {
+        const nextAssignments = await getStudentAssignments();
+        if (!isActive) return;
+        setAssignments(nextAssignments);
+        setAssignmentError(null);
+      } catch (error) {
+        if (!isActive) return;
+        setAssignmentError(error instanceof Error ? error.message : 'Failed to load assignments.');
+      } finally {
+        if (isActive) setAssignmentsLoading(false);
+      }
+    };
+
+    void loadAssignments();
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -38,6 +70,68 @@ export function AppLearningPage() {
           {t('app.dashboard.snapshot') || 'Weekly Snapshot'}
         </h2>
         <DashboardStatsBar stats={MOCK_STATS} t={t} />
+      </section>
+
+      <section className={`${surfaceClass} p-6`}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-lg font-display font-bold text-foreground">Assigned practice</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Published school assignments appear here with their assignment-aware launch page.
+            </p>
+          </div>
+          <Badge variant="secondary" size="sm">
+            {assignments.length} active
+          </Badge>
+        </div>
+
+        {assignmentError ? (
+          <Alert className="mt-5">
+            <AlertDescription>{assignmentError}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {assignmentsLoading ? (
+          <div className="mt-6 flex items-center gap-3 rounded-2xl border-2 border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading assignments...
+          </div>
+        ) : assignments.length === 0 ? (
+          <div className="mt-6 rounded-3xl border-3 border-dashed border-border bg-secondary/40 p-8 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-foreground bg-card">
+              <GraduationCap size={24} strokeWidth={2.5} />
+            </div>
+            <h3 className="mt-4 text-xl font-display font-bold text-foreground">No school assignments yet</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              When a teacher publishes an assignment for your class, it will show up here.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {assignments.map((assignment) => (
+              <div key={assignment.id} className="rounded-2xl border-2 border-border bg-secondary/40 p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={assignment.status === 'published' ? 'success' : 'outline'} size="sm">
+                    {assignment.status}
+                  </Badge>
+                  <Badge variant="secondary" size="sm">
+                    {assignment.taskType.replace('_', ' ')}
+                  </Badge>
+                </div>
+                <h3 className="mt-4 text-xl font-display font-bold text-foreground">{assignment.title}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {assignment.className || 'Your class'} {assignment.dueAt ? `· Due ${assignment.dueAt}` : ''}
+                </p>
+                <p className="mt-3 text-sm text-foreground/80">
+                  {assignment.description || 'Assignment details will be shown on the launch page.'}
+                </p>
+                <Button className="mt-5" onClick={() => navigate(`/app/assignments/${assignment.id}`)}>
+                  Launch assignment
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className={`${surfaceClass} p-6`}>

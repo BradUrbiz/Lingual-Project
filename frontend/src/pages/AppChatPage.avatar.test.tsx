@@ -23,12 +23,29 @@ const legacyRealtimeState = {
   assistantTranscriptFinal: '',
   assistantSpeechStartedAt: null,
   assistantSpeechEndedAt: null,
+  avatarDirective: null,
+  avatarDirectiveSource: 'fallback' as const,
+  avatarDiagnostics: {
+    audioLevel: 0,
+    rmsLevel: 0,
+    hasRemoteAudio: false,
+    speakingEventState: 'idle' as const,
+    mouthTarget: 0,
+    paramA: null,
+    paramI: null,
+    paramU: null,
+    paramE: null,
+    paramO: null,
+    lastExplicitDirective: null,
+    source: 'fallback' as const,
+  },
   error: null,
   connect: vi.fn(),
   disconnect: vi.fn(),
   startListening: vi.fn(),
   stopListening: vi.fn(),
   clearMessages: vi.fn(),
+  queueAvatarHit: vi.fn(),
 };
 
 const avatarPerformanceState: AvatarPerformanceFrame = {
@@ -50,11 +67,18 @@ const avatarPerformanceState: AvatarPerformanceFrame = {
   headRoll: 0,
   neckPitch: 0,
   chestPitch: 0,
+  directive: null,
+  directiveSource: 'fallback',
   debug: {
     audioLevel: 0,
+    rmsLevel: 0,
     transcript: '',
     hasRemoteAudio: false,
+    speakingEventState: 'idle',
+    mouthTarget: 0.01,
     detectedExpressionKeys: [],
+    directiveSource: 'fallback',
+    lastExplicitDirective: null,
   },
 };
 
@@ -95,11 +119,15 @@ vi.mock('@/components/avatar/Live2DAvatarPanel', () => ({
     avatarReaction,
     audioLevel,
     statusLabel,
+    onAvatarHit,
+    avatarDiagnostics,
   }: {
     avatarState: unknown;
     avatarReaction: unknown;
     audioLevel: number;
     statusLabel: string;
+    onAvatarHit?: (area: string) => void;
+    avatarDiagnostics?: unknown;
   }) => (
     <div
       data-testid="live2d-avatar"
@@ -107,6 +135,8 @@ vi.mock('@/components/avatar/Live2DAvatarPanel', () => ({
       data-audio-level={String(audioLevel)}
       data-avatar-state={JSON.stringify(avatarState)}
       data-avatar-reaction={JSON.stringify(avatarReaction)}
+      data-avatar-diagnostics={JSON.stringify(avatarDiagnostics)}
+      data-has-avatar-hit={String(Boolean(onAvatarHit))}
     />
   ),
 }));
@@ -202,6 +232,22 @@ describe('AppChatPage live2d avatar wiring', () => {
       assistantTranscriptFinal: '',
       assistantSpeechStartedAt: null,
       assistantSpeechEndedAt: null,
+      avatarDirective: null,
+      avatarDirectiveSource: 'fallback',
+      avatarDiagnostics: {
+        audioLevel: 0,
+        rmsLevel: 0,
+        hasRemoteAudio: false,
+        speakingEventState: 'idle',
+        mouthTarget: 0,
+        paramA: null,
+        paramI: null,
+        paramU: null,
+        paramE: null,
+        paramO: null,
+        lastExplicitDirective: null,
+        source: 'fallback',
+      },
       error: null,
     });
     Object.assign(avatarPerformanceState, {
@@ -225,9 +271,14 @@ describe('AppChatPage live2d avatar wiring', () => {
       chestPitch: 0,
       debug: {
         audioLevel: 0,
+        rmsLevel: 0,
         transcript: '',
         hasRemoteAudio: false,
+        speakingEventState: 'idle',
+        mouthTarget: 0.01,
         detectedExpressionKeys: [],
+        directiveSource: 'fallback',
+        lastExplicitDirective: null,
       },
     });
 
@@ -290,9 +341,14 @@ describe('AppChatPage live2d avatar wiring', () => {
     avatarPerformanceState.affect = 'curious';
     avatarPerformanceState.debug = {
       audioLevel: 0.42,
+      rmsLevel: 0.11,
       transcript: 'Can you try that again?',
       hasRemoteAudio: true,
+      speakingEventState: 'speaking',
+      mouthTarget: 0.33,
       detectedExpressionKeys: [],
+      directiveSource: 'fallback',
+      lastExplicitDirective: null,
     };
 
     view.rerender(<AppChatPage />);
@@ -303,9 +359,13 @@ describe('AppChatPage live2d avatar wiring', () => {
 
     const state = JSON.parse(panel.getAttribute('data-avatar-state') || '{}');
     const reaction = JSON.parse(panel.getAttribute('data-avatar-reaction') || 'null');
+    const diagnostics = JSON.parse(panel.getAttribute('data-avatar-diagnostics') || '{}');
     expect(state.motionGroup).toBe('question');
     expect(state.subtitleText).toBe('Can you try that again?');
     expect(reaction).toBeNull();
+    expect(panel).toHaveAttribute('data-has-avatar-hit', 'true');
+    expect(diagnostics.audioLevel).toBe(0.42);
+    expect(diagnostics.mouthTarget).toBe(0.33);
   });
 
   it('still saves finalized realtime voice messages with sequential sortOrder metadata', async () => {

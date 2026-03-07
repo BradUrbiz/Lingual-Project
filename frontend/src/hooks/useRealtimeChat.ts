@@ -1,5 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { AvatarDiagnostics, AvatarDirective } from '@/components/avatar/types';
 import api from '../api';
+import {
+  buildBaseAvatarDiagnostics,
+  parseAvatarDirectiveArguments,
+  shouldTriggerAvatarContextResponse,
+} from './realtimeAvatar';
 
 interface RealtimeMessage {
   id: string;
@@ -10,9 +16,15 @@ interface RealtimeMessage {
   sortOrder: number;
 }
 
+type RealtimeSessionParams = {
+  uiLanguage?: string;
+  practice?: unknown;
+  [key: string]: unknown;
+};
+
 interface UseRealtimeChatOptions {
   onMessage?: (role: 'user' | 'assistant', content: string) => void;
-  sessionParams?: unknown;
+  sessionParams?: RealtimeSessionParams;
 }
 
 interface UseRealtimeChatReturn {
@@ -25,12 +37,16 @@ interface UseRealtimeChatReturn {
   assistantTranscriptFinal: string;
   assistantSpeechStartedAt: number | null;
   assistantSpeechEndedAt: number | null;
+  avatarDirective: AvatarDirective | null;
+  avatarDirectiveSource: 'directive' | 'fallback';
+  avatarDiagnostics: AvatarDiagnostics;
   error: string | null;
   connect: () => Promise<void>;
   disconnect: () => void;
   startListening: () => void;
   stopListening: () => void;
   clearMessages: () => void;
+  queueAvatarHit: (area: string) => Promise<void>;
 }
 
 type RealtimeContentItem = {
@@ -43,6 +59,9 @@ type RealtimeItem = {
   id?: string;
   role?: string;
   type?: string;
+  name?: string;
+  call_id?: string;
+  arguments?: string;
   content?: RealtimeContentItem[];
 };
 
@@ -51,10 +70,19 @@ type RealtimeServerEvent = {
   delta?: string;
   transcript?: string;
   item_id?: string;
+  call_id?: string;
+  name?: string;
+  arguments?: string;
   item?: RealtimeItem;
   session?: { input_audio_transcription?: unknown };
   response?: { id?: string };
   error?: { message?: string };
+};
+
+type AvatarContextResponse = {
+  systemMessage?: string;
+  reactionIntent?: string;
+  subtitleText?: string;
 };
 
 const ASSISTANT_TRANSCRIPT_DELTA_EVENTS = new Set([
@@ -78,6 +106,8 @@ const ASSISTANT_AUDIO_DONE_EVENTS = new Set([
   'response.output_audio.done',
   'output_audio_buffer.cleared',
 ]);
+
+const DIRECTIVE_TOOL_NAME = 'emit_avatar_directive';
 
 function extractItemText(item?: RealtimeItem): string | null {
   if (!item?.content?.length) return null;
@@ -110,6 +140,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const [assistantTranscriptFinal, setAssistantTranscriptFinal] = useState('');
   const [assistantSpeechStartedAt, setAssistantSpeechStartedAt] = useState<number | null>(null);
   const [assistantSpeechEndedAt, setAssistantSpeechEndedAt] = useState<number | null>(null);
+  const [avatarDirective, setAvatarDirective] = useState<AvatarDirective | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -124,9 +155,43 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const pendingUserOrderRef = useRef<number | null>(null);
   const pendingAssistantOrderRef = useRef<number | null>(null);
   const currentResponseIdRef = useRef<string | null>(null);
+  const isConnectedRef = useRef(false);
+  const isListeningRef = useRef(false);
   const isSpeakingRef = useRef(false);
   const assistantTranscriptDeltaRef = useRef('');
   const assistantSpeechStartedAtRef = useRef<number | null>(null);
+  const directiveResetTimeoutRef = useRef<number | null>(null);
+  const directiveArgumentBufferRef = useRef<Map<string, string>>(new Map());
+  const directiveCallRef = useRef<Map<string, { callId: string | null; name: string | null }>>(new Map());
+  const completedDirectiveCallsRef = useRef<Set<string>>(new Set());
+  const pendingDirectiveContinuationRef = useRef(false);
+  const queuedAvatarContextsRef = useRef<AvatarContextResponse[]>([]);
+
+  const clearAvatarDirective = useCallback(() => {
+    if (directiveResetTimeoutRef.current !== null) {
+      window.clearTimeout(directiveResetTimeoutRef.current);
+      directiveResetTimeoutRef.current = null;
+    }
+    setAvatarDirective(null);
+  }, []);
+
+  const applyAvatarDirective = useCallback((directive: AvatarDirective | null) => {
+    if (!directive) return;
+
+    if (directiveResetTimeoutRef.current !== null) {
+      window.clearTimeout(directiveResetTimeoutRef.current);
+      directiveResetTimeoutRef.current = null;
+    }
+
+    setAvatarDirective(directive);
+
+    if (directive.holdMs) {
+      directiveResetTimeoutRef.current = window.setTimeout(() => {
+        setAvatarDirective(null);
+        directiveResetTimeoutRef.current = null;
+      }, directive.holdMs);
+    }
+  }, []);
 
   const resetMessageTracking = useCallback(() => {
     finalizedItemsRef.current.clear();
@@ -310,11 +375,19 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     setIsListening(false);
     setIsSpeaking(false);
     setRemoteAudioStream(null);
+    isConnectedRef.current = false;
+    isListeningRef.current = false;
+    isSpeakingRef.current = false;
 
     currentResponseIdRef.current = null;
-    isSpeakingRef.current = false;
+    directiveArgumentBufferRef.current.clear();
+    directiveCallRef.current.clear();
+    completedDirectiveCallsRef.current.clear();
+    pendingDirectiveContinuationRef.current = false;
+    queuedAvatarContextsRef.current = [];
     resetAssistantPerformanceState();
-  }, [resetAssistantPerformanceState]);
+    clearAvatarDirective();
+  }, [clearAvatarDirective, resetAssistantPerformanceState]);
 
   const sendClientEvent = useCallback((payload: Record<string, unknown>) => {
     if (dataChannelRef.current?.readyState === 'open') {
@@ -324,6 +397,17 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     return false;
   }, []);
 
+  const createConversationItem = useCallback((item: Record<string, unknown>) => {
+    return sendClientEvent({
+      type: 'conversation.item.create',
+      item,
+    });
+  }, [sendClientEvent]);
+
+  const createRealtimeResponse = useCallback(() => {
+    return sendClientEvent({ type: 'response.create' });
+  }, [sendClientEvent]);
+
   const cancelCurrentResponse = useCallback(() => {
     sendClientEvent({ type: 'response.cancel' });
   }, [sendClientEvent]);
@@ -331,6 +415,91 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const clearOutputAudioBuffer = useCallback(() => {
     sendClientEvent({ type: 'output_audio_buffer.clear' });
   }, [sendClientEvent]);
+
+  const acknowledgeFunctionCall = useCallback((callId: string | null, ok: boolean) => {
+    if (!callId) return;
+    createConversationItem({
+      type: 'function_call_output',
+      call_id: callId,
+      output: JSON.stringify({ ok }),
+    });
+  }, [createConversationItem]);
+
+  const maybeContinueAfterDirectiveTool = useCallback(() => {
+    if (!pendingDirectiveContinuationRef.current || currentResponseIdRef.current) {
+      return false;
+    }
+
+    pendingDirectiveContinuationRef.current = false;
+    createRealtimeResponse();
+    return true;
+  }, [createRealtimeResponse]);
+
+  const flushQueuedAvatarContexts = useCallback(() => {
+    if (!shouldTriggerAvatarContextResponse({
+      isConnected: isConnectedRef.current,
+      isListening: isListeningRef.current,
+      isSpeaking: isSpeakingRef.current,
+      currentResponseId: currentResponseIdRef.current,
+    })) {
+      return false;
+    }
+
+    const queuedItems = queuedAvatarContextsRef.current.splice(0);
+    if (!queuedItems.length) {
+      return false;
+    }
+
+    for (const item of queuedItems) {
+      if (!item.systemMessage?.trim()) continue;
+      createConversationItem({
+        type: 'message',
+        role: 'system',
+        content: [
+          {
+            type: 'input_text',
+            text: item.systemMessage,
+          },
+        ],
+      });
+    }
+
+    createRealtimeResponse();
+    return true;
+  }, [createConversationItem, createRealtimeResponse]);
+
+  const completeDirectiveToolCall = useCallback((itemId: string, argsString?: string, eventCallId?: string | null, eventName?: string | null) => {
+    const meta = directiveCallRef.current.get(itemId);
+    const resolvedName = eventName ?? meta?.name ?? null;
+    if (resolvedName !== DIRECTIVE_TOOL_NAME) {
+      directiveArgumentBufferRef.current.delete(itemId);
+      directiveCallRef.current.delete(itemId);
+      return;
+    }
+
+    const resolvedCallId = eventCallId ?? meta?.callId ?? null;
+    if (resolvedCallId && completedDirectiveCallsRef.current.has(resolvedCallId)) {
+      directiveArgumentBufferRef.current.delete(itemId);
+      directiveCallRef.current.delete(itemId);
+      return;
+    }
+
+    const serializedArguments = argsString ?? directiveArgumentBufferRef.current.get(itemId) ?? '';
+    const directive = parseAvatarDirectiveArguments(serializedArguments);
+
+    if (directive) {
+      applyAvatarDirective(directive);
+    }
+    acknowledgeFunctionCall(resolvedCallId, Boolean(directive));
+    if (resolvedCallId) {
+      completedDirectiveCallsRef.current.add(resolvedCallId);
+    }
+    pendingDirectiveContinuationRef.current = true;
+    maybeContinueAfterDirectiveTool();
+
+    directiveArgumentBufferRef.current.delete(itemId);
+    directiveCallRef.current.delete(itemId);
+  }, [acknowledgeFunctionCall, applyAvatarDirective, maybeContinueAfterDirectiveTool]);
 
   const handleServerEvent = useCallback(
     (event: RealtimeServerEvent) => {
@@ -362,6 +531,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
         isSpeakingRef.current = false;
         setIsSpeaking(false);
         setAssistantSpeechEndedAt(Date.now());
+        flushQueuedAvatarContexts();
         return;
       }
 
@@ -369,12 +539,26 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
         case 'session.created':
           resetMessageTracking();
           resetAssistantPerformanceState();
+          directiveArgumentBufferRef.current.clear();
+          directiveCallRef.current.clear();
+          completedDirectiveCallsRef.current.clear();
+          pendingDirectiveContinuationRef.current = false;
+          clearAvatarDirective();
           break;
 
         case 'conversation.item.created':
         case 'conversation.item.added':
         case 'response.output_item.added':
           reserveMessageOrder(event.item, itemId);
+          if (itemId && event.item?.type === 'function_call') {
+            directiveCallRef.current.set(itemId, {
+              callId: event.item.call_id ?? event.call_id ?? null,
+              name: event.item.name ?? event.name ?? null,
+            });
+            if (typeof event.item.arguments === 'string') {
+              directiveArgumentBufferRef.current.set(itemId, event.item.arguments);
+            }
+          }
           break;
 
         case 'response.created':
@@ -388,14 +572,43 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
           setAssistantSpeechEndedAt(null);
           break;
 
-        case 'response.output_item.done': {
-          const role = resolveRole(event.item, 'assistant');
-          const text = extractItemText(event.item);
-          if (text) {
-            finalizeTranscript(role, text, itemId);
+        case 'response.function_call_arguments.delta':
+          if (itemId) {
+            const previous = directiveArgumentBufferRef.current.get(itemId) ?? '';
+            directiveArgumentBufferRef.current.set(itemId, `${previous}${event.delta ?? ''}`);
           }
           break;
-        }
+
+        case 'response.function_call_arguments.done':
+          if (itemId) {
+            completeDirectiveToolCall(
+              itemId,
+              event.arguments ?? event.item?.arguments,
+              event.call_id ?? event.item?.call_id ?? null,
+              event.name ?? event.item?.name ?? null
+            );
+          }
+          break;
+
+        case 'response.output_item.done':
+          if (event.item?.type === 'function_call' && itemId) {
+            completeDirectiveToolCall(
+              itemId,
+              event.item.arguments,
+              event.item.call_id ?? event.call_id ?? null,
+              event.item.name ?? event.name ?? null
+            );
+            break;
+          }
+
+          {
+            const role = resolveRole(event.item, 'assistant');
+            const text = extractItemText(event.item);
+            if (text) {
+              finalizeTranscript(role, text, itemId);
+            }
+          }
+          break;
 
         case 'conversation.item.input_audio_transcription.delta':
           appendTranscript('user', event.delta ?? event.transcript ?? '', itemId);
@@ -415,6 +628,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
 
         case 'input_audio_buffer.speech_started':
           reservePendingMessageOrder('user');
+          pendingDirectiveContinuationRef.current = false;
+          isListeningRef.current = true;
           setIsListening(true);
           resetAssistantPerformanceState();
           if (isSpeakingRef.current) {
@@ -428,7 +643,9 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
 
         case 'input_audio_buffer.speech_stopped':
           reserveMessageOrder(undefined, itemId);
+          isListeningRef.current = false;
           setIsListening(false);
+          flushQueuedAvatarContexts();
           break;
 
         case 'response.done':
@@ -441,11 +658,16 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
           if (assistantSpeechStartedAtRef.current === null && assistantTranscriptDeltaRef.current.trim()) {
             setAssistantSpeechEndedAt(Date.now());
           }
+          if (maybeContinueAfterDirectiveTool()) {
+            break;
+          }
+          flushQueuedAvatarContexts();
           break;
 
         case 'error':
           setError(event.error?.message || 'Unknown error');
           currentResponseIdRef.current = null;
+          pendingDirectiveContinuationRef.current = false;
           pendingAssistantOrderRef.current = null;
           isSpeakingRef.current = false;
           setIsSpeaking(false);
@@ -455,8 +677,12 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     [
       appendTranscript,
       cancelCurrentResponse,
+      clearAvatarDirective,
       clearOutputAudioBuffer,
+      completeDirectiveToolCall,
       finalizeTranscript,
+      flushQueuedAvatarContexts,
+      maybeContinueAfterDirectiveTool,
       reserveMessageOrder,
       reservePendingMessageOrder,
       resetAssistantPerformanceState,
@@ -501,7 +727,9 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       dataChannelRef.current = dc;
 
       dc.onopen = () => {
+        isConnectedRef.current = true;
         setIsConnected(true);
+        flushQueuedAvatarContexts();
       };
 
       dc.onmessage = (event) => {
@@ -513,6 +741,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       };
 
       dc.onclose = () => {
+        isConnectedRef.current = false;
         setIsConnected(false);
       };
 
@@ -543,7 +772,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       setError(message);
       console.error('Realtime connection error:', err);
     }
-  }, [cleanupConnection, handleServerEvent, sessionParams]);
+  }, [cleanupConnection, flushQueuedAvatarContexts, handleServerEvent, sessionParams]);
 
   const disconnect = useCallback(() => {
     cleanupConnection();
@@ -567,7 +796,46 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     setMessages([]);
     resetMessageTracking();
     resetAssistantPerformanceState();
-  }, [resetAssistantPerformanceState, resetMessageTracking]);
+    directiveArgumentBufferRef.current.clear();
+    directiveCallRef.current.clear();
+    completedDirectiveCallsRef.current.clear();
+    pendingDirectiveContinuationRef.current = false;
+    clearAvatarDirective();
+  }, [clearAvatarDirective, resetAssistantPerformanceState, resetMessageTracking]);
+
+  const queueAvatarHit = useCallback(async (area: string) => {
+    if (!area.trim()) return;
+
+    try {
+      const response = await api.post('/realtime/avatar-context', {
+        area,
+        practice: sessionParams?.practice ?? null,
+        mode: 'realtime',
+      });
+
+      const payload = response.data as AvatarContextResponse;
+      if (!payload.systemMessage?.trim()) {
+        return;
+      }
+
+      queuedAvatarContextsRef.current.push(payload);
+      flushQueuedAvatarContexts();
+    } catch (avatarContextError) {
+      console.error('Failed to queue avatar context:', avatarContextError);
+    }
+  }, [flushQueuedAvatarContexts, sessionParams]);
+
+  const avatarDiagnostics = useMemo(
+    () =>
+      buildBaseAvatarDiagnostics({
+        hasRemoteAudio: Boolean(remoteAudioStream),
+        isListening,
+        isSpeaking,
+        hasPendingAssistantTranscript: Boolean(assistantTranscriptDelta.trim() || assistantTranscriptFinal.trim()),
+        lastExplicitDirective: avatarDirective,
+      }),
+    [assistantTranscriptDelta, assistantTranscriptFinal, avatarDirective, isListening, isSpeaking, remoteAudioStream]
+  );
 
   return {
     isConnected,
@@ -579,11 +847,15 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     assistantTranscriptFinal,
     assistantSpeechStartedAt,
     assistantSpeechEndedAt,
+    avatarDirective,
+    avatarDirectiveSource: avatarDirective ? 'directive' : 'fallback',
+    avatarDiagnostics,
     error,
     connect,
     disconnect,
     startListening,
     stopListening,
     clearMessages,
+    queueAvatarHit,
   };
 }

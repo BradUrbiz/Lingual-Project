@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
@@ -19,6 +21,8 @@ class RouteDeps:
     load_sample_curriculum_package: Callable[[], dict]
     get_curriculum_practice_context: Callable[..., Any]
     build_curriculum_system_prompt: Callable[..., str]
+    get_school_request_context: Callable[[], Any]
+    set_active_school_membership: Callable[[str], Any]
     allowed_learning_locales: set[str]
     allowed_minigame_types: set[str]
     supported_ui_languages: set[str]

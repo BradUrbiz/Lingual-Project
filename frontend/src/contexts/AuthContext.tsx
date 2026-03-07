@@ -22,6 +22,7 @@ interface AuthContextType {
   error: string | null;
   avatarUrl: string | null;
   updateAvatarUrl: (url: string) => void;
+  refreshUser: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -44,21 +45,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateAvatarUrl = (url: string) => setAvatarUrl(url);
 
+  const refreshUser = async () => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      setUser(null);
+      return;
+    }
+
+    const idToken = await currentUser.getIdToken();
+    const result = await verifyToken(idToken);
+
+    if (result.success && result.user) {
+      setUser(result.user);
+      setError(null);
+      return;
+    }
+
+    setUser(null);
+    setError(result.error || 'Failed to verify token');
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
 
       if (fbUser) {
         try {
-          const idToken = await fbUser.getIdToken();
-          const result = await verifyToken(idToken);
-
-          if (result.success && result.user) {
-            setUser(result.user);
-          } else {
-            setError(result.error || 'Failed to verify token');
-            setUser(null);
-          }
+          await refreshUser();
         } catch {
           setError('Failed to authenticate');
           setUser(null);
@@ -192,6 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error,
         avatarUrl,
         updateAvatarUrl,
+        refreshUser,
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,

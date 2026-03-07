@@ -9,6 +9,34 @@ Lingual is an AI-powered platform for learning colloquial/spoken language throug
 
 **Key principle:** Curriculum is the backbone of learning — sessions and feedback should trace back to curriculum objectives. Teachers can upload custom curricula or use Lingual’s standard curricula.
 
+## Current product priority
+
+The current strategic priority is **school integration** for opening Lingual beta to schools.
+
+From this point onward, school-integration planning, architecture, implementation, and sequencing should be centered on the formal documents under `docs/school-integration/`:
+
+- `docs/school-integration/PRD.md`
+- `docs/school-integration/TECH_SPEC.md`
+- `docs/school-integration/TASKS.md`
+- `docs/school-integration/LIMITATIONS.md`
+
+These documents are the working source of truth for the school track:
+
+- `PRD.md`: product goals, user needs, scope, success metrics, and non-goals
+- `TECH_SPEC.md`: implementation blueprint, architecture decisions, domain model, API direction, compliance model, and rollout phases
+- `TASKS.md`: execution order, phased checklist, immediate sprint priorities, and beta definition of done
+- `LIMITATIONS.md`: running log of current implementation constraints, temporary shortcuts, and known gaps that still need to be resolved
+
+When working on school integration:
+
+- Read these documents first before proposing architecture or writing code.
+- Prefer implementation that follows the current `TECH_SPEC.md` rather than ad hoc local decisions.
+- Use `TASKS.md` to decide sequencing and what should be built next.
+- Keep `LIMITATIONS.md` updated when the shipped implementation is narrower than the intended architecture or still relies on a temporary shortcut.
+- If code changes require a product or architecture change, update the documents first or in the same change set.
+- Update the documents in this order when scope changes: `PRD.md` -> `TECH_SPEC.md` -> `TASKS.md`.
+- If an older assumption in the repo conflicts with these school-integration docs, treat the docs as the authoritative direction for this track until they are revised.
+
 ## Repository layout
 - Backend
   - `main.py`: Flask app + API routes; serves the built React app from `static/react` in production.
@@ -65,3 +93,4 @@ Docker (from repo root):
 - SPA serving: Flask serves `static/react` if built; do not edit `static/react` by hand.
 - Firebase client config lives in `frontend/src/config/firebase.ts`.
 - Architecture principles (from PRD): keep the learning core language-agnostic, curriculum-driven, and multi-tenancy ready for B2B.
+- For school-integration work, do not treat the current B2C-only data model, sample curriculum flow, or mock teacher dashboard as the target architecture; use `docs/school-integration/TECH_SPEC.md` and `docs/school-integration/TASKS.md` to drive the migration path.

@@ -1,15 +1,18 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider } from './contexts/AuthContext';
+import { MembershipProvider } from './contexts/MembershipContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { LearningLocaleProvider } from './contexts/LearningLocaleContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AppProtectedRoute } from './components/layout/AppProtectedRoute';
+import { TeacherRoute } from './components/layout/TeacherRoute';
 import {
   LandingPage,
   AuthPage,
   GeneralPage,
   InitialOnboardingPage,
+  SchoolOnboardingPage,
   AssessmentPage,
   CategoriesPage,
   ProfilePage,
@@ -23,6 +26,8 @@ import {
   AppSettingsPage,
   PronunciationPracticePage,
   TeacherDashboardPage,
+  TeacherAssignmentBuilderPage,
+  AssignmentLaunchPage,
 } from './pages';
 
 function AnimatedRoutes() {
@@ -39,6 +44,7 @@ function AnimatedRoutes() {
         <Route element={<ProtectedRoute />}>
           <Route path="/general" element={<GeneralPage />} />
           <Route path="/onboarding" element={<InitialOnboardingPage />} />
+          <Route path="/school/setup" element={<SchoolOnboardingPage />} />
           <Route path="/assessment" element={<AssessmentPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/chat" element={<Navigate to="/app/chat" replace />} />
@@ -55,9 +61,25 @@ function AnimatedRoutes() {
           <Route path="games" element={<AppGamesPage />} />
           <Route path="progress" element={<AppProgressPage />} />
           <Route path="practice" element={<PronunciationPracticePage />} />
+          <Route path="assignments/:assignmentId" element={<AssignmentLaunchPage />} />
           <Route path="profile" element={<AppProfilePage />} />
           <Route path="settings" element={<AppSettingsPage />} />
-          <Route path="teacher" element={<TeacherDashboardPage />} />
+          <Route
+            path="teacher"
+            element={
+              <TeacherRoute>
+                <TeacherDashboardPage />
+              </TeacherRoute>
+            }
+          />
+          <Route
+            path="teacher/classes/:classId/assignments"
+            element={
+              <TeacherRoute>
+                <TeacherAssignmentBuilderPage />
+              </TeacherRoute>
+            }
+          />
         </Route>
       </Routes>
     </AnimatePresence>
@@ -71,11 +93,13 @@ function App() {
   return (
     <BrowserRouter basename={basename}>
       <AuthProvider>
-        <LanguageProvider>
-          <LearningLocaleProvider>
-            <AnimatedRoutes />
-          </LearningLocaleProvider>
-        </LanguageProvider>
+        <MembershipProvider>
+          <LanguageProvider>
+            <LearningLocaleProvider>
+              <AnimatedRoutes />
+            </LearningLocaleProvider>
+          </LanguageProvider>
+        </MembershipProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -1,0 +1,463 @@
+from __future__ import annotations
+
+from flask import Blueprint, jsonify, request
+
+from backend.route_deps import RouteDeps
+from backend.services.assignment_resolver import (
+    SUPPORTED_ASSIGNMENT_STATUSES,
+    SUPPORTED_TASK_TYPES,
+    TEACHER_ALLOWED_ROLES,
+    build_sample_package_summary,
+    resolve_assignment_bootstrap_for_user,
+    normalize_feedback_policy,
+    normalize_modality_policy,
+    normalize_scaffold_policy,
+    serialize_assignment,
+    serialize_curriculum_mapping,
+)
+from backend.services.membership_context import SchoolContextPermissionError
+from backend.services.practice_analytics import (
+    SUPPORTED_EVENT_TYPES,
+    apply_learning_event_to_session,
+    build_assignment_analytics_payload,
+    build_learning_event_payload,
+    build_practice_session_payload,
+    serialize_practice_session,
+)
+
+
+def _normalize_string(value):
+    if not isinstance(value, str):
+        return ''
+    return value.strip()
+
+
+def _normalize_string_list(values):
+    if not isinstance(values, list):
+        return []
+    normalized = []
+    seen = set()
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        cleaned = value.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        normalized.append(cleaned)
+        seen.add(cleaned)
+    return normalized
+
+
+def _coerce_optional_int(value):
+    if value is None or value == '':
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str) and value.strip().lstrip('-').isdigit():
+        return int(value.strip())
+    return None
+
+
+def _sample_package(deps: RouteDeps):
+    package = deps.load_sample_curriculum_package()
+    return package, build_sample_package_summary(package)
+
+
+def _require_teacher_context(deps: RouteDeps, class_id: str):
+    context = deps.get_school_request_context()
+    context.require_any_role(TEACHER_ALLOWED_ROLES)
+
+    class_record = deps.db.get_class(class_id)
+    if not class_record:
+        raise SchoolContextPermissionError('Class not found.')
+    if class_record.get('org_id') != context.active_organization_id:
+        raise SchoolContextPermissionError('Class is outside the active organization.')
+
+    teacher_membership_ids = class_record.get('teacher_membership_ids') or []
+    if context.has_role('school_admin') or context.active_membership_id in teacher_membership_ids:
+        return context, class_record
+
+    raise SchoolContextPermissionError('Teacher membership does not have access to this class.')
+
+
+def _ensure_sample_mapping_references(deps: RouteDeps, package_id: str, module_id: str, situation_ids: list[str], objective_ids: list[str]):
+    package, package_summary = _sample_package(deps)
+    if package_id != package_summary['id']:
+        raise ValueError('Only the bundled sample curriculum package is supported right now.')
+
+    if not situation_ids:
+        raise ValueError('At least one speaking situation is required.')
+
+    deps.get_curriculum_practice_context(
+        module_id=module_id,
+        situation_id=situation_ids[0],
+    )
+
+    objective_index = {
+        objective.get('id')
+        for objective in package.get('objectives', [])
+        if isinstance(objective, dict) and objective.get('id')
+    }
+    invalid_objective_ids = [objective_id for objective_id in objective_ids if objective_id not in objective_index]
+    if invalid_objective_ids:
+        raise ValueError('One or more objectiveIds are invalid for the selected curriculum package.')
+
+    return package_summary
+
+
+def _serialize_assignments_with_class_names(deps: RouteDeps, assignments: list[dict]):
+    serialized = []
+    for assignment in assignments:
+        assignment_dto = serialize_assignment(assignment)
+        if not assignment_dto:
+            continue
+        class_record = deps.db.get_class(assignment.get('class_id'))
+        serialized.append({
+            **assignment_dto,
+            'className': (class_record or {}).get('name', ''),
+        })
+    return serialized
+
+
+def _require_assignment_teacher_access(deps: RouteDeps, assignment_id: str):
+    assignment = deps.db.get_assignment(assignment_id)
+    if not assignment:
+        raise ValueError('Assignment not found.')
+    _require_teacher_context(deps, assignment.get('class_id'))
+    return assignment
+
+
+def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
+    bp = Blueprint('curriculum_admin_routes', __name__)
+
+    @bp.route('/api/teacher/classes/<class_id>/curriculum/packages', methods=['GET'])
+    @deps.login_required
+    def api_get_curriculum_packages(class_id):
+        try:
+            _require_teacher_context(deps, class_id)
+            _package, package_summary = _sample_package(deps)
+            return jsonify({
+                'success': True,
+                'packages': [package_summary],
+                'limitations': [
+                    'Teacher package selection is currently sample-only; organization-owned packages are not live yet.',
+                ],
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except Exception as exc:
+            print(f'Curriculum package list error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/teacher/classes/<class_id>/curriculum/mappings', methods=['GET'])
+    @deps.login_required
+    def api_list_curriculum_mappings(class_id):
+        try:
+            _require_teacher_context(deps, class_id)
+            mappings = deps.db.list_class_curriculum_mappings(class_id)
+            return jsonify({
+                'success': True,
+                'mappings': [
+                    mapping_dto
+                    for mapping in mappings
+                    if (mapping_dto := serialize_curriculum_mapping(mapping))
+                ],
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except Exception as exc:
+            print(f'Curriculum mapping list error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/teacher/classes/<class_id>/curriculum/mappings', methods=['POST'])
+    @deps.login_required
+    def api_create_curriculum_mapping(class_id):
+        try:
+            context, class_record = _require_teacher_context(deps, class_id)
+            uid = deps.get_current_user_uid()
+            data = request.get_json() or {}
+
+            package_id = _normalize_string(data.get('packageId'))
+            module_id = _normalize_string(data.get('moduleId'))
+            objective_ids = _normalize_string_list(data.get('objectiveIds'))
+            situation_ids = _normalize_string_list(data.get('situationIds'))
+            target_expressions = _normalize_string_list(data.get('targetExpressions'))
+            focus_grammar = _normalize_string_list(data.get('focusGrammar'))
+            allowed_context_tags = _normalize_string_list(data.get('allowedContextTags'))
+            rubric_focus = _normalize_string_list(data.get('rubricFocus'))
+            teacher_notes = _normalize_string(data.get('teacherNotes'))
+
+            if not package_id:
+                return jsonify({'success': False, 'error': 'packageId is required.'}), 400
+            if not module_id:
+                return jsonify({'success': False, 'error': 'moduleId is required.'}), 400
+
+            _ensure_sample_mapping_references(deps, package_id, module_id, situation_ids, objective_ids)
+
+            mapping_id = deps.db.create_curriculum_mapping(
+                org_id=class_record.get('org_id'),
+                class_id=class_id,
+                package_id=package_id,
+                module_id=module_id,
+                objective_ids=objective_ids,
+                situation_ids=situation_ids,
+                target_expressions=target_expressions,
+                focus_grammar=focus_grammar,
+                allowed_context_tags=allowed_context_tags,
+                feedback_policy=normalize_feedback_policy(data.get('feedbackPolicy')),
+                scaffold_policy=normalize_scaffold_policy(data.get('scaffoldPolicy')),
+                modality_policy=normalize_modality_policy(data.get('modalityPolicy')),
+                rubric_focus=rubric_focus,
+                teacher_notes=teacher_notes,
+                created_by_uid=uid or '',
+            )
+
+            return jsonify({
+                'success': True,
+                'mapping': serialize_curriculum_mapping(deps.db.get_curriculum_mapping(mapping_id)),
+            }), 201
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except ValueError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 400
+        except Exception as exc:
+            print(f'Curriculum mapping creation error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/teacher/classes/<class_id>/assignments', methods=['GET'])
+    @deps.login_required
+    def api_list_class_assignments(class_id):
+        try:
+            _require_teacher_context(deps, class_id)
+            assignments = deps.db.list_class_assignments(class_id)
+            return jsonify({
+                'success': True,
+                'assignments': _serialize_assignments_with_class_names(deps, assignments),
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except Exception as exc:
+            print(f'Assignment list error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/teacher/classes/<class_id>/assignments', methods=['POST'])
+    @deps.login_required
+    def api_create_assignment(class_id):
+        try:
+            _context, class_record = _require_teacher_context(deps, class_id)
+            uid = deps.get_current_user_uid()
+            data = request.get_json() or {}
+
+            mapping_id = _normalize_string(data.get('mappingId'))
+            title = _normalize_string(data.get('title'))
+            description = _normalize_string(data.get('description'))
+            status = _normalize_string(data.get('status')) or 'draft'
+            release_at = _normalize_string(data.get('releaseAt'))
+            due_at = _normalize_string(data.get('dueAt'))
+            task_type = _normalize_string(data.get('taskType')) or 'decision_making'
+            success_criteria = _normalize_string_list(data.get('successCriteria'))
+            max_attempts = _coerce_optional_int(data.get('maxAttempts'))
+
+            if not mapping_id:
+                return jsonify({'success': False, 'error': 'mappingId is required.'}), 400
+            if not title:
+                return jsonify({'success': False, 'error': 'title is required.'}), 400
+            if status not in SUPPORTED_ASSIGNMENT_STATUSES:
+                return jsonify({'success': False, 'error': 'Invalid assignment status.'}), 400
+            if task_type not in SUPPORTED_TASK_TYPES:
+                return jsonify({'success': False, 'error': 'Invalid task type.'}), 400
+
+            mapping = deps.db.get_curriculum_mapping(mapping_id)
+            if not mapping or mapping.get('class_id') != class_id:
+                return jsonify({'success': False, 'error': 'Mapping not found for this class.'}), 404
+
+            assignment_id = deps.db.create_assignment(
+                org_id=class_record.get('org_id'),
+                class_id=class_id,
+                mapping_id=mapping_id,
+                title=title,
+                description=description,
+                status=status,
+                release_at=release_at,
+                due_at=due_at,
+                modality_override=normalize_modality_policy(data.get('modalityOverride')),
+                max_attempts=max_attempts,
+                task_type=task_type,
+                success_criteria=success_criteria,
+                created_by_uid=uid or '',
+            )
+
+            return jsonify({
+                'success': True,
+                'assignment': serialize_assignment(deps.db.get_assignment(assignment_id)),
+            }), 201
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except Exception as exc:
+            print(f'Assignment creation error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/student/assignments', methods=['GET'])
+    @deps.login_required
+    def api_list_student_assignments():
+        try:
+            uid = deps.get_current_user_uid()
+            assignments = deps.db.list_student_assignments(uid, statuses=['published'])
+            return jsonify({
+                'success': True,
+                'assignments': _serialize_assignments_with_class_names(deps, assignments),
+            })
+        except Exception as exc:
+            print(f'Student assignment list error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/student/assignments/<assignment_id>/bootstrap', methods=['POST'])
+    @deps.login_required
+    def api_bootstrap_student_assignment(assignment_id):
+        try:
+            uid = deps.get_current_user_uid()
+            data = request.get_json(silent=True) or {}
+            ui_language = _normalize_string(data.get('uiLanguage')) or 'en'
+            context = deps.get_school_request_context()
+            bootstrap = resolve_assignment_bootstrap_for_user(
+                deps,
+                uid=uid,
+                context=context,
+                assignment_id=assignment_id,
+                ui_language=ui_language,
+            )
+            return jsonify({'success': True, 'bootstrap': bootstrap})
+        except ValueError as exc:
+            error = str(exc)
+            status_code = 404 if 'not found' in error.lower() else 400
+            return jsonify({'success': False, 'error': error}), status_code
+        except PermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except Exception as exc:
+            print(f'Assignment bootstrap error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/student/assignments/<assignment_id>/practice-sessions', methods=['POST'])
+    @deps.login_required
+    def api_create_assignment_practice_session(assignment_id):
+        try:
+            uid = deps.get_current_user_uid()
+            data = request.get_json(silent=True) or {}
+            ui_language = _normalize_string(data.get('uiLanguage')) or 'en'
+            chat_id = _normalize_string(data.get('chatId'))
+            context = deps.get_school_request_context()
+            bootstrap = resolve_assignment_bootstrap_for_user(
+                deps,
+                uid=uid,
+                context=context,
+                assignment_id=assignment_id,
+                ui_language=ui_language,
+            )
+
+            session_payload = build_practice_session_payload(
+                bootstrap,
+                student_uid=uid or '',
+                chat_id=chat_id,
+                ui_language=ui_language,
+            )
+            session_id = deps.db.create_practice_session(session_payload)
+            session_record = deps.db.get_practice_session(session_id)
+
+            deps.db.create_learning_event(
+                build_learning_event_payload(
+                    session_record,
+                    event_type='session.started',
+                    payload={
+                        'chatId': chat_id,
+                        'uiLanguage': ui_language,
+                        'modality': session_record.get('modality'),
+                    },
+                )
+            )
+
+            return jsonify({
+                'success': True,
+                'practiceSession': serialize_practice_session(session_record),
+            }), 201
+        except ValueError as exc:
+            error = str(exc)
+            status_code = 404 if 'not found' in error.lower() else 400
+            return jsonify({'success': False, 'error': error}), status_code
+        except PermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except Exception as exc:
+            print(f'Practice session creation error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/practice-sessions/<session_id>/events', methods=['POST'])
+    @deps.login_required
+    def api_report_practice_session_event(session_id):
+        try:
+            uid = deps.get_current_user_uid()
+            data = request.get_json(silent=True) or {}
+            event_type = _normalize_string(data.get('eventType'))
+            turn_index = _coerce_optional_int(data.get('turnIndex'))
+            payload = data.get('payload') if isinstance(data.get('payload'), dict) else {}
+
+            if event_type not in SUPPORTED_EVENT_TYPES:
+                return jsonify({'success': False, 'error': 'Unsupported eventType.'}), 400
+
+            session_record = deps.db.get_practice_session(session_id)
+            if not session_record:
+                return jsonify({'success': False, 'error': 'Practice session not found.'}), 404
+            if session_record.get('student_uid') != uid:
+                return jsonify({'success': False, 'error': 'Practice session is not available for this user.'}), 403
+            if session_record.get('status') != 'active' and event_type != 'session.ended':
+                return jsonify({'success': False, 'error': 'Practice session is no longer active.'}), 409
+
+            deps.db.create_learning_event(
+                build_learning_event_payload(
+                    session_record,
+                    event_type=event_type,
+                    turn_index=turn_index,
+                    payload=payload,
+                )
+            )
+            deps.db.update_practice_session(
+                session_id,
+                apply_learning_event_to_session(
+                    session_record,
+                    event_type=event_type,
+                    payload=payload,
+                ),
+            )
+
+            return jsonify({
+                'success': True,
+                'practiceSession': serialize_practice_session(deps.db.get_practice_session(session_id)),
+            })
+        except Exception as exc:
+            print(f'Practice session event error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/teacher/assignments/<assignment_id>/analytics', methods=['GET'])
+    @deps.login_required
+    def api_get_assignment_analytics(assignment_id):
+        try:
+            assignment = _require_assignment_teacher_access(deps, assignment_id)
+            analytics = build_assignment_analytics_payload(
+                assignment,
+                deps.db.list_assignment_practice_sessions(assignment_id),
+            )
+            return jsonify({
+                'success': True,
+                'analytics': analytics,
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except ValueError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 404
+        except Exception as exc:
+            print(f'Assignment analytics error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    return bp

@@ -1,4 +1,4 @@
-from flask import Flask, session, jsonify, send_from_directory
+from flask import Flask, g, session, jsonify, send_from_directory
 from flask_cors import CORS
 from functools import wraps, lru_cache
 import json
@@ -80,6 +80,13 @@ from backend.routes.chat import create_chat_blueprint
 from backend.routes.assessment import create_assessment_blueprint
 from backend.routes.pronunciation import create_pronunciation_blueprint
 from backend.routes.games import create_games_blueprint
+from backend.routes.schools import create_schools_blueprint
+from backend.routes.teacher import create_teacher_blueprint
+from backend.routes.curriculum_admin import create_curriculum_admin_blueprint
+from backend.services.membership_context import (
+    SchoolContextNotFoundError,
+    resolve_school_request_context,
+)
 
 
 def get_current_user_uid():
@@ -433,6 +440,47 @@ Remember: You're a supportive tutor, not a strict teacher. Make learning fun!"""
 
 
 def register_domain_blueprints():
+    def get_school_request_context():
+        cached_context = getattr(g, 'school_request_context', None)
+        if cached_context is not None:
+            return cached_context
+
+        uid = get_current_user_uid()
+        if not uid:
+            raise PermissionError('Authentication required.')
+
+        preferred_active_membership_id = (session.get('user') or {}).get('active_membership_id')
+        context = resolve_school_request_context(
+            db,
+            uid,
+            preferred_active_membership_id=preferred_active_membership_id,
+        )
+
+        if 'user' in session:
+            session['user']['active_membership_id'] = context.active_membership_id
+        db.set_user_last_active_membership(uid, context.active_membership_id)
+        g.school_request_context = context
+        return context
+
+    def set_active_school_membership(membership_id):
+        uid = get_current_user_uid()
+        if not uid:
+            raise PermissionError('Authentication required.')
+
+        context = resolve_school_request_context(
+            db,
+            uid,
+            preferred_active_membership_id=membership_id,
+        )
+        if context.active_membership_id != membership_id:
+            raise SchoolContextNotFoundError('Membership not found for the current user.')
+
+        if 'user' in session:
+            session['user']['active_membership_id'] = context.active_membership_id
+        db.set_user_last_active_membership(uid, context.active_membership_id)
+        g.school_request_context = context
+        return context
+
     deps = RouteDeps(
         db=db,
         firebase_auth=firebase_auth,
@@ -447,6 +495,8 @@ def register_domain_blueprints():
         load_sample_curriculum_package=load_sample_curriculum_package,
         get_curriculum_practice_context=get_curriculum_practice_context,
         build_curriculum_system_prompt=build_curriculum_system_prompt,
+        get_school_request_context=get_school_request_context,
+        set_active_school_membership=set_active_school_membership,
         allowed_learning_locales=ALLOWED_LEARNING_LOCALES,
         allowed_minigame_types=ALLOWED_MINIGAME_TYPES,
         supported_ui_languages=SUPPORTED_UI_LANGUAGES,
@@ -457,6 +507,9 @@ def register_domain_blueprints():
     app.register_blueprint(create_assessment_blueprint(deps))
     app.register_blueprint(create_pronunciation_blueprint(deps))
     app.register_blueprint(create_games_blueprint(deps))
+    app.register_blueprint(create_schools_blueprint(deps))
+    app.register_blueprint(create_teacher_blueprint(deps))
+    app.register_blueprint(create_curriculum_admin_blueprint(deps))
     register_avatar_chat_routes(app, deps)
 
 

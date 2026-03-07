@@ -1,5 +1,5 @@
 import { useState, FormEvent, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Loader2, Languages, CheckCircle, Sparkles } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
@@ -10,6 +10,7 @@ import { staggerContainer, staggerItem } from '@/lib/animations';
 
 export function AuthPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, loading, error, signInWithEmail, signUpWithEmail, signInWithGoogle, clearError } =
     useAuth();
   const { t } = useLanguage();
@@ -18,12 +19,14 @@ export function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const redirectPath =
+    (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || '/general';
 
   useEffect(() => {
     if (user && !loading) {
-      navigate('/general');
+      navigate(redirectPath, { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, redirectPath]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

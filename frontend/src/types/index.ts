@@ -1,8 +1,14 @@
+import type { MembershipSummary, SchoolRole } from './school';
+
 // User Types
 export interface User {
   uid: string;
   email: string;
   name: string;
+  memberships?: MembershipSummary[];
+  activeMembershipId?: string | null;
+  activeOrganizationId?: string | null;
+  activeRoles?: SchoolRole[];
 }
 
 // Profile form data for GeneralPage
@@ -237,6 +243,42 @@ export type Language = 'en' | 'ko';
 export type LearningLocale = 'ko-KR' | 'es-ES' | 'fr-FR';
 
 // Curriculum Types
+export type {
+  CreateSchoolPayload,
+  CreateTeacherClassPayload,
+  MembershipSummary,
+  SchoolContextSummary,
+  OrganizationType,
+  SetupChecklistItem,
+  TeacherClassSummary,
+  TeacherDashboardData,
+  TeacherDashboardSummary,
+  MembershipStatus,
+  SchoolRole,
+} from './school';
+
+export type {
+  AssignmentAnalyticsData,
+  AssignmentBootstrapData,
+  AssignmentDto,
+  AssignmentStatus,
+  AssignmentTaskType,
+  CreateAssignmentPayload,
+  CreateCurriculumMappingPayload,
+  CreatePracticeSessionPayload,
+  CurriculumMappingDto,
+  FeedbackPolicy,
+  ModalityMode,
+  ModalityPolicy,
+  PracticeSessionCostSummary,
+  PracticeSessionDto,
+  PracticeSessionEventPayload,
+  PracticeSessionSummary,
+  ScaffoldPolicy,
+  StudentAssignmentSummary,
+  TeacherCurriculumPackageSummary,
+} from './assignment';
+
 export type {
   I18nText,
   CurriculumMode,

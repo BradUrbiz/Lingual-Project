@@ -1,9 +1,13 @@
 import type { AvatarReaction, AvatarState } from '@/types/avatarChat';
-import type { AvatarPerformanceFrame } from './types';
+import type {
+  AvatarDirectiveSource,
+  AvatarExpressionId,
+  AvatarMotionRef,
+  AvatarPerformanceFrame,
+} from './types';
 import type {
   Live2DEmotionKey,
   Live2DManifest,
-  Live2DMotionRef,
 } from './live2dManifest';
 
 export type Live2DFocusPoint = {
@@ -13,14 +17,15 @@ export type Live2DFocusPoint = {
 
 export type Live2DParameterTargets = {
   values: Record<string, number>;
-  motionCandidates: Live2DMotionRef[];
-  expressionCandidates: string[];
+  motionRefs: AvatarMotionRef[];
+  expressionIds: AvatarExpressionId[];
   emotionKey: Live2DEmotionKey;
   debug: {
     mouthOpen: number;
     motionKey: string;
     reactionKey: string | null;
     emotionKey: Live2DEmotionKey;
+    directiveSource: AvatarDirectiveSource;
   };
 };
 
@@ -56,14 +61,16 @@ function amplifyAudioLevel(audioLevel: number, speaking: boolean) {
   if (!speaking) {
     return clamp(audioLevel * 0.35, 0, 1);
   }
-  return clamp(audioLevel * 1.45 + 0.12, 0, 1);
+  return clamp(audioLevel * 1.85 + 0.15, 0, 1);
 }
 
-export function resolveMotionCandidates(
+export function resolveMotionRefs(
   manifest: Live2DManifest,
   avatarState: AvatarState,
-  avatarReaction: AvatarReaction | null
-): Live2DMotionRef[] {
+  avatarReaction: AvatarReaction | null,
+  performance?: AvatarPerformanceFrame | null
+): AvatarMotionRef[] {
+  const directiveMotion = performance?.directive?.motionRef ? [performance.directive.motionRef] : [];
   const reactionCandidates = avatarReaction
     ? [
       ...(manifest.tapMotions[avatarReaction.area as keyof typeof manifest.tapMotions] ?? []),
@@ -73,7 +80,8 @@ export function resolveMotionCandidates(
   const stateCandidates = manifest.defaultMotionGroups[avatarState.motionGroup]
     ?? manifest.defaultMotionGroups[avatarState.dialogueState]
     ?? [];
-  return [...reactionCandidates, ...stateCandidates];
+
+  return [...directiveMotion, ...reactionCandidates, ...stateCandidates];
 }
 
 function inferEmotionKey(
@@ -81,6 +89,10 @@ function inferEmotionKey(
   avatarReaction: AvatarReaction | null,
   performance?: AvatarPerformanceFrame | null
 ): Live2DEmotionKey {
+  if (performance?.directive?.emotionKey) {
+    return performance.directive.emotionKey;
+  }
+
   if (avatarReaction) {
     if (avatarReaction.motionGroup === 'react_head' || avatarReaction.affect === 'curious') {
       return 'surprise';
@@ -127,13 +139,19 @@ function inferEmotionKey(
   return 'neutral';
 }
 
-export function resolveExpressionCandidates(
+export function resolveExpressionIds(
   manifest: Live2DManifest,
   avatarState: AvatarState,
   avatarReaction: AvatarReaction | null,
   performance?: AvatarPerformanceFrame | null
-): { emotionKey: Live2DEmotionKey; expressionCandidates: string[] } {
+): { emotionKey: Live2DEmotionKey; expressionIds: AvatarExpressionId[] } {
   const emotionKey = inferEmotionKey(avatarState, avatarReaction, performance);
+  const directiveExpressionIds = performance?.directive?.expressionId
+    ? [performance.directive.expressionId]
+    : [];
+  const directiveEmotionIds = performance?.directive?.emotionKey
+    ? manifest.expressionMap[performance.directive.emotionKey] ?? []
+    : [];
   const emotionCandidates = manifest.expressionMap[emotionKey] ?? [];
   const affectCandidates = avatarReaction
     ? manifest.expressionMap[avatarReaction.affect] ?? []
@@ -141,7 +159,12 @@ export function resolveExpressionCandidates(
 
   return {
     emotionKey,
-    expressionCandidates: [...emotionCandidates, ...affectCandidates],
+    expressionIds: [
+      ...directiveExpressionIds,
+      ...directiveEmotionIds,
+      ...emotionCandidates,
+      ...affectCandidates,
+    ],
   };
 }
 
@@ -174,7 +197,7 @@ export function buildLive2DParameterTargets({
   const performanceChestPitch = performance?.chestPitch ?? 0;
   const performanceNeckPitch = performance?.neckPitch ?? 0;
 
-  const talkPulse = speaking ? 0.16 + ((Math.sin(phase * 14) + 1) / 2) * 0.22 : 0;
+  const talkPulse = speaking ? 0.18 + ((Math.sin(phase * 14) + 1) / 2) * 0.28 : 0;
   const mouthOpen = speaking
     ? clamp(Math.max(boostedAudio * 0.88, talkPulse, performanceJaw * 1.15), 0, 1)
     : listening
@@ -291,7 +314,7 @@ export function buildLive2DParameterTargets({
   const breath = clamp(0.25 + avatarState.bodySway * 0.35 + performanceChestPitch * 4 + mouthOpen * 0.15, 0, 1);
   const shoulderLift = clamp((speaking ? 0.06 : 0) + performanceChestPitch * 2.2 + beat * 0.015, -1, 1);
 
-  setAliases(values, manifest.parameterMap.mouthOpen, round(clamp(mouthOpen * 1.15, 0, 1)));
+  setAliases(values, manifest.parameterMap.mouthOpen, round(clamp(mouthOpen * 1.3, 0, 1)));
   setAliases(values, manifest.parameterMap.mouthSpread, round(clamp(mouthSpread, 0, 1)));
   setAliases(values, manifest.parameterMap.mouthRound, round(clamp(mouthRound, 0, 1)));
   setAliases(values, manifest.parameterMap.mouthSmile, round(mouthSmile));
@@ -325,7 +348,7 @@ export function buildLive2DParameterTargets({
   setAliases(values, manifest.parameterMap.leftShoulderUp, round(shoulderLift));
   setAliases(values, manifest.parameterMap.rightShoulderUp, round(-shoulderLift * 0.7));
 
-  const { emotionKey, expressionCandidates } = resolveExpressionCandidates(
+  const { emotionKey, expressionIds } = resolveExpressionIds(
     manifest,
     avatarState,
     avatarReaction,
@@ -334,14 +357,15 @@ export function buildLive2DParameterTargets({
 
   return {
     values,
-    motionCandidates: resolveMotionCandidates(manifest, avatarState, avatarReaction),
-    expressionCandidates,
+    motionRefs: resolveMotionRefs(manifest, avatarState, avatarReaction, performance),
+    expressionIds,
     emotionKey,
     debug: {
-      mouthOpen: round(clamp(mouthOpen * 1.15, 0, 1)),
+      mouthOpen: round(clamp(mouthOpen * 1.3, 0, 1)),
       motionKey: avatarState.motionGroup,
       reactionKey,
       emotionKey,
+      directiveSource: performance?.directiveSource ?? 'fallback',
     },
   };
 }

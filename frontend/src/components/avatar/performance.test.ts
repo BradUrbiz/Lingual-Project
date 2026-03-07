@@ -17,6 +17,7 @@ function createSource(overrides: Partial<AvatarPerformanceSource> = {}): AvatarP
     assistantTranscriptFinal: '',
     assistantSpeechStartedAt: null,
     assistantSpeechEndedAt: null,
+    avatarDirective: null,
     now: 1_000,
     ...overrides,
   };
@@ -111,5 +112,28 @@ describe('avatar performance planner', () => {
     expect(frame.jawOpen).toBeGreaterThan(0.12);
     expect(Math.abs(frame.headPitch)).toBeGreaterThan(0.01);
     expect(frame.mouthSpread).toBeGreaterThan(0.05);
+  });
+
+  it('prefers explicit avatar directives over transcript heuristics', () => {
+    const frame = buildAvatarPerformanceFrame({
+      source: createSource({
+        assistantTranscriptFinal: 'Could you try that again?',
+        avatarDirective: {
+          emotionKey: 'joy',
+          expressionId: 'warm_smile',
+          motionRef: 'speaking_affirm',
+          intensity: 0.74,
+          holdMs: 900,
+        },
+      }),
+      dialogueState: 'speaking',
+      affect: 'encouraging',
+      audioLevel: 0.1,
+    });
+
+    expect(frame.directive?.expressionId).toBe('warm_smile');
+    expect(frame.directiveSource).toBe('directive');
+    expect(frame.intensity).toBe(0.74);
+    expect(frame.debug.detectedExpressionKeys).toContain('warm_smile');
   });
 });

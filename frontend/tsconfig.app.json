@@ -19,7 +19,8 @@
     /* Path aliases */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@cubism/*": ["../CubismSdkForWeb-5-r.4/Framework/dist/*"]
     },
 
     /* Linting */

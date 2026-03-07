@@ -22,11 +22,18 @@ function createFrame(overrides: Partial<AvatarPerformanceFrame> = {}): AvatarPer
     headRoll: 0,
     neckPitch: 0,
     chestPitch: 0,
+    directive: null,
+    directiveSource: 'fallback',
     debug: {
       audioLevel: 0,
+      rmsLevel: 0,
       transcript: '',
       hasRemoteAudio: false,
+      speakingEventState: 'idle',
+      mouthTarget: 0.01,
       detectedExpressionKeys: [],
+      directiveSource: 'fallback',
+      lastExplicitDirective: null,
     },
     ...overrides,
   };
@@ -42,9 +49,14 @@ describe('live2dAdapter', () => {
       headYaw: 0.02,
       debug: {
         audioLevel: 0.5,
+        rmsLevel: 0.2,
         transcript: 'Can you try that again?',
         hasRemoteAudio: true,
+        speakingEventState: 'speaking',
+        mouthTarget: 0.2,
         detectedExpressionKeys: [],
+        directiveSource: 'fallback',
+        lastExplicitDirective: null,
       },
     }));
 
@@ -65,9 +77,14 @@ describe('live2dAdapter', () => {
       affect: 'affirming',
       debug: {
         audioLevel: 0,
+        rmsLevel: 0,
         transcript: 'Right, let me explain.',
         hasRemoteAudio: false,
+        speakingEventState: 'thinking',
+        mouthTarget: 0.05,
         detectedExpressionKeys: [],
+        directiveSource: 'fallback',
+        lastExplicitDirective: null,
       },
     }));
 

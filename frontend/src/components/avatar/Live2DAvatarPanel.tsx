@@ -1,59 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AvatarReaction, AvatarState } from '@/types/avatarChat';
-import type { AvatarPerformanceFrame } from './types';
 import { DEFAULT_AVATAR_STATE } from '@/types/avatarChat';
-import {
-  LINGUAL_TUTOR_LIVE2D_MANIFEST,
-  type Live2DMotionRef,
-} from './live2dManifest';
+import type {
+  AvatarDiagnostics,
+  AvatarPerformanceFrame,
+} from './types';
+import { LINGUAL_TUTOR_LIVE2D_MANIFEST } from './live2dManifest';
 import {
   buildLive2DParameterTargets,
   resolveHitAreaName,
   type Live2DFocusPoint,
+  type Live2DParameterTargets,
 } from './live2dMapping';
-
-type Live2DModelLike = {
-  anchor: { set: (x: number, y: number) => void };
-  scale: { set: (value: number) => void };
-  x: number;
-  y: number;
-  interactive: boolean;
-  buttonMode?: boolean;
-  on: (event: string, listener: (...args: unknown[]) => void) => void;
-  off?: (event: string, listener: (...args: unknown[]) => void) => void;
-  motion: (group: string, index?: number, priority?: number) => Promise<boolean>;
-  expression: (id?: number | string) => Promise<boolean>;
-  internalModel?: {
-    coreModel?: {
-      setParameterValueById?: (parameterId: string, value: number, weight?: number) => void;
-    };
-    settings?: {
-      motions?: Record<string, unknown[]>;
-      expressions?: Array<{ name?: string; Name?: string }>;
-    };
-  };
-  destroy?: (options?: { children?: boolean }) => void;
-  tap?: (x: number, y: number) => void;
-};
-
-type PixiAppLike = {
-  view: HTMLCanvasElement;
-  stage: {
-    addChild: (child: Live2DModelLike) => void;
-    removeChild: (child: Live2DModelLike) => void;
-  };
-  ticker: {
-    add: (listener: () => void) => void;
-    remove: (listener: () => void) => void;
-  };
-  destroy: (removeView?: boolean, stageOptions?: { children?: boolean }) => void;
-};
-
-type Live2DModule = {
-  Live2DModel: {
-    from: (source: string) => Promise<Live2DModelLike>;
-  };
-};
+import {
+  chooseExpressionFromBanks,
+  chooseMotionFromBanks,
+} from './live2dSelection';
+import { acquireCubismFramework } from './cubismRuntime';
+import { OfficialCubismModel } from './OfficialCubismModel';
 
 type Live2DAvatarPanelProps = {
   enabled?: boolean;
@@ -63,8 +27,27 @@ type Live2DAvatarPanelProps = {
   avatarReaction?: AvatarReaction | null;
   performanceFrame?: AvatarPerformanceFrame | null;
   audioLevel?: number;
+  avatarDiagnostics?: AvatarDiagnostics | null;
   fallbackSrc: string;
   onAvatarHit?: (area: string) => void;
+};
+
+type Live2DDebugSnapshot = {
+  mouthOpen: number;
+  emotionKey: string;
+  expressionIds: string[];
+  motionRefs: string[];
+  targetParamA: number | null;
+  targetParamI: number | null;
+  targetParamU: number | null;
+  targetParamE: number | null;
+  targetParamO: number | null;
+  actualParamA: number | null;
+  actualParamI: number | null;
+  actualParamU: number | null;
+  actualParamE: number | null;
+  actualParamO: number | null;
+  directiveSource: string;
 };
 
 let live2DCorePromise: Promise<void> | null = null;
@@ -98,6 +81,29 @@ function ensureLive2DCoreScript(src: string) {
   return live2DCorePromise;
 }
 
+function buildDebugSnapshot(
+  targets: Live2DParameterTargets,
+  actualParams: Record<string, number | null>
+): Live2DDebugSnapshot {
+  return {
+    mouthOpen: targets.debug.mouthOpen,
+    emotionKey: targets.emotionKey,
+    expressionIds: targets.expressionIds,
+    motionRefs: targets.motionRefs,
+    targetParamA: targets.values.ParamA ?? null,
+    targetParamI: targets.values.ParamI ?? null,
+    targetParamU: targets.values.ParamU ?? null,
+    targetParamE: targets.values.ParamE ?? null,
+    targetParamO: targets.values.ParamO ?? null,
+    actualParamA: actualParams.ParamA ?? null,
+    actualParamI: actualParams.ParamI ?? null,
+    actualParamU: actualParams.ParamU ?? null,
+    actualParamE: actualParams.ParamE ?? null,
+    actualParamO: actualParams.ParamO ?? null,
+    directiveSource: targets.debug.directiveSource,
+  };
+}
+
 export default function Live2DAvatarPanel({
   enabled = true,
   title,
@@ -106,31 +112,43 @@ export default function Live2DAvatarPanel({
   avatarReaction = null,
   performanceFrame = null,
   audioLevel = 0,
+  avatarDiagnostics = null,
   fallbackSrc,
   onAvatarHit,
 }: Live2DAvatarPanelProps) {
   const manifest = LINGUAL_TUTOR_LIVE2D_MANIFEST;
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const pixiAppRef = useRef<PixiAppLike | null>(null);
-  const modelRef = useRef<Live2DModelLike | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const modelRef = useRef<OfficialCubismModel | null>(null);
   const pointerFocusRef = useRef<Live2DFocusPoint>({ x: 0, y: 0 });
   const lastMotionRef = useRef<string | null>(null);
   const lastMotionTriggerKeyRef = useRef<string | null>(null);
+  const lastMotionBankRef = useRef<string | null>(null);
   const lastExpressionRef = useRef<string | null>(null);
+  const lastExpressionBankRef = useRef<string | null>(null);
+  const lastExpressionChangedAtRef = useRef(0);
+  const expressionHistoryRef = useRef<Map<string, number>>(new Map());
+  const motionHistoryRef = useRef<Map<string, number>>(new Map());
+  const lastFrameAtRef = useRef<number | null>(null);
   const localReactionTimeoutRef = useRef<number | null>(null);
   const avatarStateRef = useRef<AvatarState>(avatarState);
   const avatarReactionRef = useRef<AvatarReaction | null>(avatarReaction);
   const performanceRef = useRef<AvatarPerformanceFrame | null>(performanceFrame);
   const audioLevelRef = useRef(audioLevel);
+  const diagnosticsRef = useRef<AvatarDiagnostics | null>(avatarDiagnostics);
   const localReactionRef = useRef<AvatarReaction | null>(null);
   const availableMotionGroupsRef = useRef<Record<string, number>>({});
   const availableExpressionsRef = useRef<string[]>([]);
+  const latestTargetsRef = useRef<Live2DParameterTargets | null>(null);
+  const showDebugRef = useRef(false);
+  const lastDebugCommitAtRef = useRef(0);
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [availableMotionGroups, setAvailableMotionGroups] = useState<string[]>([]);
   const [availableExpressions, setAvailableExpressions] = useState<string[]>([]);
   const [localReaction, setLocalReaction] = useState<AvatarReaction | null>(null);
+  const [debugSnapshot, setDebugSnapshot] = useState<Live2DDebugSnapshot | null>(null);
 
   useEffect(() => {
     avatarStateRef.current = avatarState;
@@ -149,8 +167,16 @@ export default function Live2DAvatarPanel({
   }, [audioLevel]);
 
   useEffect(() => {
+    diagnosticsRef.current = avatarDiagnostics;
+  }, [avatarDiagnostics]);
+
+  useEffect(() => {
     localReactionRef.current = localReaction;
   }, [localReaction]);
+
+  useEffect(() => {
+    showDebugRef.current = showDebug;
+  }, [showDebug]);
 
   useEffect(() => {
     return () => {
@@ -160,44 +186,43 @@ export default function Live2DAvatarPanel({
     };
   }, []);
 
-  const chooseWeightedMotion = (
-    candidates: Live2DMotionRef[],
-    availableGroups: Record<string, number>,
-    lastMotionKey: string | null
-  ) => {
-    const availableCandidates = candidates.filter((candidate) => {
-      const count = availableGroups[candidate.group];
-      if (typeof count !== 'number' || count <= 0) {
-        return false;
-      }
-      const index = candidate.index ?? 0;
-      return index >= 0 && index < count;
-    });
-
-    if (!availableCandidates.length) {
-      return null;
-    }
-
-    const withoutLast = availableCandidates.filter((candidate) => `${candidate.group}:${candidate.index ?? 0}` !== lastMotionKey);
-    const pool = withoutLast.length ? withoutLast : availableCandidates;
-    const totalWeight = pool.reduce((sum, candidate) => sum + (candidate.weight ?? 1), 0);
-    let cursor = Math.random() * totalWeight;
-    for (const candidate of pool) {
-      cursor -= candidate.weight ?? 1;
-      if (cursor <= 0) {
-        return candidate;
-      }
-    }
-    return pool[pool.length - 1];
-  };
-
   useEffect(() => {
-    if (!enabled || !containerRef.current) return;
+    if (!enabled || !containerRef.current || !canvasRef.current) return;
 
     let cancelled = false;
-    let animationListener: (() => void) | null = null;
-    let hitListener: ((areas: unknown) => void) | null = null;
+    let frameId: number | null = null;
+    let releaseFramework: (() => void) | null = null;
+    let gl: WebGLRenderingContext | null = null;
+
+    const canvas = canvasRef.current;
     const mountNode = containerRef.current;
+    const motionHistory = motionHistoryRef.current;
+    const expressionHistory = expressionHistoryRef.current;
+
+    const resizeCanvas = () => {
+      if (!gl) return;
+      const devicePixelRatio = window.devicePixelRatio || 1;
+      const width = Math.max(1, Math.round(mountNode.clientWidth * devicePixelRatio));
+      const height = Math.max(1, Math.round(mountNode.clientHeight * devicePixelRatio));
+
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+
+      gl.viewport(0, 0, canvas.width, canvas.height);
+    };
+
+    const clearFrame = () => {
+      if (!gl) return;
+      gl.clearColor(0, 0, 0, 0);
+      gl.clearDepth(1.0);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthFunc(gl.LEQUAL);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    };
 
     const load = async () => {
       setLoadState('loading');
@@ -205,87 +230,37 @@ export default function Live2DAvatarPanel({
 
       try {
         await ensureLive2DCoreScript(manifest.coreScriptUrl);
-        const PIXI = await import('pixi.js');
-        (window as typeof window & { PIXI?: typeof PIXI }).PIXI = PIXI;
-        const live2dModule = await import('pixi-live2d-display/cubism4') as Live2DModule;
-        if (cancelled) return;
+        releaseFramework = acquireCubismFramework();
 
-        const app = new PIXI.Application({
-          resizeTo: mountNode,
-          backgroundAlpha: 0,
-          antialias: true,
-          autoDensity: true,
-        }) as unknown as PixiAppLike;
+        gl = (canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true }) as WebGLRenderingContext | null)
+          ?? canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true });
 
-        mountNode.replaceChildren(app.view);
-        pixiAppRef.current = app;
+        if (!gl) {
+          throw new Error('WebGL is not available in this browser.');
+        }
 
-        const model = await live2dModule.Live2DModel.from(manifest.modelJsonPath);
+        const model = new OfficialCubismModel(gl);
+        await model.load(manifest.modelJsonPath);
+
         if (cancelled) {
-          app.destroy(true, { children: true });
-          model.destroy?.({ children: true });
+          model.release();
           return;
         }
 
-        model.anchor.set(manifest.anchor.x, manifest.anchor.y);
-        model.scale.set(manifest.scale);
-        model.x = mountNode.clientWidth * manifest.position.x;
-        model.y = mountNode.clientHeight * manifest.position.y;
-        model.interactive = true;
-        model.buttonMode = true;
         modelRef.current = model;
-        lastMotionRef.current = null;
-        lastMotionTriggerKeyRef.current = null;
-        lastExpressionRef.current = null;
-        app.stage.addChild(model);
+        availableMotionGroupsRef.current = model.getAvailableMotionGroups();
+        availableExpressionsRef.current = model.getAvailableExpressions();
+        setAvailableMotionGroups(Object.keys(availableMotionGroupsRef.current));
+        setAvailableExpressions(availableExpressionsRef.current);
+        resizeCanvas();
+        model.resizeToCanvas(canvas.width, canvas.height, manifest);
+        setLoadState('ready');
 
-        const settings = model.internalModel?.settings;
-        const nextMotionGroupsRecord = Object.fromEntries(
-          Object.entries(settings?.motions ?? {}).map(([groupName, entries]) => [groupName, Array.isArray(entries) ? entries.length : 0])
-        );
-        const nextMotionGroups = Object.keys(nextMotionGroupsRecord);
-        const nextExpressions = (settings?.expressions ?? [])
-          .map((entry) => entry.name ?? entry.Name ?? '')
-          .filter(Boolean);
-        availableMotionGroupsRef.current = nextMotionGroupsRecord;
-        availableExpressionsRef.current = nextExpressions;
-        setAvailableMotionGroups(nextMotionGroups);
-        setAvailableExpressions(nextExpressions);
+        const render = (now: number) => {
+          if (cancelled || !modelRef.current) return;
 
-        hitListener = (areas) => {
-          const hitAreas = Array.isArray(areas) ? areas : [];
-          const firstArea = typeof hitAreas[0] === 'string' ? hitAreas[0] : 'body';
-          const resolvedArea = resolveHitAreaName(manifest, firstArea);
-          const instantReaction: AvatarReaction = {
-            area: resolvedArea,
-            affect: resolvedArea === 'head' || resolvedArea === 'face' ? 'curious' : 'affirming',
-            motionGroup: resolvedArea === 'head'
-              ? 'react_head'
-              : resolvedArea === 'face'
-                ? 'react_face'
-                : 'react_body',
-            subtitleText: resolvedArea === 'head' || resolvedArea === 'face' ? 'Oh?' : 'Ready.',
-            durationMs: 700,
-          };
-
-          if (localReactionTimeoutRef.current !== null) {
-            window.clearTimeout(localReactionTimeoutRef.current);
-          }
-          setLocalReaction(instantReaction);
-          localReactionTimeoutRef.current = window.setTimeout(() => {
-            setLocalReaction(null);
-            localReactionTimeoutRef.current = null;
-          }, instantReaction.durationMs);
-          onAvatarHit?.(resolvedArea);
-        };
-
-        model.on('hit', hitListener);
-
-        animationListener = () => {
-          if (!modelRef.current || !containerRef.current) return;
-
-          modelRef.current.x = containerRef.current.clientWidth * manifest.position.x;
-          modelRef.current.y = containerRef.current.clientHeight * manifest.position.y;
+          resizeCanvas();
+          modelRef.current.resizeToCanvas(canvas.width, canvas.height, manifest);
 
           const effectiveReaction = localReactionRef.current ?? avatarReactionRef.current;
           const targets = buildLive2DParameterTargets({
@@ -295,45 +270,100 @@ export default function Live2DAvatarPanel({
             performance: performanceRef.current,
             audioLevel: audioLevelRef.current,
             pointerFocus: pointerFocusRef.current,
-            now: performance.now(),
+            now,
           });
-
-          const coreModel = modelRef.current.internalModel?.coreModel;
-          if (coreModel?.setParameterValueById) {
-            for (const [parameterId, value] of Object.entries(targets.values)) {
-              coreModel.setParameterValueById(parameterId, value);
-            }
-          }
+          latestTargetsRef.current = targets;
 
           const motionTriggerKey = effectiveReaction
             ? `reaction:${effectiveReaction.motionGroup}:${effectiveReaction.area}`
-            : `state:${avatarStateRef.current.dialogueState}:${targets.debug.motionKey}:${targets.emotionKey}`;
-          if (motionTriggerKey !== lastMotionTriggerKeyRef.current) {
-            lastMotionTriggerKeyRef.current = motionTriggerKey;
-            const nextMotion = chooseWeightedMotion(
-              targets.motionCandidates,
+            : `state:${avatarStateRef.current.dialogueState}:${targets.debug.motionKey}:${targets.emotionKey}:${targets.motionRefs.join('|')}`;
+          const shouldRestartMotion = motionTriggerKey !== lastMotionTriggerKeyRef.current || modelRef.current.isMotionFinished();
+
+          if (shouldRestartMotion) {
+            const nextMotion = chooseMotionFromBanks(
+              targets.motionRefs,
               availableMotionGroupsRef.current,
-              lastMotionRef.current
-            );
+              manifest,
+                motionHistory,
+                lastMotionRef.current,
+                now
+              );
             if (nextMotion) {
-              const motionKey = `${nextMotion.group}:${nextMotion.index ?? 0}`;
-              lastMotionRef.current = motionKey;
-              void modelRef.current.motion(nextMotion.group, nextMotion.index ?? 0);
+              const started = effectiveReaction
+                ? modelRef.current.startMotion(nextMotion.candidate.group, nextMotion.candidate.index ?? 0, 3)
+                : avatarStateRef.current.dialogueState === 'idle'
+                  ? modelRef.current.startIdleMotion(nextMotion.candidate.group, nextMotion.candidate.index ?? 0)
+                  : modelRef.current.startMotion(nextMotion.candidate.group, nextMotion.candidate.index ?? 0, 2);
+
+              if (started) {
+                lastMotionRef.current = nextMotion.candidateKey;
+                lastMotionBankRef.current = nextMotion.bankId;
+                lastMotionTriggerKeyRef.current = motionTriggerKey;
+                motionHistory.set(nextMotion.candidateKey, now);
+              }
             }
           }
 
-          const nextExpression = targets.expressionCandidates.find((candidate) => availableExpressionsRef.current.includes(candidate))
-            ?? (manifest.defaultExpression && availableExpressionsRef.current.includes(manifest.defaultExpression)
-              ? manifest.defaultExpression
-              : null);
-          if (nextExpression && lastExpressionRef.current !== nextExpression) {
-            lastExpressionRef.current = nextExpression;
-            void modelRef.current.expression(nextExpression);
+          const activeExpressionBank = targets.expressionIds[0] ?? null;
+          const shouldPreserveExpression = (
+            activeExpressionBank !== null &&
+            activeExpressionBank === lastExpressionBankRef.current &&
+            now - lastExpressionChangedAtRef.current < 420 &&
+            lastExpressionRef.current !== null
+          );
+
+          if (!shouldPreserveExpression) {
+            const nextExpression = chooseExpressionFromBanks(
+              targets.expressionIds,
+              availableExpressionsRef.current,
+              manifest,
+              expressionHistory,
+              lastExpressionRef.current,
+              now
+            ) ?? (
+              manifest.defaultExpression && availableExpressionsRef.current.includes(manifest.defaultExpression)
+                ? {
+                  bankId: 'default',
+                  candidate: manifest.defaultExpression,
+                  candidateKey: manifest.defaultExpression,
+                }
+                : null
+            );
+
+            if (nextExpression && nextExpression.candidate !== lastExpressionRef.current) {
+              if (modelRef.current.setExpression(nextExpression.candidate)) {
+                lastExpressionRef.current = nextExpression.candidate;
+                lastExpressionBankRef.current = nextExpression.bankId;
+                lastExpressionChangedAtRef.current = now;
+                expressionHistory.set(nextExpression.candidateKey, now);
+              }
+            }
           }
+
+          const lastFrameAt = lastFrameAtRef.current;
+          const deltaSeconds = lastFrameAt === null ? 1 / 60 : (now - lastFrameAt) / 1000;
+          lastFrameAtRef.current = now;
+
+          modelRef.current.update(deltaSeconds, targets);
+          clearFrame();
+          modelRef.current.draw(canvas.width, canvas.height);
+
+          if (import.meta.env.DEV && showDebugRef.current) {
+            if (now - lastDebugCommitAtRef.current > 120) {
+              lastDebugCommitAtRef.current = now;
+              setDebugSnapshot(
+                buildDebugSnapshot(
+                  targets,
+                  modelRef.current.getParameterValues(['ParamA', 'ParamI', 'ParamU', 'ParamE', 'ParamO'])
+                )
+              );
+            }
+          }
+
+          frameId = window.requestAnimationFrame(render);
         };
 
-        app.ticker.add(animationListener);
-        setLoadState('ready');
+        frameId = window.requestAnimationFrame(render);
       } catch (loadError) {
         setLoadState('error');
         setErrorMessage(loadError instanceof Error ? loadError.message : 'Failed to load Live2D avatar');
@@ -345,32 +375,30 @@ export default function Live2DAvatarPanel({
     return () => {
       cancelled = true;
 
-      if (animationListener && pixiAppRef.current) {
-        pixiAppRef.current.ticker.remove(animationListener);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
       }
 
-      if (hitListener && modelRef.current?.off) {
-        modelRef.current.off('hit', hitListener);
-      }
-
-      if (modelRef.current && pixiAppRef.current) {
-        pixiAppRef.current.stage.removeChild(modelRef.current);
-        modelRef.current.destroy?.({ children: true });
-      }
-
+      modelRef.current?.release();
       modelRef.current = null;
+      releaseFramework?.();
+
       lastMotionRef.current = null;
       lastMotionTriggerKeyRef.current = null;
+      lastMotionBankRef.current = null;
       lastExpressionRef.current = null;
+      lastExpressionBankRef.current = null;
+      lastExpressionChangedAtRef.current = 0;
+      motionHistory.clear();
+      expressionHistory.clear();
+      lastFrameAtRef.current = null;
+      latestTargetsRef.current = null;
       availableMotionGroupsRef.current = {};
       availableExpressionsRef.current = [];
+      lastDebugCommitAtRef.current = 0;
       setAvailableMotionGroups([]);
       setAvailableExpressions([]);
-
-      if (pixiAppRef.current) {
-        pixiAppRef.current.destroy(true, { children: true });
-        pixiAppRef.current = null;
-      }
+      setDebugSnapshot(null);
     };
   }, [enabled, manifest, onAvatarHit]);
 
@@ -389,17 +417,45 @@ export default function Live2DAvatarPanel({
   };
 
   const handlePointerTap = (event: React.PointerEvent<HTMLDivElement>) => {
+    const canvas = canvasRef.current;
     const model = modelRef.current;
-    if (!model?.tap || !containerRef.current) return;
+    if (!canvas || !model) return;
 
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    model.tap(x, y);
+    const rect = canvas.getBoundingClientRect();
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    const deviceX = (event.clientX - rect.left) * devicePixelRatio;
+    const deviceY = (event.clientY - rect.top) * devicePixelRatio;
+    const { x, y } = model.deviceToView(deviceX, deviceY, canvas.width, canvas.height);
+    const hitAreas = model.hitTest(x, y);
+    const firstArea = hitAreas[0] ?? 'body';
+    const resolvedArea = resolveHitAreaName(manifest, firstArea);
+
+    const instantReaction: AvatarReaction = {
+      area: resolvedArea,
+      affect: resolvedArea === 'head' || resolvedArea === 'face' ? 'curious' : 'affirming',
+      motionGroup: resolvedArea === 'head'
+        ? 'react_head'
+        : resolvedArea === 'face'
+          ? 'react_face'
+          : 'react_body',
+      subtitleText: resolvedArea === 'head' || resolvedArea === 'face' ? 'Oh?' : 'Ready.',
+      durationMs: 700,
+    };
+
+    if (localReactionTimeoutRef.current !== null) {
+      window.clearTimeout(localReactionTimeoutRef.current);
+    }
+    setLocalReaction(instantReaction);
+    localReactionTimeoutRef.current = window.setTimeout(() => {
+      setLocalReaction(null);
+      localReactionTimeoutRef.current = null;
+    }, instantReaction.durationMs);
+    onAvatarHit?.(resolvedArea);
   };
 
   const effectiveReaction = localReaction ?? avatarReaction;
   const subtitleText = effectiveReaction?.subtitleText || avatarState.subtitleText;
+  const diagnostics = diagnosticsRef.current;
 
   return (
     <div className="relative flex h-full flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#fff8f1_0%,#f2ede7_48%,#e7dfd4_100%)]">
@@ -409,7 +465,9 @@ export default function Live2DAvatarPanel({
         onPointerMove={handlePointerMove}
         onPointerLeave={handlePointerLeave}
         onPointerUp={handlePointerTap}
-      />
+      >
+        <canvas ref={canvasRef} className="h-full w-full" />
+      </div>
 
       {(loadState !== 'ready' || errorMessage) && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/55 backdrop-blur-[2px]">
@@ -457,17 +515,39 @@ export default function Live2DAvatarPanel({
       </div>
 
       {import.meta.env.DEV && showDebug ? (
-        <div className="absolute right-4 top-4 w-64 rounded-2xl border-3 border-foreground bg-card/95 p-3 text-[11px] leading-5 shadow-stamp">
+        <div className="absolute right-4 top-4 w-80 rounded-2xl border-3 border-foreground bg-card/95 p-3 text-[11px] leading-5 shadow-stamp">
           <p className="font-black text-primary">Live2D Debug</p>
           <p className="mt-1 text-muted-foreground">State: {avatarState.dialogueState}</p>
           <p className="text-muted-foreground">Affect: {avatarState.affect}</p>
           <p className="text-muted-foreground">Motion: {avatarState.motionGroup}</p>
-          <p className="text-muted-foreground">Audio: {audioLevel.toFixed(3)}</p>
+          <p className="text-muted-foreground">Feed audio: {(diagnostics?.audioLevel ?? audioLevel).toFixed(3)}</p>
+          <p className="text-muted-foreground">RMS: {(diagnostics?.rmsLevel ?? 0).toFixed(4)}</p>
+          <p className="text-muted-foreground">Remote audio: {diagnostics?.hasRemoteAudio ? 'yes' : 'no'}</p>
+          <p className="text-muted-foreground">Speaking event: {diagnostics?.speakingEventState ?? 'idle'}</p>
+          <p className="text-muted-foreground">Directive source: {diagnostics?.source ?? debugSnapshot?.directiveSource ?? 'fallback'}</p>
+          <p className="text-muted-foreground">Mouth target: {(diagnostics?.mouthTarget ?? debugSnapshot?.mouthOpen ?? 0).toFixed(3)}</p>
+          <p className="text-muted-foreground">
+            Target A/I/U/E/O: {debugSnapshot?.targetParamA?.toFixed(2) ?? 'n/a'} / {debugSnapshot?.targetParamI?.toFixed(2) ?? 'n/a'} / {debugSnapshot?.targetParamU?.toFixed(2) ?? 'n/a'} / {debugSnapshot?.targetParamE?.toFixed(2) ?? 'n/a'} / {debugSnapshot?.targetParamO?.toFixed(2) ?? 'n/a'}
+          </p>
+          <p className="text-muted-foreground">
+            Actual A/I/U/E/O: {debugSnapshot?.actualParamA?.toFixed(2) ?? 'n/a'} / {debugSnapshot?.actualParamI?.toFixed(2) ?? 'n/a'} / {debugSnapshot?.actualParamU?.toFixed(2) ?? 'n/a'} / {debugSnapshot?.actualParamE?.toFixed(2) ?? 'n/a'} / {debugSnapshot?.actualParamO?.toFixed(2) ?? 'n/a'}
+          </p>
+          <p className="text-muted-foreground">Emotion key: {debugSnapshot?.emotionKey ?? 'n/a'}</p>
           <p className="text-muted-foreground">Load: {loadState}</p>
           <p className="mt-2 font-bold text-foreground">Expressions</p>
           <p className="text-muted-foreground">{availableExpressions.join(', ') || 'none'}</p>
+          <p className="mt-2 font-bold text-foreground">Expression banks</p>
+          <p className="text-muted-foreground">{debugSnapshot?.expressionIds.join(', ') || 'none'}</p>
           <p className="mt-2 font-bold text-foreground">Motion groups</p>
           <p className="max-h-20 overflow-auto text-muted-foreground">{availableMotionGroups.join(', ') || 'none'}</p>
+          <p className="mt-2 font-bold text-foreground">Motion banks</p>
+          <p className="max-h-20 overflow-auto text-muted-foreground">{debugSnapshot?.motionRefs.join(', ') || 'none'}</p>
+          {diagnostics?.lastExplicitDirective ? (
+            <>
+              <p className="mt-2 font-bold text-foreground">Last directive</p>
+              <p className="text-muted-foreground">{JSON.stringify(diagnostics.lastExplicitDirective)}</p>
+            </>
+          ) : null}
           {effectiveReaction ? (
             <>
               <p className="mt-2 font-bold text-foreground">Reaction</p>

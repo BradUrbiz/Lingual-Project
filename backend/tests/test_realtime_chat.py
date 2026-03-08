@@ -276,7 +276,7 @@ class FakeRealtimeSessionResponse:
 
 
 class FakeRealtimeConnectResponse:
-    status_code = 200
+    status_code = 201
     text = 'mock-answer-sdp'
 
 

@@ -381,7 +381,7 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 timeout=30,
             )
 
-            if response.status_code != 200:
+            if response.status_code not in {200, 201}:
                 return jsonify({
                     'success': False,
                     'error': f'Failed to connect realtime session: {response.text}',

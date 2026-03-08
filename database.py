@@ -151,6 +151,7 @@ Schema:
     - mapping_snapshot: dict
     - assignment_snapshot: dict
     - curriculum_snapshot: dict
+    - pedagogy_snapshot: dict
     - modality: str
     - voice_enabled: bool
     - text_enabled: bool
@@ -161,6 +162,7 @@ Schema:
     - transcript_ref: dict
     - cost_summary: dict
     - session_summary: dict
+    - analysis_state: dict
     - teacher_preview: bool
     - ui_language: str
     - created_at: timestamp
@@ -174,7 +176,7 @@ Schema:
     - student_uid: str
     - event_type: str
     - turn_index: int | None
-    - payload: dict
+    - payload: dict (includes curriculum/pedagogy metadata for analytics alignment)
     - created_at: timestamp
 """
 
@@ -960,6 +962,60 @@ def list_assignment_practice_sessions(assignment_id):
         data['id'] = doc.id
         sessions.append(data)
     return sessions
+
+
+def list_class_practice_sessions(class_id):
+    """List all practice sessions for a class."""
+    docs = get_practice_sessions_collection().where('class_id', '==', class_id).stream()
+    sessions = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        sessions.append(data)
+    return sessions
+
+
+def list_student_class_practice_sessions(class_id, student_uid):
+    """List practice sessions for a student in a class."""
+    docs = (
+        get_practice_sessions_collection()
+        .where('class_id', '==', class_id)
+        .where('student_uid', '==', student_uid)
+        .stream()
+    )
+    sessions = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        sessions.append(data)
+    return sessions
+
+
+def list_class_learning_events(class_id):
+    """List all learning events for a class."""
+    docs = get_learning_events_collection().where('class_id', '==', class_id).stream()
+    events = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        events.append(data)
+    return events
+
+
+def list_student_class_learning_events(class_id, student_uid):
+    """List learning events for a student in a class."""
+    docs = (
+        get_learning_events_collection()
+        .where('class_id', '==', class_id)
+        .where('student_uid', '==', student_uid)
+        .stream()
+    )
+    events = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        events.append(data)
+    return events
 
 
 def create_learning_event(event_data, event_id=None):

@@ -1,3 +1,4 @@
+import { Suspense, lazy, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider } from './contexts/AuthContext';
@@ -7,28 +8,43 @@ import { LearningLocaleProvider } from './contexts/LearningLocaleContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AppProtectedRoute } from './components/layout/AppProtectedRoute';
 import { TeacherRoute } from './components/layout/TeacherRoute';
-import {
-  LandingPage,
-  AuthPage,
-  GeneralPage,
-  InitialOnboardingPage,
-  SchoolOnboardingPage,
-  AssessmentPage,
-  CategoriesPage,
-  ProfilePage,
-  AppLearningPage,
-  AppCurriculumPage,
-  AppCurriculumModulePage,
-  AppChatPage,
-  AppGamesPage,
-  AppProgressPage,
-  AppProfilePage,
-  AppSettingsPage,
-  PronunciationPracticePage,
-  TeacherDashboardPage,
-  TeacherAssignmentBuilderPage,
-  AssignmentLaunchPage,
-} from './pages';
+import { LoadingSpinner } from './components/common';
+
+const LandingPage = lazy(() => import('./pages/LandingPage').then((module) => ({ default: module.LandingPage })));
+const AuthPage = lazy(() => import('./pages/AuthPage').then((module) => ({ default: module.AuthPage })));
+const GeneralPage = lazy(() => import('./pages/GeneralPage').then((module) => ({ default: module.GeneralPage })));
+const InitialOnboardingPage = lazy(() => import('./pages/InitialOnboardingPage').then((module) => ({ default: module.InitialOnboardingPage })));
+const SchoolOnboardingPage = lazy(() => import('./pages/SchoolOnboardingPage').then((module) => ({ default: module.SchoolOnboardingPage })));
+const AssessmentPage = lazy(() => import('./pages/AssessmentPage').then((module) => ({ default: module.AssessmentPage })));
+const CategoriesPage = lazy(() => import('./pages/CategoriesPage').then((module) => ({ default: module.CategoriesPage })));
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
+const AppLearningPage = lazy(() => import('./pages/AppLearningPage').then((module) => ({ default: module.AppLearningPage })));
+const AppCurriculumPage = lazy(() => import('./pages/AppCurriculumPage').then((module) => ({ default: module.AppCurriculumPage })));
+const AppCurriculumModulePage = lazy(() => import('./pages/AppCurriculumModulePage').then((module) => ({ default: module.AppCurriculumModulePage })));
+const AppChatPage = lazy(() => import('./pages/AppChatPage').then((module) => ({ default: module.AppChatPage })));
+const AppGamesPage = lazy(() => import('./pages/AppGamesPage').then((module) => ({ default: module.AppGamesPage })));
+const AppProgressPage = lazy(() => import('./pages/AppProgressPage').then((module) => ({ default: module.AppProgressPage })));
+const PronunciationPracticePage = lazy(() => import('./pages/PronunciationPracticePage').then((module) => ({ default: module.PronunciationPracticePage })));
+const AppProfilePage = lazy(() => import('./pages/AppProfilePage').then((module) => ({ default: module.AppProfilePage })));
+const AppSettingsPage = lazy(() => import('./pages/AppSettingsPage').then((module) => ({ default: module.AppSettingsPage })));
+const TeacherDashboardPage = lazy(() => import('./pages/TeacherDashboardPage').then((module) => ({ default: module.TeacherDashboardPage })));
+const TeacherAssignmentBuilderPage = lazy(() => import('./pages/TeacherAssignmentBuilderPage').then((module) => ({ default: module.TeacherAssignmentBuilderPage })));
+const TeacherAssignmentAnalyticsPage = lazy(() => import('./pages/TeacherAssignmentAnalyticsPage').then((module) => ({ default: module.TeacherAssignmentAnalyticsPage })));
+const TeacherClassAnalyticsPage = lazy(() => import('./pages/TeacherClassAnalyticsPage').then((module) => ({ default: module.TeacherClassAnalyticsPage })));
+const TeacherStudentDrillDownPage = lazy(() => import('./pages/TeacherStudentDrillDownPage').then((module) => ({ default: module.TeacherStudentDrillDownPage })));
+const AssignmentLaunchPage = lazy(() => import('./pages/AssignmentLaunchPage').then((module) => ({ default: module.AssignmentLaunchPage })));
+
+function RouteLoadingScreen() {
+  return (
+    <div className="min-h-[40vh] flex items-center justify-center">
+      <LoadingSpinner size="lg" />
+    </div>
+  );
+}
+
+function withRouteSuspense(element: ReactNode) {
+  return <Suspense fallback={<RouteLoadingScreen />}>{element}</Suspense>;
+}
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -37,48 +53,72 @@ function AnimatedRoutes() {
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         {/* Public Routes */}
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/auth" element={<AuthPage />} />
+        <Route path="/" element={withRouteSuspense(<LandingPage />)} />
+        <Route path="/auth" element={withRouteSuspense(<AuthPage />)} />
 
         {/* Protected Routes */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/general" element={<GeneralPage />} />
-          <Route path="/onboarding" element={<InitialOnboardingPage />} />
-          <Route path="/school/setup" element={<SchoolOnboardingPage />} />
-          <Route path="/assessment" element={<AssessmentPage />} />
-          <Route path="/categories" element={<CategoriesPage />} />
+          <Route path="/general" element={withRouteSuspense(<GeneralPage />)} />
+          <Route path="/onboarding" element={withRouteSuspense(<InitialOnboardingPage />)} />
+          <Route path="/school/setup" element={withRouteSuspense(<SchoolOnboardingPage />)} />
+          <Route path="/assessment" element={withRouteSuspense(<AssessmentPage />)} />
+          <Route path="/categories" element={withRouteSuspense(<CategoriesPage />)} />
           <Route path="/chat" element={<Navigate to="/app/chat" replace />} />
-          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/profile" element={withRouteSuspense(<ProfilePage />)} />
         </Route>
 
         {/* App Shell Routes */}
         <Route path="/app" element={<AppProtectedRoute />}>
           <Route index element={<Navigate to="learn" replace />} />
-          <Route path="learn" element={<AppLearningPage />} />
-          <Route path="curriculum" element={<AppCurriculumPage />} />
-          <Route path="curriculum/:moduleId" element={<AppCurriculumModulePage />} />
-          <Route path="chat" element={<AppChatPage />} />
-          <Route path="games" element={<AppGamesPage />} />
-          <Route path="progress" element={<AppProgressPage />} />
-          <Route path="practice" element={<PronunciationPracticePage />} />
-          <Route path="assignments/:assignmentId" element={<AssignmentLaunchPage />} />
-          <Route path="profile" element={<AppProfilePage />} />
-          <Route path="settings" element={<AppSettingsPage />} />
+          <Route path="learn" element={withRouteSuspense(<AppLearningPage />)} />
+          <Route path="curriculum" element={withRouteSuspense(<AppCurriculumPage />)} />
+          <Route path="curriculum/:moduleId" element={withRouteSuspense(<AppCurriculumModulePage />)} />
+          <Route path="chat" element={withRouteSuspense(<AppChatPage />)} />
+          <Route path="games" element={withRouteSuspense(<AppGamesPage />)} />
+          <Route path="progress" element={withRouteSuspense(<AppProgressPage />)} />
+          <Route path="practice" element={withRouteSuspense(<PronunciationPracticePage />)} />
+          <Route path="assignments/:assignmentId" element={withRouteSuspense(<AssignmentLaunchPage />)} />
+          <Route path="profile" element={withRouteSuspense(<AppProfilePage />)} />
+          <Route path="settings" element={withRouteSuspense(<AppSettingsPage />)} />
           <Route
             path="teacher"
-            element={
+            element={withRouteSuspense(
               <TeacherRoute>
                 <TeacherDashboardPage />
               </TeacherRoute>
-            }
+            )}
+          />
+          <Route
+            path="teacher/classes/:classId/analytics"
+            element={withRouteSuspense(
+              <TeacherRoute>
+                <TeacherClassAnalyticsPage />
+              </TeacherRoute>
+            )}
           />
           <Route
             path="teacher/classes/:classId/assignments"
-            element={
+            element={withRouteSuspense(
               <TeacherRoute>
                 <TeacherAssignmentBuilderPage />
               </TeacherRoute>
-            }
+            )}
+          />
+          <Route
+            path="teacher/classes/:classId/assignments/:assignmentId/analytics"
+            element={withRouteSuspense(
+              <TeacherRoute>
+                <TeacherAssignmentAnalyticsPage />
+              </TeacherRoute>
+            )}
+          />
+          <Route
+            path="teacher/classes/:classId/students/:studentUid/analytics"
+            element={withRouteSuspense(
+              <TeacherRoute>
+                <TeacherStudentDrillDownPage />
+              </TeacherRoute>
+            )}
           />
         </Route>
       </Routes>

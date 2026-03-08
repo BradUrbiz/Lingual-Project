@@ -12,6 +12,7 @@ from backend.routes.chat import (
     build_avatar_directive_tool,
     build_realtime_session_request,
     create_chat_blueprint,
+    realtime_avatar_directives_requested,
 )
 from backend.services.membership_context import resolve_school_request_context
 
@@ -29,6 +30,13 @@ SAMPLE_PACKAGE = {
         'version': '2026.03',
         'source': {'type': 'native'},
     },
+    'taxonomies': {
+        'contextTags': ['restaurant', 'ordering'],
+        'communicativeFunctions': ['ask_follow_up', 'ask_for_clarification'],
+        'discourseMoves': ['turn_taking', 'self_correction'],
+        'taskModels': ['ap.conversation'],
+        'foundationDomains': ['communication_strategies', 'language_control'],
+    },
     'units': [
         {
             'id': 'U1',
@@ -42,6 +50,11 @@ SAMPLE_PACKAGE = {
             'unitId': 'U1',
             'title': {'en': 'Restaurant roleplay'},
             'moduleGoal': {'en': 'Order food politely.'},
+            'capstone': {
+                'mode': 'interpersonal_speaking',
+                'taskModel': 'ap.conversation',
+                'situationId': 'S1',
+            },
             'situations': {
                 'interpretive_listening': [],
                 'interpersonal_speaking': [
@@ -70,8 +83,32 @@ SAMPLE_PACKAGE = {
             'mode': 'interpersonal_speaking',
             'canDo': {'en': 'I can order food in a restaurant conversation.'},
             'contextTags': ['restaurant', 'ordering'],
+            'communicativeFunctions': ['ask_follow_up', 'ask_for_clarification'],
+            'discourseMoves': ['turn_taking', 'self_correction'],
+            'foundationDomains': ['communication_strategies', 'language_control'],
+            'register': 'mixed',
+            'mastery': {'rubricId': 'rub.speaking.v1', 'threshold': 3},
+            'evidenceModel': {'taskModel': 'ap.conversation', 'minTurns': 4, 'timeLimitSec': 90},
+            'templateRefs': ['tpl.restaurant_roleplay.v1'],
         }
     ],
+    'rubrics': [
+        {
+            'id': 'rub.speaking.v1',
+            'title': {'en': 'Speaking Rubric'},
+            'scale': {'min': 0, 'max': 4, 'step': 1},
+            'dimensions': [
+                {
+                    'id': 'task_completion',
+                    'title': {'en': 'Task completion'},
+                    'description': {'en': 'Completes the assigned task clearly.'},
+                }
+            ],
+        }
+    ],
+    'templates': {
+        'activityTemplateIds': ['tpl.restaurant_roleplay.v1'],
+    },
 }
 
 
@@ -258,6 +295,7 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
 
         self.assertEqual(head_context['reactionIntent'], 'tap_head_notice')
         self.assertIn('head', head_context['systemMessage'].lower())
+        self.assertIn('reactionintent=tap_head_notice', head_context['systemMessage'].lower())
         self.assertEqual(body_context['reactionIntent'], 'tap_body_affirm')
         self.assertIn('module M1', body_context['systemMessage'])
         self.assertIn('situation S2', body_context['systemMessage'])
@@ -267,6 +305,7 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
             payload = build_realtime_session_request('Base instructions')
 
         self.assertEqual(payload['instructions'], 'Base instructions')
+        self.assertEqual(payload['turn_detection']['threshold'], 0.7)
         self.assertNotIn('tool_choice', payload)
         self.assertNotIn('tools', payload)
 
@@ -277,6 +316,27 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
         self.assertEqual(payload['tool_choice'], 'auto')
         self.assertEqual(payload['tools'][0]['name'], 'emit_avatar_directive')
         self.assertIn('Avatar acting contract', payload['instructions'])
+        self.assertIn('Preferred mappings', payload['instructions'])
+        self.assertIn('Tap reaction mappings', payload['instructions'])
+
+    def test_realtime_session_request_includes_avatar_tools_when_explicitly_enabled(self):
+        payload = build_realtime_session_request(
+            'Base instructions',
+            enable_avatar_directives=True,
+        )
+
+        self.assertEqual(payload['tool_choice'], 'auto')
+        self.assertEqual(payload['tools'][0]['name'], 'emit_avatar_directive')
+
+    def test_realtime_avatar_directives_requested_only_allows_payload_opt_in_in_development(self):
+        with patch.dict('os.environ', {'FLASK_ENV': 'development'}, clear=False):
+            self.assertTrue(realtime_avatar_directives_requested({'avatarDirectives': True}))
+
+        with patch.dict('os.environ', {'FLASK_ENV': 'production'}, clear=False):
+            self.assertFalse(realtime_avatar_directives_requested({'avatarDirectives': True}))
+
+        with patch.dict('os.environ', {'FLASK_ENV': 'development'}, clear=False):
+            self.assertFalse(realtime_avatar_directives_requested({'avatarDirectives': False}))
 
 
 class RealtimeChatRoutesTestCase(unittest.TestCase):
@@ -360,10 +420,32 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         self.assertIn('Prompt for M1::S1', instructions)
         self.assertIn('Assignment title: Restaurant Ordering Practice', instructions)
         self.assertIn('Task type: information_gap', instructions)
+        self.assertIn('Task model: ap.conversation', instructions)
         self.assertIn('Could I have', instructions)
         self.assertIn('polite requests', instructions)
+        self.assertIn('COMMUNICATIVE FUNCTIONS TO WATCH', instructions)
+        self.assertIn('RUBRICS IN PLAY', instructions)
         self.assertIn('Feedback mode: accuracy_first', instructions)
         self.assertIn('Teacher notes: Keep the student in the restaurant ordering lane.', instructions)
+
+    def test_realtime_session_allows_avatar_directive_opt_in_in_development(self):
+        with patch.dict(
+            'os.environ',
+            {'OPENAI_API_KEY': 'test-openai-key', 'FLASK_ENV': 'development'},
+            clear=False,
+        ):
+            with patch('backend.routes.chat.requests.post') as mocked_post:
+                mocked_post.return_value = FakeRealtimeSessionResponse()
+
+                response = self.client.post('/api/realtime/session', json={
+                    'uiLanguage': 'en',
+                    'avatarDirectives': True,
+                })
+
+        self.assertEqual(response.status_code, 200)
+        request_payload = mocked_post.call_args.kwargs['json']
+        self.assertEqual(request_payload['tool_choice'], 'auto')
+        self.assertEqual(request_payload['tools'][0]['name'], 'emit_avatar_directive')
 
 
 if __name__ == '__main__':

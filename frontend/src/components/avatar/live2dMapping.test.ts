@@ -181,4 +181,66 @@ describe('live2dMapping', () => {
     expect(resolved.expressionIds[0]).toBe('corrective_focus');
     expect(resolved.expressionIds).toContain('corrective_soft');
   });
+
+  it('maps viseme-weighted mouth targets into distinct A/I/U/E/O parameters', () => {
+    const targets = buildLive2DParameterTargets({
+      manifest: LINGUAL_TUTOR_LIVE2D_MANIFEST,
+      avatarState: {
+        ...DEFAULT_AVATAR_STATE,
+        dialogueState: 'speaking',
+        affect: 'curious',
+        motionGroup: 'question',
+        subtitleText: 'Could you go over that again?',
+      },
+      avatarReaction: null,
+      audioLevel: 0.18,
+      pointerFocus: { x: 0, y: 0 },
+      now: 1_440,
+      performance: {
+        dialogueState: 'speaking',
+        affect: 'curious',
+        intensity: 0.58,
+        jawOpen: 0.28,
+        mouthRound: 0.2,
+        mouthSpread: 0.14,
+        smile: 0.08,
+        browInnerUp: 0.12,
+        browOuterUp: 0.24,
+        browDown: 0.04,
+        blink: 0,
+        gazeYaw: 0,
+        gazePitch: -0.03,
+        headPitch: -0.02,
+        headYaw: 0.01,
+        headRoll: 0,
+        neckPitch: 0,
+        chestPitch: 0.01,
+        directive: null,
+        directiveSource: 'fallback',
+        debug: {
+          audioLevel: 0.18,
+          rmsLevel: 0.09,
+          mouthDrive: 0.3,
+          transcript: 'Could you go over that again?',
+          hasRemoteAudio: true,
+          speakingEventState: 'speaking',
+          mouthTarget: 0.28,
+          mouthVisemes: {
+            a: 0.08,
+            i: 0.12,
+            u: 0.16,
+            e: 0.24,
+            o: 0.4,
+          },
+          detectedExpressionKeys: [],
+          directiveSource: 'fallback',
+          lastExplicitDirective: null,
+        },
+      },
+    });
+
+    expect(targets.values.ParamA).toBeGreaterThan(0.15);
+    expect(targets.values.ParamO).toBeGreaterThan(targets.values.ParamI);
+    expect(targets.values.ParamE).toBeGreaterThan(0.1);
+  });
 });

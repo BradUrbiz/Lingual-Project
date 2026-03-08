@@ -89,11 +89,28 @@ def build_avatar_realtime_instructions() -> str:
 
 Avatar acting contract:
 - You may call emit_avatar_directive to control the Live2D tutor's expression and motion.
-- Use a directive when your speaking intent changes meaningfully: question, encouragement, correction, apology, surprise, or contextual tap reaction.
+- For most spoken tutor turns, emit one concise directive near the start of the turn unless the turn is truly neutral and very short.
+- Use a directive whenever your speaking intent is meaningfully one of: question, encouragement, correction, apology, surprise, affirmation, or contextual tap reaction.
 - Keep the spoken tutoring response natural. Never mention internal tool names, schemas, or tags.
-- Prefer one concise directive near the start of a turn instead of spamming repeated directives.
+- Prefer exactly one directive per turn instead of spamming repeated directives.
 - Use only the provided symbolic expressionId and motionRef values. Do not invent new ones.
-- If there is no meaningful acting change, do not call the tool.
+- Keep subtitleText short and natural. Use it mainly for tap reactions or strong affect shifts.
+
+Preferred mappings:
+- curious questions: emotionKey=surprise or neutral, expressionId=curious_lift or curious_smile, motionRef=speaking_question
+- encouragement or praise: emotionKey=joy, expressionId=warm_smile or warm_bright, motionRef=speaking_affirm
+- affirmation or agreement: emotionKey=joy or neutral, expressionId=affirm_soft, motionRef=speaking_affirm
+- correction or reformulation: emotionKey=anger or disgust, expressionId=corrective_focus or corrective_soft, motionRef=speaking_corrective
+- apology or gentle hedge: emotionKey=sadness or fear, expressionId=apology_soft, motionRef=speaking_apology
+- playful acknowledgement: emotionKey=smirk, expressionId=playful_smirk, motionRef=speaking_base
+- neutral explanation: emotionKey=neutral, expressionId=neutral_soft or neutral_primary, motionRef=speaking_base
+
+Tap reaction mappings:
+- head tap: reactionIntent=tap_head_notice with a curious expression and react_head_curious or speaking_question motion
+- face tap: reactionIntent=tap_face_focus with attentive curiosity and react_face_curious motion
+- body tap: reactionIntent=tap_body_affirm with warm affirmation and react_body_affirm motion
+- hand tap: reactionIntent=tap_hand_wave with a brief friendly acknowledgement
+- chest tap: reactionIntent=tap_chest_reassure with a soft reassuring tone
 """.strip()
 
 
@@ -140,7 +157,9 @@ def build_avatar_context_payload(area: str, mode: str, practice: Any = None) -> 
     system_message = (
         f'{reaction["seed"]} '
         f'The current voice mode is {normalized_mode}. '
-        'If you answer immediately, keep it to one short sentence.'
+        'If you answer immediately, keep it to one short sentence. '
+        f'If avatar directives are available, emit one directive that uses reactionIntent={reaction["reactionIntent"]} '
+        'with matching expression and motion.'
         f'{practice_hint}'
     )
 
@@ -160,7 +179,21 @@ def realtime_avatar_directives_enabled() -> bool:
     }
 
 
-def build_realtime_session_request(system_instructions: str) -> dict[str, Any]:
+def realtime_avatar_directives_requested(payload: dict[str, Any] | None = None) -> bool:
+    if realtime_avatar_directives_enabled():
+        return True
+
+    request_payload = payload or {}
+    request_opt_in = request_payload.get('avatarDirectives') is True
+    is_development = os.environ.get('FLASK_ENV', '').strip().lower() == 'development'
+    return is_development and request_opt_in
+
+
+def build_realtime_session_request(
+    system_instructions: str,
+    *,
+    enable_avatar_directives: bool | None = None,
+) -> dict[str, Any]:
     request_payload: dict[str, Any] = {
         'model': 'gpt-realtime-mini',
         'voice': 'coral',
@@ -168,14 +201,17 @@ def build_realtime_session_request(system_instructions: str) -> dict[str, Any]:
         'input_audio_transcription': {'model': 'whisper-1'},
         'turn_detection': {
             'type': 'server_vad',
-            'threshold': 0.5,
+            'threshold': 0.7,
             'prefix_padding_ms': 300,
             'silence_duration_ms': 350,
             'interrupt_response': True,
         },
     }
 
-    if realtime_avatar_directives_enabled():
+    if enable_avatar_directives is None:
+        enable_avatar_directives = realtime_avatar_directives_enabled()
+
+    if enable_avatar_directives:
         request_payload['instructions'] = (
             f'{system_instructions}\n\n{build_avatar_realtime_instructions()}'
         )
@@ -282,7 +318,10 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     'Authorization': f'Bearer {api_key}',
                     'Content-Type': 'application/json',
                 },
-                json=build_realtime_session_request(system_instructions),
+                json=build_realtime_session_request(
+                    system_instructions,
+                    enable_avatar_directives=realtime_avatar_directives_requested(payload),
+                ),
             )
 
             if response.status_code != 200:

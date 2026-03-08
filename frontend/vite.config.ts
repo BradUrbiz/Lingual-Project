@@ -3,10 +3,83 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
+function manualChunks(id: string): string | undefined {
+  if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/') || id.includes('/node_modules/react-router')) {
+    return 'react-vendor'
+  }
+
+  if (id.includes('/node_modules/firebase/')) {
+    return 'firebase-vendor'
+  }
+
+  if (id.includes('/node_modules/framer-motion/') || id.includes('/node_modules/motion/')) {
+    return 'motion-vendor'
+  }
+
+  if (id.includes('/node_modules/lucide-react/')) {
+    return 'icons-vendor'
+  }
+
+  if (
+    id.includes('/node_modules/@radix-ui/') ||
+    id.includes('/node_modules/class-variance-authority/') ||
+    id.includes('/node_modules/clsx/') ||
+    id.includes('/node_modules/tailwind-merge/') ||
+    id.includes('/node_modules/sonner/')
+  ) {
+    return 'ui-vendor'
+  }
+
+  if (id.includes('/node_modules/axios/')) {
+    return 'network-vendor'
+  }
+
+  if (id.includes('/node_modules/recharts/')) {
+    return 'charts-vendor'
+  }
+
+  if (id.includes('/node_modules/microsoft-cognitiveservices-speech-sdk/')) {
+    return 'speech-vendor'
+  }
+
+  if (id.includes('/node_modules/three/examples/')) {
+    return 'three-examples-vendor'
+  }
+
+  if (id.includes('/node_modules/three/')) {
+    return 'three-vendor'
+  }
+
+  if (id.includes('/node_modules/@pixiv/three-vrm/')) {
+    return 'three-vrm-vendor'
+  }
+
+  if (
+    id.includes('/CubismSdkForWeb-5-r.4/') ||
+    id.includes('/node_modules/pixi-live2d-display/') ||
+    id.includes('/node_modules/pixi.js/')
+  ) {
+    return 'avatar-runtime-vendor'
+  }
+
+  return undefined
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: '/',
+  build: {
+    // The remaining chunk above Vite's default 500 kB warning is the isolated
+    // Three.js vendor bundle used by the avatar renderer. We keep it split
+    // from the app shell and raise the warning limit slightly above its size.
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks,
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

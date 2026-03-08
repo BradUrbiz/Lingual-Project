@@ -52,11 +52,21 @@ describe('realtimeAvatar helpers', () => {
       lastExplicitDirective: {
         motionRef: 'speaking_base',
       },
+      directiveRequested: true,
+      stats: {
+        directiveEventCount: 2,
+        avatarHitCount: 1,
+        assistantSpeechTurnCount: 3,
+        directiveSpeechTurnCount: 2,
+        fallbackSpeechTurnCount: 1,
+      },
     });
 
     expect(diagnostics.hasRemoteAudio).toBe(true);
     expect(diagnostics.speakingEventState).toBe('speaking');
     expect(diagnostics.lastExplicitDirective?.motionRef).toBe('speaking_base');
     expect(diagnostics.source).toBe('directive');
+    expect(diagnostics.directiveRequested).toBe(true);
+    expect(diagnostics.stats.directiveSpeechTurnCount).toBe(2);
   });
 });

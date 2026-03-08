@@ -18,4 +18,7 @@ export { AppProfilePage } from './AppProfilePage';
 export { AppSettingsPage } from './AppSettingsPage';
 export { TeacherDashboardPage } from './TeacherDashboardPage';
 export { TeacherAssignmentBuilderPage } from './TeacherAssignmentBuilderPage';
+export { TeacherAssignmentAnalyticsPage } from './TeacherAssignmentAnalyticsPage';
+export { TeacherClassAnalyticsPage } from './TeacherClassAnalyticsPage';
+export { TeacherStudentDrillDownPage } from './TeacherStudentDrillDownPage';
 export { AssignmentLaunchPage } from './AssignmentLaunchPage';

@@ -6,51 +6,68 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Lingual** is an AI-powered platform for learning colloquial/spoken language through real-time conversation practice. Our mission is to become **the standard for spoken language learning**.
 
+### Current Priority
+
+**School integration** is the top priority. The system has moved beyond B2C-only assumptions. All new work should follow the formal school-integration documents:
+
+- `docs/school-integration/PRD.md` - product goals, scope, success metrics
+- `docs/school-integration/TECH_SPEC.md` - architecture, domain model, API design
+- `docs/school-integration/TASKS.md` - phased checklist and build order
+- `docs/school-integration/LIMITATIONS.md` - known gaps and temporary shortcuts
+
+**Key rule:** If scope or architecture changes, update docs in this order: PRD → TECH_SPEC → TASKS. Keep LIMITATIONS.md updated when shipped behavior is narrower than the intended architecture.
+
 ### Vision & Roadmap
 
 | Aspect | Current (v1) | Future |
 |--------|--------------|--------|
-| **Languages** | Korean (SKLC-aligned) | Spanish, French, Russian |
-| **Market** | B2C (general population) | B2B-first (K-12 schools, language institutes) |
+| **Languages** | Korean (SKLC-aligned), French (AP sample) | Spanish, Russian |
+| **Market** | B2B-first (K-12 schools, language institutes) | Broader B2C |
 | **Platform** | Web only | Web + Native mobile apps |
-
-### Target Markets
-
-- **Primary (B2B):** K-12 schools and language institutes - contract-based service for classroom speaking practice
-- **Secondary (B2C):** General population seeking conversational fluency
 
 ### User Roles
 
 | Role | Capabilities |
 |------|-------------|
-| **Student** | Assessment, AI conversation practice, progress tracking |
-| **Teacher** | Student monitoring, class management, curriculum customization, assignment creation |
+| **Student** | Assessment, assignment-aware AI practice, progress tracking |
+| **Teacher** | Class management, curriculum mapping, assignment creation, analytics |
 | **Administrator** | School-wide analytics, multi-teacher management, billing |
 
 ### Core Learning Flow
 
-1. Diagnostic assessment → proficiency level mapping (per-language standards)
-2. Curriculum-driven AI tutor conversations (7-10 min sessions)
-3. Post-session feedback with curriculum-aligned progress tracking
+1. Teacher creates class → maps curriculum → publishes assignment
+2. Student launches assignment-aware speaking practice (voice/text/hybrid)
+3. AI tutor follows curriculum mapping (target expressions, grammar, feedback policy)
+4. System captures learning events → builds session summaries → rolls up analytics
+5. Teacher reviews class/assignment/student analytics to inform instruction
 
-**Key Principle:** Curriculum is the backbone of learning - teachers can upload their own curriculum or use Lingual's standard curriculum.
+**Key Principle:** Curriculum is the backbone - teachers design the exercise, AI executes it at student scale.
 
 ## Development Commands
 
 ### Backend (Flask)
 ```bash
 pip install -r requirements.txt
-python main.py  # Runs on localhost:5001
+PORT=5001 FLASK_ENV=development python main.py  # Runs on localhost:5001
 ```
 
 ### Frontend (React + Vite)
 ```bash
 cd frontend
 npm install
-npm run dev      # Dev server on localhost:5173
+npm run dev      # Dev server on localhost:5173, proxies /api/* to :5001
 npm run build    # TypeScript compile + Vite build
 npm run lint     # ESLint
-npm run preview  # Preview production build
+npm run test     # Vitest
+```
+
+### Running Tests
+```bash
+# Backend unit tests
+python3 -m unittest backend.tests.test_curriculum_admin_routes backend.tests.test_realtime_chat backend.tests.test_school_foundation_routes backend.tests.test_auth_memberships
+
+# Frontend tests
+cd frontend && npm run test -- --run src/pages/TeacherAssignmentAnalyticsPage.test.tsx src/components/layout/TeacherRoute.test.tsx
 ```
 
 ### Docker
@@ -61,72 +78,113 @@ docker run -p 8080:8080 lingual
 
 ## Architecture
 
-### Backend (`main.py`, `database.py`, `scoring.py`)
-- **Flask** serves API endpoints and static frontend in production
-- **Firestore** stores users, profiles, assessment data, and chat history
-- **OpenAI GPT Realtime API (gpt-realtime-mini)** powers live conversation with ephemeral token auth
-- Authentication via Firebase ID tokens verified server-side
+### Backend
 
-### Frontend (`frontend/src/`)
+- **Flask** app registered via blueprints in `main.py`
+
+- **Firestore** for all persistence (users, schools, sessions, events)
+- **OpenAI GPT Realtime API** powers live conversation with ephemeral token auth
+- **Firebase Auth** ID tokens verified server-side
+
+Backend is organized into:
+- `main.py` - Flask app, blueprint registration, legacy routes
+- `database.py` - Firestore CRUD helpers for all collections
+- `backend/routes/` - Blueprint modules (auth, chat, teacher, curriculum_admin, schools, pronunciation)
+- `backend/services/` - Domain services (assignment_resolver, practice_analytics, membership_context, prompt_builder)
+- `backend/route_deps.py` - Shared dependencies injected into routes
+- `scoring.py` - Assessment scoring (MCQ, heuristic text, domain aggregation)
+
+### Frontend
+
 - **React 19 + TypeScript + Vite** with React Router v7
-- **Contexts**: `AuthContext` (Firebase user, session), `LanguageContext` (en/ko UI)
+- **Contexts**: `AuthContext` (Firebase user, session, memberships), `LanguageContext` (en/ko UI), `MembershipContext` (active org, role, classes)
 - **UI**: Radix UI primitives + Tailwind CSS 4 + Framer Motion
-- **Key hooks**: `useRealtimeChat` (OpenAI streaming), `useVoiceRecorder` (audio capture)
+- **Route-level lazy loading** via `React.lazy()` in `App.tsx`
+- **Vendor chunking** configured in `vite.config.ts`
+
+Frontend is organized into:
+- `frontend/src/App.tsx` - Router, lazy-loaded pages, `TeacherRoute` guard
+- `frontend/src/api/` - Typed API client modules (teacher, assignments, schools, compliance)
+- `frontend/src/types/` - TypeScript DTOs (school, assignment, curriculum)
+- `frontend/src/pages/` - Page components
+- `frontend/src/contexts/` - React contexts
+- `frontend/src/components/` - Shared UI components
 
 ### Data Flow
-1. Firebase Auth issues ID token → `/api/auth/verify` creates session + Firestore user
-2. Protected routes check `AuthContext` before rendering
-3. Chat uses OpenAI Realtime API with ephemeral tokens from `/api/realtime/session`
-4. Vite dev server proxies `/api/*` to Flask backend
+
+1. Firebase Auth issues ID token → `/api/auth/verify` creates session + returns memberships
+2. `MembershipContext` hydrates active org, role, classes
+3. `TeacherRoute` guards teacher-only pages by checking membership role
+4. Teacher creates assignment → curriculum mapping → assignment record
+5. Student launches assignment → backend resolves assignment context → creates practice session
+6. During practice: learning events emitted → session summary updated in real-time
+7. Teacher views analytics: backend aggregates sessions + events into typed payloads
 
 ### Firestore Schema
+
 ```
 users/{uid}/
-  ├── profile/     (display_name, age, rigor, frequency, ui_language)
-  ├── assessment/  (responses, current_item_index, completed)
-  ├── results/     (global_stage, domain_bands, domain_raw_scores)
-  └── chats/{id}/  (title, messages[], timestamps)
+  ├── profile/       (display_name, age, rigor, frequency, ui_language)
+  ├── assessment/    (responses, current_item_index, completed)
+  ├── results/       (global_stage, domain_bands, domain_raw_scores)
+  └── chats/{id}/    (title, messages[], timestamps)
+
+organizations/{orgId}          (name, type, status, pilot_stage, policies)
+memberships/{membershipId}     (org_id, uid, roles[], status)
+classes/{classId}              (org_id, name, term, subject, teacher_membership_ids[])
+enrollments/{enrollmentId}     (class_id, student_uid, status, join_source)
+curriculum_mappings/{mappingId} (class_id, package_id, module_id, objectives, policies)
+assignments/{assignmentId}     (class_id, mapping_id, title, status, task_type)
+practice_sessions/{sessionId}  (assignment_id, student_uid, session_summary, cost_summary)
+learning_events/{eventId}      (assignment_id, session_id, event_type, turn_index, payload)
 ```
 
 ## Key Files
 
-### Backend
+### Backend - School Integration
 
-- `main.py` - Flask app with all API routes (~1150 lines)
-- `database.py` - Firestore CRUD operations
-- `scoring.py` - Assessment scoring (MCQ, heuristic text, domain aggregation)
-- `data/assessment_v1.json` - Assessment questions and scoring config
+- `backend/routes/curriculum_admin.py` - Assignment CRUD, practice session creation, event reporting, analytics endpoints
+- `backend/routes/teacher.py` - Teacher dashboard, class CRUD
+- `backend/routes/schools.py` - School/org bootstrap and management
+- `backend/services/practice_analytics.py` - Session summary building, learning event processing, assignment analytics aggregation
+- `backend/services/assignment_resolver.py` - Assignment bootstrap, curriculum resolution, prompt assembly
+- `backend/services/membership_context.py` - Request-level school context and role checking
 
-### Frontend Core
+### Backend - Core
 
-- `frontend/src/App.tsx` - Router and protected route setup
-- `frontend/src/hooks/useRealtimeChat.ts` - OpenAI Realtime WebSocket handling
+- `main.py` - Flask app with blueprint registration and legacy routes
+- `database.py` - Firestore CRUD for all collections
+- `scoring.py` - Assessment scoring
 
-### Pages
+### Frontend - Teacher Flow
 
-- `LandingPage.tsx` - 마케팅 랜딩 페이지
-- `AuthPage.tsx` - 로그인/회원가입
-- `AssessmentPage.tsx` - 진단 평가
-- `ChatPage.tsx` - AI 튜터 대화
-- `ProfilePage.tsx` - 사용자 프로필
-- `AppLearningPage.tsx` - 학습 메인 (플래시카드, 미니게임)
-- `AppProfilePage.tsx` - 앱 내 프로필
-- `AppSettingsPage.tsx` - 설정
-- `TeacherDashboardPage.tsx` - 교사용 대시보드
+- `TeacherDashboardPage.tsx` - Class list, summary stats, setup checklist
+- `TeacherAssignmentBuilderPage.tsx` - Curriculum mapping + assignment authoring
+- `TeacherAssignmentAnalyticsPage.tsx` - Per-assignment analytics drill-down
+- `frontend/src/api/teacher.ts` - Teacher dashboard and class API
+- `frontend/src/api/assignments.ts` - Assignment CRUD and analytics API
+- `frontend/src/types/assignment.ts` - Assignment, practice session, analytics DTOs
+- `frontend/src/types/school.ts` - School, class, membership DTOs
 
-### Minigames
+### Frontend - Student Flow
 
-- `FlashcardFlip.tsx` - 플래시카드 뒤집기 게임
-- `WordMatch.tsx` - 단어 매칭 게임
+- `AppCurriculumPage.tsx` - Curriculum browsing
+- `AppCurriculumModulePage.tsx` - Module practice entry
+- `ChatPage.tsx` - AI tutor conversation (legacy + assignment-aware)
 
-### Documentation
+### Frontend - Core
 
-- `docs/claude-plugins-guide.md` - Claude Code 플러그인 가이드
+- `frontend/src/App.tsx` - Router with lazy-loaded pages and TeacherRoute guard
+- `frontend/src/contexts/AuthContext.tsx` - Firebase auth + session
+- `frontend/src/contexts/MembershipContext.tsx` - Active org, role, classes
+- `frontend/src/components/layout/TeacherRoute.tsx` - Role-gated route wrapper
 
 ## Environment Variables
 
 Required in `.env`:
-- `OPENAI_API_KEY` - For GPT Realtime API (gpt-realtime-mini)
+- `OPENAI_API_KEY` - For GPT Realtime API
 - `GOOGLE_APPLICATION_CREDENTIALS` - Path to Firebase service account JSON
-- `GOOGLE_CLOUD_PROJECT` - Firebase project ID
+- `GOOGLE_CLOUD_PROJECT` - Firebase project ID (defaults to `lingu-480600`)
 - `SECRET_KEY` - Flask session secret
+- `PORT` - Backend port (default 5000; set to 5001 for Vite proxy)
+- `FLASK_ENV` - Set to `development` for debug mode

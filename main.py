@@ -28,7 +28,10 @@ FIREBASE_PROJECT_ID = os.environ.get('GOOGLE_CLOUD_PROJECT', 'lingu-480600')
 ALLOWED_LEARNING_LOCALES = {'ko-KR', 'es-ES', 'fr-FR'}
 ALLOWED_MINIGAME_TYPES = {'listening_quiz', 'grammar_challenge'}
 SUPPORTED_UI_LANGUAGES = {'en', 'ko'}
-SAMPLE_CURRICULUM_PATH = Path('data/curriculum/ap_french_fall2024_unit1_3.v1.json')
+SAMPLE_CURRICULUM_CANDIDATE_PATHS = (
+    Path('Curriculum Data/curriculum/ap_french_fall2024_unit1_3.v1.json'),
+    Path('data/curriculum/ap_french_fall2024_unit1_3.v1.json'),
+)
 PRACTICEABLE_CURRICULUM_MODES = {'interpersonal_speaking', 'presentational_speaking'}
 FOUNDATION_DOMAIN_LABELS = {
     'comprehension': 'Comprehension',
@@ -115,8 +118,17 @@ def get_i18n_text(value, ui_language='en'):
 
 
 @lru_cache(maxsize=1)
+def get_sample_curriculum_path():
+    for candidate in SAMPLE_CURRICULUM_CANDIDATE_PATHS:
+        if candidate.exists():
+            return candidate
+    searched = ', '.join(str(path) for path in SAMPLE_CURRICULUM_CANDIDATE_PATHS)
+    raise FileNotFoundError(f'Sample curriculum package not found. Checked: {searched}')
+
+
+@lru_cache(maxsize=1)
 def load_sample_curriculum_package():
-    with SAMPLE_CURRICULUM_PATH.open('r', encoding='utf-8') as file:
+    with get_sample_curriculum_path().open('r', encoding='utf-8') as file:
         return json.load(file)
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -38,7 +38,7 @@ def _timestamp_to_iso(value: Any) -> str | None:
     if hasattr(value, "isoformat"):
         return value.isoformat()
     if hasattr(value, "seconds"):
-        return datetime.utcfromtimestamp(value.seconds).isoformat()
+        return datetime.fromtimestamp(value.seconds, UTC).isoformat()
     return str(value)
 
 
@@ -225,6 +225,182 @@ def _package_objective_index(package: dict[str, Any]) -> dict[str, dict[str, Any
     }
 
 
+def _package_rubric_index(package: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        rubric.get("id"): rubric
+        for rubric in package.get("rubrics", [])
+        if isinstance(rubric, dict) and rubric.get("id")
+    }
+
+
+def _unique_ordered_strings(values: list[Any]) -> list[str]:
+    normalized = []
+    seen = set()
+    for value in values:
+        cleaned = _normalize_string(value)
+        if not cleaned or cleaned in seen:
+            continue
+        normalized.append(cleaned)
+        seen.add(cleaned)
+    return normalized
+
+
+def _serialize_bootstrap_objective(objective: dict[str, Any]) -> dict[str, Any]:
+    mastery = objective.get("mastery", {}) if isinstance(objective, dict) else {}
+    evidence_model = objective.get("evidenceModel", {}) if isinstance(objective, dict) else {}
+    return {
+        "id": objective.get("id"),
+        "mode": objective.get("mode"),
+        "canDo": objective.get("canDo", {}),
+        "contextTags": _normalize_string_list(objective.get("contextTags")),
+        "communicativeFunctions": _normalize_string_list(objective.get("communicativeFunctions")),
+        "discourseMoves": _normalize_string_list(objective.get("discourseMoves")),
+        "foundationDomains": _normalize_string_list(objective.get("foundationDomains")),
+        "register": objective.get("register"),
+        "mastery": {
+            "rubricId": _normalize_string(mastery.get("rubricId")),
+            "threshold": mastery.get("threshold"),
+        },
+        "evidenceModel": {
+            "taskModel": _normalize_string(evidence_model.get("taskModel")),
+            "timeLimitSec": evidence_model.get("timeLimitSec"),
+            "minTurns": evidence_model.get("minTurns"),
+            "inputProfile": evidence_model.get("inputProfile", {}),
+        },
+        "templateRefs": _normalize_string_list(objective.get("templateRefs")),
+    }
+
+
+def _serialize_bootstrap_rubric(rubric: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": rubric.get("id"),
+        "title": rubric.get("title", {}),
+        "scale": rubric.get("scale", {}),
+        "dimensions": [
+            {
+                "id": dimension.get("id"),
+                "title": dimension.get("title", {}),
+                "description": dimension.get("description", {}),
+            }
+            for dimension in rubric.get("dimensions", [])
+            if isinstance(dimension, dict) and dimension.get("id")
+        ],
+        "notes": rubric.get("notes", ""),
+    }
+
+
+def _build_bootstrap_pedagogy_context(
+    module: dict[str, Any],
+    situation: dict[str, Any],
+    objectives: list[dict[str, Any]],
+    rubrics: list[dict[str, Any]],
+) -> dict[str, Any]:
+    module_capstone = module.get("capstone", {}) if isinstance(module, dict) else {}
+    situation_seed = situation.get("seed", {}) if isinstance(situation, dict) else {}
+    situation_constraints = situation_seed.get("constraints", {}) if isinstance(situation_seed, dict) else {}
+
+    task_model_candidates = [
+        module_capstone.get("taskModel"),
+        *[
+            (objective.get("evidenceModel") or {}).get("taskModel")
+            for objective in objectives
+            if isinstance(objective, dict)
+        ],
+    ]
+    time_limit_candidates = [
+        situation_constraints.get("timeLimitSec"),
+        *[
+            (objective.get("evidenceModel") or {}).get("timeLimitSec")
+            for objective in objectives
+            if isinstance(objective, dict)
+        ],
+    ]
+    min_turn_candidates = [
+        situation_constraints.get("minTurns"),
+        *[
+            (objective.get("evidenceModel") or {}).get("minTurns")
+            for objective in objectives
+            if isinstance(objective, dict)
+        ],
+    ]
+
+    return {
+        "taskModel": next((value for value in task_model_candidates if _normalize_string(value)), ""),
+        "evidence": {
+            "timeLimitSec": next((value for value in time_limit_candidates if isinstance(value, int)), None),
+            "minTurns": next((value for value in min_turn_candidates if isinstance(value, int)), None),
+            "maxTurns": situation_constraints.get("maxTurns")
+            if isinstance(situation_constraints.get("maxTurns"), int)
+            else None,
+            "maxReplays": situation_constraints.get("maxReplays")
+            if isinstance(situation_constraints.get("maxReplays"), int)
+            else None,
+        },
+        "contextTags": _unique_ordered_strings(
+            [
+                *(situation_seed.get("contextTags") or []),
+                *[
+                    tag
+                    for objective in objectives
+                    if isinstance(objective, dict)
+                    for tag in (objective.get("contextTags") or [])
+                ],
+            ]
+        ),
+        "communicativeFunctions": _unique_ordered_strings(
+            [
+                function_id
+                for objective in objectives
+                if isinstance(objective, dict)
+                for function_id in (objective.get("communicativeFunctions") or [])
+            ]
+        ),
+        "discourseMoves": _unique_ordered_strings(
+            [
+                move_id
+                for objective in objectives
+                if isinstance(objective, dict)
+                for move_id in (objective.get("discourseMoves") or [])
+            ]
+        ),
+        "foundationDomains": _unique_ordered_strings(
+            [
+                domain_id
+                for objective in objectives
+                if isinstance(objective, dict)
+                for domain_id in (objective.get("foundationDomains") or [])
+            ]
+        ),
+        "templateRefs": _unique_ordered_strings(
+            [
+                template_id
+                for objective in objectives
+                if isinstance(objective, dict)
+                for template_id in (objective.get("templateRefs") or [])
+            ]
+        ),
+        "objectiveIds": _unique_ordered_strings(
+            [objective.get("id") for objective in objectives if isinstance(objective, dict)]
+        ),
+        "rubricIds": _unique_ordered_strings(
+            [
+                (objective.get("mastery") or {}).get("rubricId")
+                for objective in objectives
+                if isinstance(objective, dict)
+            ]
+        ),
+        "rubricDimensionIds": _unique_ordered_strings(
+            [
+                dimension.get("id")
+                for rubric in rubrics
+                if isinstance(rubric, dict)
+                for dimension in (rubric.get("dimensions") or [])
+                if isinstance(dimension, dict)
+            ]
+        ),
+    }
+
+
 def resolve_assignment_bootstrap(
     deps: Any,
     *,
@@ -252,12 +428,30 @@ def resolve_assignment_bootstrap(
         situation_id=selected_situation_id,
     )
     objective_index = _package_objective_index(package)
+    rubric_index = _package_rubric_index(package)
     mapped_objective_ids = mapping_dto.get("objectiveIds") or []
     resolved_objectives = [
         objective_index[objective_id]
         for objective_id in mapped_objective_ids
         if objective_id in objective_index
     ] or situation_objectives
+    resolved_rubrics = [
+        rubric_index[rubric_id]
+        for rubric_id in _unique_ordered_strings(
+            [
+                (objective.get("mastery") or {}).get("rubricId")
+                for objective in resolved_objectives
+                if isinstance(objective, dict)
+            ]
+        )
+        if rubric_id in rubric_index
+    ]
+    pedagogy_context = _build_bootstrap_pedagogy_context(
+        module=module,
+        situation=situation,
+        objectives=resolved_objectives,
+        rubrics=resolved_rubrics,
+    )
 
     system_prompt_preview = deps.build_curriculum_system_prompt(
         package=package,
@@ -297,21 +491,29 @@ def resolve_assignment_bootstrap(
                 "id": module.get("id"),
                 "title": module.get("title", {}),
                 "goal": module.get("moduleGoal", {}),
+                "capstone": {
+                    "mode": (module.get("capstone") or {}).get("mode"),
+                    "taskModel": (module.get("capstone") or {}).get("taskModel"),
+                    "situationId": (module.get("capstone") or {}).get("situationId"),
+                } if isinstance(module.get("capstone"), dict) else None,
             },
             "situation": {
                 "id": situation.get("id"),
                 "kind": situation.get("kind"),
                 "seed": situation.get("seed", {}),
+                "objectiveIds": _normalize_string_list(situation.get("objectiveIds")),
             },
             "objectives": [
-                {
-                    "id": objective.get("id"),
-                    "mode": objective.get("mode"),
-                    "canDo": objective.get("canDo", {}),
-                    "contextTags": objective.get("contextTags", []),
-                }
+                _serialize_bootstrap_objective(objective)
                 for objective in resolved_objectives
+                if isinstance(objective, dict)
             ],
+            "rubrics": [
+                _serialize_bootstrap_rubric(rubric)
+                for rubric in resolved_rubrics
+                if isinstance(rubric, dict)
+            ],
+            "pedagogy": pedagogy_context,
         },
         "launch": {
             "modality": serialize_modality_policy(launch_modality),
@@ -330,13 +532,15 @@ def resolve_assignment_bootstrap(
                 "assignmentId": assignment_dto["id"],
                 "classId": assignment_dto["classId"],
                 "mappingId": mapping_dto["id"],
+                "objectiveIds": pedagogy_context["objectiveIds"],
+                "taskModel": pedagogy_context["taskModel"],
+                "rubricIds": pedagogy_context["rubricIds"],
             },
         },
         "systemPromptPreview": system_prompt_preview,
         "limitations": [
             "Bootstrap currently supports only the bundled sample curriculum package.",
             "Teacher mapping controls are returned in bootstrap data and only partially injected into live prompt assembly.",
-            "Bootstrap does not yet create practice_sessions or emit learning_events.",
             "Compliance gating is not yet enforced here; voiceAllowed is optimistic until Phase 6 lands.",
         ],
     }
@@ -432,6 +636,12 @@ def build_assignment_system_prompt(bootstrap: dict[str, Any]) -> str:
     classroom = bootstrap.get("class", {}) if isinstance(bootstrap, dict) else {}
     curriculum = bootstrap.get("curriculum", {}) if isinstance(bootstrap, dict) else {}
     launch = bootstrap.get("launch", {}) if isinstance(bootstrap, dict) else {}
+    pedagogy = curriculum.get("pedagogy", {}) if isinstance(curriculum, dict) else {}
+    rubric_lines = [
+        f"- {rubric.get('title', {}).get('en') or rubric.get('id')}"
+        for rubric in curriculum.get("rubrics", [])
+        if isinstance(rubric, dict)
+    ] or ["- No explicit rubrics were resolved for this assignment."]
 
     objective_lines = [
         f"- {objective.get('canDo', {}).get('en') or objective.get('id')}"
@@ -450,6 +660,21 @@ def build_assignment_system_prompt(bootstrap: dict[str, Any]) -> str:
         for grammar_point in mapping.get("focusGrammar", [])
         if isinstance(grammar_point, str) and grammar_point.strip()
     ] or ["- No explicit focus grammar was configured."]
+    communicative_function_lines = [
+        f"- {function_id}"
+        for function_id in pedagogy.get("communicativeFunctions", [])
+        if isinstance(function_id, str) and function_id.strip()
+    ] or ["- No explicit communicative functions were resolved."]
+    discourse_move_lines = [
+        f"- {move_id}"
+        for move_id in pedagogy.get("discourseMoves", [])
+        if isinstance(move_id, str) and move_id.strip()
+    ] or ["- No explicit discourse moves were resolved."]
+    foundation_domain_lines = [
+        f"- {domain_id}"
+        for domain_id in pedagogy.get("foundationDomains", [])
+        if isinstance(domain_id, str) and domain_id.strip()
+    ] or ["- No explicit foundation domains were resolved."]
 
     success_criteria_lines = [
         f"- {criterion}"
@@ -470,6 +695,10 @@ ASSIGNMENT ENVELOPE:
 - Voice allowed: {launch.get('voiceAllowed')}
 - Text allowed: {launch.get('textAllowed')}
 - Modality mode: {modality_policy.get('mode', 'hybrid')}
+- Task model: {pedagogy.get('taskModel') or 'n/a'}
+- Evidence target min turns: {(pedagogy.get('evidence') or {}).get('minTurns') or 'n/a'}
+- Evidence target max turns: {(pedagogy.get('evidence') or {}).get('maxTurns') or 'n/a'}
+- Evidence time limit sec: {(pedagogy.get('evidence') or {}).get('timeLimitSec') or 'n/a'}
 
 ASSIGNMENT OBJECTIVES:
 {chr(10).join(objective_lines)}
@@ -479,6 +708,18 @@ TARGET EXPRESSIONS TO ELICIT:
 
 FOCUS GRAMMAR:
 {chr(10).join(focus_grammar_lines)}
+
+COMMUNICATIVE FUNCTIONS TO WATCH:
+{chr(10).join(communicative_function_lines)}
+
+DISCOURSE MOVES TO WATCH:
+{chr(10).join(discourse_move_lines)}
+
+FOUNDATION DOMAINS TO SUPPORT:
+{chr(10).join(foundation_domain_lines)}
+
+RUBRICS IN PLAY:
+{chr(10).join(rubric_lines)}
 
 SUCCESS CRITERIA:
 {chr(10).join(success_criteria_lines)}

@@ -8,7 +8,9 @@ from backend.services.assignment_resolver import (
     SUPPORTED_TASK_TYPES,
     TEACHER_ALLOWED_ROLES,
     build_sample_package_summary,
+    load_assignment_bundle,
     resolve_assignment_bootstrap_for_user,
+    resolve_assignment_bootstrap,
     normalize_feedback_policy,
     normalize_modality_policy,
     normalize_scaffold_policy,
@@ -20,8 +22,11 @@ from backend.services.practice_analytics import (
     SUPPORTED_EVENT_TYPES,
     apply_learning_event_to_session,
     build_assignment_analytics_payload,
+    build_class_analytics_payload,
+    build_derived_learning_events,
     build_learning_event_payload,
     build_practice_session_payload,
+    build_student_drill_down_payload,
     serialize_practice_session,
 )
 
@@ -422,14 +427,21 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                     payload=payload,
                 )
             )
-            deps.db.update_practice_session(
-                session_id,
-                apply_learning_event_to_session(
-                    session_record,
-                    event_type=event_type,
-                    payload=payload,
-                ),
+            session_updates = apply_learning_event_to_session(
+                session_record,
+                event_type=event_type,
+                turn_index=turn_index,
+                payload=payload,
             )
+            for derived_event in build_derived_learning_events(
+                session_record,
+                event_type=event_type,
+                turn_index=turn_index,
+                payload=payload,
+                updated_session_summary=session_updates.get('session_summary'),
+            ):
+                deps.db.create_learning_event(derived_event)
+            deps.db.update_practice_session(session_id, session_updates)
 
             return jsonify({
                 'success': True,
@@ -443,10 +455,19 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
     @deps.login_required
     def api_get_assignment_analytics(assignment_id):
         try:
-            assignment = _require_assignment_teacher_access(deps, assignment_id)
+            _require_assignment_teacher_access(deps, assignment_id)
+            assignment, mapping, class_record = load_assignment_bundle(deps, assignment_id)
+            bootstrap = resolve_assignment_bootstrap(
+                deps,
+                assignment=assignment,
+                mapping=mapping,
+                class_record=class_record,
+                ui_language='en',
+            )
             analytics = build_assignment_analytics_payload(
-                assignment,
+                bootstrap,
                 deps.db.list_assignment_practice_sessions(assignment_id),
+                deps.db.list_assignment_learning_events(assignment_id),
             )
             return jsonify({
                 'success': True,
@@ -458,6 +479,76 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({'success': False, 'error': str(exc)}), 404
         except Exception as exc:
             print(f'Assignment analytics error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/teacher/classes/<class_id>/analytics', methods=['GET'])
+    @deps.login_required
+    def api_get_class_analytics(class_id):
+        try:
+            _context, class_record = _require_teacher_context(deps, class_id)
+            assignments = deps.db.list_class_assignments(class_id)
+            enrollments = deps.db.list_class_enrollments(class_id, status=None)
+            all_sessions = deps.db.list_class_practice_sessions(class_id)
+
+            student_uids = set()
+            for enrollment in enrollments:
+                uid = enrollment.get('student_uid')
+                if isinstance(uid, str) and uid:
+                    student_uids.add(uid)
+            for session in all_sessions:
+                uid = session.get('student_uid')
+                if isinstance(uid, str) and uid:
+                    student_uids.add(uid)
+
+            student_profiles = {}
+            for uid in student_uids:
+                user = deps.db.get_user(uid)
+                if user:
+                    student_profiles[uid] = user
+
+            analytics = build_class_analytics_payload(
+                class_record,
+                assignments,
+                enrollments,
+                all_sessions,
+                student_profiles,
+            )
+            return jsonify({
+                'success': True,
+                'analytics': analytics,
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except Exception as exc:
+            print(f'Class analytics error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/teacher/classes/<class_id>/students/<student_uid>/analytics', methods=['GET'])
+    @deps.login_required
+    def api_get_student_drill_down(class_id, student_uid):
+        try:
+            _context, class_record = _require_teacher_context(deps, class_id)
+            assignments = deps.db.list_class_assignments(class_id)
+            student_sessions = deps.db.list_student_class_practice_sessions(class_id, student_uid)
+            student_events = deps.db.list_student_class_learning_events(class_id, student_uid)
+            student_profile = deps.db.get_user(student_uid) or {}
+
+            analytics = build_student_drill_down_payload(
+                student_uid,
+                class_record,
+                assignments,
+                student_sessions,
+                student_events,
+                student_profile,
+            )
+            return jsonify({
+                'success': True,
+                'analytics': analytics,
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except Exception as exc:
+            print(f'Student drill-down error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
 
     return bp

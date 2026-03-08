@@ -1,5 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import * as THREE from 'three';
+import {
+  Box3,
+  Clock,
+  DirectionalLight,
+  Euler,
+  HemisphereLight,
+  MathUtils,
+  Object3D,
+  PerspectiveCamera,
+  Quaternion,
+  Scene,
+  SRGBColorSpace,
+  Texture,
+  Vector3,
+  WebGLRenderer,
+  type Material,
+  type Mesh,
+} from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMHumanBoneName, VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import {
@@ -12,9 +29,9 @@ import { clamp01 } from './rms';
 import type { AvatarDialogueState, AvatarPerformanceFrame } from './types';
 
 type BoneMotionState = {
-  node: THREE.Object3D;
-  position: THREE.Vector3;
-  quaternion: THREE.Quaternion;
+  node: Object3D;
+  position: Vector3;
+  quaternion: Quaternion;
 };
 
 type VrmAvatarPanelProps = {
@@ -28,8 +45,8 @@ type VrmAvatarPanelProps = {
 
 type PanelStatus = 'idle' | 'loading' | 'ready' | 'error';
 type VrmHumanoidBoneAccess = {
-  getNormalizedBoneNode?: (name: VRMHumanBoneName) => THREE.Object3D | null;
-  getRawBoneNode?: (name: VRMHumanBoneName) => THREE.Object3D | null;
+  getNormalizedBoneNode?: (name: VRMHumanBoneName) => Object3D | null;
+  getRawBoneNode?: (name: VRMHumanBoneName) => Object3D | null;
 };
 type VrmExpressionManagerAccess = {
   expressionMap?: Record<string, unknown>;
@@ -65,23 +82,23 @@ function supportsWebGL(): boolean {
   }
 }
 
-function disposeMaterial(material: THREE.Material) {
+function disposeMaterial(material: Material) {
   const maybeAnyMaterial = material as unknown as Record<string, unknown>;
   for (const value of Object.values(maybeAnyMaterial)) {
-    if (value && typeof value === 'object' && value instanceof THREE.Texture) {
+    if (value && typeof value === 'object' && value instanceof Texture) {
       value.dispose();
     }
   }
   material.dispose();
 }
 
-function deepDispose(object: THREE.Object3D) {
-  object.traverse((child: THREE.Object3D) => {
-    const mesh = child as THREE.Mesh;
+function deepDispose(object: Object3D) {
+  object.traverse((child: Object3D) => {
+    const mesh = child as Mesh;
     if (mesh.geometry) {
       mesh.geometry.dispose();
     }
-    const material = (mesh as unknown as { material?: THREE.Material | THREE.Material[] }).material;
+    const material = (mesh as unknown as { material?: Material | Material[] }).material;
     if (!material) return;
     if (Array.isArray(material)) {
       material.forEach(disposeMaterial);
@@ -91,17 +108,17 @@ function deepDispose(object: THREE.Object3D) {
   });
 }
 
-function resolveBoneNode(vrm: VRM, boneName: VRMHumanBoneName): THREE.Object3D | null {
+function resolveBoneNode(vrm: VRM, boneName: VRMHumanBoneName): Object3D | null {
   const humanoid = (vrm as unknown as { humanoid?: unknown }).humanoid as VrmHumanoidBoneAccess | undefined;
 
   return humanoid?.getNormalizedBoneNode?.(boneName) ?? humanoid?.getRawBoneNode?.(boneName) ?? null;
 }
 
-function getBoneWorldPosition(vrm: VRM, boneName: VRMHumanBoneName): THREE.Vector3 | null {
+function getBoneWorldPosition(vrm: VRM, boneName: VRMHumanBoneName): Vector3 | null {
   const boneNode = resolveBoneNode(vrm, boneName);
   if (!boneNode) return null;
 
-  const position = new THREE.Vector3();
+  const position = new Vector3();
   boneNode.getWorldPosition(position);
   return position;
 }
@@ -117,7 +134,7 @@ function captureBoneMotionState(vrm: VRM, boneName: VRMHumanBoneName): BoneMotio
   };
 }
 
-function frameCameraToBust(vrm: VRM, camera: THREE.PerspectiveCamera) {
+function frameCameraToBust(vrm: VRM, camera: PerspectiveCamera) {
   const head = getBoneWorldPosition(vrm, VRMHumanBoneName.Head);
   const chest =
     getBoneWorldPosition(vrm, VRMHumanBoneName.UpperChest) ??
@@ -135,14 +152,14 @@ function frameCameraToBust(vrm: VRM, camera: THREE.PerspectiveCamera) {
     return;
   }
 
-  const box = new THREE.Box3().setFromObject(vrm.scene);
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
+  const box = new Box3().setFromObject(vrm.scene);
+  const size = box.getSize(new Vector3());
+  const center = box.getCenter(new Vector3());
   const target = center.clone();
   target.y += size.y * 0.2;
 
   const maxDim = Math.max(size.x, size.y, size.z);
-  const halfFovRadians = THREE.MathUtils.degToRad(camera.fov / 2);
+  const halfFovRadians = MathUtils.degToRad(camera.fov / 2);
   const distance = maxDim / Math.tan(halfFovRadians);
 
   camera.position.set(center.x, target.y, center.z + distance * 0.65);
@@ -279,13 +296,13 @@ export default function VrmAvatarPanel({
     let rafId: number | null = null;
     let resizeObserver: ResizeObserver | null = null;
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(28, 1, 0.1, 100);
     camera.position.set(0, 1.4, 1.8);
 
-    let renderer: THREE.WebGLRenderer | null = null;
+    let renderer: WebGLRenderer | null = null;
     try {
-      renderer = new THREE.WebGLRenderer({
+      renderer = new WebGLRenderer({
         canvas,
         alpha: true,
         antialias: true,
@@ -301,13 +318,13 @@ export default function VrmAvatarPanel({
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.outputColorSpace = SRGBColorSpace;
 
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x202020, 0.9);
+    const hemi = new HemisphereLight(0xffffff, 0x202020, 0.9);
     hemi.position.set(0, 2, 0);
     scene.add(hemi);
 
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    const dir = new DirectionalLight(0xffffff, 0.8);
     dir.position.set(1.5, 2.2, 2.0);
     scene.add(dir);
 
@@ -324,9 +341,9 @@ export default function VrmAvatarPanel({
     resizeObserver = new ResizeObserver(updateSize);
     resizeObserver.observe(container);
 
-    const clock = new THREE.Clock();
-    const rotationEuler = new THREE.Euler();
-    const rotationQuat = new THREE.Quaternion();
+    const clock = new Clock();
+    const rotationEuler = new Euler();
+    const rotationQuat = new Quaternion();
     const expressionAliasesRef = { current: resolveExpressionAliases(undefined) };
     const expressionCapabilitiesRef = { current: getExpressionCapabilities(expressionAliasesRef.current) };
 
@@ -437,7 +454,7 @@ export default function VrmAvatarPanel({
         setResolvedExpressionKeys(listResolvedExpressionKeys(aliases));
 
         vrm.scene.rotation.y = Math.PI;
-        vrm.scene.traverse((obj: THREE.Object3D) => {
+        vrm.scene.traverse((obj: Object3D) => {
           obj.frustumCulled = false;
         });
 
@@ -474,7 +491,7 @@ export default function VrmAvatarPanel({
         } catch {
           // ignore
         }
-        const maybeDeepDispose = (VRMUtils as unknown as { deepDispose?: (obj: THREE.Object3D) => void }).deepDispose;
+        const maybeDeepDispose = (VRMUtils as unknown as { deepDispose?: (obj: Object3D) => void }).deepDispose;
         if (maybeDeepDispose) {
           maybeDeepDispose(vrm.scene);
         } else {

@@ -1,4 +1,5 @@
 import type {
+  AvatarDebugStats,
   AvatarDiagnostics,
   AvatarDirective,
   AvatarEmotionKey,
@@ -123,10 +124,13 @@ export function buildBaseAvatarDiagnostics(args: {
   isSpeaking: boolean;
   hasPendingAssistantTranscript: boolean;
   lastExplicitDirective: AvatarDirective | null;
+  directiveRequested: boolean;
+  stats: AvatarDebugStats;
 }): AvatarDiagnostics {
   return {
     audioLevel: 0,
     rmsLevel: 0,
+    mouthDrive: 0,
     hasRemoteAudio: args.hasRemoteAudio,
     speakingEventState: args.isSpeaking
       ? 'speaking'
@@ -143,5 +147,7 @@ export function buildBaseAvatarDiagnostics(args: {
     paramO: null,
     lastExplicitDirective: args.lastExplicitDirective,
     source: args.lastExplicitDirective ? 'directive' : 'fallback',
+    directiveRequested: args.directiveRequested,
+    stats: args.stats,
   };
 }

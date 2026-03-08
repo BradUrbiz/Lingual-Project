@@ -78,9 +78,12 @@ export type Live2DManifest = {
   modelJsonPath: string;
   coreScriptUrl: string;
   scale: number;
+  /** Base zoom level (model height in logical units). Calibrated for ~0.88 safe-area fraction on desktop. */
   logicalViewHeight?: number;
+  /** Visual center of the character within the model canvas, as fraction (0-1) from top-left. */
   anchor: { x: number; y: number };
-  position: { x: number; y: number };
+  /** CSS-pixel padding around the viewport edges, added on top of runtime insets. */
+  viewportPaddingPx?: { top: number; right: number; bottom: number; left: number };
   hitAreas: Record<string, string[]>;
   defaultExpression?: string;
   namedExpressions: Record<AvatarExpressionId, Live2DNamedExpressionBank>;
@@ -96,9 +99,14 @@ export const LINGUAL_TUTOR_LIVE2D_MANIFEST: Live2DManifest = {
   modelJsonPath: '/avatars/live2d/mao-pro-en/mao_pro.model3.json',
   coreScriptUrl: '/live2d/core/live2dcubismcore.min.js',
   scale: 0.16,
-  logicalViewHeight: 1.55,
-  anchor: { x: 0.5, y: 0.18 },
-  position: { x: 0.5, y: 0.34 },
+  logicalViewHeight: 5.6,
+  anchor: { x: 0.0, y: 0.28 },
+  viewportPaddingPx: {
+    top: 24,
+    right: 24,
+    bottom: 24,
+    left: 24,
+  },
   hitAreas: {
     head: ['Head', 'HitAreaHead', 'head'],
     face: ['Face', 'HitAreaHead', 'face'],

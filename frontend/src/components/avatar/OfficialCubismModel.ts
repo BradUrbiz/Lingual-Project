@@ -21,6 +21,13 @@ type LoadedTexture = {
   height: number;
 };
 
+type Live2DViewportInsets = {
+  topInsetPx?: number;
+  rightInsetPx?: number;
+  bottomInsetPx?: number;
+  leftInsetPx?: number;
+};
+
 function getModelDirectory(modelJsonPath: string) {
   const lastSlash = modelJsonPath.lastIndexOf('/');
   return lastSlash === -1 ? '' : modelJsonPath.slice(0, lastSlash + 1);
@@ -172,19 +179,72 @@ export class OfficialCubismModel extends CubismUserModel {
     return true;
   }
 
+  /**
+   * Dynamically frames the model within the safe area of the canvas.
+   *
+   * Auto-centering: the model's visual center (manifest.anchor) is placed at
+   * the center of the safe area — no per-breakpoint position values needed.
+   *
+   * Auto-zoom: logicalViewHeight scales proportionally to the safe-area
+   * fraction of the viewport, with portrait tightening for narrow screens.
+   *
+   * @param devicePixelRatio  Pass window.devicePixelRatio so CSS-pixel insets
+   *                          are correctly scaled to the device-pixel canvas.
+   */
   public resizeToCanvas(
     canvasWidth: number,
     canvasHeight: number,
-    manifest: Live2DManifest
+    manifest: Live2DManifest,
+    viewportInsets?: Live2DViewportInsets,
+    devicePixelRatio?: number
   ) {
     if (!this.modelSetting || !this.getModel()) return;
 
     const modelMatrix = this.getModelMatrix();
     const ratio = canvasWidth / Math.max(1, canvasHeight);
-    const fallbackHeight = (this.maxTextureHeight * manifest.scale * 2) / Math.max(1, canvasHeight);
-    const logicalHeight = manifest.logicalViewHeight ?? Math.max(0.95, fallbackHeight || 1.35);
-    const anchorX = (manifest.position.x - 0.5) * 2 * ratio;
-    const anchorY = (0.5 - manifest.position.y) * 2;
+    const dpr = devicePixelRatio ?? 1;
+    const pad = manifest.viewportPaddingPx ?? { top: 0, right: 0, bottom: 0, left: 0 };
+
+    // Safe area in device pixels (insets + padding are CSS pixels → scale by DPR)
+    const safeLeftPx = Math.min(
+      canvasWidth - 1,
+      Math.max(0, ((viewportInsets?.leftInsetPx ?? 0) + pad.left) * dpr)
+    );
+    const safeRightPx = Math.min(
+      canvasWidth - 1,
+      Math.max(0, ((viewportInsets?.rightInsetPx ?? 0) + pad.right) * dpr)
+    );
+    const safeTopPx = Math.min(
+      canvasHeight - 1,
+      Math.max(0, ((viewportInsets?.topInsetPx ?? 0) + pad.top) * dpr)
+    );
+    const safeBottomPx = Math.min(
+      canvasHeight - 1,
+      Math.max(0, ((viewportInsets?.bottomInsetPx ?? 0) + pad.bottom) * dpr)
+    );
+    const safeWidthPx = Math.max(1, canvasWidth - safeLeftPx - safeRightPx);
+    const safeHeightPx = Math.max(1, canvasHeight - safeTopPx - safeBottomPx);
+
+    // Auto-center: place model anchor at the center of the safe area
+    const safeCenterXNorm = (safeLeftPx + safeWidthPx * 0.5) / Math.max(1, canvasWidth);
+    const safeCenterYNorm = (safeTopPx + safeHeightPx * 0.5) / Math.max(1, canvasHeight);
+    const anchorX = (safeCenterXNorm - 0.5) * 2 * ratio;
+    const anchorY = (0.5 - safeCenterYNorm) * 2;
+
+    // Auto-zoom: scale logicalViewHeight proportionally to safe-area fraction.
+    // baseHeight was calibrated at ~0.88 safe fraction (typical desktop with HUD).
+    const safeFraction = safeHeightPx / Math.max(1, canvasHeight);
+    const baseHeight = manifest.logicalViewHeight ?? 1.88;
+    const REF_SAFE_FRACTION = 0.88;
+    let logicalHeight = baseHeight * (safeFraction / REF_SAFE_FRACTION);
+
+    // Portrait tightening: zoom in on narrow viewports so the character
+    // fills more of the visible area instead of becoming tiny.
+    const safeAspect = safeWidthPx / Math.max(1, safeHeightPx);
+    if (safeAspect < 0.9) {
+      const t = safeAspect / 0.9;
+      logicalHeight *= 0.65 + 0.35 * t;
+    }
 
     modelMatrix.loadIdentity();
     modelMatrix.setHeight(logicalHeight);
@@ -192,8 +252,9 @@ export class OfficialCubismModel extends CubismUserModel {
     const scaledWidth = this.getModel().getCanvasWidth() * modelMatrix.getScaleX();
     const scaledHeight = this.getModel().getCanvasHeight() * modelMatrix.getScaleY();
 
-    modelMatrix.left(anchorX - scaledWidth * manifest.anchor.x);
-    modelMatrix.top(anchorY - scaledHeight * manifest.anchor.y);
+    const anchor = manifest.anchor ?? { x: 0.5, y: 0.5 };
+    modelMatrix.left(anchorX - scaledWidth * anchor.x);
+    modelMatrix.top(anchorY - scaledHeight * anchor.y);
   }
 
   public getParameterValues(parameterIds: string[]) {

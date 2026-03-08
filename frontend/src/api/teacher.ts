@@ -1,5 +1,11 @@
 import api from './index';
-import type { CreateTeacherClassPayload, TeacherClassSummary, TeacherDashboardData } from '@/types';
+import type {
+  ClassAnalyticsData,
+  CreateTeacherClassPayload,
+  StudentDrillDownData,
+  TeacherClassSummary,
+  TeacherDashboardData,
+} from '@/types';
 
 interface TeacherDashboardResponse {
   success: boolean;
@@ -14,6 +20,16 @@ interface TeacherClassesResponse {
 interface TeacherClassCreateResponse {
   success: boolean;
   class: TeacherClassSummary;
+}
+
+interface ClassAnalyticsResponse {
+  success: boolean;
+  analytics: ClassAnalyticsData;
+}
+
+interface StudentDrillDownResponse {
+  success: boolean;
+  analytics: StudentDrillDownData;
 }
 
 export const getTeacherDashboard = async (): Promise<TeacherDashboardData> => {
@@ -31,4 +47,19 @@ export const createTeacherClass = async (
 ): Promise<TeacherClassSummary> => {
   const response = await api.post<TeacherClassCreateResponse>('/teacher/classes', payload);
   return response.data.class;
+};
+
+export const getClassAnalytics = async (classId: string): Promise<ClassAnalyticsData> => {
+  const response = await api.get<ClassAnalyticsResponse>(`/teacher/classes/${classId}/analytics`);
+  return response.data.analytics;
+};
+
+export const getStudentDrillDown = async (
+  classId: string,
+  studentUid: string,
+): Promise<StudentDrillDownData> => {
+  const response = await api.get<StudentDrillDownResponse>(
+    `/teacher/classes/${classId}/students/${studentUid}/analytics`,
+  );
+  return response.data.analytics;
 };

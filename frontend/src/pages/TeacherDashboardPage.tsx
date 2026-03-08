@@ -296,6 +296,12 @@ export function TeacherDashboardPage() {
                   <div className="flex flex-wrap gap-3">
                     <Button
                       variant="outline"
+                      onClick={() => navigate(`/app/teacher/classes/${classSummary.id}/analytics`)}
+                    >
+                      Class analytics
+                    </Button>
+                    <Button
+                      variant="outline"
                       onClick={() => navigate(`/app/teacher/classes/${classSummary.id}/assignments`)}
                     >
                       Build assignments

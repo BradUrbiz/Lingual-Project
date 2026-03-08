@@ -263,6 +263,9 @@ export type {
   AssignmentDto,
   AssignmentStatus,
   AssignmentTaskType,
+  ClassAnalyticsAssignmentCard,
+  ClassAnalyticsData,
+  ClassAnalyticsStudentCard,
   CreateAssignmentPayload,
   CreateCurriculumMappingPayload,
   CreatePracticeSessionPayload,
@@ -276,6 +279,9 @@ export type {
   PracticeSessionSummary,
   ScaffoldPolicy,
   StudentAssignmentSummary,
+  StudentDrillDownAssignmentCard,
+  StudentDrillDownData,
+  StudentDrillDownRepeatedError,
   TeacherCurriculumPackageSummary,
 } from './assignment';
 

@@ -2,6 +2,7 @@ import type { AvatarReaction, AvatarState } from '@/types/avatarChat';
 import type {
   AvatarDirectiveSource,
   AvatarExpressionId,
+  AvatarMouthVisemeProfile,
   AvatarMotionRef,
   AvatarPerformanceFrame,
 } from './types';
@@ -9,6 +10,7 @@ import type {
   Live2DEmotionKey,
   Live2DManifest,
 } from './live2dManifest';
+import { DEFAULT_MOUTH_VISEME_PROFILE } from './speechMouth';
 
 export type Live2DFocusPoint = {
   x: number;
@@ -54,6 +56,17 @@ function setAliases(
 ) {
   for (const alias of aliases) {
     target[alias] = value;
+  }
+}
+
+function setWeightedAliases(
+  target: Record<string, number>,
+  aliases: string[],
+  specificValues: Record<string, number>,
+  fallbackValue: number
+) {
+  for (const alias of aliases) {
+    target[alias] = alias in specificValues ? specificValues[alias] : fallbackValue;
   }
 }
 
@@ -196,6 +209,7 @@ export function buildLive2DParameterTargets({
   const performanceHeadRoll = performance?.headRoll ?? 0;
   const performanceChestPitch = performance?.chestPitch ?? 0;
   const performanceNeckPitch = performance?.neckPitch ?? 0;
+  const mouthVisemes: AvatarMouthVisemeProfile = performance?.debug.mouthVisemes ?? DEFAULT_MOUTH_VISEME_PROFILE;
 
   const talkPulse = speaking ? 0.18 + ((Math.sin(phase * 14) + 1) / 2) * 0.28 : 0;
   const mouthOpen = speaking
@@ -219,6 +233,13 @@ export function buildLive2DParameterTargets({
   const mouthRound = clamp(Math.max(-mouthForm, 0) + performanceRound * 0.95 + mouthOpen * 0.15, 0, 1);
   const mouthSmile = clamp((smile > 0 ? smile : 0) + performanceSmile * 0.5, 0, 1);
   const mouthFrown = clamp((mouthForm < 0 ? -mouthForm : 0) + performanceBrowDown * 0.5, 0, 1);
+  const questionTail = /[?？]\s*$/.test(performance?.debug.transcript ?? avatarState.subtitleText ?? '');
+  const softSpeech = avatarState.affect === 'apologetic' || avatarState.affect === 'encouraging';
+  const paramA = round(clamp(mouthOpen * (0.62 + mouthVisemes.a * 0.55) + performanceJaw * 0.16, 0, 1));
+  const paramI = round(clamp(mouthSpread * (0.18 + mouthVisemes.i * 1.05) + mouthSmile * 0.08 + (avatarState.affect === 'corrective' ? 0.03 : 0), 0, 1));
+  const paramE = round(clamp(mouthSpread * (0.16 + mouthVisemes.e * 0.98) + mouthOpen * 0.08 + (questionTail ? 0.03 : 0), 0, 1));
+  const paramU = round(clamp(mouthRound * (0.18 + mouthVisemes.u * 1.02) + (softSpeech ? 0.03 : 0), 0, 1));
+  const paramO = round(clamp(mouthRound * (0.22 + mouthVisemes.o * 1.08) + mouthOpen * 0.1 + (questionTail ? 0.04 : 0), 0, 1));
   const angryMouth = clamp(
     (avatarState.affect === 'corrective' ? 0.42 : 0) +
     (avatarReaction?.motionGroup === 'react_face' ? 0.2 : 0) +
@@ -314,9 +335,17 @@ export function buildLive2DParameterTargets({
   const breath = clamp(0.25 + avatarState.bodySway * 0.35 + performanceChestPitch * 4 + mouthOpen * 0.15, 0, 1);
   const shoulderLift = clamp((speaking ? 0.06 : 0) + performanceChestPitch * 2.2 + beat * 0.015, -1, 1);
 
-  setAliases(values, manifest.parameterMap.mouthOpen, round(clamp(mouthOpen * 1.3, 0, 1)));
-  setAliases(values, manifest.parameterMap.mouthSpread, round(clamp(mouthSpread, 0, 1)));
-  setAliases(values, manifest.parameterMap.mouthRound, round(clamp(mouthRound, 0, 1)));
+  setWeightedAliases(values, manifest.parameterMap.mouthOpen, {
+    ParamA: paramA,
+  }, paramA);
+  setWeightedAliases(values, manifest.parameterMap.mouthSpread, {
+    ParamI: paramI,
+    ParamE: paramE,
+  }, round((paramI + paramE) / 2));
+  setWeightedAliases(values, manifest.parameterMap.mouthRound, {
+    ParamU: paramU,
+    ParamO: paramO,
+  }, round((paramU + paramO) / 2));
   setAliases(values, manifest.parameterMap.mouthSmile, round(mouthSmile));
   setAliases(values, manifest.parameterMap.mouthFrown, round(clamp(Math.max(mouthFrown, angryMouth), 0, 1)));
   setAliases(values, manifest.parameterMap.angleX, round(angleX));
@@ -361,7 +390,7 @@ export function buildLive2DParameterTargets({
     expressionIds,
     emotionKey,
     debug: {
-      mouthOpen: round(clamp(mouthOpen * 1.3, 0, 1)),
+      mouthOpen: paramA,
       motionKey: avatarState.motionGroup,
       reactionKey,
       emotionKey,

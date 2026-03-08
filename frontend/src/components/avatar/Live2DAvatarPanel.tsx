@@ -50,7 +50,29 @@ type Live2DDebugSnapshot = {
   directiveSource: string;
 };
 
+type Live2DDebugCounters = {
+  totalFrames: number;
+  directiveFrames: number;
+  fallbackFrames: number;
+  expressionSelectionCount: number;
+  repeatedExpressionSelectionCount: number;
+  motionSelectionCount: number;
+  repeatedMotionSelectionCount: number;
+};
+
 let live2DCorePromise: Promise<void> | null = null;
+
+function createLive2DDebugCounters(): Live2DDebugCounters {
+  return {
+    totalFrames: 0,
+    directiveFrames: 0,
+    fallbackFrames: 0,
+    expressionSelectionCount: 0,
+    repeatedExpressionSelectionCount: 0,
+    motionSelectionCount: 0,
+    repeatedMotionSelectionCount: 0,
+  };
+}
 
 function ensureLive2DCoreScript(src: string) {
   if ((window as typeof window & { Live2DCubismCore?: unknown }).Live2DCubismCore) {
@@ -119,6 +141,7 @@ export default function Live2DAvatarPanel({
   const manifest = LINGUAL_TUTOR_LIVE2D_MANIFEST;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const hudRef = useRef<HTMLDivElement | null>(null);
   const modelRef = useRef<OfficialCubismModel | null>(null);
   const pointerFocusRef = useRef<Live2DFocusPoint>({ x: 0, y: 0 });
   const lastMotionRef = useRef<string | null>(null);
@@ -140,6 +163,7 @@ export default function Live2DAvatarPanel({
   const availableMotionGroupsRef = useRef<Record<string, number>>({});
   const availableExpressionsRef = useRef<string[]>([]);
   const latestTargetsRef = useRef<Live2DParameterTargets | null>(null);
+  const debugCountersRef = useRef<Live2DDebugCounters>(createLive2DDebugCounters());
   const showDebugRef = useRef(false);
   const lastDebugCommitAtRef = useRef(0);
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
@@ -149,6 +173,7 @@ export default function Live2DAvatarPanel({
   const [availableExpressions, setAvailableExpressions] = useState<string[]>([]);
   const [localReaction, setLocalReaction] = useState<AvatarReaction | null>(null);
   const [debugSnapshot, setDebugSnapshot] = useState<Live2DDebugSnapshot | null>(null);
+  const [debugCounters, setDebugCounters] = useState<Live2DDebugCounters>(() => createLive2DDebugCounters());
 
   useEffect(() => {
     avatarStateRef.current = avatarState;
@@ -198,6 +223,12 @@ export default function Live2DAvatarPanel({
     const mountNode = containerRef.current;
     const motionHistory = motionHistoryRef.current;
     const expressionHistory = expressionHistoryRef.current;
+    const getViewportInsets = () => ({
+      topInsetPx: 20,
+      rightInsetPx: 20,
+      bottomInsetPx: (hudRef.current?.offsetHeight ?? 0) + 20,
+      leftInsetPx: 20,
+    });
 
     const resizeCanvas = () => {
       if (!gl) return;
@@ -253,14 +284,14 @@ export default function Live2DAvatarPanel({
         setAvailableMotionGroups(Object.keys(availableMotionGroupsRef.current));
         setAvailableExpressions(availableExpressionsRef.current);
         resizeCanvas();
-        model.resizeToCanvas(canvas.width, canvas.height, manifest);
+        model.resizeToCanvas(canvas.width, canvas.height, manifest, getViewportInsets(), window.devicePixelRatio || 1);
         setLoadState('ready');
 
         const render = (now: number) => {
           if (cancelled || !modelRef.current) return;
 
           resizeCanvas();
-          modelRef.current.resizeToCanvas(canvas.width, canvas.height, manifest);
+          modelRef.current.resizeToCanvas(canvas.width, canvas.height, manifest, getViewportInsets(), window.devicePixelRatio || 1);
 
           const effectiveReaction = localReactionRef.current ?? avatarReactionRef.current;
           const targets = buildLive2DParameterTargets({
@@ -296,6 +327,12 @@ export default function Live2DAvatarPanel({
                   : modelRef.current.startMotion(nextMotion.candidate.group, nextMotion.candidate.index ?? 0, 2);
 
               if (started) {
+                const previousMotion = lastMotionRef.current;
+                const counters = debugCountersRef.current;
+                counters.motionSelectionCount += 1;
+                if (previousMotion === nextMotion.candidateKey) {
+                  counters.repeatedMotionSelectionCount += 1;
+                }
                 lastMotionRef.current = nextMotion.candidateKey;
                 lastMotionBankRef.current = nextMotion.bankId;
                 lastMotionTriggerKeyRef.current = motionTriggerKey;
@@ -332,6 +369,12 @@ export default function Live2DAvatarPanel({
 
             if (nextExpression && nextExpression.candidate !== lastExpressionRef.current) {
               if (modelRef.current.setExpression(nextExpression.candidate)) {
+                const previousExpression = lastExpressionRef.current;
+                const counters = debugCountersRef.current;
+                counters.expressionSelectionCount += 1;
+                if (previousExpression === nextExpression.candidateKey) {
+                  counters.repeatedExpressionSelectionCount += 1;
+                }
                 lastExpressionRef.current = nextExpression.candidate;
                 lastExpressionBankRef.current = nextExpression.bankId;
                 lastExpressionChangedAtRef.current = now;
@@ -349,6 +392,13 @@ export default function Live2DAvatarPanel({
           modelRef.current.draw(canvas.width, canvas.height);
 
           if (import.meta.env.DEV && showDebugRef.current) {
+            const counters = debugCountersRef.current;
+            counters.totalFrames += 1;
+            if (targets.debug.directiveSource === 'directive') {
+              counters.directiveFrames += 1;
+            } else {
+              counters.fallbackFrames += 1;
+            }
             if (now - lastDebugCommitAtRef.current > 120) {
               lastDebugCommitAtRef.current = now;
               setDebugSnapshot(
@@ -357,6 +407,7 @@ export default function Live2DAvatarPanel({
                   modelRef.current.getParameterValues(['ParamA', 'ParamI', 'ParamU', 'ParamE', 'ParamO'])
                 )
               );
+              setDebugCounters({ ...counters });
             }
           }
 
@@ -393,12 +444,14 @@ export default function Live2DAvatarPanel({
       expressionHistory.clear();
       lastFrameAtRef.current = null;
       latestTargetsRef.current = null;
+      debugCountersRef.current = createLive2DDebugCounters();
       availableMotionGroupsRef.current = {};
       availableExpressionsRef.current = [];
       lastDebugCommitAtRef.current = 0;
       setAvailableMotionGroups([]);
       setAvailableExpressions([]);
       setDebugSnapshot(null);
+      setDebugCounters(createLive2DDebugCounters());
     };
   }, [enabled, manifest, onAvatarHit]);
 
@@ -488,7 +541,7 @@ export default function Live2DAvatarPanel({
         </div>
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 p-5">
+      <div ref={hudRef} className="pointer-events-none absolute inset-x-0 bottom-0 p-5">
         <div className="rounded-3xl border-3 border-foreground bg-card/92 px-4 py-3 shadow-stamp backdrop-blur-sm">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -522,10 +575,28 @@ export default function Live2DAvatarPanel({
           <p className="text-muted-foreground">Motion: {avatarState.motionGroup}</p>
           <p className="text-muted-foreground">Feed audio: {(diagnostics?.audioLevel ?? audioLevel).toFixed(3)}</p>
           <p className="text-muted-foreground">RMS: {(diagnostics?.rmsLevel ?? 0).toFixed(4)}</p>
+          <p className="text-muted-foreground">Mouth drive: {(diagnostics?.mouthDrive ?? diagnostics?.mouthTarget ?? 0).toFixed(3)}</p>
           <p className="text-muted-foreground">Remote audio: {diagnostics?.hasRemoteAudio ? 'yes' : 'no'}</p>
           <p className="text-muted-foreground">Speaking event: {diagnostics?.speakingEventState ?? 'idle'}</p>
+          <p className="text-muted-foreground">Directive mode requested: {diagnostics?.directiveRequested ? 'yes' : 'no'}</p>
           <p className="text-muted-foreground">Directive source: {diagnostics?.source ?? debugSnapshot?.directiveSource ?? 'fallback'}</p>
           <p className="text-muted-foreground">Mouth target: {(diagnostics?.mouthTarget ?? debugSnapshot?.mouthOpen ?? 0).toFixed(3)}</p>
+          <p className="text-muted-foreground">
+            Directive events / speech turns: {diagnostics?.stats.directiveEventCount ?? 0} / {diagnostics?.stats.assistantSpeechTurnCount ?? 0}
+          </p>
+          <p className="text-muted-foreground">
+            Directive turns / fallback turns: {diagnostics?.stats.directiveSpeechTurnCount ?? 0} / {diagnostics?.stats.fallbackSpeechTurnCount ?? 0}
+          </p>
+          <p className="text-muted-foreground">Avatar hits: {diagnostics?.stats.avatarHitCount ?? 0}</p>
+          <p className="text-muted-foreground">
+            Renderer directive / fallback frames: {debugCounters.directiveFrames} / {debugCounters.fallbackFrames}
+          </p>
+          <p className="text-muted-foreground">
+            Expression repeats: {debugCounters.repeatedExpressionSelectionCount} / {debugCounters.expressionSelectionCount}
+          </p>
+          <p className="text-muted-foreground">
+            Motion repeats: {debugCounters.repeatedMotionSelectionCount} / {debugCounters.motionSelectionCount}
+          </p>
           <p className="text-muted-foreground">
             Target A/I/U/E/O: {debugSnapshot?.targetParamA?.toFixed(2) ?? 'n/a'} / {debugSnapshot?.targetParamI?.toFixed(2) ?? 'n/a'} / {debugSnapshot?.targetParamU?.toFixed(2) ?? 'n/a'} / {debugSnapshot?.targetParamE?.toFixed(2) ?? 'n/a'} / {debugSnapshot?.targetParamO?.toFixed(2) ?? 'n/a'}
           </p>

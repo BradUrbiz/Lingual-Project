@@ -1019,14 +1019,24 @@ export function TeacherAssignmentBuilderPage() {
                           {assignment.description || 'No description yet.'}
                         </p>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate(`/app/assignments/${assignment.id}`)}
-                      >
-                        <Eye size={16} className="mr-2" />
-                        Preview launch
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/app/teacher/classes/${classId}/assignments/${assignment.id}/analytics`)}
+                        >
+                          <Sparkles size={16} className="mr-2" />
+                          View analytics
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/app/assignments/${assignment.id}`)}
+                        >
+                          <Eye size={16} className="mr-2" />
+                          Preview launch
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))

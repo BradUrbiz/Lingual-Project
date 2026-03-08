@@ -268,9 +268,127 @@ Original prompt: "read and understand our app's purpose (both PRD and AGENTS.md 
 5. If taps do not feel contextual enough:
    - inspect payloads from `POST /api/realtime/avatar-context`
    - verify queued context is injected on a safe turn and not starved by current response state
+6. Review `docs/avatar-expression-improvement-plan.md` before starting the next avatar quality pass.
 
 ### Short summary
 - Transport direction is correct again: `/app/chat` uses OpenAI Realtime, not server-orchestrated avatar websocket.
 - Renderer direction is correct: official Cubism SDK, not Pixi workaround.
 - Expression richness groundwork is in place: explicit directives, symbolic banks, weighted rotation, backend-aware hit context.
 - The single most important unresolved question for the next session is live browser confirmation that Realtime audio still flows correctly with the new directive tool path.
+
+---
+
+## 2026-03-09 - Avatar expression improvement plan documented
+
+- Added `docs/avatar-expression-improvement-plan.md`.
+- The document captures:
+  - current `/app/chat` avatar architecture
+  - benchmark comparison against Open-LLM-VTuber
+  - core diagnosis for current awkwardness
+  - phased implementation plan for directive reliability, lipsync quality, motion layering, interaction richness, repetition reduction, responsive framing, and asset-ceiling evaluation
+- `docs/README.md` now links to the new avatar plan document.
+
+## 2026-03-09 - Avatar improvement Phase 0 instrumentation started
+
+- Implemented Phase 0 debug instrumentation for `/app/chat` avatar quality work.
+- `useRealtimeChat()` now tracks:
+  - directive event count
+  - avatar hit count
+  - assistant speech turn count
+  - directive-driven speech turn count
+  - fallback speech turn count
+- `Live2DAvatarPanel` debug overlay now also shows:
+  - directive events vs speech turns
+  - directive turns vs fallback turns
+  - renderer directive vs fallback frame counts
+  - expression repeat count
+  - motion repeat count
+- Added/update test coverage for diagnostic shape:
+  - `frontend/src/hooks/realtimeAvatar.test.ts`
+  - `frontend/src/pages/AppChatPage.avatar.test.tsx`
+- Validation completed:
+  - `cd frontend && npm run test -- --run src/hooks/realtimeAvatar.test.ts src/pages/AppChatPage.avatar.test.tsx`
+  - `cd frontend && npx eslint src/hooks/useRealtimeChat.ts src/hooks/realtimeAvatar.ts src/components/avatar/Live2DAvatarPanel.tsx src/pages/AppChatPage.avatar.test.tsx`
+  - `cd frontend && npm run build`
+
+## 2026-03-09 - Avatar limitations documented and Phase 1 opt-in started
+
+- Added `docs/avatar-expression-limitations.md` as a separate running limitations log for the current avatar stack.
+- `docs/README.md` now links both:
+  - `docs/avatar-expression-improvement-plan.md`
+  - `docs/avatar-expression-limitations.md`
+- Began Phase 1 by making avatar directives re-enableable per Realtime session in development:
+  - backend now allows `avatarDirectives: true` payload opt-in when `FLASK_ENV=development`
+  - existing global env override (`ENABLE_REALTIME_AVATAR_DIRECTIVES=true`) still works
+  - `/app/chat` now sends `avatarDirectives` based on `VITE_ENABLE_REALTIME_AVATAR_DIRECTIVES`
+- Debug visibility was improved:
+  - diagnostics now expose whether the current session requested directive mode
+  - Live2D debug overlay shows `Directive mode requested: yes/no`
+- Validation completed:
+  - `python3 -m unittest backend.tests.test_realtime_chat`
+  - `python3 -m py_compile backend/routes/chat.py`
+  - `cd frontend && npm run test -- --run src/hooks/realtimeAvatar.test.ts src/hooks/useRealtimeChat.test.tsx src/pages/AppChatPage.avatar.test.tsx`
+  - `cd frontend && npx eslint src/hooks/useRealtimeChat.ts src/hooks/realtimeAvatar.ts src/components/avatar/Live2DAvatarPanel.tsx src/pages/AppChatPage.tsx src/pages/AppChatPage.avatar.test.tsx`
+  - `cd frontend && npm run build`
+
+## 2026-03-09 - Avatar directive instruction quality improved
+
+- Strengthened `build_avatar_realtime_instructions()` in `backend/routes/chat.py`.
+- The Realtime avatar prompt now:
+  - asks for one concise directive near the start of most spoken tutor turns
+  - gives preferred mappings for question / encouragement / affirmation / correction / apology / playful / neutral explanation
+  - gives explicit tap-reaction mappings per hit type
+  - clarifies how `subtitleText` should be used
+- Strengthened `build_avatar_context_payload()` so tap-context injections explicitly instruct the model to emit a matching avatar directive when available.
+- Validation completed:
+  - `python3 -m unittest backend.tests.test_realtime_chat`
+  - `python3 -m py_compile backend/routes/chat.py`
+
+## 2026-03-09 - Avatar directive semantics now bias planner motion
+
+- Continued Phase 2 work by making explicit directives shape the planner output, not just bank selection.
+- `frontend/src/components/avatar/performance.ts` now:
+  - derives affect not only from `emotionKey`, but also from `expressionId`, `motionRef`, and `reactionIntent`
+  - translates directive semantics into direct face/body bias for:
+    - jaw openness
+    - mouth round/spread
+    - smile
+    - brow lift/down
+    - gaze
+    - head/neck/chest motion
+    - question/clause/cadence shaping
+- This means affirming, corrective, curious, apologetic, and reaction-driven turns can now look more distinct even before Live2D bank resolution happens.
+- Added planner regression coverage in `frontend/src/components/avatar/performance.test.ts` for:
+  - affect derivation from expression/motion/reaction without `emotionKey`
+  - visible difference between affirming and corrective speaking turns
+- Updated `docs/avatar-expression-limitations.md` to record that the directive contract is still intentionally coarse even after this improvement.
+- Validation completed:
+  - `cd frontend && npm run test -- --run src/components/avatar/performance.test.ts`
+  - `cd frontend && npx eslint src/components/avatar/performance.ts src/components/avatar/performance.test.ts`
+  - `cd frontend && npm run build`
+
+## 2026-03-09 - Avatar mouth shaping moved beyond plain RMS
+
+- Began Phase 3 by adding a dedicated speech-mouth shaping layer:
+  - `frontend/src/components/avatar/speechMouth.ts`
+  - `frontend/src/components/avatar/speechMouth.test.ts`
+- The mouth pipeline now blends:
+  - feed audio level
+  - raw RMS
+  - attack/release smoothing
+  - syllable-like pulse shaping
+  - transcript-derived English/Korean vowel bias
+  - dialogue-state and affect-aware question/correction/softness bias
+- `useAvatarPerformance()` now computes a `mouthDrive` separate from raw feed audio.
+- `buildAvatarPerformanceFrame()` now exposes:
+  - feed audio level
+  - raw RMS
+  - mouth drive
+  - inferred mouth viseme profile
+- `buildLive2DParameterTargets()` now maps mouth targets into distinct `ParamA/I/U/E/O` values instead of flattening them into generic spread/round aliases.
+- Debug overlay now shows `Mouth drive` in addition to feed audio, RMS, and target/actual A/I/U/E/O values.
+- Updated `docs/avatar-expression-limitations.md` to reflect that mouth motion is now speech-shaped but still heuristic, not true provider viseme playback.
+- Validation completed:
+  - `cd frontend && npm run test -- --run src/components/avatar/speechMouth.test.ts src/components/avatar/live2dMapping.test.ts src/components/avatar/performance.test.ts`
+  - `cd frontend && npx eslint src/components/avatar/speechMouth.ts src/components/avatar/speechMouth.test.ts src/components/avatar/useAvatarPerformance.ts src/components/avatar/performance.ts src/components/avatar/live2dMapping.ts src/components/avatar/live2dMapping.test.ts src/components/avatar/Live2DAvatarPanel.tsx src/pages/AppChatPage.tsx src/hooks/realtimeAvatar.ts`
+  - `cd frontend && npm run build`

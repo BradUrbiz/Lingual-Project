@@ -48,6 +48,7 @@ const CHAT_AVATAR_ENABLED_KEY = 'lingual:chat:avatarEnabled';
 const TEXT_AVATAR_SPEAK_MIN_MS = 1200;
 const TEXT_AVATAR_SPEAK_MAX_MS = 4200;
 const LIVE2D_CHAT_ENABLED = (import.meta.env.VITE_ENABLE_LIVE2D_CHAT ?? 'true') !== 'false';
+const REALTIME_AVATAR_DIRECTIVES_ENABLED = (import.meta.env.VITE_ENABLE_REALTIME_AVATAR_DIRECTIVES ?? 'false') === 'true';
 
 const AvatarPerformancePanel = lazy(() => import('@/components/avatar/AvatarPerformancePanel'));
 const Live2DAvatarPanel = lazy(() => import('@/components/avatar/Live2DAvatarPanel'));
@@ -221,7 +222,13 @@ export function AppChatPage() {
       });
   }, []);
 
-  const realtimeSessionParams = useMemo(() => ({ uiLanguage: lang }), [lang]);
+  const realtimeSessionParams = useMemo(
+    () => ({
+      uiLanguage: lang,
+      avatarDirectives: LIVE2D_CHAT_ENABLED && REALTIME_AVATAR_DIRECTIVES_ENABLED,
+    }),
+    [lang]
+  );
   const legacyRealtimeSession = useRealtimeChat({
     onMessage: handleRealtimeMessage,
     sessionParams: realtimeSessionParams,
@@ -303,6 +310,7 @@ export function AppChatPage() {
       ...legacyRealtimeSession.avatarDiagnostics,
       audioLevel: live2dPerformance.debug.audioLevel,
       rmsLevel: live2dPerformance.debug.rmsLevel,
+      mouthDrive: live2dPerformance.debug.mouthDrive,
       mouthTarget: live2dPerformance.debug.mouthTarget,
       source: live2dPerformance.debug.directiveSource,
       lastExplicitDirective: live2dPerformance.debug.lastExplicitDirective,

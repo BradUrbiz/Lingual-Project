@@ -20,6 +20,13 @@ SAMPLE_PACKAGE = {
         'version': '2026.03',
         'source': {'type': 'native'},
     },
+    'taxonomies': {
+        'contextTags': ['weekend', 'narrative'],
+        'communicativeFunctions': ['ask_follow_up', 'summarize'],
+        'discourseMoves': ['turn_taking', 'self_correction'],
+        'taskModels': ['ap.conversation'],
+        'foundationDomains': ['communication_strategies', 'language_control'],
+    },
     'units': [
         {
             'id': 'U1',
@@ -33,6 +40,11 @@ SAMPLE_PACKAGE = {
             'unitId': 'U1',
             'title': {'en': 'Past tense narratives'},
             'moduleGoal': {'en': 'Describe what happened last weekend.'},
+            'capstone': {
+                'mode': 'interpersonal_speaking',
+                'taskModel': 'ap.conversation',
+                'situationId': 'S1',
+            },
             'situations': {
                 'interpretive_listening': [],
                 'interpersonal_speaking': [
@@ -44,7 +56,7 @@ SAMPLE_PACKAGE = {
                             'roles': ['learner', 'friend'],
                             'contextTags': ['weekend', 'narrative'],
                             'register': 'mixed',
-                            'constraints': {'minTurns': 4},
+                            'constraints': {'minTurns': 4, 'maxTurns': 8},
                         },
                         'objectiveIds': ['OBJ1'],
                     }
@@ -61,8 +73,37 @@ SAMPLE_PACKAGE = {
             'mode': 'interpersonal_speaking',
             'canDo': {'en': 'I can describe past events in a conversation.'},
             'contextTags': ['weekend', 'past'],
+            'communicativeFunctions': ['ask_follow_up', 'summarize'],
+            'discourseMoves': ['turn_taking', 'self_correction'],
+            'foundationDomains': ['communication_strategies', 'language_control'],
+            'register': 'mixed',
+            'mastery': {'rubricId': 'rub.interpersonal_speaking.v1', 'threshold': 3},
+            'evidenceModel': {'taskModel': 'ap.conversation', 'minTurns': 4},
+            'templateRefs': ['tpl.conversation.v1'],
         }
     ],
+    'rubrics': [
+        {
+            'id': 'rub.interpersonal_speaking.v1',
+            'title': {'en': 'Interpersonal Speaking Rubric'},
+            'scale': {'min': 0, 'max': 4, 'step': 1},
+            'dimensions': [
+                {
+                    'id': 'interaction_management',
+                    'title': {'en': 'Interaction Management'},
+                    'description': {'en': 'Initiates and sustains the exchange.'},
+                },
+                {
+                    'id': 'lexical_grammatical_control',
+                    'title': {'en': 'Lexical/Grammatical Control'},
+                    'description': {'en': 'Uses vocabulary and grammar with control.'},
+                },
+            ],
+        }
+    ],
+    'templates': {
+        'activityTemplateIds': ['tpl.conversation.v1'],
+    },
 }
 
 
@@ -253,6 +294,17 @@ class FakeCurriculumAdminDb:
         }
         return event_id
 
+    def list_assignment_learning_events(self, assignment_id, event_types=None):
+        allowed_event_types = set(event_types or [])
+        events = []
+        for event in self.learning_events.values():
+            if event.get('assignment_id') != assignment_id:
+                continue
+            if allowed_event_types and event.get('event_type') not in allowed_event_types:
+                continue
+            events.append(dict(event))
+        return events
+
 
 def build_test_curriculum_context(module_id, situation_id):
     module = SAMPLE_PACKAGE['modules'][0]
@@ -396,7 +448,8 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             'moduleId': 'M1',
             'objectiveIds': ['OBJ1'],
             'situationIds': ['S1'],
-            'targetExpressions': ['Could I have'],
+            'targetExpressions': ["j'ai"],
+            'focusGrammar': ['past tense'],
         })
         mapping_id = mapping_response.get_json()['mapping']['id']
 
@@ -423,7 +476,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         student_turn_response = self.client.post(f'/api/practice-sessions/{session_id}/events', json={
             'eventType': 'student.turn',
             'turnIndex': 0,
-            'payload': {'content': 'Could I have the soup, please?'},
+            'payload': {'content': "Hier je vais au restaurant et j'ai manger avec mes amis."},
         })
         self.assertEqual(student_turn_response.status_code, 200)
         self.assertEqual(
@@ -431,10 +484,21 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             1,
         )
 
+        second_student_turn_response = self.client.post(f'/api/practice-sessions/{session_id}/events', json={
+            'eventType': 'student.turn',
+            'turnIndex': 1,
+            'payload': {'content': "Le week-end dernier je vais chez ma tante et j'ai manger trop vite."},
+        })
+        self.assertEqual(second_student_turn_response.status_code, 200)
+        self.assertEqual(
+            second_student_turn_response.get_json()['practiceSession']['sessionSummary']['repeatedErrorCounts']['fr.past_auxiliary_infinitive'],
+            2,
+        )
+
         assistant_turn_response = self.client.post(f'/api/practice-sessions/{session_id}/events', json={
             'eventType': 'assistant.turn',
-            'turnIndex': 1,
-            'payload': {'content': 'Of course. Would you like anything to drink?'},
+            'turnIndex': 2,
+            'payload': {'content': "Tu veux dire: hier je suis allé au restaurant ? Essaie encore avec le passé composé."},
         })
         self.assertEqual(assistant_turn_response.status_code, 200)
         self.assertEqual(
@@ -455,9 +519,25 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         analytics = analytics_response.get_json()['analytics']
         self.assertEqual(analytics['summary']['sessionCount'], 1)
         self.assertEqual(analytics['summary']['completedSessionCount'], 1)
-        self.assertEqual(analytics['summary']['totalStudentTurns'], 1)
+        self.assertEqual(analytics['summary']['totalStudentTurns'], 2)
         self.assertEqual(analytics['summary']['totalAssistantTurns'], 1)
-        self.assertEqual(analytics['summary']['targetExpressionHits']['Could I have'], 1)
+        self.assertEqual(analytics['summary']['targetExpressionHits']["j'ai"], 2)
+        self.assertEqual(analytics['summary']['repeatedErrorCount'], 4)
+        self.assertTrue(analytics['summary']['rubricAverageScore'] is not None)
+        self.assertEqual(analytics['pedagogy']['taskModel'], 'ap.conversation')
+        self.assertEqual(analytics['pedagogy']['evidence']['minTurns'], 4)
+        self.assertTrue(any(item['id'] == 'weekend' for item in analytics['pedagogy']['contextTagCoverage']))
+        self.assertEqual(analytics['pedagogy']['objectives'][0]['turnCount'], 2)
+        self.assertEqual(analytics['pedagogy']['repeatedErrors'][0]['id'], 'fr.past_auxiliary_infinitive')
+        self.assertEqual(analytics['pedagogy']['repeatedErrors'][0]['studentCount'], 1)
+        self.assertEqual(analytics['pedagogy']['rubrics'][0]['threshold'], 3)
+        self.assertTrue(
+            analytics['pedagogy']['rubrics'][0]['dimensions'][0]['averageScore'] is not None
+        )
+        self.assertIn(
+            analytics['pedagogy']['rubrics'][0]['dimensions'][0]['confidence'],
+            {'low', 'medium', 'high'},
+        )
 
 
 if __name__ == '__main__':

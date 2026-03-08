@@ -2,6 +2,7 @@ import {
   buildAvatarPerformanceFrame,
   inferAvatarAffect,
   POST_SPEAKING_WINDOW_MS,
+  resolveAvatarAffect,
   resolveDialogueState,
 } from './performance';
 import type { AvatarPerformanceSource } from './types';
@@ -135,5 +136,66 @@ describe('avatar performance planner', () => {
     expect(frame.directiveSource).toBe('directive');
     expect(frame.intensity).toBe(0.74);
     expect(frame.debug.detectedExpressionKeys).toContain('warm_smile');
+  });
+
+  it('derives affect from directive expression, motion, and reaction when emotion is absent', () => {
+    expect(resolveAvatarAffect(createSource({
+      avatarDirective: {
+        expressionId: 'corrective_focus',
+      },
+    }))).toBe('corrective');
+
+    expect(resolveAvatarAffect(createSource({
+      avatarDirective: {
+        motionRef: 'speaking_apology',
+      },
+    }))).toBe('apologetic');
+
+    expect(resolveAvatarAffect(createSource({
+      avatarDirective: {
+        reactionIntent: 'tap_head_notice',
+      },
+    }))).toBe('curious');
+  });
+
+  it('uses directive semantics to make affirming and corrective turns visibly distinct', () => {
+    const affirmSource = createSource({
+      isSpeaking: true,
+      assistantSpeechStartedAt: 900,
+      now: 1_000,
+      avatarDirective: {
+        expressionId: 'warm_smile',
+        motionRef: 'speaking_affirm',
+        intensity: 0.82,
+      },
+    });
+    const correctiveSource = createSource({
+      isSpeaking: true,
+      assistantSpeechStartedAt: 900,
+      now: 1_000,
+      avatarDirective: {
+        expressionId: 'corrective_focus',
+        motionRef: 'speaking_corrective',
+        intensity: 0.82,
+      },
+    });
+
+    const affirmFrame = buildAvatarPerformanceFrame({
+      source: affirmSource,
+      dialogueState: 'speaking',
+      affect: resolveAvatarAffect(affirmSource),
+      audioLevel: 0.08,
+    });
+    const correctiveFrame = buildAvatarPerformanceFrame({
+      source: correctiveSource,
+      dialogueState: 'speaking',
+      affect: resolveAvatarAffect(correctiveSource),
+      audioLevel: 0.08,
+    });
+
+    expect(affirmFrame.smile).toBeGreaterThan(correctiveFrame.smile);
+    expect(correctiveFrame.browDown).toBeGreaterThan(affirmFrame.browDown);
+    expect(correctiveFrame.headPitch).toBeGreaterThan(affirmFrame.headPitch);
+    expect(affirmFrame.chestPitch).toBeGreaterThan(correctiveFrame.chestPitch);
   });
 });

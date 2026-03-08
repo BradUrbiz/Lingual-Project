@@ -12,6 +12,10 @@ This directory holds product and implementation documents that should guide feat
   Phased execution checklist for engineering, product, and pilot operations.
 - `school-integration/LIMITATIONS.md`
   Running log of current implementation constraints, temporary shortcuts, and known gaps.
+- `avatar-expression-improvement-plan.md`
+  Improvement plan for `/app/chat` Live2D acting quality, benchmarked against Open-LLM-VTuber.
+- `avatar-expression-limitations.md`
+  Running limitations log for the current `/app/chat` Live2D avatar stack.
 
 ## Working rule
 

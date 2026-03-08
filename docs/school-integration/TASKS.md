@@ -1,7 +1,7 @@
 # School Integration Tasks
 
 Status: Active
-Last updated: 2026-03-07
+Last updated: 2026-03-08
 Owner: Engineering + Product
 
 ## Status legend
@@ -97,6 +97,7 @@ Owner: Engineering + Product
 - [x] Add practice session bootstrap endpoint.
 - [x] Extend realtime session creation to accept `assignmentId`.
 - [x] Snapshot resolved mapping into each practice session.
+- [x] Expose rubric, task-model, and evidence metadata in assignment bootstrap.
 - [x] Enforce assignment-aware prompt assembly for school practice.
 
 ### Pedagogy engine
@@ -123,23 +124,29 @@ Owner: Engineering + Product
 - [x] Define `learning_events` schema.
 - [x] Emit session lifecycle events.
 - [x] Emit student/assistant turn events.
-- [ ] Emit feedback-type events.
-- [ ] Emit target-expression hit events.
-- [ ] Emit self-correction and task-completion events.
+- [x] Emit feedback-type events.
+- [x] Emit target-expression hit events.
+- [x] Emit context-tag, error-pattern, and repeated-error signals.
+- [x] Emit self-correction and task-completion events.
 
 ### Session summary
 
 - [x] Write synchronous per-session summaries.
 - [-] Capture estimated speaking time, turn counts, transcript-based MLU, target usage, and first-pass cost summary.
-- [ ] Capture repeated errors.
-- [ ] Capture self-correction from live events.
+- [x] Capture repeated errors.
+- [x] Capture self-correction from live events.
+- [x] Add first-pass rubric-dimension scoring.
+- [-] Strengthen semantic event detection with locale-aware pedagogical signal rules.
 
 ### Teacher dashboard
 
 - [x] Replace hardcoded teacher dashboard data with typed API payload.
-- [ ] Build class dashboard endpoint.
-- [ ] Build student drill-down endpoint.
+- [x] Build class dashboard endpoint.
+- [x] Build student drill-down endpoint.
 - [x] Build assignment analytics endpoint.
+- [x] Add assignment analytics drill-down UI.
+- [x] Add class analytics drill-down UI.
+- [x] Add student drill-down UI.
 - [ ] Add dashboard filters for date range, class, and assignment.
 
 ## Phase 6: Compliance, privacy, and retention
@@ -195,7 +202,7 @@ Owner: Engineering + Product
 - [x] Teacher can create or import a class.
 - [x] Teacher can create an assignment from curriculum mappings.
 - [x] Student can launch assignment-aware practice.
-- [ ] Teacher can see class and student analytics tied to that assignment.
+- [x] Teacher can see class and student analytics tied to that assignment.
 - [ ] Voice access respects consent and retention policy.
 - [x] Teacher routes are role-protected.
 - [x] Firestore rules are no longer placeholder-only.

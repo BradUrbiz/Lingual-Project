@@ -1,7 +1,7 @@
 # School Integration Limitations
 
 Status: Active
-Last updated: 2026-03-07
+Last updated: 2026-03-08
 Owner: Engineering
 
 ## Purpose
@@ -32,14 +32,14 @@ Planned follow-up: org settings, invite flows, and role management.
 Impact: no invite flow, no LMS roster sync, no CSV fallback, and no teacher-managed student join UX.
 Planned follow-up: Phase 2 onboarding and roster workflows.
 
-3. Teacher dashboard summary metrics are still early-stage.
-Impact: class and assignment counts now reflect real school records, and a first assignment analytics endpoint exists, but the dashboard UI still does not surface full session analytics or student drill-downs.
-Planned follow-up: dashboard integration, class analytics, and student-level drill-down views.
+3. Teacher analytics are available at class, assignment, and student level, but are still heuristic-based.
+Impact: teachers can now navigate from the dashboard to class analytics (aggregated across assignments), student drill-down (per-student across assignments), and per-assignment analytics. However, all metrics (speaking time, rubric scores, error detection) are still heuristic estimates from transcript-level signals, not model-verified or provider-accurate.
+Planned follow-up: dashboard date range filters, cross-class trends, richer visualization, and model-backed scoring calibration.
 
 ### Curriculum mapping and assignments
 
 4. Curriculum mapping currently supports only the bundled sample curriculum package.
-Impact: teachers can create mappings and assignments only against the existing sample package, not organization-owned or imported packages.
+Impact: the runtime now uses the canonical AP French sample JSON as its bundled package source, but teachers still cannot create mappings against organization-owned or imported packages.
 Planned follow-up: package ownership rules and school-aware package lookup.
 
 5. Assignment launch currently supports assignment-aware realtime voice/hybrid sessions, but not assignment-scoped text launch.
@@ -47,12 +47,12 @@ Impact: students can start assignment-aware realtime practice, but `text_only` a
 Planned follow-up: Phase 4 text fallback and assignment-aware text chat entry.
 
 6. Live prompt generation now injects the core assignment envelope, but some teacher controls are still not enforced as hard runtime constraints.
-Impact: `targetExpressions`, `focusGrammar`, `feedbackPolicy`, `scaffoldPolicy`, and teacher notes shape the prompt, but `allowedContextTags`, `rubricFocus`, and downstream analytics are not yet enforced or measured.
+Impact: `targetExpressions`, `focusGrammar`, `feedbackPolicy`, `scaffoldPolicy`, teacher notes, rubric/task/evidence metadata, and curriculum pedagogy tags now shape the prompt, but `allowedContextTags` and `rubricFocus` still are not enforced as hard runtime constraints.
 Planned follow-up: stricter prompt-policy enforcement plus event-backed rubric measurement.
 
-7. Practice analytics are now first-pass, not pedagogically complete.
-Impact: assignment launch now creates `practice_sessions`, emits lifecycle and turn-level `learning_events`, and rolls them into per-session summaries plus an assignment analytics endpoint. However, feedback-type events, self-correction events, task-completion events, repeated-error tracking, and rubric-level rollups are still not emitted by the live runtime.
-Planned follow-up: richer realtime instrumentation, pedagogical event capture, and analytics rollups.
+7. Practice analytics are improved, but still not equivalent to human scoring.
+Impact: assignment launch now creates `practice_sessions`, emits lifecycle and turn-level `learning_events`, and rolls them into per-session summaries plus a teacher-facing assignment analytics page. The runtime now also tracks repeated-error patterns, feedback-linked correction families, actual context-tag signals, rubric-dimension evidence, rubric thresholds/confidence, and locale-aware communicative-function / discourse-move / feedback detection for English and French. However, these detections and rubric scores are still rule-based heuristics rather than model-verified semantics or certified assessment scoring.
+Planned follow-up: richer realtime instrumentation, rubric-scoring calibration against teacher review, repeated-error families beyond the current rule catalog, and stronger semantic analysis.
 
 8. Speaking time and cost are currently estimated, not provider-accurate.
 Impact: session summaries derive speaking time from transcript word counts and track estimated voice seconds / text turns, but they do not yet use raw audio durations or provider billing metadata for precise cost accounting.

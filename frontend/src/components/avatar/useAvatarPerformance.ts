@@ -1,6 +1,7 @@
 import { startTransition, useEffect, useRef, useState } from 'react';
 import { useAudioRms } from './useAudioRms';
 import { buildAvatarPerformanceFrame, resolveAvatarAffect, resolveDialogueState } from './performance';
+import { buildSpeechMouthTarget, smoothSpeechMouthDrive } from './speechMouth';
 import type { AvatarPerformanceFrame, AvatarPerformanceSource } from './types';
 
 type UseAvatarPerformanceInput = Omit<AvatarPerformanceSource, 'now'> & {
@@ -15,10 +16,12 @@ function resolveNow(now?: number): number {
 
 export function useAvatarPerformance(source: UseAvatarPerformanceInput): AvatarPerformanceFrame {
   const [tickNow, setTickNow] = useState<number>(() => resolveNow(source.now));
-  const [audioLevel, setAudioLevel] = useState(0);
+  const [feedAudioLevel, setFeedAudioLevel] = useState(0);
+  const [mouthDrive, setMouthDrive] = useState(0);
   const [rawRms, setRawRms] = useState(0);
   const [lastUserSpeechStoppedAt, setLastUserSpeechStoppedAt] = useState<number | null>(null);
   const previousListeningRef = useRef(source.isListening);
+  const mouthDriveRef = useRef(0);
   const analysisEnabled =
     source.mode === 'realtime' &&
     Boolean(source.remoteAudioStream) &&
@@ -52,11 +55,49 @@ export function useAvatarPerformance(source: UseAvatarPerformanceInput): AvatarP
       Boolean(source.assistantTranscriptFinal.trim());
     const tick = () => {
       const nextNow = resolveNow();
-      const nextAudioLevel = rmsLevelRef.current;
+      const nextFeedAudioLevel = rmsLevelRef.current;
       const nextRawRms = rawRmsRef.current;
+      const plannerSource: AvatarPerformanceSource = {
+        mode: source.mode,
+        isConnected: source.isConnected,
+        isListening: source.isListening,
+        isSpeaking: source.isSpeaking,
+        remoteAudioStream: source.remoteAudioStream,
+        assistantTranscriptDelta: source.assistantTranscriptDelta,
+        assistantTranscriptFinal: source.assistantTranscriptFinal,
+        assistantSpeechStartedAt: source.assistantSpeechStartedAt,
+        assistantSpeechEndedAt: source.assistantSpeechEndedAt,
+        avatarDirective: source.avatarDirective,
+        now: nextNow,
+      };
+      const dialogueState = resolveDialogueState(plannerSource, {
+        lastUserSpeechStoppedAt,
+      });
+      const affect = resolveAvatarAffect(plannerSource);
+      const transcript =
+        plannerSource.avatarDirective?.subtitleText?.trim()
+        || plannerSource.assistantTranscriptDelta.trim()
+        || plannerSource.assistantTranscriptFinal.trim();
+      const mouthTarget = buildSpeechMouthTarget({
+        audioLevel: nextFeedAudioLevel,
+        rawRms: nextRawRms,
+        transcript,
+        affect,
+        dialogueState,
+        now: nextNow,
+        assistantSpeechStartedAt: source.assistantSpeechStartedAt,
+      });
+      const nextMouthDrive = smoothSpeechMouthDrive(
+        mouthDriveRef.current,
+        mouthTarget,
+        dialogueState,
+      );
+      mouthDriveRef.current = nextMouthDrive;
+
       startTransition(() => {
         setTickNow(nextNow);
-        setAudioLevel(nextAudioLevel);
+        setFeedAudioLevel(nextFeedAudioLevel);
+        setMouthDrive(nextMouthDrive);
         setRawRms(nextRawRms);
       });
     };
@@ -84,9 +125,14 @@ export function useAvatarPerformance(source: UseAvatarPerformanceInput): AvatarP
     source.assistantSpeechStartedAt,
     source.assistantTranscriptDelta,
     source.assistantTranscriptFinal,
+    source.isConnected,
     source.isListening,
     source.isSpeaking,
+    source.mode,
     source.now,
+    source.avatarDirective,
+    source.remoteAudioStream,
+    lastUserSpeechStoppedAt,
     rmsLevelRef,
     rawRmsRef,
   ]);
@@ -105,14 +151,9 @@ export function useAvatarPerformance(source: UseAvatarPerformanceInput): AvatarP
     source: plannerSource,
     dialogueState,
     affect,
-    audioLevel,
+    audioLevel: mouthDrive,
+    feedAudioLevel,
+    rawRmsLevel: rawRms,
   });
-
-  return {
-    ...frame,
-    debug: {
-      ...frame.debug,
-      rmsLevel: rawRms,
-    },
-  };
+  return frame;
 }

@@ -74,6 +74,14 @@ export type AvatarDirective = {
 
 export type AvatarDirectiveSource = 'directive' | 'reaction' | 'fallback';
 
+export type AvatarMouthVisemeProfile = {
+  a: number;
+  i: number;
+  u: number;
+  e: number;
+  o: number;
+};
+
 export type AvatarPerformanceSource = {
   mode: AvatarChatMode;
   isConnected: boolean;
@@ -91,18 +99,29 @@ export type AvatarPerformanceSource = {
 export type AvatarPerformanceDebug = {
   audioLevel: number;
   rmsLevel: number;
+  mouthDrive?: number;
   transcript: string;
   hasRemoteAudio: boolean;
   speakingEventState: 'idle' | 'listening' | 'speaking' | 'thinking';
   mouthTarget: number;
+  mouthVisemes?: AvatarMouthVisemeProfile;
   detectedExpressionKeys: string[];
   directiveSource: AvatarDirectiveSource;
   lastExplicitDirective: AvatarDirective | null;
 };
 
+export type AvatarDebugStats = {
+  directiveEventCount: number;
+  avatarHitCount: number;
+  assistantSpeechTurnCount: number;
+  directiveSpeechTurnCount: number;
+  fallbackSpeechTurnCount: number;
+};
+
 export type AvatarDiagnostics = {
   audioLevel: number;
   rmsLevel: number;
+  mouthDrive?: number;
   hasRemoteAudio: boolean;
   speakingEventState: 'idle' | 'listening' | 'speaking' | 'thinking';
   mouthTarget: number;
@@ -113,6 +132,8 @@ export type AvatarDiagnostics = {
   paramO: number | null;
   lastExplicitDirective: AvatarDirective | null;
   source: AvatarDirectiveSource;
+  directiveRequested: boolean;
+  stats: AvatarDebugStats;
 };
 
 export type AvatarPerformanceFrame = {

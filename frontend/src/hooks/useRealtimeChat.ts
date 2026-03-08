@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AvatarDiagnostics, AvatarDirective } from '@/components/avatar/types';
+import type { AvatarDebugStats, AvatarDiagnostics, AvatarDirective } from '@/components/avatar/types';
 import api from '../api';
 import {
   buildBaseAvatarDiagnostics,
@@ -109,6 +109,16 @@ const ASSISTANT_AUDIO_DONE_EVENTS = new Set([
 
 const DIRECTIVE_TOOL_NAME = 'emit_avatar_directive';
 
+function createEmptyAvatarDebugStats(): AvatarDebugStats {
+  return {
+    directiveEventCount: 0,
+    avatarHitCount: 0,
+    assistantSpeechTurnCount: 0,
+    directiveSpeechTurnCount: 0,
+    fallbackSpeechTurnCount: 0,
+  };
+}
+
 function extractItemText(item?: RealtimeItem): string | null {
   if (!item?.content?.length) return null;
 
@@ -141,6 +151,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const [assistantSpeechStartedAt, setAssistantSpeechStartedAt] = useState<number | null>(null);
   const [assistantSpeechEndedAt, setAssistantSpeechEndedAt] = useState<number | null>(null);
   const [avatarDirective, setAvatarDirective] = useState<AvatarDirective | null>(null);
+  const [avatarDebugStats, setAvatarDebugStats] = useState<AvatarDebugStats>(() => createEmptyAvatarDebugStats());
   const [error, setError] = useState<string | null>(null);
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -166,6 +177,12 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const completedDirectiveCallsRef = useRef<Set<string>>(new Set());
   const pendingDirectiveContinuationRef = useRef(false);
   const queuedAvatarContextsRef = useRef<AvatarContextResponse[]>([]);
+  const pendingSpeechTurnHasDirectiveRef = useRef(false);
+  const currentSpeechTurnCountedRef = useRef(false);
+
+  const updateAvatarDebugStats = useCallback((updater: (current: AvatarDebugStats) => AvatarDebugStats) => {
+    setAvatarDebugStats((current) => updater(current));
+  }, []);
 
   const clearAvatarDirective = useCallback(() => {
     if (directiveResetTimeoutRef.current !== null) {
@@ -183,6 +200,11 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       directiveResetTimeoutRef.current = null;
     }
 
+    pendingSpeechTurnHasDirectiveRef.current = true;
+    updateAvatarDebugStats((current) => ({
+      ...current,
+      directiveEventCount: current.directiveEventCount + 1,
+    }));
     setAvatarDirective(directive);
 
     if (directive.holdMs) {
@@ -191,7 +213,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
         directiveResetTimeoutRef.current = null;
       }, directive.holdMs);
     }
-  }, []);
+  }, [updateAvatarDebugStats]);
 
   const resetMessageTracking = useCallback(() => {
     finalizedItemsRef.current.clear();
@@ -385,6 +407,9 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     completedDirectiveCallsRef.current.clear();
     pendingDirectiveContinuationRef.current = false;
     queuedAvatarContextsRef.current = [];
+    pendingSpeechTurnHasDirectiveRef.current = false;
+    currentSpeechTurnCountedRef.current = false;
+    setAvatarDebugStats(createEmptyAvatarDebugStats());
     resetAssistantPerformanceState();
     clearAvatarDirective();
   }, [clearAvatarDirective, resetAssistantPerformanceState]);
@@ -520,6 +545,16 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
           const startedAt = Date.now();
           isSpeakingRef.current = true;
           assistantSpeechStartedAtRef.current = startedAt;
+          if (!currentSpeechTurnCountedRef.current) {
+            currentSpeechTurnCountedRef.current = true;
+            const usedDirective = pendingSpeechTurnHasDirectiveRef.current;
+            updateAvatarDebugStats((current) => ({
+              ...current,
+              assistantSpeechTurnCount: current.assistantSpeechTurnCount + 1,
+              directiveSpeechTurnCount: current.directiveSpeechTurnCount + (usedDirective ? 1 : 0),
+              fallbackSpeechTurnCount: current.fallbackSpeechTurnCount + (usedDirective ? 0 : 1),
+            }));
+          }
           setIsSpeaking(true);
           setAssistantSpeechStartedAt(startedAt);
           setAssistantSpeechEndedAt(null);
@@ -564,6 +599,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
         case 'response.created':
           reservePendingMessageOrder('assistant');
           currentResponseIdRef.current = event.response?.id || null;
+          currentSpeechTurnCountedRef.current = false;
           assistantTranscriptDeltaRef.current = '';
           assistantSpeechStartedAtRef.current = null;
           setAssistantTranscriptDelta('');
@@ -629,6 +665,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
         case 'input_audio_buffer.speech_started':
           reservePendingMessageOrder('user');
           pendingDirectiveContinuationRef.current = false;
+          pendingSpeechTurnHasDirectiveRef.current = false;
+          currentSpeechTurnCountedRef.current = false;
           isListeningRef.current = true;
           setIsListening(true);
           resetAssistantPerformanceState();
@@ -687,6 +725,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       reservePendingMessageOrder,
       resetAssistantPerformanceState,
       resetMessageTracking,
+      updateAvatarDebugStats,
     ]
   );
 
@@ -806,6 +845,11 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const queueAvatarHit = useCallback(async (area: string) => {
     if (!area.trim()) return;
 
+    updateAvatarDebugStats((current) => ({
+      ...current,
+      avatarHitCount: current.avatarHitCount + 1,
+    }));
+
     try {
       const response = await api.post('/realtime/avatar-context', {
         area,
@@ -823,7 +867,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     } catch (avatarContextError) {
       console.error('Failed to queue avatar context:', avatarContextError);
     }
-  }, [flushQueuedAvatarContexts, sessionParams]);
+  }, [flushQueuedAvatarContexts, sessionParams, updateAvatarDebugStats]);
 
   const avatarDiagnostics = useMemo(
     () =>
@@ -833,8 +877,10 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
         isSpeaking,
         hasPendingAssistantTranscript: Boolean(assistantTranscriptDelta.trim() || assistantTranscriptFinal.trim()),
         lastExplicitDirective: avatarDirective,
+        directiveRequested: sessionParams?.avatarDirectives === true,
+        stats: avatarDebugStats,
       }),
-    [assistantTranscriptDelta, assistantTranscriptFinal, avatarDirective, isListening, isSpeaking, remoteAudioStream]
+    [assistantTranscriptDelta, assistantTranscriptFinal, avatarDebugStats, avatarDirective, isListening, isSpeaking, remoteAudioStream, sessionParams]
   );
 
   return {

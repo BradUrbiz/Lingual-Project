@@ -108,6 +108,7 @@ const ASSISTANT_AUDIO_DONE_EVENTS = new Set([
 ]);
 
 const DIRECTIVE_TOOL_NAME = 'emit_avatar_directive';
+const REALTIME_MODEL = 'gpt-realtime-mini';
 
 function createEmptyAvatarDebugStats(): AvatarDebugStats {
   return {
@@ -787,20 +788,17 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      const sdpResponse = await fetch('https://api.openai.com/v1/realtime?model=gpt-realtime-mini', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${client_secret}`,
-          'Content-Type': 'application/sdp',
-        },
-        body: offer.sdp,
+      const connectResponse = await api.post('/realtime/connect', {
+        offerSdp: offer.sdp,
+        clientSecret: client_secret,
+        model: REALTIME_MODEL,
       });
 
-      if (!sdpResponse.ok) {
-        throw new Error(`Failed to connect: ${sdpResponse.status}`);
+      const answerSdp = connectResponse.data?.answerSdp;
+      if (typeof answerSdp !== 'string' || !answerSdp.trim()) {
+        throw new Error('Failed to receive realtime SDP answer');
       }
 
-      const answerSdp = await sdpResponse.text();
       await pc.setRemoteDescription({
         type: 'answer',
         sdp: answerSdp,

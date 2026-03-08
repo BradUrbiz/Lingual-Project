@@ -62,6 +62,8 @@ AVATAR_REACTION_INTENTS = [
     'tap_chest_reassure',
 ]
 
+REALTIME_MODEL = 'gpt-realtime-mini'
+
 
 def build_avatar_directive_tool() -> dict[str, Any]:
     return {
@@ -195,7 +197,7 @@ def build_realtime_session_request(
     enable_avatar_directives: bool | None = None,
 ) -> dict[str, Any]:
     request_payload: dict[str, Any] = {
-        'model': 'gpt-realtime-mini',
+        'model': REALTIME_MODEL,
         'voice': 'coral',
         'instructions': system_instructions,
         'input_audio_transcription': {'model': 'whisper-1'},
@@ -344,6 +346,51 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
             error = str(e)
             status_code = 404 if 'not found' in error.lower() else 400
             return jsonify({'error': error, 'success': False}), status_code
+        except Exception as e:
+            return jsonify({'error': str(e), 'success': False}), 500
+
+    @bp.route('/api/realtime/connect', methods=['POST'])
+    @deps.login_required
+    def connect_realtime_session():
+        """Proxy the browser WebRTC SDP offer to OpenAI Realtime to avoid browser-side CORS issues."""
+        try:
+            payload = request.get_json(silent=True) or {}
+            offer_sdp = payload.get('offerSdp')
+            client_secret = payload.get('clientSecret')
+            model = payload.get('model')
+
+            if not isinstance(offer_sdp, str) or not offer_sdp.strip():
+                return jsonify({'success': False, 'error': 'offerSdp is required'}), 400
+
+            if not isinstance(client_secret, str) or not client_secret.strip():
+                return jsonify({'success': False, 'error': 'clientSecret is required'}), 400
+
+            normalized_model = REALTIME_MODEL
+            if isinstance(model, str) and model.strip():
+                normalized_model = model.strip()
+
+            response = requests.post(
+                'https://api.openai.com/v1/realtime',
+                params={'model': normalized_model},
+                headers={
+                    'Authorization': f'Bearer {client_secret}',
+                    'Content-Type': 'application/sdp',
+                    'Accept': 'application/sdp',
+                },
+                data=offer_sdp,
+                timeout=30,
+            )
+
+            if response.status_code != 200:
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to connect realtime session: {response.text}',
+                }), response.status_code
+
+            return jsonify({
+                'success': True,
+                'answerSdp': response.text,
+            })
         except Exception as e:
             return jsonify({'error': str(e), 'success': False}), 500
 

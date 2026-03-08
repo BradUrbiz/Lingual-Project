@@ -99,14 +99,18 @@ describe('useRealtimeChat directive continuation', () => {
         } as Awaited<ReturnType<typeof api.post>>;
       }
 
+      if (url === '/realtime/connect') {
+        return {
+          data: {
+            answerSdp: 'mock-answer-sdp',
+          },
+        } as Awaited<ReturnType<typeof api.post>>;
+      }
+
       throw new Error(`Unexpected api.post call: ${url}`);
     });
 
     vi.stubGlobal('RTCPeerConnection', MockRTCPeerConnection);
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      text: async () => 'mock-answer-sdp',
-    })));
 
     Object.defineProperty(window.navigator, 'mediaDevices', {
       configurable: true,

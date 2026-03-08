@@ -392,3 +392,21 @@ Original prompt: "read and understand our app's purpose (both PRD and AGENTS.md 
   - `cd frontend && npm run test -- --run src/components/avatar/speechMouth.test.ts src/components/avatar/live2dMapping.test.ts src/components/avatar/performance.test.ts`
   - `cd frontend && npx eslint src/components/avatar/speechMouth.ts src/components/avatar/speechMouth.test.ts src/components/avatar/useAvatarPerformance.ts src/components/avatar/performance.ts src/components/avatar/live2dMapping.ts src/components/avatar/live2dMapping.test.ts src/components/avatar/Live2DAvatarPanel.tsx src/pages/AppChatPage.tsx src/hooks/realtimeAvatar.ts`
   - `cd frontend && npm run build`
+
+## 2026-03-09 - Realtime WebRTC connect path moved behind backend proxy
+
+- Fixed a local-dev/runtime regression where `/app/chat` tried to POST the SDP offer from the browser directly to `https://api.openai.com/v1/realtime`, which is blocked by browser CORS.
+- Added backend route:
+  - `POST /api/realtime/connect`
+- The frontend Realtime hook now:
+  - still creates the local WebRTC offer in the browser
+  - sends that SDP offer to our backend
+  - receives the SDP answer from our backend instead of calling OpenAI directly from `localhost:5173`
+- Added regression coverage for:
+  - backend SDP proxy route in `backend/tests/test_realtime_chat.py`
+  - frontend connect flow in `frontend/src/hooks/useRealtimeChat.test.tsx`
+- Validation completed:
+  - `python3 -m unittest backend.tests.test_realtime_chat`
+  - `cd frontend && npm run test -- --run src/hooks/useRealtimeChat.test.tsx src/hooks/realtimeAvatar.test.ts src/components/avatar/performance.test.ts src/components/avatar/live2dMapping.test.ts src/components/avatar/speechMouth.test.ts src/pages/AppChatPage.avatar.test.tsx`
+  - `cd frontend && npx eslint src/pages/AppChatPage.tsx src/hooks/useRealtimeChat.ts src/components/avatar/useAvatarPerformance.ts`
+  - `cd frontend && npm run build`

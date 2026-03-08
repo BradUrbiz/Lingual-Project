@@ -275,6 +275,11 @@ class FakeRealtimeSessionResponse:
         }
 
 
+class FakeRealtimeConnectResponse:
+    status_code = 200
+    text = 'mock-answer-sdp'
+
+
 class RealtimeChatHelpersTestCase(unittest.TestCase):
     def test_build_avatar_directive_tool_exposes_manifest_scoped_enums(self):
         tool = build_avatar_directive_tool()
@@ -446,6 +451,45 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         request_payload = mocked_post.call_args.kwargs['json']
         self.assertEqual(request_payload['tool_choice'], 'auto')
         self.assertEqual(request_payload['tools'][0]['name'], 'emit_avatar_directive')
+
+    def test_realtime_connect_proxies_offer_to_openai(self):
+        with patch('backend.routes.chat.requests.post') as mocked_post:
+            mocked_post.return_value = FakeRealtimeConnectResponse()
+
+            response = self.client.post('/api/realtime/connect', json={
+                'offerSdp': 'v=0\r\no=- 0 0 IN IP4 127.0.0.1',
+                'clientSecret': 'secret_123',
+                'model': 'gpt-realtime-mini',
+            })
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['success'])
+        self.assertEqual(payload['answerSdp'], 'mock-answer-sdp')
+        self.assertEqual(
+            mocked_post.call_args.kwargs['params'],
+            {'model': 'gpt-realtime-mini'},
+        )
+        self.assertEqual(
+            mocked_post.call_args.kwargs['headers']['Content-Type'],
+            'application/sdp',
+        )
+        self.assertEqual(
+            mocked_post.call_args.kwargs['headers']['Accept'],
+            'application/sdp',
+        )
+        self.assertEqual(
+            mocked_post.call_args.kwargs['data'],
+            'v=0\r\no=- 0 0 IN IP4 127.0.0.1',
+        )
+
+    def test_realtime_connect_requires_offer_and_client_secret(self):
+        response = self.client.post('/api/realtime/connect', json={})
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.get_json()
+        self.assertFalse(payload['success'])
+        self.assertIn('offerSdp is required', payload['error'])
 
 
 if __name__ == '__main__':

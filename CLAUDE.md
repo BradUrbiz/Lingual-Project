@@ -15,7 +15,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/school-integration/TASKS.md` - phased checklist and build order
 - `docs/school-integration/LIMITATIONS.md` - known gaps and temporary shortcuts
 
-**Key rule:** If scope or architecture changes, update docs in this order: PRD → TECH_SPEC → TASKS. Keep LIMITATIONS.md updated when shipped behavior is narrower than the intended architecture.
+### Document-Driven Development
+
+All school-integration work follows a document-first workflow. The four spec documents are the authoritative source of truth — code implements what the docs describe, and docs are updated to match what code ships.
+
+**Update order:** PRD → TECH_SPEC → TASKS → LIMITATIONS.md
+
+| Document | Purpose | When to update |
+|----------|---------|----------------|
+| `PRD.md` | Product goals, user stories, success metrics | Scope, user stories, or success criteria change |
+| `TECH_SPEC.md` | Architecture, domain model, API design | Architecture decisions, data models, or API surface change |
+| `TASKS.md` | Phased checklist (`[x]`/`[-]`/`[ ]`) | Items start, complete, or new items are identified |
+| `LIMITATIONS.md` | Shipped constraints, temporary shortcuts | Shipped behavior is narrower than the intended architecture |
+
+**Rules for Claude Code:**
+
+- Before starting a feature: read the relevant PRD → TECH_SPEC → TASKS sections to understand scope and architecture
+- After shipping: mark TASKS.md items complete, add LIMITATIONS.md entries for any behavior narrower than spec
+- Do not implement features that contradict TECH_SPEC architecture without updating docs first
+- When the user says "update docs," refresh all four documents to match the current codebase state
+- When a feature introduces new architecture (new collections, API surface, domain concepts), update TECH_SPEC before or alongside the implementation
 
 ### Vision & Roadmap
 
@@ -90,7 +109,8 @@ Backend is organized into:
 - `main.py` - Flask app, blueprint registration, legacy routes
 - `database.py` - Firestore CRUD helpers for all collections
 - `backend/routes/` - Blueprint modules (auth, chat, teacher, curriculum_admin, schools, pronunciation)
-- `backend/services/` - Domain services (assignment_resolver, practice_analytics, membership_context, prompt_builder)
+- `backend/services/` - Domain services (assignment_resolver, practice_analytics, membership_context, compliance)
+- `backend/services/pedagogy/` - Pedagogy engine (task templates, curriculum template resolution, prompt section assembly)
 - `backend/route_deps.py` - Shared dependencies injected into routes
 - `scoring.py` - Assessment scoring (MCQ, heuristic text, domain aggregation)
 
@@ -148,6 +168,7 @@ learning_events/{eventId}      (assignment_id, session_id, event_type, turn_inde
 - `backend/routes/schools.py` - School/org bootstrap and management
 - `backend/services/practice_analytics.py` - Session summary building, learning event processing, assignment analytics aggregation
 - `backend/services/assignment_resolver.py` - Assignment bootstrap, curriculum resolution, prompt assembly
+- `backend/services/pedagogy/` - Task template prompt assembly, curriculum template resolution, template catalog
 - `backend/services/membership_context.py` - Request-level school context and role checking
 
 ### Backend - Core
@@ -159,7 +180,7 @@ learning_events/{eventId}      (assignment_id, session_id, event_type, turn_inde
 ### Frontend - Teacher Flow
 
 - `TeacherDashboardPage.tsx` - Class list, summary stats, setup checklist
-- `TeacherAssignmentBuilderPage.tsx` - Curriculum mapping + assignment authoring
+- `TeacherAssignmentBuilderPage.tsx` - Curriculum mapping, assignment authoring, interaction contract preview
 - `TeacherAssignmentAnalyticsPage.tsx` - Per-assignment analytics drill-down
 - `frontend/src/api/teacher.ts` - Teacher dashboard and class API
 - `frontend/src/api/assignments.ts` - Assignment CRUD and analytics API
@@ -168,8 +189,8 @@ learning_events/{eventId}      (assignment_id, session_id, event_type, turn_inde
 
 ### Frontend - Student Flow
 
-- `AppCurriculumPage.tsx` - Curriculum browsing
-- `AppCurriculumModulePage.tsx` - Module practice entry
+- `AppCurriculumPage.tsx` - Curriculum browsing with template summaries
+- `AppCurriculumModulePage.tsx` - Module practice entry with interaction contract display
 - `ChatPage.tsx` - AI tutor conversation (legacy + assignment-aware)
 
 ### Frontend - Core

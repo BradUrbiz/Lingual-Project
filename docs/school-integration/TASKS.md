@@ -110,6 +110,10 @@ Owner: Engineering + Product
   - opinion gap
   - decision-making
 - [x] Add extended-output pressure settings.
+- [x] Promote task templates to structured definitions owned by curriculum packages.
+- [x] Add runtime template resolution from objective templateRefs to package-level activityTemplates.
+- [x] Add interaction contract preview to teacher assignment builder.
+- [x] Add interaction contract display to curriculum browsing views (module page + listing).
 
 ### Modality and cost controls
 

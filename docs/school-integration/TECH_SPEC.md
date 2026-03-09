@@ -57,7 +57,7 @@ Relevant current files:
 - `frontend/src/pages/TeacherDashboardPage.tsx`
 - `firestore.rules`
 
-### Current shipped foundation as of 2026-03-07
+### Current shipped foundation as of 2026-03-09
 
 The following foundation work is now in code:
 
@@ -68,6 +68,13 @@ The following foundation work is now in code:
 - teacher dashboard data contract backed by school records instead of hardcoded mock data
 - curriculum mapping and assignment DTOs plus backend CRUD endpoints
 - assignment bootstrap endpoint that resolves assignment context into launch data for current realtime practice
+- assignment-aware pedagogy engine with feedback, scaffold, output, and task-template policies
+- structured activity template definitions owned by curriculum packages, resolved at assignment bootstrap time
+- learning event capture, per-session summaries, and teacher-facing analytics (class, assignment, student drill-down)
+- compliance gating for voice sessions, pronunciation audio retention, and consent state enforcement
+- guardian consent packet lifecycle with secure-link delivery and teacher/admin management
+- class compliance roster, bulk consent operations, and audit export
+- interaction contract visibility in teacher assignment builder (live preview), curriculum module page (full template cards), and curriculum listing (template name summary)
 
 Current limitations for these shipped features live in `LIMITATIONS.md`.
 

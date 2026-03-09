@@ -186,8 +186,20 @@ Fields:
 - `teacher_membership_ids`
 - `grade_band`
 - `status`
+- `join_code` (6-char uppercase alphanumeric, safe alphabet excluding 0/O/1/I/L)
+- `join_code_active` (boolean, default `true` when generated)
+- `join_code_generated_at`
 - `created_at`
 - `updated_at`
+
+Join code rules:
+
+- A class has at most one active join code at a time.
+- The code is stored directly on the class document (1:1 relationship, no separate collection).
+- Teachers generate, regenerate, or deactivate the code.
+- Students enter the code to join the class. Joining auto-creates a student membership for the org and an active enrollment for the class.
+- Duplicate join is idempotent: if the student is already enrolled and active, return success. If enrolled but inactive, reactivate.
+- Requires a composite Firestore index on `(join_code, join_code_active, status)`.
 
 ### `enrollments/{enrollmentId}`
 
@@ -547,6 +559,12 @@ Core endpoints:
 - `GET /api/teacher/classes`
 - `POST /api/teacher/classes`
 - `GET /api/teacher/classes/<class_id>/dashboard`
+- `POST /api/teacher/classes/<class_id>/join-code`
+- `GET /api/teacher/classes/<class_id>/join-code`
+- `DELETE /api/teacher/classes/<class_id>/join-code`
+- `GET /api/teacher/classes/<class_id>/roster`
+- `DELETE /api/teacher/classes/<class_id>/students/<student_uid>`
+- `POST /api/schools/join`
 - `POST /api/teacher/classes/<class_id>/roster/import`
 
 ### Curriculum admin and assignment orchestration

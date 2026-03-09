@@ -695,4 +695,92 @@ def create_teacher_blueprint(deps: RouteDeps) -> Blueprint:
             print(f"Class compliance audit export error: {exc}")
             return jsonify({"success": False, "error": str(exc)}), 500
 
+    @bp.route("/api/teacher/classes/<class_id>/join-code", methods=["POST"])
+    @deps.login_required
+    def api_generate_join_code(class_id):
+        try:
+            _context, _class_record = _require_teacher_class_context(deps, class_id)
+            code = deps.db.generate_class_join_code(class_id)
+            return jsonify({"success": True, "joinCode": code, "active": True})
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            print(f"Join code generation error: {exc}")
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @bp.route("/api/teacher/classes/<class_id>/join-code")
+    @deps.login_required
+    def api_get_join_code(class_id):
+        try:
+            _context, class_record = _require_teacher_class_context(deps, class_id)
+            join_code = class_record.get("join_code")
+            return jsonify({
+                "success": True,
+                "joinCode": join_code if join_code else None,
+                "active": bool(class_record.get("join_code_active")) if join_code else False,
+                "generatedAt": _timestamp_to_iso(class_record.get("join_code_generated_at")),
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            print(f"Join code lookup error: {exc}")
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @bp.route("/api/teacher/classes/<class_id>/join-code", methods=["DELETE"])
+    @deps.login_required
+    def api_deactivate_join_code(class_id):
+        try:
+            _context, _class_record = _require_teacher_class_context(deps, class_id)
+            deps.db.deactivate_class_join_code(class_id)
+            return jsonify({"success": True})
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            print(f"Join code deactivation error: {exc}")
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @bp.route("/api/teacher/classes/<class_id>/roster")
+    @deps.login_required
+    def api_get_class_roster(class_id):
+        try:
+            _context, _class_record = _require_teacher_class_context(deps, class_id)
+            enrollments = deps.db.list_class_enrollments(class_id)
+            students = []
+            for enrollment in enrollments:
+                student_uid = _normalize_string(enrollment.get("student_uid"))
+                if not student_uid:
+                    continue
+                user = deps.db.get_user(student_uid) if hasattr(deps.db, "get_user") else None
+                students.append({
+                    "uid": student_uid,
+                    "displayName": _get_user_display_name(user, fallback=student_uid),
+                    "studentNumber": _normalize_string(enrollment.get("student_number")),
+                    "joinSource": _normalize_string(enrollment.get("join_source")),
+                    "enrolledAt": _timestamp_to_iso(enrollment.get("created_at")),
+                    "status": _normalize_string(enrollment.get("status")) or "active",
+                })
+            students.sort(key=lambda item: item.get("displayName", "").lower())
+            return jsonify({"success": True, "students": students})
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            print(f"Class roster error: {exc}")
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @bp.route("/api/teacher/classes/<class_id>/students/<student_uid>", methods=["DELETE"])
+    @deps.login_required
+    def api_remove_student(class_id, student_uid):
+        try:
+            _context, _class_record = _require_teacher_class_context(deps, class_id)
+            enrollment = deps.db.get_student_class_enrollment(class_id, student_uid)
+            if not enrollment:
+                return jsonify({"success": False, "error": "Student enrollment not found."}), 404
+            deps.db.deactivate_enrollment(class_id, student_uid)
+            return jsonify({"success": True})
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            print(f"Student removal error: {exc}")
+            return jsonify({"success": False, "error": str(exc)}), 500
+
     return bp

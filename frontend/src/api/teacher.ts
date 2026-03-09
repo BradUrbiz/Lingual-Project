@@ -5,6 +5,8 @@ import type {
   BulkUpdateClassComplianceResult,
   ClassComplianceRosterData,
   ClassAnalyticsData,
+  ClassJoinCodeData,
+  ClassRosterStudent,
   CreateTeacherClassPayload,
   GuardianConsentIssueResult,
   GuardianConsentPacket,
@@ -220,6 +222,55 @@ export const resendStudentGuardianConsentPacket = async (
     throw new Error(extractTeacherApiError(error, 'Failed to resend guardian packet.'));
   }
 };
+
+// ── Join code management ──────────────────────────────────────────────
+
+interface JoinCodeResponse {
+  success: boolean;
+  joinCode: string;
+  active: boolean;
+  generatedAt: string | null;
+}
+
+interface RosterResponse {
+  success: boolean;
+  roster: ClassRosterStudent[];
+}
+
+export const generateClassJoinCode = async (classId: string): Promise<ClassJoinCodeData> => {
+  const response = await api.post<JoinCodeResponse>(`/teacher/classes/${classId}/join-code`);
+  return {
+    joinCode: response.data.joinCode,
+    active: response.data.active,
+    generatedAt: response.data.generatedAt,
+  };
+};
+
+export const getClassJoinCode = async (classId: string): Promise<ClassJoinCodeData> => {
+  const response = await api.get<JoinCodeResponse>(`/teacher/classes/${classId}/join-code`);
+  return {
+    joinCode: response.data.joinCode,
+    active: response.data.active,
+    generatedAt: response.data.generatedAt,
+  };
+};
+
+export const deactivateClassJoinCode = async (classId: string): Promise<void> => {
+  await api.delete(`/teacher/classes/${classId}/join-code`);
+};
+
+// ── Roster management ─────────────────────────────────────────────────
+
+export const getClassRoster = async (classId: string): Promise<ClassRosterStudent[]> => {
+  const response = await api.get<RosterResponse>(`/teacher/classes/${classId}/roster`);
+  return response.data.roster;
+};
+
+export const removeStudentFromClass = async (classId: string, studentUid: string): Promise<void> => {
+  await api.delete(`/teacher/classes/${classId}/students/${studentUid}`);
+};
+
+// ── Guardian consent ──────────────────────────────────────────────────
 
 export const cancelStudentGuardianConsentPacket = async (
   classId: string,

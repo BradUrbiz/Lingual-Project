@@ -22,5 +22,6 @@ export { TeacherAssignmentAnalyticsPage } from './TeacherAssignmentAnalyticsPage
 export { TeacherClassAnalyticsPage } from './TeacherClassAnalyticsPage';
 export { TeacherClassCompliancePage } from './TeacherClassCompliancePage';
 export { TeacherStudentDrillDownPage } from './TeacherStudentDrillDownPage';
+export { StudentJoinClassPage } from './StudentJoinClassPage';
 export { AssignmentLaunchPage } from './AssignmentLaunchPage';
 export { GuardianConsentPage } from './GuardianConsentPage';

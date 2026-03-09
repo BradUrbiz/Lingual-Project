@@ -273,6 +273,9 @@ export type {
   TeacherDashboardData,
   TeacherDashboardSummary,
   UpdateStudentCompliancePayload,
+  ClassJoinCodeData,
+  ClassRosterStudent,
+  JoinClassResult,
   MembershipStatus,
   SchoolRole,
 } from './school';

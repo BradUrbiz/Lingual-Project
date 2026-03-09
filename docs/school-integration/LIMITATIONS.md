@@ -28,9 +28,9 @@ This is not the product source of truth. Product and architecture decisions stil
 Impact: fast for pilot setup, but not yet suitable for real multi-teacher org administration.
 Planned follow-up: org settings, invite flows, and role management.
 
-2. Student roster workflows are not live yet.
-Impact: no invite flow, no LMS roster sync, no CSV fallback, and no teacher-managed student join UX.
-Planned follow-up: Phase 2 onboarding and roster workflows.
+2. Student invite/join flow is live via class join codes, but advanced roster workflows are not yet available.
+Impact: teachers can generate/regenerate/deactivate 6-character join codes, students can join via `/app/join`, and teachers can view the roster and remove students. However, LMS roster sync, CSV import, bulk invite, and email-based invitations are not yet implemented.
+Planned follow-up: LMS integration (Google Classroom / Canvas), CSV roster import, and email-based invitations.
 
 3. Teacher analytics are available at class, assignment, and student level, but are still heuristic-based.
 Impact: teachers can now navigate from the dashboard to class analytics (aggregated across assignments), student drill-down (per-student across assignments), and per-assignment analytics. However, all metrics (speaking time, rubric scores, error detection) are still heuristic estimates from transcript-level signals, not model-verified or provider-accurate.

@@ -50,7 +50,7 @@ Owner: Engineering + Product
 
 - [x] Design separate school onboarding flow from learner onboarding.
 - [x] Create class manually flow.
-- [ ] Invite student flow.
+- [x] Invite student flow (class join code + student join page + roster management).
 - [x] Add basic teacher-facing setup checklist state.
 
 ### LMS / roster import

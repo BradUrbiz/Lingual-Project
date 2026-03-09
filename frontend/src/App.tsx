@@ -33,6 +33,7 @@ const TeacherAssignmentAnalyticsPage = lazy(() => import('./pages/TeacherAssignm
 const TeacherClassAnalyticsPage = lazy(() => import('./pages/TeacherClassAnalyticsPage').then((module) => ({ default: module.TeacherClassAnalyticsPage })));
 const TeacherClassCompliancePage = lazy(() => import('./pages/TeacherClassCompliancePage').then((module) => ({ default: module.TeacherClassCompliancePage })));
 const TeacherStudentDrillDownPage = lazy(() => import('./pages/TeacherStudentDrillDownPage').then((module) => ({ default: module.TeacherStudentDrillDownPage })));
+const StudentJoinClassPage = lazy(() => import('./pages/StudentJoinClassPage').then((module) => ({ default: module.StudentJoinClassPage })));
 const AssignmentLaunchPage = lazy(() => import('./pages/AssignmentLaunchPage').then((module) => ({ default: module.AssignmentLaunchPage })));
 const GuardianConsentPage = lazy(() => import('./pages/GuardianConsentPage').then((module) => ({ default: module.GuardianConsentPage })));
 
@@ -80,6 +81,7 @@ function AnimatedRoutes() {
           <Route path="games" element={withRouteSuspense(<AppGamesPage />)} />
           <Route path="progress" element={withRouteSuspense(<AppProgressPage />)} />
           <Route path="practice" element={withRouteSuspense(<PronunciationPracticePage />)} />
+          <Route path="join" element={withRouteSuspense(<StudentJoinClassPage />)} />
           <Route path="assignments/:assignmentId" element={withRouteSuspense(<AssignmentLaunchPage />)} />
           <Route path="profile" element={withRouteSuspense(<AppProfilePage />)} />
           <Route path="settings" element={withRouteSuspense(<AppSettingsPage />)} />

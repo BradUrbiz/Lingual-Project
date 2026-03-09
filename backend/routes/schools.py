@@ -230,4 +230,80 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
             print(f"Active membership switch error: {exc}")
             return jsonify({"success": False, "error": str(exc)}), 500
 
+    @bp.route("/api/schools/join", methods=["POST"])
+    @deps.login_required
+    def api_join_class_by_code():
+        try:
+            uid = deps.get_current_user_uid()
+            if not uid:
+                raise SchoolContextPermissionError("Authentication required.")
+
+            data = request.get_json() or {}
+            raw_code = _normalize_string(data.get("joinCode")).upper()
+            if not raw_code or len(raw_code) != 6:
+                return jsonify({"success": False, "error": "A valid 6-character join code is required."}), 400
+
+            class_record = deps.db.get_class_by_join_code(raw_code)
+            if not class_record:
+                return jsonify({"success": False, "error": "Invalid or expired join code."}), 404
+
+            class_id = class_record["id"]
+            org_id = class_record["org_id"]
+
+            existing = deps.db.get_student_class_enrollment(class_id, uid)
+            if existing and existing.get("status") == "active":
+                return jsonify({
+                    "success": True,
+                    "alreadyEnrolled": True,
+                    "class": {
+                        "id": class_id,
+                        "name": class_record.get("name", ""),
+                        "subject": class_record.get("subject", ""),
+                        "learningLocale": class_record.get("learning_locale", ""),
+                    },
+                })
+
+            membership_id = f"{org_id}_{uid}"
+            membership = deps.db.get_membership(membership_id)
+            if not membership:
+                deps.db.create_membership(
+                    org_id=org_id,
+                    uid=uid,
+                    roles=["student"],
+                    primary_class_ids=[class_id],
+                    membership_id=membership_id,
+                )
+            else:
+                deps.db.add_primary_class_to_membership(membership_id, class_id)
+
+            if existing and existing.get("status") == "inactive":
+                deps.db.reactivate_enrollment(class_id, uid)
+            else:
+                deps.db.create_enrollment(
+                    class_id=class_id,
+                    student_uid=uid,
+                    student_membership_id=membership_id,
+                    join_source="join_code",
+                )
+
+            deps.db.set_user_last_active_membership(uid, membership_id)
+
+            return jsonify({
+                "success": True,
+                "alreadyEnrolled": False,
+                "class": {
+                    "id": class_id,
+                    "name": class_record.get("name", ""),
+                    "subject": class_record.get("subject", ""),
+                    "learningLocale": class_record.get("learning_locale", ""),
+                },
+                "membershipId": membership_id,
+                "enrollmentId": f"{class_id}_{uid}",
+            }), 201
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            print(f"Class join error: {exc}")
+            return jsonify({"success": False, "error": str(exc)}), 500
+
     return bp

@@ -1,4 +1,5 @@
 import unittest
+import secrets
 from datetime import UTC, datetime, timedelta
 
 from flask import Flask, session
@@ -219,6 +220,55 @@ class FakeSchoolDb:
             if packet.get('token_hash') == token_hash:
                 return dict(packet)
         return None
+
+    def generate_class_join_code(self, class_id):
+        alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+        code = ''.join(secrets.choice(alphabet) for _ in range(6))
+        if class_id in self.classes:
+            self.classes[class_id]['join_code'] = code
+            self.classes[class_id]['join_code_active'] = True
+            self.classes[class_id]['join_code_generated_at'] = datetime.now(UTC).isoformat()
+        return code
+
+    def deactivate_class_join_code(self, class_id):
+        if class_id in self.classes:
+            self.classes[class_id]['join_code_active'] = False
+
+    def get_class_by_join_code(self, code):
+        for class_record in self.classes.values():
+            if (
+                class_record.get('join_code') == code
+                and class_record.get('join_code_active')
+                and class_record.get('status') == 'active'
+            ):
+                return dict(class_record)
+        return None
+
+    def get_membership(self, membership_id):
+        return self.memberships.get(membership_id)
+
+    def create_enrollment(self, class_id, student_uid, student_membership_id='', join_source='', **_kwargs):
+        enrollment_id = f'{class_id}_{student_uid}'
+        self.enrollments[enrollment_id] = {
+            'id': enrollment_id,
+            'class_id': class_id,
+            'student_uid': student_uid,
+            'student_membership_id': student_membership_id,
+            'join_source': join_source,
+            'status': 'active',
+            'created_at': datetime.now(UTC).isoformat(),
+        }
+        return enrollment_id
+
+    def deactivate_enrollment(self, class_id, student_uid):
+        enrollment_id = f'{class_id}_{student_uid}'
+        if enrollment_id in self.enrollments:
+            self.enrollments[enrollment_id]['status'] = 'inactive'
+
+    def reactivate_enrollment(self, class_id, student_uid):
+        enrollment_id = f'{class_id}_{student_uid}'
+        if enrollment_id in self.enrollments:
+            self.enrollments[enrollment_id]['status'] = 'active'
 
     def list_class_assignments(self, class_id):
         return []
@@ -621,6 +671,161 @@ class SchoolFoundationRoutesTestCase(unittest.TestCase):
         self.assertEqual(expired_response.status_code, 410)
         self.assertEqual(self.fake_db.guardian_packets[packet_id]['status'], 'expired')
         self.assertEqual(self.fake_db.consent_events[-1]['event_type'], 'guardian_packet.expired')
+
+
+    # ── Join code and roster tests ──────────────────────────────────────
+
+    def _bootstrap_school(self):
+        response = self.client.post('/api/schools', json={
+            'orgName': 'Lingual Academy',
+            'orgType': 'school',
+            'className': 'Korean 1',
+            'term': 'Fall 2026',
+            'subject': 'Korean',
+            'gradeBand': '9-10',
+            'learningLocale': 'ko-KR',
+        })
+        payload = response.get_json()
+        return payload['createdClass']['id'], payload['school']['activeOrganizationId']
+
+    def test_teacher_can_generate_and_retrieve_join_code(self):
+        class_id, _org_id = self._bootstrap_school()
+
+        generate_response = self.client.post(f'/api/teacher/classes/{class_id}/join-code')
+        self.assertEqual(generate_response.status_code, 200)
+        code = generate_response.get_json()['joinCode']
+        self.assertEqual(len(code), 6)
+        self.assertTrue(generate_response.get_json()['active'])
+
+        get_response = self.client.get(f'/api/teacher/classes/{class_id}/join-code')
+        self.assertEqual(get_response.status_code, 200)
+        self.assertEqual(get_response.get_json()['joinCode'], code)
+        self.assertTrue(get_response.get_json()['active'])
+
+    def test_teacher_can_deactivate_join_code(self):
+        class_id, _org_id = self._bootstrap_school()
+        self.client.post(f'/api/teacher/classes/{class_id}/join-code')
+
+        delete_response = self.client.delete(f'/api/teacher/classes/{class_id}/join-code')
+        self.assertEqual(delete_response.status_code, 200)
+
+        get_response = self.client.get(f'/api/teacher/classes/{class_id}/join-code')
+        self.assertFalse(get_response.get_json()['active'])
+
+    def test_student_can_join_class_with_valid_code(self):
+        class_id, org_id = self._bootstrap_school()
+        self.client.post(f'/api/teacher/classes/{class_id}/join-code')
+        code = self.fake_db.classes[class_id]['join_code']
+
+        # Switch to student session
+        with self.client.session_transaction() as flask_session:
+            flask_session['user'] = {
+                'uid': 'student-1',
+                'email': 'student1@example.com',
+                'name': 'Student One',
+                'active_membership_id': None,
+            }
+
+        join_response = self.client.post('/api/schools/join', json={'joinCode': code})
+        self.assertEqual(join_response.status_code, 201)
+        payload = join_response.get_json()
+        self.assertFalse(payload['alreadyEnrolled'])
+        self.assertEqual(payload['class']['id'], class_id)
+        self.assertEqual(payload['class']['name'], 'Korean 1')
+
+        # Verify enrollment and membership were created
+        enrollment = self.fake_db.enrollments.get(f'{class_id}_student-1')
+        self.assertIsNotNone(enrollment)
+        self.assertEqual(enrollment['status'], 'active')
+        self.assertEqual(enrollment['join_source'], 'join_code')
+
+        membership = self.fake_db.memberships.get(f'{org_id}_student-1')
+        self.assertIsNotNone(membership)
+        self.assertIn('student', membership['roles'])
+
+    def test_student_join_is_idempotent(self):
+        class_id, _org_id = self._bootstrap_school()
+        self.client.post(f'/api/teacher/classes/{class_id}/join-code')
+        code = self.fake_db.classes[class_id]['join_code']
+
+        with self.client.session_transaction() as flask_session:
+            flask_session['user'] = {
+                'uid': 'student-1',
+                'email': 'student1@example.com',
+                'name': 'Student One',
+                'active_membership_id': None,
+            }
+
+        # First join
+        self.client.post('/api/schools/join', json={'joinCode': code})
+
+        # Second join with same code
+        second_response = self.client.post('/api/schools/join', json={'joinCode': code})
+        self.assertEqual(second_response.status_code, 200)
+        self.assertTrue(second_response.get_json()['alreadyEnrolled'])
+
+    def test_student_join_reactivates_inactive_enrollment(self):
+        class_id, _org_id = self._bootstrap_school()
+        self.client.post(f'/api/teacher/classes/{class_id}/join-code')
+        code = self.fake_db.classes[class_id]['join_code']
+
+        # Pre-create an inactive enrollment
+        self.fake_db.enrollments[f'{class_id}_student-1'] = {
+            'id': f'{class_id}_student-1',
+            'class_id': class_id,
+            'student_uid': 'student-1',
+            'status': 'inactive',
+        }
+
+        with self.client.session_transaction() as flask_session:
+            flask_session['user'] = {
+                'uid': 'student-1',
+                'email': 'student1@example.com',
+                'name': 'Student One',
+                'active_membership_id': None,
+            }
+
+        join_response = self.client.post('/api/schools/join', json={'joinCode': code})
+        self.assertEqual(join_response.status_code, 201)
+        self.assertFalse(join_response.get_json()['alreadyEnrolled'])
+        self.assertEqual(self.fake_db.enrollments[f'{class_id}_student-1']['status'], 'active')
+
+    def test_join_with_invalid_code_returns_404(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session['user'] = {
+                'uid': 'student-1',
+                'email': 'student1@example.com',
+                'name': 'Student One',
+                'active_membership_id': None,
+            }
+
+        response = self.client.post('/api/schools/join', json={'joinCode': 'ZZZZZZ'})
+        self.assertEqual(response.status_code, 404)
+
+    def test_teacher_can_view_roster_and_remove_student(self):
+        class_id, _org_id = self._bootstrap_school()
+        self.fake_db.enrollments[f'{class_id}_student-1'] = {
+            'id': f'{class_id}_student-1',
+            'class_id': class_id,
+            'student_uid': 'student-1',
+            'status': 'active',
+            'join_source': 'join_code',
+        }
+
+        roster_response = self.client.get(f'/api/teacher/classes/{class_id}/roster')
+        self.assertEqual(roster_response.status_code, 200)
+        students = roster_response.get_json()['students']
+        self.assertEqual(len(students), 1)
+        self.assertEqual(students[0]['displayName'], 'Student One')
+        self.assertEqual(students[0]['joinSource'], 'join_code')
+
+        remove_response = self.client.delete(f'/api/teacher/classes/{class_id}/students/student-1')
+        self.assertEqual(remove_response.status_code, 200)
+        self.assertEqual(self.fake_db.enrollments[f'{class_id}_student-1']['status'], 'inactive')
+
+        # Roster should be empty after removal (soft delete)
+        refreshed = self.client.get(f'/api/teacher/classes/{class_id}/roster')
+        self.assertEqual(len(refreshed.get_json()['students']), 0)
 
 
 if __name__ == '__main__':

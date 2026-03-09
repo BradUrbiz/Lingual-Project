@@ -1,5 +1,5 @@
 import api from './index';
-import type { CreateSchoolPayload, SchoolContextSummary } from '@/types';
+import type { CreateSchoolPayload, JoinClassResult, SchoolContextSummary } from '@/types';
 
 interface SchoolContextResponse {
   success: boolean;
@@ -21,4 +21,22 @@ export const setActiveMembership = async (membershipId: string): Promise<SchoolC
     membershipId,
   });
   return response.data.school;
+};
+
+interface JoinClassResponse {
+  success: boolean;
+  alreadyEnrolled: boolean;
+  class: { id: string; name: string; subject?: string; learningLocale?: string };
+  membershipId?: string;
+  enrollmentId?: string;
+}
+
+export const joinClassByCode = async (joinCode: string): Promise<JoinClassResult> => {
+  const response = await api.post<JoinClassResponse>('/schools/join', { joinCode });
+  return {
+    alreadyEnrolled: response.data.alreadyEnrolled,
+    class: response.data.class,
+    membershipId: response.data.membershipId,
+    enrollmentId: response.data.enrollmentId,
+  };
 };

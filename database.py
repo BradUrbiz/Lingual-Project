@@ -227,6 +227,7 @@ Schema:
     - created_at: timestamp
 """
 
+import secrets
 from datetime import UTC, datetime
 
 from firebase_admin import firestore
@@ -846,6 +847,69 @@ def list_class_enrollments(class_id, status='active'):
         data['id'] = doc.id
         enrollments.append(data)
     return enrollments
+
+
+JOIN_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+JOIN_CODE_LENGTH = 6
+
+
+def generate_class_join_code(class_id):
+    """Generate or regenerate a 6-char join code for a class."""
+    code = ''.join(secrets.choice(JOIN_CODE_ALPHABET) for _ in range(JOIN_CODE_LENGTH))
+    # Check for collision (extremely unlikely but safe)
+    existing = get_class_by_join_code(code)
+    if existing and existing['id'] != class_id:
+        code = ''.join(secrets.choice(JOIN_CODE_ALPHABET) for _ in range(JOIN_CODE_LENGTH))
+    get_class_ref(class_id).update({
+        'join_code': code,
+        'join_code_active': True,
+        'join_code_generated_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    })
+    return code
+
+
+def deactivate_class_join_code(class_id):
+    """Deactivate the join code for a class."""
+    get_class_ref(class_id).update({
+        'join_code_active': False,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    })
+
+
+def get_class_by_join_code(code):
+    """Find an active class by its join code."""
+    docs = (
+        get_classes_collection()
+        .where('join_code', '==', code)
+        .where('join_code_active', '==', True)
+        .where('status', '==', 'active')
+        .limit(1)
+        .stream()
+    )
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        return data
+    return None
+
+
+def deactivate_enrollment(class_id, student_uid):
+    """Set an enrollment to inactive (soft-delete)."""
+    enrollment_id = f'{class_id}_{student_uid}'
+    get_enrollment_ref(enrollment_id).update({
+        'status': 'inactive',
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    })
+
+
+def reactivate_enrollment(class_id, student_uid):
+    """Reactivate a previously deactivated enrollment."""
+    enrollment_id = f'{class_id}_{student_uid}'
+    get_enrollment_ref(enrollment_id).update({
+        'status': 'active',
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    })
 
 
 def get_student_compliance_record(org_id, student_uid):

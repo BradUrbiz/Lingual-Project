@@ -228,3 +228,30 @@ export interface CreateTeacherClassPayload {
   gradeBand?: string;
   learningLocale: string;
 }
+
+export interface ClassJoinCodeData {
+  joinCode: string;
+  active: boolean;
+  generatedAt: string | null;
+}
+
+export interface JoinClassResult {
+  alreadyEnrolled: boolean;
+  class: {
+    id: string;
+    name: string;
+    subject?: string;
+    learningLocale?: string;
+  };
+  membershipId?: string;
+  enrollmentId?: string;
+}
+
+export interface ClassRosterStudent {
+  uid: string;
+  displayName: string;
+  studentNumber?: string;
+  joinSource?: string;
+  enrolledAt?: string | null;
+  status: string;
+}

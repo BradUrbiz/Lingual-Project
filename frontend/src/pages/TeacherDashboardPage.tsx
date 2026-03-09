@@ -5,10 +5,13 @@ import {
   BookOpen,
   CalendarClock,
   CheckCircle2,
+  ClipboardCopy,
   GraduationCap,
   Loader2,
   Plus,
   School,
+  Trash2,
+  UserPlus,
   Users,
 } from 'lucide-react';
 import {
@@ -24,8 +27,21 @@ import {
   DialogTitle,
   Input,
 } from '@/components/ui';
-import { getTeacherDashboard, createTeacherClass } from '@/api/teacher';
-import type { CreateTeacherClassPayload, TeacherDashboardData } from '@/types';
+import {
+  getTeacherDashboard,
+  createTeacherClass,
+  generateClassJoinCode,
+  getClassJoinCode,
+  deactivateClassJoinCode,
+  getClassRoster,
+  removeStudentFromClass,
+} from '@/api/teacher';
+import type {
+  ClassJoinCodeData,
+  ClassRosterStudent,
+  CreateTeacherClassPayload,
+  TeacherDashboardData,
+} from '@/types';
 
 const DEFAULT_CLASS_FORM: CreateTeacherClassPayload = {
   name: '',
@@ -49,6 +65,18 @@ export function TeacherDashboardPage() {
   const [dashboard, setDashboard] = useState<TeacherDashboardData | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [classForm, setClassForm] = useState<CreateTeacherClassPayload>(DEFAULT_CLASS_FORM);
+
+  // Join code state
+  const [joinCodeClassId, setJoinCodeClassId] = useState<string | null>(null);
+  const [joinCodeData, setJoinCodeData] = useState<ClassJoinCodeData | null>(null);
+  const [joinCodeLoading, setJoinCodeLoading] = useState(false);
+  const [joinCodeCopied, setJoinCodeCopied] = useState(false);
+
+  // Roster state
+  const [rosterClassId, setRosterClassId] = useState<string | null>(null);
+  const [roster, setRoster] = useState<ClassRosterStudent[]>([]);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [removingUid, setRemovingUid] = useState<string | null>(null);
 
   const loadDashboard = async () => {
     try {
@@ -89,6 +117,86 @@ export function TeacherDashboardPage() {
       setError(err instanceof Error ? err.message : 'Failed to create class.');
     } finally {
       setSavingClass(false);
+    }
+  };
+
+  // ── Join code handlers ──────────────────────────────────────────────
+
+  const openJoinCodeDialog = async (classId: string) => {
+    setJoinCodeClassId(classId);
+    setJoinCodeData(null);
+    setJoinCodeLoading(true);
+    setJoinCodeCopied(false);
+    try {
+      const data = await getClassJoinCode(classId);
+      setJoinCodeData(data);
+    } catch {
+      // No active code — that's fine, user can generate one
+      setJoinCodeData(null);
+    } finally {
+      setJoinCodeLoading(false);
+    }
+  };
+
+  const handleGenerateCode = async () => {
+    if (!joinCodeClassId) return;
+    setJoinCodeLoading(true);
+    try {
+      const data = await generateClassJoinCode(joinCodeClassId);
+      setJoinCodeData(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate join code.');
+    } finally {
+      setJoinCodeLoading(false);
+    }
+  };
+
+  const handleDeactivateCode = async () => {
+    if (!joinCodeClassId) return;
+    setJoinCodeLoading(true);
+    try {
+      await deactivateClassJoinCode(joinCodeClassId);
+      setJoinCodeData(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to deactivate join code.');
+    } finally {
+      setJoinCodeLoading(false);
+    }
+  };
+
+  const handleCopyCode = async (code: string) => {
+    await navigator.clipboard.writeText(code);
+    setJoinCodeCopied(true);
+    setTimeout(() => setJoinCodeCopied(false), 2000);
+  };
+
+  // ── Roster handlers ───────────────────────────────────────────────
+
+  const openRosterDialog = async (classId: string) => {
+    setRosterClassId(classId);
+    setRoster([]);
+    setRosterLoading(true);
+    try {
+      const students = await getClassRoster(classId);
+      setRoster(students);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load roster.');
+    } finally {
+      setRosterLoading(false);
+    }
+  };
+
+  const handleRemoveStudent = async (studentUid: string) => {
+    if (!rosterClassId) return;
+    setRemovingUid(studentUid);
+    try {
+      await removeStudentFromClass(rosterClassId, studentUid);
+      setRoster((prev) => prev.filter((s) => s.uid !== studentUid));
+      await loadDashboard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove student.');
+    } finally {
+      setRemovingUid(null);
     }
   };
 
@@ -293,15 +401,33 @@ export function TeacherDashboardPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="mt-4 flex flex-wrap gap-3">
                     <Button
                       variant="outline"
+                      size="sm"
+                      onClick={() => openJoinCodeDialog(classSummary.id)}
+                    >
+                      <UserPlus size={14} className="mr-1.5" />
+                      Invite students
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openRosterDialog(classSummary.id)}
+                    >
+                      <Users size={14} className="mr-1.5" />
+                      Roster
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => navigate(`/app/teacher/classes/${classSummary.id}/analytics`)}
                     >
                       Class analytics
                     </Button>
                     <Button
                       variant="outline"
+                      size="sm"
                       onClick={() => navigate(`/app/teacher/classes/${classSummary.id}/assignments`)}
                     >
                       Build assignments
@@ -376,6 +502,132 @@ export function TeacherDashboardPage() {
               Create class
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Join code dialog */}
+      <Dialog open={joinCodeClassId !== null} onOpenChange={(open) => { if (!open) setJoinCodeClassId(null); }}>
+        <DialogContent className="border-3 border-foreground shadow-stamp">
+          <DialogHeader>
+            <DialogTitle className="font-display text-2xl">Invite students</DialogTitle>
+            <DialogDescription>
+              Share this code with students. They enter it at the join page to enroll in your class.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            {joinCodeLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : joinCodeData?.active ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-center gap-3 rounded-2xl border-2 border-border bg-secondary/60 p-6">
+                  <span className="font-mono text-4xl font-bold tracking-[0.4em] text-foreground">
+                    {joinCodeData.joinCode}
+                  </span>
+                  <button
+                    onClick={() => handleCopyCode(joinCodeData.joinCode)}
+                    className="rounded-lg border border-border bg-card p-2 text-muted-foreground hover:text-foreground transition-colors"
+                    title="Copy code"
+                  >
+                    <ClipboardCopy size={18} />
+                  </button>
+                </div>
+                {joinCodeCopied && (
+                  <p className="text-center text-sm text-success font-medium">Copied to clipboard!</p>
+                )}
+                <p className="text-center text-sm text-muted-foreground">
+                  Students go to <strong>/app/join</strong> and enter this code.
+                </p>
+              </div>
+            ) : (
+              <div className="text-center space-y-4 py-4">
+                <p className="text-muted-foreground">No active join code for this class.</p>
+                <Button onClick={handleGenerateCode}>Generate join code</Button>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            {joinCodeData?.active && (
+              <Button variant="outline" onClick={handleDeactivateCode} disabled={joinCodeLoading}>
+                Deactivate code
+              </Button>
+            )}
+            {joinCodeData?.active && (
+              <Button onClick={handleGenerateCode} disabled={joinCodeLoading}>
+                Regenerate
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Roster dialog */}
+      <Dialog open={rosterClassId !== null} onOpenChange={(open) => { if (!open) setRosterClassId(null); }}>
+        <DialogContent className="border-3 border-foreground shadow-stamp sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display text-2xl">Class roster</DialogTitle>
+            <DialogDescription>
+              {roster.length} student{roster.length !== 1 ? 's' : ''} enrolled
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2 max-h-[400px] overflow-y-auto">
+            {rosterLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : roster.length === 0 ? (
+              <div className="text-center py-8">
+                <Users className="mx-auto h-10 w-10 text-muted-foreground" />
+                <p className="mt-3 text-muted-foreground">No students enrolled yet.</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => {
+                    setRosterClassId(null);
+                    if (rosterClassId) openJoinCodeDialog(rosterClassId);
+                  }}
+                >
+                  <UserPlus size={14} className="mr-1.5" />
+                  Invite students
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {roster.map((student) => (
+                  <div
+                    key={student.uid}
+                    className="flex items-center justify-between rounded-xl border border-border bg-secondary/40 px-4 py-3"
+                  >
+                    <div>
+                      <p className="font-medium text-foreground">{student.displayName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {student.joinSource === 'join_code' ? 'Joined via code' : student.joinSource || 'Enrolled'}
+                        {student.enrolledAt ? ` · ${new Date(student.enrolledAt).toLocaleDateString()}` : ''}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveStudent(student.uid)}
+                      disabled={removingUid === student.uid}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      {removingUid === student.uid ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

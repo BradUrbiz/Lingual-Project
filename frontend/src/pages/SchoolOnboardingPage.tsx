@@ -127,15 +127,15 @@ export function SchoolOnboardingPage() {
 
           <div className="grid gap-5 md:grid-cols-2">
             <Input
-              label="Organization name"
+              label="Organization Name"
               value={form.orgName}
               onChange={(event) => updateField('orgName', event.target.value)}
               placeholder="West High World Languages"
             />
 
-            <div className="space-y-2">
+            <div className="flex flex-col gap-1.5">
               <label htmlFor="school-org-type" className="text-base font-semibold text-foreground">
-                Organization type
+                Organization Type
               </label>
               <select
                 id="school-org-type"

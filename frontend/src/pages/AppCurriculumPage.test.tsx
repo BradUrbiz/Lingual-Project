@@ -123,6 +123,21 @@ const SAMPLE_CURRICULUM = {
   ],
   templates: {
     activityTemplateIds: ['tpl.sample.v1'],
+    activityTemplates: [
+      {
+        id: 'tpl.sample.v1',
+        title: { en: 'Sample Template' },
+        mode: 'interpersonal_speaking',
+        assistantRole: 'Act as a peer conversation partner.',
+        interactionPattern: {
+          openingMoves: ['Open with a direct question.'],
+          sustainMoves: ['Use one follow-up question to extend the exchange.'],
+          closingMoves: ['Close after the learner answers and adds one detail.'],
+          completionRule: 'The learner must answer and elaborate.',
+        },
+        promptCues: ['Keep the exchange short and natural.'],
+      },
+    ],
   },
 } as unknown as CurriculumPackageV1;
 
@@ -148,5 +163,16 @@ describe('AppCurriculumPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /family members and relationships/i }));
     expect(navigateMock).toHaveBeenCalledWith('/app/curriculum/mod.1.1');
+  });
+
+  it('shows activity template summary on module cards', async () => {
+    getSampleCurriculumPackageMock.mockResolvedValue(SAMPLE_CURRICULUM);
+
+    render(<AppCurriculumPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Activity template:/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Sample Template/)).toBeInTheDocument();
   });
 });

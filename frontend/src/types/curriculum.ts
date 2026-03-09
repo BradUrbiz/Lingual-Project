@@ -120,6 +120,20 @@ export interface Objective {
   sourceRefs: SourceRef[];
 }
 
+export interface ActivityTemplateDefinition {
+  id: string;
+  title: I18nText;
+  mode: CurriculumMode | string;
+  assistantRole: string;
+  interactionPattern: {
+    openingMoves: string[];
+    sustainMoves: string[];
+    closingMoves: string[];
+    completionRule: string;
+  };
+  promptCues: string[];
+}
+
 export interface CurriculumPackageV1 {
   schemaVersion: 'lingual.curriculum_package.v1';
   curriculum: {
@@ -164,6 +178,7 @@ export interface CurriculumPackageV1 {
   objectives: Objective[];
   templates: {
     activityTemplateIds: string[];
+    activityTemplates: ActivityTemplateDefinition[];
   };
   glossary?: Record<string, unknown>;
 }

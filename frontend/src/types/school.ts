@@ -2,6 +2,16 @@ export type OrganizationType = 'school' | 'district' | 'program';
 export type SchoolRole = 'school_admin' | 'teacher' | 'student';
 export type MembershipStatus = 'active' | 'invited' | 'inactive';
 export type ConsentStatus = 'unknown' | 'granted' | 'revoked' | 'not_required';
+export type GuardianConsentPacketStatus =
+  | 'draft'
+  | 'issued'
+  | 'viewed'
+  | 'granted'
+  | 'revoked'
+  | 'expired'
+  | 'canceled';
+export type GuardianConsentDeliveryMethod = 'secure_link' | 'downloadable_notice';
+export type GuardianConsentContactChannel = 'email' | 'phone' | 'paper' | 'other';
 
 export interface MembershipSummary {
   id: string;
@@ -97,6 +107,108 @@ export interface UpdateStudentCompliancePayload {
   textAllowed?: boolean;
   retentionPolicyId?: string;
   schoolAgreementVersion?: string;
+}
+
+export interface GuardianConsentPacket {
+  id: string;
+  orgId: string;
+  classId: string;
+  studentUid: string;
+  noticeVersion: string;
+  consentScope: string;
+  contactChannel: GuardianConsentContactChannel | string;
+  contactDestinationHint: string;
+  deliveryMethod: GuardianConsentDeliveryMethod | string;
+  status: GuardianConsentPacketStatus | string;
+  tokenLastFour?: string;
+  responseMethod?: string;
+  evidenceRef?: string;
+  reminderCount: number;
+  expiresAt?: string | null;
+  issuedAt?: string | null;
+  lastSentAt?: string | null;
+  actedAt?: string | null;
+  createdByUid?: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  canResend?: boolean;
+  canCancel?: boolean;
+  isTerminal?: boolean;
+}
+
+export interface IssueGuardianConsentPacketPayload {
+  noticeVersion?: string;
+  consentScope?: string;
+  deliveryMethod?: GuardianConsentDeliveryMethod | string;
+  contactChannel?: GuardianConsentContactChannel | string;
+  contactDestinationHint?: string;
+}
+
+export interface GuardianConsentIssueResult {
+  guardianPacket: GuardianConsentPacket;
+  deliveryToken?: string;
+}
+
+export interface GuardianConsentPublicView {
+  packet: GuardianConsentPacket;
+  notice: {
+    version: string;
+    title: string;
+    summary: string;
+    bullets: string[];
+  };
+  student: {
+    displayName: string;
+  };
+  class: {
+    name: string;
+    subject?: string;
+  };
+}
+
+export interface GuardianConsentDecisionResult {
+  guardianConsent: GuardianConsentPublicView;
+  guardianPacket: GuardianConsentPacket;
+  compliance: StudentComplianceRecord;
+}
+
+export interface ClassComplianceStudentEntry {
+  uid: string;
+  displayName: string;
+  studentNumber?: string;
+  guardianContactRequired: boolean;
+  compliance: StudentComplianceRecord;
+  guardianPacket?: GuardianConsentPacket | null;
+  blockedReasons: string[];
+}
+
+export interface ClassComplianceRosterSummary {
+  studentCount: number;
+  voiceAllowedCount: number;
+  voiceBlockedCount: number;
+  guardianActionRequiredCount: number;
+  unknownConsentCount: number;
+  rawAudioRestrictedCount: number;
+  textBlockedCount: number;
+}
+
+export interface ClassComplianceRosterData {
+  class: TeacherClassSummary;
+  summary: ClassComplianceRosterSummary;
+  students: ClassComplianceStudentEntry[];
+  limitations: string[];
+}
+
+export interface BulkUpdateClassCompliancePayload {
+  studentUids: string[];
+  updates: UpdateStudentCompliancePayload;
+  reason?: string;
+}
+
+export interface BulkUpdateClassComplianceResult {
+  batchId: string;
+  updatedCount: number;
+  studentUids: string[];
 }
 
 export interface CreateSchoolPayload {

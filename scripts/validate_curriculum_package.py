@@ -73,6 +73,7 @@ def _validate_references(package: dict[str, Any]) -> list[Issue]:
 
     templates_obj = package.get("templates", {}) or {}
     templates = set(templates_obj.get("activityTemplateIds", []) or [])
+    activity_templates = templates_obj.get("activityTemplates", []) or []
 
     if not isinstance(units, list) or not isinstance(modules, list) or not isinstance(objectives, list) or not isinstance(rubrics, list):
         issues.append(Issue("error", "Top-level lists (units/modules/objectives/rubrics) must be arrays."))
@@ -82,6 +83,18 @@ def _validate_references(package: dict[str, Any]) -> list[Issue]:
     modules_by_id = _index_by_id([m for m in modules if isinstance(m, dict)], "modules", issues)
     objectives_by_id = _index_by_id([o for o in objectives if isinstance(o, dict)], "objectives", issues)
     rubrics_by_id = _index_by_id([r for r in rubrics if isinstance(r, dict)], "rubrics", issues)
+    activity_templates_by_id = _index_by_id(
+        [t for t in activity_templates if isinstance(t, dict)],
+        "activityTemplates",
+        issues,
+    )
+
+    for template_id in templates:
+        if template_id not in activity_templates_by_id:
+            issues.append(Issue("error", f"Template id {template_id} is listed in templates.activityTemplateIds but has no definition"))
+    for template_id in activity_templates_by_id:
+        if template_id not in templates:
+            issues.append(Issue("error", f"Template definition {template_id} is not listed in templates.activityTemplateIds"))
 
     # Unit -> modules
     for unit in units:

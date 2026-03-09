@@ -97,6 +97,8 @@ Add first-class entities for:
 
 `CurriculumPackageV1` remains the canonical package format. Teacher customization should live in a separate mapping layer that references package, module, objective, and situation IDs.
 
+For task-template behavior, objectives should continue to reference `templateRefs`, but the package itself should own the structured definitions under `templates.activityTemplates[]`. Runtime prompt assembly should resolve objective refs against those package-level template definitions rather than inferring behavior from template IDs alone.
+
 ### 3.4 Route every teacher-managed practice session through an assignment resolver
 
 The prompt builder must no longer be called directly from a sample module selector alone. For school-managed practice, the flow becomes:
@@ -287,13 +289,153 @@ Audit trail for consent creation, revocation, reminders, and policy changes.
 Fields:
 
 - `org_id`
-- `student_uid`
+- `student_uid` (nullable for class- or org-scoped operational events)
+- `scope_type` (`student` | `class` | `org`)
+- `scope_id`
 - `event_type`
 - `actor_type`
 - `actor_id`
 - `evidence_ref`
 - `payload`
 - `created_at`
+
+Purpose:
+
+Record both student-scoped consent mutations and class/org-scoped sensitive access operations such as audit export.
+
+### `guardian_consent_packets/{packetId}`
+
+Epic A model for beta guardian collection. Current beta ships secure-link guardian response plus staff-managed `downloadable_notice` packet tracking.
+
+Fields:
+
+- `org_id`
+- `class_id`
+- `student_uid`
+- `notice_version`
+- `consent_scope`
+- `contact_channel`
+- `contact_destination_hint`
+- `delivery_method` (`secure_link` | `downloadable_notice`)
+- `status` (`draft` | `issued` | `viewed` | `granted` | `revoked` | `expired` | `canceled`)
+- `token_hash`
+- `token_last_four`
+- `response_method`
+- `evidence_ref`
+- `reminder_count`
+- `expires_at`
+- `issued_at`
+- `last_sent_at`
+- `acted_at`
+- `created_by_uid`
+- `created_at`
+- `updated_at`
+
+Purpose:
+
+Support a school-admin-assisted guardian workflow without introducing a standalone guardian account model in beta.
+
+State model:
+
+- `draft`: packet prepared but not yet delivered
+- `issued`: packet delivered by secure link or downloadable notice
+- `viewed`: recipient opened the secure packet or confirmed receipt in staff tooling
+- `granted`: guardian accepted the consent terms for the declared scope
+- `revoked`: guardian explicitly withdrew a previously granted consent
+- `expired`: packet timed out before a valid response
+- `canceled`: staff withdrew the packet before completion
+
+Implementation rules:
+
+- Do not create guardian accounts for beta.
+- Packets are school-admin-assisted artifacts, not a parent portal.
+- `token_hash` must store only a hashed token, never the raw token.
+- Every packet issuance, resend, reminder, view, grant, revoke, expire, and cancel action must emit a `consent_events` row.
+- Packet completion must write both `guardian_consent_packets` state and the derived `student_compliance_records.guardian_consent_status`.
+
+Current beta API surface:
+
+- `GET /api/teacher/classes/<class_id>/students/<student_uid>/guardian-consent-packet`
+- `POST /api/teacher/classes/<class_id>/students/<student_uid>/guardian-consent-packets`
+- `POST /api/teacher/classes/<class_id>/students/<student_uid>/guardian-consent-packets/<packet_id>/resend`
+- `POST /api/teacher/classes/<class_id>/students/<student_uid>/guardian-consent-packets/<packet_id>/cancel`
+- `GET /api/guardian/consent/<token>`
+- `POST /api/guardian/consent/<token>/decision`
+
+### `deletion_requests/{requestId}`
+
+Epic B request model for auditable deletion operations, not yet implemented.
+
+Fields:
+
+- `org_id`
+- `scope_type` (`student` | `class` | `org`)
+- `scope_id`
+- `requested_by_uid`
+- `request_reason`
+- `status` (`requested` | `approved` | `rejected` | `in_progress` | `completed` | `failed` | `partially_completed`)
+- `approved_by_uid`
+- `review_notes`
+- `target_collections`
+- `target_storage_prefixes`
+- `execution_summary`
+- `created_at`
+- `updated_at`
+- `completed_at`
+
+Purpose:
+
+Separate request intake, approval, and asynchronous execution for deletion so storage cleanup and partial failures are auditable.
+
+### `deletion_execution_runs/{runId}`
+
+Epic B execution model for asynchronous deletion workers, not yet implemented.
+
+Fields:
+
+- `request_id`
+- `org_id`
+- `scope_type`
+- `scope_id`
+- `status` (`queued` | `running` | `completed` | `failed` | `partially_completed`)
+- `attempt_number`
+- `firestore_counts`
+- `storage_counts`
+- `error_summary`
+- `started_at`
+- `finished_at`
+- `worker_ref`
+
+Purpose:
+
+Track every async execution attempt independently from the human approval request so retries and partial failures remain auditable.
+
+Request state model:
+
+- `requested`: request submitted and awaiting review
+- `approved`: request accepted and queued for execution
+- `rejected`: request denied with review notes
+- `in_progress`: at least one execution run is active
+- `completed`: deletion finished successfully
+- `failed`: terminal failure without successful cleanup
+- `partially_completed`: some targets were deleted but manual intervention is still required
+
+Execution rules:
+
+- Approval and execution are separate steps.
+- Firestore records and Firebase Storage artifacts must be enumerated from the same request scope snapshot.
+- Execution must be idempotent and retryable.
+- Every request, approval, rejection, queue, execution start, retry, completion, and failure action must emit a `consent_events` or deletion-specific audit event.
+- The UI must show both the request state and the latest execution run summary.
+
+Suggested API surface:
+
+- `GET /api/admin/deletion-requests`
+- `POST /api/admin/deletion-requests`
+- `GET /api/admin/deletion-requests/<request_id>`
+- `POST /api/admin/deletion-requests/<request_id>/approve`
+- `POST /api/admin/deletion-requests/<request_id>/reject`
+- `POST /api/admin/deletion-requests/<request_id>/retry`
 
 ### `practice_sessions/{sessionId}`
 
@@ -462,6 +604,7 @@ The prompt builder should move to layered assembly.
 - correction mode
 - elicitation threshold
 - scaffold ladder
+- curriculum-aware task template structure
 - target-output pressure
 - preferred balance of fluency vs accuracy
 
@@ -469,6 +612,7 @@ Implementation note:
 
 - keep `assignment_resolver.py` as the final assignment-aware prompt assembler
 - keep pedagogy-specific policy normalization and prompt sections in `backend/services/pedagogy/`
+- let task-template assembly compile situation seed, communicative functions, discourse moves, rubric focus, and resolved curriculum template definitions into deterministic prompt sections
 - keep the beta pedagogy engine deterministic and policy-driven before introducing any live intervention layer
 
 ### Layer 4: learner personalization
@@ -517,6 +661,29 @@ Rules to encode:
 - Retention policy must determine whether raw audio is stored, for how long, and where.
 - Audit trail must record consent changes and sensitive access paths.
 - Teachers and school admins may update consent records inside their authorized organization and class scope during beta.
+- Beta operational tooling should start with class-scoped bulk consent updates and class-scoped audit export from teacher workflows.
+- Guardian-facing consent collection requires a dedicated actor/evidence model and should not be improvised from teacher-only forms.
+- Deletion execution requires a stateful workflow that covers Firestore records and Firebase Storage audio artifacts before it is automated.
+
+Current beta implementation slice:
+
+- class compliance roster endpoint that joins active enrollments, user display names, guardian-contact flags, and effective compliance status
+- class-scoped bulk consent update actions for teacher and school-admin roles
+- class-scoped audit export in CSV format backed by `consent_events`
+- audit export access logged as a class-scoped `consent_events` row
+- guardian packet issue/resend/cancel actions from student drill-down
+- class compliance roster and student drill-down surfaces that show guardian packet state alongside effective consent state
+- secure-link public guardian page that records `granted` / `revoked` decisions back into `student_compliance_records`
+- `downloadable_notice` delivery recorded as a staff-managed packet type without a rendered handout artifact in beta
+
+Remaining hardening after the current slice:
+
+#### Epic B: Deletion requests and execution
+
+- define request intake, approval, and async execution lifecycle
+- add deletion execution runs so retries and partial failures are visible
+- enumerate Firestore and Storage deletion targets from a request scope snapshot
+- broaden event taxonomy for request creation, approval, rejection, queue, retry, completion, and failure
 
 Recommended beta defaults, pending counsel validation:
 

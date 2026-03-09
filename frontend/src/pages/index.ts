@@ -20,5 +20,7 @@ export { TeacherDashboardPage } from './TeacherDashboardPage';
 export { TeacherAssignmentBuilderPage } from './TeacherAssignmentBuilderPage';
 export { TeacherAssignmentAnalyticsPage } from './TeacherAssignmentAnalyticsPage';
 export { TeacherClassAnalyticsPage } from './TeacherClassAnalyticsPage';
+export { TeacherClassCompliancePage } from './TeacherClassCompliancePage';
 export { TeacherStudentDrillDownPage } from './TeacherStudentDrillDownPage';
 export { AssignmentLaunchPage } from './AssignmentLaunchPage';
+export { GuardianConsentPage } from './GuardianConsentPage';

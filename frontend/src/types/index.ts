@@ -247,9 +247,22 @@ export type LearningLocale = 'ko-KR' | 'es-ES' | 'fr-FR';
 
 // Curriculum Types
 export type {
+  BulkUpdateClassCompliancePayload,
+  BulkUpdateClassComplianceResult,
+  ClassComplianceRosterData,
+  ClassComplianceRosterSummary,
+  ClassComplianceStudentEntry,
   ConsentStatus,
   CreateSchoolPayload,
   CreateTeacherClassPayload,
+  GuardianConsentContactChannel,
+  GuardianConsentDecisionResult,
+  GuardianConsentDeliveryMethod,
+  GuardianConsentIssueResult,
+  GuardianConsentPacket,
+  GuardianConsentPacketStatus,
+  GuardianConsentPublicView,
+  IssueGuardianConsentPacketPayload,
   MembershipSummary,
   RetentionPolicySummary,
   SchoolContextSummary,
@@ -307,5 +320,6 @@ export type {
   Capstone,
   Module,
   Objective,
+  ActivityTemplateDefinition,
   CurriculumPackageV1,
 } from './curriculum';

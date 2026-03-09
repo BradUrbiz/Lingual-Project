@@ -103,6 +103,21 @@ SAMPLE_PACKAGE = {
     ],
     'templates': {
         'activityTemplateIds': ['tpl.conversation.v1'],
+        'activityTemplates': [
+            {
+                'id': 'tpl.conversation.v1',
+                'title': {'en': 'Conversation Exchange'},
+                'mode': 'interpersonal_speaking',
+                'assistantRole': 'Act as a peer conversation partner who prompts for more detail without taking over.',
+                'interactionPattern': {
+                    'openingMoves': ['Start with an everyday question tied to the situation.'],
+                    'sustainMoves': ['Push the learner to elaborate and summarize what happened.'],
+                    'closingMoves': ['Close only after the learner has summarized the main event.'],
+                    'completionRule': 'The learner must sustain the exchange and summarize the event before closing.',
+                },
+                'promptCues': ['Keep the exchange natural and peer-like.'],
+            }
+        ],
     },
 }
 

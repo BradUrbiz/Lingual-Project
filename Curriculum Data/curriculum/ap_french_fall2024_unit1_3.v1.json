@@ -4937,6 +4937,136 @@
       "tpl.presentational_cultural_comparison_60s.v1",
       "tpl.presentational_cultural_comparison_120s.v1",
       "tpl.presentational_opinion_speech.v1"
+    ],
+    "activityTemplates": [
+      {
+        "id": "tpl.listen_gist_detail_infer.v1",
+        "title": { "en": "Gist / Detail / Inference Listening" },
+        "mode": "interpretive_listening",
+        "assistantRole": "Deliver a short listening-style source, then probe for gist, detail, and inference without front-loading the answers.",
+        "interactionPattern": {
+          "openingMoves": ["Present the source context and cue the learner to listen for the main idea first."],
+          "sustainMoves": ["Move from gist to supporting detail to inference questions while keeping each prompt anchored to the source."],
+          "closingMoves": ["Close by asking the learner to summarize what the source most strongly suggests."],
+          "completionRule": "The learner must identify the gist, recover at least one supporting detail, and make a plausible inference."
+        },
+        "promptCues": [
+          "Keep prompts source-bound instead of turning them into general knowledge questions.",
+          "Escalate from broad comprehension to finer interpretation."
+        ]
+      },
+      {
+        "id": "tpl.listen_multi_source_audio_plus_visual.v1",
+        "title": { "en": "Multi-Source Audio Plus Visual" },
+        "mode": "interpretive_listening",
+        "assistantRole": "Simulate multiple related sources and make the learner compare how each source contributes to the meaning.",
+        "interactionPattern": {
+          "openingMoves": ["Frame the sources and cue the learner to identify what each source contributes."],
+          "sustainMoves": ["Prompt the learner to compare overlap, contrast, and usefulness across the sources."],
+          "closingMoves": ["Close by requiring a synthesis statement that combines the audio and visual evidence."],
+          "completionRule": "The learner must compare multiple sources and synthesize their combined meaning."
+        },
+        "promptCues": [
+          "Ask the learner to cite which source supports the answer.",
+          "Do not let the learner stay at single-source recall."
+        ]
+      },
+      {
+        "id": "tpl.interpersonal_guided_exchange.v1",
+        "title": { "en": "Interpersonal Guided Exchange" },
+        "mode": "interpersonal_speaking",
+        "assistantRole": "Act as a cooperative conversation partner who guides the exchange while still making the learner carry the meaning-making load.",
+        "interactionPattern": {
+          "openingMoves": ["Open with a concrete personal or situational question that invites a direct response."],
+          "sustainMoves": ["Use follow-up questions, clarification prompts, and brief reactions to keep the exchange balanced and spontaneous."],
+          "closingMoves": ["Close only after the learner has responded, elaborated, and summarized or confirmed the main point."],
+          "completionRule": "The learner must sustain the exchange across multiple turns and respond to follow-up prompts with meaningful elaboration."
+        },
+        "promptCues": [
+          "Keep turns short enough to invite learner output.",
+          "Prefer follow-up questions over long explanations."
+        ]
+      },
+      {
+        "id": "tpl.interpersonal_simulated_conversation_ap.v1",
+        "title": { "en": "AP Simulated Conversation" },
+        "mode": "interpersonal_speaking",
+        "assistantRole": "Act as the AP-style conversation partner who speaks naturally, expects immediate response, and keeps the exchange moving under time pressure.",
+        "interactionPattern": {
+          "openingMoves": ["Start in character with a clear situational purpose and no extra setup lecture."],
+          "sustainMoves": ["Advance the conversation one prompt at a time, requiring the learner to react, ask, clarify, or negotiate in real time."],
+          "closingMoves": ["End after the learner has handled the final conversational move and clearly closed the interaction."],
+          "completionRule": "The learner must complete the full simulated exchange, responding appropriately to each conversational move."
+        },
+        "promptCues": [
+          "Maintain conversational momentum.",
+          "Stay in role instead of switching into teacher explanation mode."
+        ]
+      },
+      {
+        "id": "tpl.presentational_cultural_presentation_60s.v1",
+        "title": { "en": "60-Second Cultural Presentation" },
+        "mode": "presentational_speaking",
+        "assistantRole": "Act as a presentation coach who asks for a concise, audience-facing explanation anchored in cultural content.",
+        "interactionPattern": {
+          "openingMoves": ["Frame a clear audience and cultural focus before the learner begins."],
+          "sustainMoves": ["Prompt for organized explanation, supporting detail, and clear transitions without turning the task into conversation practice."],
+          "closingMoves": ["Close by requiring a final takeaway sentence that sounds presentation-ready."],
+          "completionRule": "The learner must deliver a concise, organized cultural presentation with supporting detail."
+        },
+        "promptCues": [
+          "Favor structured explanation over turn-by-turn negotiation.",
+          "Keep the output concise enough for a short presentation."
+        ]
+      },
+      {
+        "id": "tpl.presentational_cultural_comparison_60s.v1",
+        "title": { "en": "60-Second Cultural Comparison" },
+        "mode": "presentational_speaking",
+        "assistantRole": "Act as a presentation coach who prompts the learner to compare a target-culture practice with the learner's own or another known context.",
+        "interactionPattern": {
+          "openingMoves": ["Frame the two comparison points and ask for a clear comparison claim."],
+          "sustainMoves": ["Prompt for one similarity, one difference, and a brief explanation of why the contrast matters."],
+          "closingMoves": ["Close by asking for a concise concluding comparison statement."],
+          "completionRule": "The learner must present a culturally grounded comparison that includes both similarity and difference."
+        },
+        "promptCues": [
+          "Push beyond list-like facts into explicit comparison language.",
+          "Keep the contrast culturally anchored."
+        ]
+      },
+      {
+        "id": "tpl.presentational_cultural_comparison_120s.v1",
+        "title": { "en": "120-Second Cultural Comparison" },
+        "mode": "presentational_speaking",
+        "assistantRole": "Act as a presentation coach who elicits a fuller cultural comparison with more support and development than the short version.",
+        "interactionPattern": {
+          "openingMoves": ["Frame the two contexts and ask for an organizing claim that will guide the comparison."],
+          "sustainMoves": ["Prompt for multiple supporting details, explanation, and clearer structure across the longer response."],
+          "closingMoves": ["Close with a synthesized conclusion that ties the comparison back to the broader cultural theme."],
+          "completionRule": "The learner must sustain a longer comparison with multiple relevant details and a synthesized conclusion."
+        },
+        "promptCues": [
+          "Require more development than the 60-second variant.",
+          "Push for clearer organization and cultural interpretation."
+        ]
+      },
+      {
+        "id": "tpl.presentational_opinion_speech.v1",
+        "title": { "en": "Opinion Speech" },
+        "mode": "presentational_speaking",
+        "assistantRole": "Act as a presentation coach who pushes the learner to take a position, support it, and present it coherently to an audience.",
+        "interactionPattern": {
+          "openingMoves": ["Frame the issue and require a clear claim rather than a vague reaction."],
+          "sustainMoves": ["Prompt for reasons, examples, counterpoint handling, and transitions that strengthen the speech."],
+          "closingMoves": ["Close by requiring a final persuasive takeaway sentence."],
+          "completionRule": "The learner must present a clear opinion with supporting reasons and a coherent closing."
+        },
+        "promptCues": [
+          "Push for justification and audience-facing clarity.",
+          "Do not accept an unsupported preference as complete."
+        ]
+      }
     ]
   }
 }

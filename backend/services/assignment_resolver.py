@@ -6,6 +6,7 @@ from typing import Any
 from backend.services.compliance import resolve_assignment_launch
 from backend.services.pedagogy import (
     build_correction_ladder_prompt,
+    resolve_activity_templates,
     build_feedback_mode_prompt,
     build_output_pressure_prompt,
     build_scaffold_ladder_prompt,
@@ -236,6 +237,7 @@ def _serialize_bootstrap_rubric(rubric: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_bootstrap_pedagogy_context(
+    package: dict[str, Any],
     module: dict[str, Any],
     situation: dict[str, Any],
     objectives: list[dict[str, Any]],
@@ -269,6 +271,15 @@ def _build_bootstrap_pedagogy_context(
             if isinstance(objective, dict)
         ],
     ]
+
+    resolved_template_refs = _unique_ordered_strings(
+        [
+            template_id
+            for objective in objectives
+            if isinstance(objective, dict)
+            for template_id in (objective.get("templateRefs") or [])
+        ]
+    )
 
     return {
         "taskModel": next((value for value in task_model_candidates if _normalize_string(value)), ""),
@@ -317,14 +328,8 @@ def _build_bootstrap_pedagogy_context(
                 for domain_id in (objective.get("foundationDomains") or [])
             ]
         ),
-        "templateRefs": _unique_ordered_strings(
-            [
-                template_id
-                for objective in objectives
-                if isinstance(objective, dict)
-                for template_id in (objective.get("templateRefs") or [])
-            ]
-        ),
+        "templateRefs": resolved_template_refs,
+        "activityTemplates": resolve_activity_templates(package, template_refs=resolved_template_refs),
         "objectiveIds": _unique_ordered_strings(
             [objective.get("id") for objective in objectives if isinstance(objective, dict)]
         ),
@@ -393,6 +398,7 @@ def resolve_assignment_bootstrap(
         if rubric_id in rubric_index
     ]
     pedagogy_context = _build_bootstrap_pedagogy_context(
+        package=package,
         module=module,
         situation=situation,
         objectives=resolved_objectives,
@@ -743,6 +749,7 @@ PRIORITY RULES:
             assignment=assignment,
             curriculum=curriculum,
             pedagogy=pedagogy,
+            mapping=mapping,
         ),
         build_output_pressure_prompt(
             serialize_output_policy(

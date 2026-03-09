@@ -31,8 +31,10 @@ const TeacherDashboardPage = lazy(() => import('./pages/TeacherDashboardPage').t
 const TeacherAssignmentBuilderPage = lazy(() => import('./pages/TeacherAssignmentBuilderPage').then((module) => ({ default: module.TeacherAssignmentBuilderPage })));
 const TeacherAssignmentAnalyticsPage = lazy(() => import('./pages/TeacherAssignmentAnalyticsPage').then((module) => ({ default: module.TeacherAssignmentAnalyticsPage })));
 const TeacherClassAnalyticsPage = lazy(() => import('./pages/TeacherClassAnalyticsPage').then((module) => ({ default: module.TeacherClassAnalyticsPage })));
+const TeacherClassCompliancePage = lazy(() => import('./pages/TeacherClassCompliancePage').then((module) => ({ default: module.TeacherClassCompliancePage })));
 const TeacherStudentDrillDownPage = lazy(() => import('./pages/TeacherStudentDrillDownPage').then((module) => ({ default: module.TeacherStudentDrillDownPage })));
 const AssignmentLaunchPage = lazy(() => import('./pages/AssignmentLaunchPage').then((module) => ({ default: module.AssignmentLaunchPage })));
+const GuardianConsentPage = lazy(() => import('./pages/GuardianConsentPage').then((module) => ({ default: module.GuardianConsentPage })));
 
 function RouteLoadingScreen() {
   return (
@@ -55,6 +57,7 @@ function AnimatedRoutes() {
         {/* Public Routes */}
         <Route path="/" element={withRouteSuspense(<LandingPage />)} />
         <Route path="/auth" element={withRouteSuspense(<AuthPage />)} />
+        <Route path="/guardian/consent/:token" element={withRouteSuspense(<GuardianConsentPage />)} />
 
         {/* Protected Routes */}
         <Route element={<ProtectedRoute />}>
@@ -109,6 +112,14 @@ function AnimatedRoutes() {
             element={withRouteSuspense(
               <TeacherRoute>
                 <TeacherAssignmentAnalyticsPage />
+              </TeacherRoute>
+            )}
+          />
+          <Route
+            path="teacher/classes/:classId/compliance"
+            element={withRouteSuspense(
+              <TeacherRoute>
+                <TeacherClassCompliancePage />
               </TeacherRoute>
             )}
           />

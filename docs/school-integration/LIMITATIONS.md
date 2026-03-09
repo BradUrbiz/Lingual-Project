@@ -47,8 +47,8 @@ Impact: `text_only` or downgraded launches now work and remain assignment-aware,
 Planned follow-up: unify assignment text practice with the shared chat shell and extend text-mode review affordances.
 
 6. Live prompt generation now uses a modular pedagogy package, but it is still a pre-session prompt layer rather than a live intervention engine.
-Impact: `targetExpressions`, `focusGrammar`, `feedbackPolicy`, `scaffoldPolicy`, teacher-configurable `outputPolicy`, teacher notes, rubric/task/evidence metadata, and curriculum pedagogy tags now shape the prompt through `backend/services/pedagogy/`. However, `allowedContextTags` and `rubricFocus` still are not enforced as hard runtime constraints, and no mid-session server-side pedagogy orchestrator updates the realtime session once it starts.
-Planned follow-up: stricter prompt-policy enforcement and a later event-driven intervention layer if beta evidence shows it is needed.
+Impact: `targetExpressions`, `focusGrammar`, `feedbackPolicy`, `scaffoldPolicy`, teacher-configurable `outputPolicy`, teacher notes, rubric/task/evidence metadata, curriculum pedagogy tags, teacher-approved context bounds, and rubric-focus cues now shape the prompt through `backend/services/pedagogy/`. Task templates now resolve against structured curriculum package definitions instead of ID heuristics, so the bundled sample package can define opening moves, sustain moves, closing moves, completion rules, assistant role, and prompt cues explicitly. However, `allowedContextTags` and `rubricFocus` still are not hard runtime constraints, and no mid-session server-side pedagogy orchestrator updates the realtime session once it starts.
+Planned follow-up: stricter prompt-policy enforcement, broader support for imported package template definitions, and a later event-driven intervention layer if beta evidence shows it is needed.
 
 7. Practice analytics are improved, but still not equivalent to human scoring.
 Impact: assignment launch now creates `practice_sessions`, emits lifecycle and turn-level `learning_events`, and rolls them into per-session summaries plus a teacher-facing assignment analytics page. The runtime now also tracks repeated-error patterns, feedback-linked correction families, actual context-tag signals, rubric-dimension evidence, rubric thresholds/confidence, and locale-aware communicative-function / discourse-move / feedback detection for English and French. However, these detections and rubric scores are still rule-based heuristics rather than model-verified semantics or certified assessment scoring.
@@ -60,9 +60,9 @@ Planned follow-up: realtime usage metering, model-cost accounting, and budget en
 
 ### Compliance and policy
 
-9. Compliance gating is now enforced for assignment launch, realtime session creation, and pronunciation voice flows, but the operational tooling is still beta-minimal.
-Impact: voice now fails closed without consent, `textFallbackEnabled` controls assignment downgrade behavior, pronunciation raw-audio retention is policy-aware, and teachers/admins can edit consent state from student drill-down. However, there is still no guardian-facing workflow, bulk consent management, deletion execution tooling, or audit export surface.
-Planned follow-up: guardian/parent workflow, bulk operations, deletion tooling, and audit export.
+9. Compliance gating and guardian packet operations are now implemented for the beta scope, but the operational tooling is still narrower than the target architecture.
+Impact: voice now fails closed without consent, `textFallbackEnabled` controls assignment downgrade behavior, pronunciation raw-audio retention is policy-aware, teachers/admins can edit consent state from student drill-down, class-scoped compliance roster/bulk operations/audit export are available, and guardian packets can now be issued/resend/canceled from student drill-down with a secure-link public decision flow. However, `downloadable_notice` remains a staff-managed beta path without a rendered handout artifact or offline evidence capture, and deletion requests/execution plus school-wide admin tooling are still missing.
+Planned follow-up: implement Epic B for deletion requests/execution, then expand to broader school-wide admin tooling and richer guardian evidence/export tooling.
 
 10. Firestore rules are now school-aware for the current collections, but they have not yet been validated in a Firebase emulator or deployment rehearsal for all school flows.
 Impact: rule logic is materially improved, but still needs environment-level validation before pilot hardening.

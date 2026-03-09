@@ -230,6 +230,21 @@ const SAMPLE_CURRICULUM = {
   ],
   templates: {
     activityTemplateIds: ['tpl.sample.v1'],
+    activityTemplates: [
+      {
+        id: 'tpl.sample.v1',
+        title: { en: 'Sample Template' },
+        mode: 'interpersonal_speaking',
+        assistantRole: 'Act as a peer conversation partner.',
+        interactionPattern: {
+          openingMoves: ['Open with a direct question.'],
+          sustainMoves: ['Use one follow-up question to extend the exchange.'],
+          closingMoves: ['Close after the learner answers and adds one detail.'],
+          completionRule: 'The learner must answer and elaborate.',
+        },
+        promptCues: ['Keep the exchange short and natural.'],
+      },
+    ],
   },
 } as unknown as CurriculumPackageV1;
 
@@ -281,5 +296,27 @@ describe('AppCurriculumModulePage', () => {
         situationId: 'sit.1.1.I01',
       },
     });
+  });
+
+  it('shows the interaction contract for the selected situation', async () => {
+    getSampleCurriculumPackageMock.mockResolvedValue(SAMPLE_CURRICULUM);
+
+    render(<AppCurriculumModulePage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Interaction Contract')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Sample Template')).toBeInTheDocument();
+    expect(screen.getByText('Act as a peer conversation partner.')).toBeInTheDocument();
+    expect(screen.getByText('Opening moves')).toBeInTheDocument();
+    expect(screen.getByText('• Open with a direct question.')).toBeInTheDocument();
+    expect(screen.getByText('Sustain moves')).toBeInTheDocument();
+    expect(screen.getByText('• Use one follow-up question to extend the exchange.')).toBeInTheDocument();
+    expect(screen.getByText('Closing moves')).toBeInTheDocument();
+    expect(screen.getByText('• Close after the learner answers and adds one detail.')).toBeInTheDocument();
+    expect(screen.getByText('Completion rule')).toBeInTheDocument();
+    expect(screen.getByText('The learner must answer and elaborate.')).toBeInTheDocument();
+    expect(screen.getByText('Keep the exchange short and natural.')).toBeInTheDocument();
   });
 });

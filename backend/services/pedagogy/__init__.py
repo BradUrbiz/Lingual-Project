@@ -1,4 +1,5 @@
 from .correction_ladder import build_correction_ladder_prompt
+from .curriculum_templates import resolve_activity_templates, serialize_activity_template
 from .feedback_mode import build_feedback_mode_prompt
 from .output_pressure import build_output_pressure_prompt
 from .policies import (
@@ -21,6 +22,8 @@ __all__ = [
     "build_output_pressure_prompt",
     "build_scaffold_ladder_prompt",
     "build_task_template_prompt",
+    "resolve_activity_templates",
+    "serialize_activity_template",
     "default_feedback_policy",
     "default_output_policy",
     "default_scaffold_policy",

@@ -54,6 +54,24 @@ export function AppCurriculumPage() {
     return map;
   }, [curriculum]);
 
+  const moduleTemplateSummaries = useMemo(() => {
+    if (!curriculum) return new Map<string, string>();
+    const index = new Map(
+      (curriculum.templates.activityTemplates || []).map((t) => [t.id, t]),
+    );
+    const map = new Map<string, string>();
+    for (const mod of curriculum.modules) {
+      const objectives = curriculum.objectives.filter((o) => mod.objectiveIds.includes(o.id));
+      const refs = Array.from(new Set(objectives.flatMap((o) => o.templateRefs || []).filter(Boolean)));
+      const resolved = refs.filter((r) => index.has(r));
+      if (resolved.length > 0) {
+        const names = resolved.map((r) => getLocalizedText(index.get(r)!.title, lang, r));
+        map.set(mod.id, names.join(', '));
+      }
+    }
+    return map;
+  }, [curriculum, lang]);
+
   const orderedUnits: Unit[] = useMemo(() => {
     if (!curriculum) return [];
     return [...curriculum.units].sort((a, b) => a.ap.unitNumber - b.ap.unitNumber);
@@ -152,6 +170,11 @@ export function AppCurriculumPage() {
                   <p className="mt-1 text-sm text-muted-foreground">
                     {getLocalizedText(module.moduleGoal, lang)}
                   </p>
+                  {moduleTemplateSummaries.has(module.id) ? (
+                    <p className="mt-1 text-xs text-primary/70">
+                      Activity template: {moduleTemplateSummaries.get(module.id)}
+                    </p>
+                  ) : null}
                 </button>
               ))}
             </div>

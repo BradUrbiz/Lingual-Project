@@ -157,7 +157,9 @@ Owner: Engineering + Product
 - [x] Add `consent_events` audit trail.
 - [x] Define retention policy objects and defaults.
 - [ ] Define deletion request and deletion execution flow.
+- [x] Define guardian-facing consent workflow, evidence model, and delivery path.
 - [x] Add teacher and school-admin consent review/update workflow within authorized school scope.
+- [x] Add class compliance roster view that joins enrollment and effective compliance state.
 
 ### Enforcement
 
@@ -165,7 +167,39 @@ Owner: Engineering + Product
 - [x] Apply the same compliance gate to pronunciation voice flows as assignment practice.
 - [x] Block pronunciation audio storage when policy forbids it.
 - [-] Log sensitive access and disclosure events required by policy.
-- [ ] Add admin tools for consent review and audit export.
+- [x] Add class-scoped bulk consent operations for teacher and school-admin workflows.
+- [x] Add class-scoped consent audit export.
+- [ ] Add admin tools for school-wide consent review and audit export.
+
+Current completion state:
+
+1. Class-scoped compliance roster, bulk consent operations, and audit export are shipped.
+2. Epic A guardian consent packets are shipped with secure-link guardian response, teacher/admin packet management, and packet status surfaces in class compliance plus student drill-down.
+3. `downloadable_notice` remains a staff-managed beta path; it records packet state without generating a rendered handout artifact.
+4. The remaining hardening work is now centered on Epic B deletion requests/execution, followed by school-wide admin tooling.
+
+### Epic A: Guardian Consent Packets
+
+- [x] Freeze packet states, notice versioning, token TTL, and delivery methods.
+- [x] Add `guardian_consent_packets` model and packet audit taxonomy.
+- [x] Add teacher/admin packet issuance, resend, and cancel endpoints.
+- [x] Add guardian decision endpoint for secure-link delivery.
+- [x] Add packet status surface to class compliance and student drill-down flows.
+- [x] Add reminder and expiry handling.
+
+### Epic B: Deletion Requests and Execution
+
+- [ ] Freeze request scope rules and approval matrix.
+- [ ] Add `deletion_requests` model.
+- [ ] Add `deletion_execution_runs` model.
+- [ ] Add request create/review/detail endpoints for admin workflows.
+- [ ] Add async execution worker for Firestore and Storage cleanup.
+- [ ] Add execution summary, retry handling, and partial-failure recovery rules.
+
+Recommended sequence for the remaining hardening work:
+
+1. Epic B: Deletion requests and execution.
+2. School-wide admin tooling on top of the current compliance stack.
 
 ### Policy review
 

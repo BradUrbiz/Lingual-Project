@@ -111,13 +111,42 @@
     "templates": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["activityTemplateIds"],
+      "required": ["activityTemplateIds", "activityTemplates"],
       "properties": {
         "activityTemplateIds": {
           "type": "array",
           "minItems": 1,
           "items": { "$ref": "#/$defs/templateId" }
+        },
+        "activityTemplates": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/activityTemplate" }
         }
+      }
+    },
+    "activityTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "mode", "assistantRole", "interactionPattern", "promptCues"],
+      "properties": {
+        "id": { "$ref": "#/$defs/templateId" },
+        "title": { "$ref": "#/$defs/i18nText" },
+        "mode": { "$ref": "#/$defs/mode" },
+        "assistantRole": { "type": "string", "minLength": 1 },
+        "interactionPattern": { "$ref": "#/$defs/activityTemplateInteractionPattern" },
+        "promptCues": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "activityTemplateInteractionPattern": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["openingMoves", "sustainMoves", "closingMoves", "completionRule"],
+      "properties": {
+        "openingMoves": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "sustainMoves": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "closingMoves": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "completionRule": { "type": "string", "minLength": 1 }
       }
     },
     "rubric": {

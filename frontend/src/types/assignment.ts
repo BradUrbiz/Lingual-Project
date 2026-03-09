@@ -1,4 +1,4 @@
-import type { CurriculumMode, I18nText } from './curriculum';
+import type { ActivityTemplateDefinition, CurriculumMode, I18nText } from './curriculum';
 import type { RetentionPolicySummary } from './school';
 
 export type FeedbackMode = 'fluency_first' | 'balanced' | 'accuracy_first' | string;
@@ -139,6 +139,7 @@ export interface AssignmentBootstrapPedagogy {
   discourseMoves: string[];
   foundationDomains: string[];
   templateRefs: string[];
+  activityTemplates: ActivityTemplateDefinition[];
   objectiveIds: string[];
   rubricIds: string[];
   rubricDimensionIds: string[];

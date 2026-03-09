@@ -108,6 +108,21 @@ SAMPLE_PACKAGE = {
     ],
     'templates': {
         'activityTemplateIds': ['tpl.restaurant_roleplay.v1'],
+        'activityTemplates': [
+            {
+                'id': 'tpl.restaurant_roleplay.v1',
+                'title': {'en': 'Restaurant Roleplay'},
+                'mode': 'interpersonal_speaking',
+                'assistantRole': 'Play the server and reveal menu details only when the learner asks.',
+                'interactionPattern': {
+                    'openingMoves': ['Greet the learner and wait for an order request.'],
+                    'sustainMoves': ['Answer questions briefly, then push the learner to choose or clarify.'],
+                    'closingMoves': ['Close after the learner confirms the final order.'],
+                    'completionRule': 'The learner must place an order and ask at least one follow-up question.',
+                },
+                'promptCues': ['Keep the server voice concise and in character.'],
+            }
+        ],
     },
 }
 
@@ -453,6 +468,8 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         self.assertIn('COMMUNICATIVE FUNCTIONS TO WATCH', instructions)
         self.assertIn('RUBRICS IN PLAY', instructions)
         self.assertIn('Feedback mode: accuracy_first', instructions)
+        self.assertIn('Resolved structured activity template: Restaurant Roleplay.', instructions)
+        self.assertIn('Template assistant role: Play the server and reveal menu details only when the learner asks.', instructions)
         self.assertIn('Teacher notes: Keep the student in the restaurant ordering lane.', instructions)
 
     def test_realtime_session_blocks_voice_when_consent_is_missing(self):

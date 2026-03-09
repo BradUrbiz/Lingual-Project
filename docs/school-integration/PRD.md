@@ -207,9 +207,13 @@ Teachers must be able to view at least:
 - Voice-enabled practice must be blocked if consent state does not allow it.
 - Pronunciation features must follow the same consent and retention rules as other school voice flows.
 - The system must support parent/guardian consent tracking where required.
+- Beta guardian consent should stay school-admin-assisted and notice-based; do not introduce a standalone guardian account or parent portal in beta.
 - Teachers and school admins must be able to review and update student consent state within their authorized school scope during beta.
+- Beta operations should include class-scoped bulk consent review/update and an exportable audit trail for consent-related events.
+- Guardian consent collection and deletion handling are separate operational epics with different rollout gates, evidence requirements, and approval paths.
+- Guardian collection workflows and deletion execution may remain admin-assisted until their dedicated product flows are defined and validated.
 - Raw audio retention must be configurable and conservative by default.
-- Schools must be able to request deletion and receive an auditable result.
+- Schools must be able to request deletion and receive an auditable result through an approval-gated asynchronous workflow.
 - Access to student data must follow role and class membership scope.
 - The system must keep auditable records of consent state and sensitive disclosure events.
 
@@ -304,6 +308,7 @@ Mitigation:
 ## 13. Open questions
 
 - Which LMS integration should ship first in beta: Google Classroom, Canvas, or both?
-- How much of the guardian consent workflow should live in-product vs school-admin-assisted operations?
+- Which delivery method should the school-admin-assisted guardian workflow use first in beta: secure link, downloadable notice, or both?
+- Which role should be allowed to approve deletion requests in beta: school admin only, or org-level admin variants where available?
 - What retention defaults are acceptable across pilot schools after counsel review?
 - Should pronunciation-specific audio storage be opt-in per assignment or per organization?

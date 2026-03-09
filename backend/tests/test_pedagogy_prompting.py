@@ -72,16 +72,59 @@ class PedagogyPromptSectionsTestCase(unittest.TestCase):
             task_type='decision_making',
             assignment={
                 'description': 'Choose the best plan for the weekend.',
+                'successCriteria': ['Compare two options', 'Agree on one final plan'],
             },
             curriculum={
+                'objectives': [
+                    {'id': 'OBJ1', 'canDo': {'en': 'I can compare plans and justify a choice.'}},
+                ],
+                'rubrics': [
+                    {
+                        'id': 'rub.speaking.v1',
+                        'dimensions': [
+                            {
+                                'id': 'task_completion',
+                                'title': {'en': 'Task completion'},
+                                'description': {'en': 'Completes the assigned task clearly.'},
+                            }
+                        ],
+                    }
+                ],
                 'situation': {
                     'seed': {
                         'setting': 'Weekend planning',
                         'roles': ['student', 'friend'],
+                        'register': 'informal',
                     }
                 }
             },
-            pedagogy={'evidence': {'minTurns': 4}},
+            pedagogy={
+                'taskModel': 'ap.conversation',
+                'contextTags': ['weekend', 'planning'],
+                'communicativeFunctions': ['ask_follow_up', 'summarize'],
+                'discourseMoves': ['turn_taking', 'self_correction'],
+                'templateRefs': ['tpl.weekend_roleplay.v1'],
+                'activityTemplates': [
+                    {
+                        'id': 'tpl.weekend_roleplay.v1',
+                        'title': {'en': 'Weekend Roleplay'},
+                        'mode': 'interpersonal_speaking',
+                        'assistantRole': 'Act as the learner’s friend and hold back details until the learner asks.',
+                        'interactionPattern': {
+                            'openingMoves': ['Open with a shared weekend planning problem.'],
+                            'sustainMoves': ['Reveal options gradually and ask the learner to compare them.'],
+                            'closingMoves': ['End only after the learner agrees on one plan.'],
+                            'completionRule': 'The learner must compare options and commit to one final plan.',
+                        },
+                        'promptCues': ['Use natural friend-to-friend follow-up questions.'],
+                    }
+                ],
+                'evidence': {'minTurns': 4, 'timeLimitSec': 90},
+            },
+            mapping={
+                'allowedContextTags': ['weekend'],
+                'rubricFocus': ['task_completion'],
+            },
         )
         output_prompt = build_output_pressure_prompt(
             serialize_output_policy(
@@ -97,8 +140,15 @@ class PedagogyPromptSectionsTestCase(unittest.TestCase):
         self.assertIn('SCAFFOLD LADDER', scaffold_prompt)
         self.assertIn('Step 3 (choice_prompt)', scaffold_prompt)
         self.assertIn('TASK TEMPLATE DIRECTIVE', task_prompt)
-        self.assertIn('negotiation toward one clear decision', task_prompt)
-        self.assertIn('Resolved scenario context: setting=Weekend planning, roles=student, friend.', task_prompt)
+        self.assertIn('decision-making task where the learner must compare options', task_prompt)
+        self.assertIn('Resolved scenario anchor: setting=Weekend planning; roles=student, friend; register=informal.', task_prompt)
+        self.assertIn('Teacher-approved context bounds: weekend.', task_prompt)
+        self.assertIn('Resolved structured activity template: Weekend Roleplay.', task_prompt)
+        self.assertIn('Template assistant role: Act as the learner’s friend and hold back details until the learner asks.', task_prompt)
+        self.assertIn('ask a targeted follow-up question', task_prompt)
+        self.assertIn('Bias the exchange toward rubric evidence for Task completion.', task_prompt)
+        self.assertIn('Create visible evidence for these mapped curriculum outcomes', task_prompt)
+        self.assertIn('Do not close the task until the learner has materially demonstrated', task_prompt)
         self.assertIn('OUTPUT PRESSURE', output_prompt)
         self.assertIn('roughly 9+ words', output_prompt)
         self.assertIn('target turn volume of about 4 turns', output_prompt)
@@ -118,6 +168,8 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
             'mapping': {
                 'targetExpressions': ['Could I have', 'I would like'],
                 'focusGrammar': ['polite requests'],
+                'allowedContextTags': ['restaurant'],
+                'rubricFocus': ['task_completion'],
                 'teacherNotes': 'Keep the learner in the restaurant ordering lane.',
                 'feedbackPolicy': {
                     'mode': 'accuracy_first',
@@ -140,16 +192,28 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
                     {'id': 'OBJ1', 'canDo': {'en': 'I can order food politely in a restaurant.'}},
                 ],
                 'rubrics': [
-                    {'id': 'rub.speaking.v1', 'title': {'en': 'Speaking Rubric'}},
+                    {
+                        'id': 'rub.speaking.v1',
+                        'title': {'en': 'Speaking Rubric'},
+                        'dimensions': [
+                            {
+                                'id': 'task_completion',
+                                'title': {'en': 'Task completion'},
+                                'description': {'en': 'Completes the assigned task clearly.'},
+                            }
+                        ],
+                    },
                 ],
                 'situation': {
                     'seed': {
                         'setting': 'Restaurant',
                         'roles': ['learner', 'server'],
+                        'register': 'mixed',
                     }
                 },
                 'pedagogy': {
                     'taskModel': 'ap.conversation',
+                    'contextTags': ['restaurant', 'ordering'],
                     'communicativeFunctions': ['ask_follow_up'],
                     'discourseMoves': ['turn_taking'],
                     'foundationDomains': ['communication_strategies'],
@@ -158,6 +222,22 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
                         'maxTurns': 8,
                         'timeLimitSec': 90,
                     },
+                    'templateRefs': ['tpl.restaurant_roleplay.v1'],
+                    'activityTemplates': [
+                        {
+                            'id': 'tpl.restaurant_roleplay.v1',
+                            'title': {'en': 'Restaurant Roleplay'},
+                            'mode': 'interpersonal_speaking',
+                            'assistantRole': 'Stay in character as the server and reveal menu details only when asked.',
+                            'interactionPattern': {
+                                'openingMoves': ['Greet the learner and wait for the first ordering move.'],
+                                'sustainMoves': ['Answer questions briefly, then push the learner to confirm or refine the order.'],
+                                'closingMoves': ['Close after the learner confirms the final order and any follow-up request.'],
+                                'completionRule': 'The learner must place an order and clarify at least one detail before closing.',
+                            },
+                            'promptCues': ['Keep the server voice natural and concise.'],
+                        }
+                    ],
                 },
             },
             'launch': {
@@ -178,7 +258,11 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
         self.assertIn('OUTPUT PRESSURE', prompt)
         self.assertIn('Output min student turn words: 8', prompt)
         self.assertIn('repeats 2 time(s)', prompt)
-        self.assertIn('setting=Restaurant, roles=learner, server.', prompt)
+        self.assertIn('Resolved scenario anchor: setting=Restaurant; roles=learner, server; register=mixed.', prompt)
+        self.assertIn('Teacher-approved context bounds: restaurant.', prompt)
+        self.assertIn('Bias the exchange toward rubric evidence for Task completion.', prompt)
+        self.assertIn('Resolved curriculum template references: tpl.restaurant_roleplay.v1.', prompt)
+        self.assertIn('Resolved structured activity template: Restaurant Roleplay.', prompt)
 
 
 if __name__ == '__main__':

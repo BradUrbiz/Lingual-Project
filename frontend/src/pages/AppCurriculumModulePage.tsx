@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowUpRight, BookOpen, Loader2, Mic } from 'lucide-react';
+import { ArrowUpRight, BookOpen, Eye, Loader2, Mic } from 'lucide-react';
 import { clsx } from 'clsx';
 import { getSampleCurriculumPackage } from '@/api/curriculum';
 import { createChatSession, saveMessageToChat } from '@/api/chat';
-import { Button } from '@/components/ui';
+import { Badge, Button } from '@/components/ui';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRealtimeChat } from '@/hooks/useRealtimeChat';
 import type {
+  ActivityTemplateDefinition,
   CurriculumMode,
   CurriculumPackageV1,
   I18nText,
@@ -56,6 +57,24 @@ const formatConstraintSummary = (situation: Situation): string => {
   if (constraints.maxReplays !== undefined) items.push(`replays: ${constraints.maxReplays}`);
   return items.join(' • ') || 'No strict constraints';
 };
+
+function buildTemplateIndex(pkg: CurriculumPackageV1 | null): Map<string, ActivityTemplateDefinition> {
+  return new Map((pkg?.templates.activityTemplates || []).map((template) => [template.id, template]));
+}
+
+function resolveActivityTemplates(
+  pkg: CurriculumPackageV1 | null,
+  objectiveIds: string[],
+): { templates: ActivityTemplateDefinition[]; unresolvedRefs: string[] } {
+  const index = buildTemplateIndex(pkg);
+  const objectives = pkg?.objectives.filter((o) => objectiveIds.includes(o.id)) || [];
+  const refs = Array.from(new Set(objectives.flatMap((o) => o.templateRefs || []).filter(Boolean)));
+  const templates = refs
+    .map((ref) => index.get(ref))
+    .filter((t): t is ActivityTemplateDefinition => Boolean(t));
+  const unresolvedRefs = refs.filter((ref) => !index.has(ref));
+  return { templates, unresolvedRefs };
+}
 
 type PracticeSituation = {
   mode: CurriculumMode;
@@ -158,6 +177,11 @@ export function AppCurriculumModulePage() {
       null
     );
   }, [practiceSituations, selectedSituationId]);
+
+  const situationTemplates = useMemo(() => {
+    if (!curriculum || !selectedPracticeSituation) return { templates: [] as ActivityTemplateDefinition[], unresolvedRefs: [] as string[] };
+    return resolveActivityTemplates(curriculum, selectedPracticeSituation.situation.objectiveIds);
+  }, [curriculum, selectedPracticeSituation]);
 
   const persistRealtimeMessage = useCallback((role: 'user' | 'assistant', content: string) => {
     const activeChatId = chatIdRef.current;
@@ -356,6 +380,80 @@ export function AppCurriculumModulePage() {
           ))}
         </div>
       </section>
+
+      {situationTemplates.templates.length > 0 ? (
+        <section className="rounded-2xl border-3 border-foreground bg-card p-5 shadow-stamp">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-foreground bg-secondary text-foreground">
+              <Eye size={22} strokeWidth={2.5} />
+            </div>
+            <div>
+              <h2 className="text-lg font-display font-bold text-foreground">Interaction Contract</h2>
+              <p className="text-sm text-muted-foreground">
+                How the AI tutor will guide this practice activity.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-4">
+            {situationTemplates.templates.map((template) => (
+              <div key={template.id} className="rounded-2xl border-2 border-border bg-card p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" size="sm">{template.id}</Badge>
+                  <Badge variant="secondary" size="sm">{template.mode.replace('_', ' ')}</Badge>
+                </div>
+                <h3 className="mt-3 text-lg font-display font-bold text-foreground">
+                  {getLocalizedText(template.title, lang, template.id)}
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground">{template.assistantRole}</p>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border border-border/80 bg-secondary/30 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Opening moves</p>
+                    <ul className="mt-2 space-y-1 text-sm text-foreground">
+                      {template.interactionPattern.openingMoves.map((move) => (
+                        <li key={move}>• {move}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-xl border border-border/80 bg-secondary/30 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Sustain moves</p>
+                    <ul className="mt-2 space-y-1 text-sm text-foreground">
+                      {template.interactionPattern.sustainMoves.map((move) => (
+                        <li key={move}>• {move}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-xl border border-border/80 bg-secondary/30 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Closing moves</p>
+                    <ul className="mt-2 space-y-1 text-sm text-foreground">
+                      {template.interactionPattern.closingMoves.map((move) => (
+                        <li key={move}>• {move}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-xl border border-border/80 bg-accent/10 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Completion rule</p>
+                  <p className="mt-1 text-sm text-foreground">{template.interactionPattern.completionRule}</p>
+                </div>
+
+                {template.promptCues.length > 0 ? (
+                  <div className="mt-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Prompt cues</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {template.promptCues.map((cue) => (
+                        <Badge key={cue} variant="accent" size="sm">{cue}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border-3 border-foreground bg-card p-5 shadow-stamp">
         <div className="flex flex-wrap items-center justify-between gap-3">

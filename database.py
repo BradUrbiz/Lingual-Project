@@ -167,6 +167,29 @@ Schema:
     - payload: dict
     - created_at: timestamp
 
+- guardian_consent_packets/{packet_id}
+    - org_id: str
+    - class_id: str
+    - student_uid: str
+    - notice_version: str
+    - consent_scope: str
+    - contact_channel: str
+    - contact_destination_hint: str
+    - delivery_method: str
+    - status: str
+    - token_hash: str
+    - token_last_four: str
+    - response_method: str
+    - evidence_ref: str
+    - reminder_count: int
+    - expires_at: timestamp | None
+    - issued_at: timestamp | None
+    - last_sent_at: timestamp | None
+    - acted_at: timestamp | None
+    - created_by_uid: str
+    - created_at: timestamp
+    - updated_at: timestamp
+
 - practice_sessions/{session_id}
     - org_id: str
     - class_id: str
@@ -271,6 +294,11 @@ def get_consent_events_collection():
     return get_db().collection('consent_events')
 
 
+def get_guardian_consent_packets_collection():
+    """Get guardian consent packets collection."""
+    return get_db().collection('guardian_consent_packets')
+
+
 def get_practice_sessions_collection():
     """Get practice sessions collection."""
     return get_db().collection('practice_sessions')
@@ -319,6 +347,11 @@ def get_student_compliance_record_ref(org_id, student_uid):
 def get_consent_event_ref(event_id):
     """Get consent event reference."""
     return get_consent_events_collection().document(event_id)
+
+
+def get_guardian_consent_packet_ref(packet_id):
+    """Get guardian consent packet reference."""
+    return get_guardian_consent_packets_collection().document(packet_id)
 
 
 def get_practice_session_ref(session_id):
@@ -842,7 +875,9 @@ def upsert_student_compliance_record(org_id, student_uid, record):
 def create_consent_event(
     *,
     org_id,
-    student_uid,
+    student_uid='',
+    scope_type='student',
+    scope_id='',
     event_type,
     actor_type,
     actor_id,
@@ -855,6 +890,8 @@ def create_consent_event(
     event_data = {
         'org_id': org_id,
         'student_uid': student_uid,
+        'scope_type': scope_type or ('student' if student_uid else 'org'),
+        'scope_id': scope_id or student_uid or org_id,
         'event_type': event_type,
         'actor_type': actor_type,
         'actor_id': actor_id,
@@ -864,6 +901,128 @@ def create_consent_event(
     }
     doc_ref.set(event_data)
     return doc_ref.id
+
+
+def list_consent_events(org_id, limit=500):
+    """List consent and sensitive-access audit events for an organization."""
+    query = get_consent_events_collection().where('org_id', '==', org_id)
+    docs = query.stream()
+
+    events = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        events.append(data)
+    events.sort(
+        key=lambda item: getattr(item.get('created_at'), 'isoformat', lambda: '')(),
+        reverse=True,
+    )
+    return events[:limit]
+
+
+def create_guardian_consent_packet(
+    *,
+    org_id,
+    class_id,
+    student_uid,
+    notice_version,
+    consent_scope,
+    contact_channel='',
+    contact_destination_hint='',
+    delivery_method='secure_link',
+    status='draft',
+    token_hash='',
+    token_last_four='',
+    response_method='',
+    evidence_ref='',
+    reminder_count=0,
+    expires_at=None,
+    issued_at=None,
+    last_sent_at=None,
+    acted_at=None,
+    created_by_uid='',
+    packet_id=None,
+):
+    """Create a guardian consent packet."""
+    doc_ref = get_guardian_consent_packet_ref(packet_id) if packet_id else get_guardian_consent_packets_collection().document()
+    packet_data = {
+        'org_id': org_id,
+        'class_id': class_id,
+        'student_uid': student_uid,
+        'notice_version': notice_version,
+        'consent_scope': consent_scope,
+        'contact_channel': contact_channel,
+        'contact_destination_hint': contact_destination_hint,
+        'delivery_method': delivery_method,
+        'status': status,
+        'token_hash': token_hash,
+        'token_last_four': token_last_four,
+        'response_method': response_method,
+        'evidence_ref': evidence_ref,
+        'reminder_count': int(reminder_count or 0),
+        'expires_at': expires_at,
+        'issued_at': issued_at,
+        'last_sent_at': last_sent_at,
+        'acted_at': acted_at,
+        'created_by_uid': created_by_uid,
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    }
+    doc_ref.set(packet_data)
+    return doc_ref.id
+
+
+def get_guardian_consent_packet(packet_id):
+    """Get a guardian consent packet by id."""
+    doc = get_guardian_consent_packet_ref(packet_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict() or {}
+    data['id'] = doc.id
+    return data
+
+
+def update_guardian_consent_packet(packet_id, updates):
+    """Update guardian consent packet fields."""
+    doc_ref = get_guardian_consent_packet_ref(packet_id)
+    payload = dict(updates or {})
+    payload['updated_at'] = firestore.SERVER_TIMESTAMP
+    doc_ref.set(payload, merge=True)
+    return packet_id
+
+
+def list_class_guardian_consent_packets(class_id, student_uid=None, limit=500):
+    """List guardian consent packets for a class, optionally scoped to one student."""
+    query = get_guardian_consent_packets_collection().where('class_id', '==', class_id)
+    docs = query.stream()
+
+    packets = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        if student_uid and data.get('student_uid') != student_uid:
+            continue
+        data['id'] = doc.id
+        packets.append(data)
+    packets.sort(
+        key=lambda item: (
+            getattr(item.get('updated_at'), 'isoformat', lambda: '')(),
+            getattr(item.get('created_at'), 'isoformat', lambda: '')(),
+        ),
+        reverse=True,
+    )
+    return packets[:limit]
+
+
+def find_guardian_consent_packet_by_token_hash(token_hash):
+    """Find a guardian consent packet by hashed public token."""
+    query = get_guardian_consent_packets_collection().where('token_hash', '==', token_hash).limit(1)
+    docs = list(query.stream())
+    if not docs:
+        return None
+    doc = docs[0]
+    data = doc.to_dict() or {}
+    data['id'] = doc.id
+    return data
 
 
 def create_curriculum_mapping(

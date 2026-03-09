@@ -84,6 +84,7 @@ from backend.routes.assessment import create_assessment_blueprint
 from backend.routes.pronunciation import create_pronunciation_blueprint
 from backend.routes.games import create_games_blueprint
 from backend.routes.schools import create_schools_blueprint
+from backend.routes.guardian import create_guardian_blueprint
 from backend.routes.teacher import create_teacher_blueprint
 from backend.routes.curriculum_admin import create_curriculum_admin_blueprint
 from backend.services.membership_context import (
@@ -520,6 +521,7 @@ def register_domain_blueprints():
     app.register_blueprint(create_pronunciation_blueprint(deps))
     app.register_blueprint(create_games_blueprint(deps))
     app.register_blueprint(create_schools_blueprint(deps))
+    app.register_blueprint(create_guardian_blueprint(deps))
     app.register_blueprint(create_teacher_blueprint(deps))
     app.register_blueprint(create_curriculum_admin_blueprint(deps))
     register_avatar_chat_routes(app, deps)

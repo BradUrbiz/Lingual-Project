@@ -16,6 +16,7 @@ import { getTeacherClasses } from '@/api/teacher';
 import { Alert, AlertDescription, Badge, Button, Card, Input, Textarea } from '@/components/ui';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type {
+  ActivityTemplateDefinition,
   AssignmentTaskType,
   CreateAssignmentPayload,
   CreateCurriculumMappingPayload,
@@ -172,6 +173,53 @@ function describeOutputPressure(mapping: CurriculumMappingDto): string {
   return `${policy.minStudentTurnWords}+ words per turn · ${policy.followUpPressure.replace('_', ' ')} follow-up pressure · clarification ${policy.allowClarificationRequests ? 'allowed' : 'limited'}`;
 }
 
+function dedupeStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function buildTemplateIndex(curriculum: CurriculumPackageV1 | null): Map<string, ActivityTemplateDefinition> {
+  return new Map((curriculum?.templates.activityTemplates || []).map((template) => [template.id, template]));
+}
+
+function resolveActivityTemplates(
+  curriculum: CurriculumPackageV1 | null,
+  objectiveIds: string[]
+): {
+  templates: ActivityTemplateDefinition[];
+  refs: string[];
+  unresolvedRefs: string[];
+} {
+  const templateIndex = buildTemplateIndex(curriculum);
+  const objectives =
+    curriculum?.objectives.filter((objective) => objectiveIds.includes(objective.id)) || [];
+  const refs = dedupeStrings(objectives.flatMap((objective) => objective.templateRefs || []));
+  const templates = refs
+    .map((ref) => templateIndex.get(ref))
+    .filter((template): template is ActivityTemplateDefinition => Boolean(template));
+  const unresolvedRefs = refs.filter((ref) => !templateIndex.has(ref));
+
+  return {
+    templates,
+    refs,
+    unresolvedRefs,
+  };
+}
+
+function describeInteractionContract(
+  curriculum: CurriculumPackageV1 | null,
+  objectiveIds: string[],
+  lang: 'en' | 'ko'
+): string {
+  const { templates, unresolvedRefs } = resolveActivityTemplates(curriculum, objectiveIds);
+  if (templates.length > 0) {
+    return templates.map((template) => getLocalizedText(template.title, lang, template.id)).join(' · ');
+  }
+  if (unresolvedRefs.length > 0) {
+    return `Missing template definitions for ${unresolvedRefs.join(', ')}`;
+  }
+  return 'No structured interaction contract linked yet.';
+}
+
 export function TeacherAssignmentBuilderPage() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
@@ -207,6 +255,11 @@ export function TeacherAssignmentBuilderPage() {
     : [];
   const selectedSituation = speakingSituations.find((item) => item.id === mappingForm.situationId) || null;
   const moduleObjectives = curriculum?.objectives.filter((objective) => objective.moduleId === mappingForm.moduleId) || [];
+  const selectedObjectives = moduleObjectives.filter((objective) => mappingForm.objectiveIds.includes(objective.id));
+  const selectedTemplatePreview = resolveActivityTemplates(
+    curriculum,
+    selectedObjectives.map((objective) => objective.id)
+  );
 
   const loadClassData = async (nextClassId: string) => {
     const [classes, packageResult, sampleCurriculum, classMappings, classAssignments] = await Promise.all([
@@ -859,6 +912,169 @@ export function TeacherAssignmentBuilderPage() {
         <div className="space-y-6">
           <Card className="border-3 border-foreground p-6 shadow-stamp">
             <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-secondary text-foreground">
+                <Eye size={22} strokeWidth={2.5} />
+              </div>
+              <div>
+                <h2 className="text-xl font-display font-bold text-foreground">Interaction contract preview</h2>
+                <p className="text-sm text-muted-foreground">
+                  This is the structured curriculum template the tutor will follow before teacher overlay policies are applied.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" size="sm">
+                  {selectedObjectives.length} objective{selectedObjectives.length === 1 ? '' : 's'}
+                </Badge>
+                {selectedSituation ? (
+                  <Badge variant="secondary" size="sm">
+                    {selectedSituation.id} · {selectedSituation.seed.setting}
+                  </Badge>
+                ) : null}
+                <Badge variant="accent" size="sm">
+                  {selectedTemplatePreview.templates.length} structured template
+                  {selectedTemplatePreview.templates.length === 1 ? '' : 's'}
+                </Badge>
+              </div>
+              {selectedSituation ? (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Roles: {(selectedSituation.seed.roles || []).join(', ') || 'n/a'} · Register:{' '}
+                  {selectedSituation.seed.register || 'n/a'}
+                </p>
+              ) : null}
+              <p className="mt-1 text-sm text-muted-foreground">
+                Objective contract: {describeInteractionContract(curriculum, mappingForm.objectiveIds, lang)}
+              </p>
+            </div>
+
+            {selectedObjectives.length === 0 ? (
+              <div className="mt-4 rounded-2xl border-2 border-dashed border-border bg-secondary/30 p-5 text-sm text-muted-foreground">
+                Select at least one objective to inspect the interaction contract.
+              </div>
+            ) : (
+              <div className="mt-4 space-y-4">
+                <div className="rounded-2xl border-2 border-border bg-card p-4">
+                  <p className="text-sm font-semibold text-foreground">Selected objective evidence</p>
+                  <div className="mt-3 space-y-3">
+                    {selectedObjectives.map((objective) => (
+                      <div key={objective.id} className="rounded-2xl border border-border/80 bg-secondary/30 p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline" size="sm">
+                            {objective.id}
+                          </Badge>
+                          {objective.templateRefs.map((templateRef) => (
+                            <Badge key={templateRef} variant="secondary" size="sm">
+                              {templateRef}
+                            </Badge>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-sm text-foreground">
+                          {getLocalizedText(objective.canDo, lang, objective.id)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {selectedTemplatePreview.unresolvedRefs.length > 0 ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      Missing structured template definitions for: {selectedTemplatePreview.unresolvedRefs.join(', ')}
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {selectedTemplatePreview.templates.length === 0 ? (
+                  <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/30 p-5 text-sm text-muted-foreground">
+                    The selected objectives do not currently resolve to a structured interaction contract.
+                  </div>
+                ) : (
+                  selectedTemplatePreview.templates.map((template) => (
+                    <div key={template.id} className="rounded-3xl border-2 border-border bg-card p-5">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" size="sm">
+                              {template.id}
+                            </Badge>
+                            <Badge variant="secondary" size="sm">
+                              {template.mode.replace('_', ' ')}
+                            </Badge>
+                          </div>
+                          <h3 className="mt-3 text-lg font-display font-bold text-foreground">
+                            {getLocalizedText(template.title, lang, template.id)}
+                          </h3>
+                          <p className="mt-2 text-sm text-muted-foreground">{template.assistantRole}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 grid gap-3 md:grid-cols-3">
+                        <div className="rounded-2xl border border-border/80 bg-secondary/30 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            Opening moves
+                          </p>
+                          <ul className="mt-3 space-y-2 text-sm text-foreground">
+                            {template.interactionPattern.openingMoves.map((move) => (
+                              <li key={move}>• {move}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="rounded-2xl border border-border/80 bg-secondary/30 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            Sustain moves
+                          </p>
+                          <ul className="mt-3 space-y-2 text-sm text-foreground">
+                            {template.interactionPattern.sustainMoves.map((move) => (
+                              <li key={move}>• {move}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="rounded-2xl border border-border/80 bg-secondary/30 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            Closing moves
+                          </p>
+                          <ul className="mt-3 space-y-2 text-sm text-foreground">
+                            {template.interactionPattern.closingMoves.map((move) => (
+                              <li key={move}>• {move}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-2xl border border-border/80 bg-accent/10 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                          Completion rule
+                        </p>
+                        <p className="mt-2 text-sm text-foreground">
+                          {template.interactionPattern.completionRule}
+                        </p>
+                      </div>
+
+                      {template.promptCues.length > 0 ? (
+                        <div className="mt-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            Prompt cues
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {template.promptCues.map((cue) => (
+                              <Badge key={cue} variant="accent" size="sm">
+                                {cue}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </Card>
+
+          <Card className="border-3 border-foreground p-6 shadow-stamp">
+            <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-success text-success-foreground">
                 <GraduationCap size={22} strokeWidth={2.5} />
               </div>
@@ -1062,6 +1278,9 @@ export function TeacherAssignmentBuilderPage() {
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Output pressure: {describeOutputPressure(mapping)}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Interaction contract: {describeInteractionContract(curriculum, mapping.objectiveIds, lang)}
                     </p>
                   </div>
                 ))

@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Loader2,
   MessageSquareText,
+  ShieldCheck,
   Users,
 } from 'lucide-react';
 import { getClassAnalytics } from '@/api/teacher';
@@ -84,15 +85,24 @@ export function TeacherClassAnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mb-4"
-          onClick={() => navigate('/app/teacher')}
-        >
-          <ArrowLeft size={16} className="mr-2" />
-          Back to dashboard
-        </Button>
+        <div className="mb-4 flex flex-wrap gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/app/teacher')}
+          >
+            <ArrowLeft size={16} className="mr-2" />
+            Back to dashboard
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/app/teacher/classes/${classId}/compliance`)}
+          >
+            <ShieldCheck size={16} className="mr-2" />
+            Compliance ops
+          </Button>
+        </div>
         <h1 className="text-3xl font-display font-bold text-foreground">{analytics.class.name}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {analytics.class.subject || 'Language practice'} · {analytics.class.term || 'Current term'}

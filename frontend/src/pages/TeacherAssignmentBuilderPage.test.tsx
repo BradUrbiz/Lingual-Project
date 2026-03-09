@@ -141,12 +141,27 @@ const SAMPLE_CURRICULUM = {
       register: 'mixed',
       mastery: { rubricId: 'rub-1', threshold: 2 },
       evidenceModel: { taskModel: 'ap.conversation' },
-      templateRefs: [],
+      templateRefs: ['tpl.restaurant_roleplay.v1'],
       sourceRefs: [],
     },
   ],
   templates: {
-    activityTemplateIds: [],
+    activityTemplateIds: ['tpl.restaurant_roleplay.v1'],
+    activityTemplates: [
+      {
+        id: 'tpl.restaurant_roleplay.v1',
+        title: { en: 'Restaurant Service Roleplay' },
+        mode: 'interpersonal_speaking',
+        assistantRole: 'Act as the server and make the learner drive the ordering process.',
+        interactionPattern: {
+          openingMoves: ['Open with a greeting and wait for the learner to begin the order.'],
+          sustainMoves: ['Answer menu questions briefly, then push the learner to clarify or add detail.'],
+          closingMoves: ['Close only after the learner confirms the final order.'],
+          completionRule: 'The learner must place an order and ask at least one follow-up question.',
+        },
+        promptCues: ['Keep the restaurant roleplay natural and concise.'],
+      },
+    ],
   },
 } as unknown as CurriculumPackageV1;
 
@@ -297,6 +312,10 @@ describe('TeacherAssignmentBuilderPage', () => {
       expect(screen.getByText('French 2 - Period 3')).toBeInTheDocument();
     });
 
+    await screen.findByText('Interaction contract preview');
+    await screen.findByText('Act as the server and make the learner drive the ordering process.');
+    await screen.findByText('Opening moves');
+
     fireEvent.change(screen.getByLabelText('Target expressions'), {
       target: { value: 'Could I have\nI would like' },
     });
@@ -365,5 +384,6 @@ describe('TeacherAssignmentBuilderPage', () => {
     });
 
     expect(screen.getByText(/Output pressure: 11\+ words per turn/i)).toBeInTheDocument();
+    expect(screen.getByText(/Interaction contract: Restaurant Service Roleplay/i)).toBeInTheDocument();
   });
 });

@@ -47,7 +47,7 @@ const AI_AVATAR = '/imgs/avatars/ai.svg';
 const CHAT_AVATAR_ENABLED_KEY = 'lingual:chat:avatarEnabled';
 const TEXT_AVATAR_SPEAK_MIN_MS = 1200;
 const TEXT_AVATAR_SPEAK_MAX_MS = 4200;
-const LIVE2D_CHAT_ENABLED = (import.meta.env.VITE_ENABLE_LIVE2D_CHAT ?? 'true') !== 'false';
+const LIVE2D_CHAT_ENABLED = (import.meta.env.VITE_ENABLE_LIVE2D_CHAT ?? 'false') !== 'false';
 const REALTIME_AVATAR_DIRECTIVES_ENABLED = (import.meta.env.VITE_ENABLE_REALTIME_AVATAR_DIRECTIVES ?? 'false') === 'true';
 
 const AvatarPerformancePanel = lazy(() => import('@/components/avatar/AvatarPerformancePanel'));
@@ -118,7 +118,7 @@ export function AppChatPage() {
   const [isAvatarEnabled, setIsAvatarEnabled] = useState(() => {
     try {
       const stored = window.localStorage.getItem(CHAT_AVATAR_ENABLED_KEY);
-      if (stored === null) return true;
+      if (stored === null) return false;
       return stored === 'true';
     } catch {
       return true;

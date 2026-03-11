@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -6,6 +6,7 @@ import {
   CalendarClock,
   CheckCircle2,
   ClipboardCopy,
+  Filter,
   GraduationCap,
   Loader2,
   Plus,
@@ -36,6 +37,7 @@ import {
   getClassRoster,
   removeStudentFromClass,
 } from '@/api/teacher';
+import { OnboardingHint } from '@/components/ui/OnboardingHint';
 import type {
   ClassJoinCodeData,
   ClassRosterStudent,
@@ -65,6 +67,7 @@ export function TeacherDashboardPage() {
   const [dashboard, setDashboard] = useState<TeacherDashboardData | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [classForm, setClassForm] = useState<CreateTeacherClassPayload>(DEFAULT_CLASS_FORM);
+  const [classFilter, setClassFilter] = useState('');
 
   // Join code state
   const [joinCodeClassId, setJoinCodeClassId] = useState<string | null>(null);
@@ -221,28 +224,45 @@ export function TeacherDashboardPage() {
     );
   }
 
+  const filteredClasses = useMemo(() => {
+    if (!classFilter) return dashboard.classes;
+    return dashboard.classes.filter((c) => c.id === classFilter);
+  }, [dashboard.classes, classFilter]);
+
+  const filteredSummary = useMemo(() => {
+    if (!classFilter) return dashboard.summary;
+    const studentCount = filteredClasses.reduce((sum, c) => sum + c.studentCount, 0);
+    const assignmentCount = filteredClasses.reduce((sum, c) => sum + (c.assignmentCount ?? 0), 0);
+    return {
+      classCount: filteredClasses.length,
+      studentCount,
+      speakingMinutes: dashboard.summary.speakingMinutes,
+      assignmentCount,
+    };
+  }, [dashboard.summary, classFilter, filteredClasses]);
+
   const stats = [
     {
       label: 'Classes',
-      value: dashboard.summary.classCount,
+      value: filteredSummary.classCount,
       icon: BookOpen,
       accent: 'bg-primary/10 text-primary',
     },
     {
       label: 'Students',
-      value: dashboard.summary.studentCount,
+      value: filteredSummary.studentCount,
       icon: Users,
       accent: 'bg-success/15 text-success',
     },
     {
       label: 'Speaking minutes',
-      value: dashboard.summary.speakingMinutes,
+      value: filteredSummary.speakingMinutes,
       icon: CalendarClock,
       accent: 'bg-accent/20 text-accent-foreground',
     },
     {
       label: 'Assignments',
-      value: dashboard.summary.assignmentCount,
+      value: filteredSummary.assignmentCount,
       icon: GraduationCap,
       accent: 'bg-secondary text-foreground',
     },
@@ -292,6 +312,36 @@ export function TeacherDashboardPage() {
         </div>
       )}
 
+      {dashboard.classes.length > 1 && (
+        <div className="flex items-center gap-3">
+          <Filter size={16} className="text-muted-foreground" />
+          <label htmlFor="dashboard-class-filter" className="text-sm font-medium text-muted-foreground">
+            Class
+          </label>
+          <select
+            id="dashboard-class-filter"
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value)}
+            className="h-9 rounded-xl border-2 border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none"
+          >
+            <option value="">All classes</option>
+            {dashboard.classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {classFilter && (
+            <button
+              onClick={() => setClassFilter('')}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => (
           <Card key={stat.label} className="border-3 border-foreground p-5 shadow-stamp">
@@ -308,6 +358,29 @@ export function TeacherDashboardPage() {
           </Card>
         ))}
       </div>
+
+      {dashboard && (
+        <>
+          <OnboardingHint
+            show={dashboard.classes.length === 0}
+            message="Create your first class to get started."
+            ctaLabel="Create Class"
+            ctaTo="/app/teacher"
+          />
+          <OnboardingHint
+            show={dashboard.classes.length > 0 && dashboard.summary.studentCount === 0}
+            message="Invite students to your class using a join code."
+            ctaLabel="Go to Class"
+            ctaTo={`/app/teacher/classes/${dashboard.classes[0]?.id}/analytics`}
+          />
+          <OnboardingHint
+            show={dashboard.classes.length > 0 && dashboard.summary.studentCount > 0 && dashboard.summary.assignmentCount === 0}
+            message="Create your first assignment from a class page."
+            ctaLabel="Go to Class"
+            ctaTo={`/app/teacher/classes/${dashboard.classes[0]?.id}/assignments`}
+          />
+        </>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <Card className="border-3 border-foreground p-6 shadow-stamp">
@@ -353,7 +426,7 @@ export function TeacherDashboardPage() {
             </Button>
           </div>
 
-          {dashboard.classes.length === 0 ? (
+          {filteredClasses.length === 0 ? (
             <div className="mt-6 rounded-3xl border-3 border-dashed border-border bg-secondary/40 p-8 text-center">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-foreground bg-card">
                 <BookOpen size={24} strokeWidth={2.5} />
@@ -369,7 +442,7 @@ export function TeacherDashboardPage() {
             </div>
           ) : (
             <div className="mt-6 grid gap-4">
-              {dashboard.classes.map((classSummary) => (
+              {filteredClasses.map((classSummary) => (
                 <div key={classSummary.id} className="rounded-2xl border-2 border-border bg-secondary/50 p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>

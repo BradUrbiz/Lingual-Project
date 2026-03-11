@@ -36,6 +36,9 @@ const TeacherStudentDrillDownPage = lazy(() => import('./pages/TeacherStudentDri
 const StudentJoinClassPage = lazy(() => import('./pages/StudentJoinClassPage').then((module) => ({ default: module.StudentJoinClassPage })));
 const AssignmentLaunchPage = lazy(() => import('./pages/AssignmentLaunchPage').then((module) => ({ default: module.AssignmentLaunchPage })));
 const GuardianConsentPage = lazy(() => import('./pages/GuardianConsentPage').then((module) => ({ default: module.GuardianConsentPage })));
+const AdminDeletionRequestsPage = lazy(() => import('./pages/AdminDeletionRequestsPage').then((module) => ({ default: module.AdminDeletionRequestsPage })));
+const AdminCompliancePage = lazy(() => import('./pages/AdminCompliancePage').then((module) => ({ default: module.AdminCompliancePage })));
+const CompliancePage = lazy(() => import('./pages/CompliancePage'));
 
 function RouteLoadingScreen() {
   return (
@@ -59,6 +62,7 @@ function AnimatedRoutes() {
         <Route path="/" element={withRouteSuspense(<LandingPage />)} />
         <Route path="/auth" element={withRouteSuspense(<AuthPage />)} />
         <Route path="/guardian/consent/:token" element={withRouteSuspense(<GuardianConsentPage />)} />
+        <Route path="/compliance" element={withRouteSuspense(<CompliancePage />)} />
 
         {/* Protected Routes */}
         <Route element={<ProtectedRoute />}>
@@ -130,6 +134,22 @@ function AnimatedRoutes() {
             element={withRouteSuspense(
               <TeacherRoute>
                 <TeacherStudentDrillDownPage />
+              </TeacherRoute>
+            )}
+          />
+          <Route
+            path="admin/deletion-requests"
+            element={withRouteSuspense(
+              <TeacherRoute>
+                <AdminDeletionRequestsPage />
+              </TeacherRoute>
+            )}
+          />
+          <Route
+            path="admin/compliance"
+            element={withRouteSuspense(
+              <TeacherRoute>
+                <AdminCompliancePage />
               </TeacherRoute>
             )}
           />

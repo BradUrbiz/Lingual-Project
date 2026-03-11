@@ -16,6 +16,7 @@ import {
   getClassComplianceRoster,
 } from '@/api/teacher';
 import { Alert, AlertDescription, Badge, Button, Card, Input } from '@/components/ui';
+import { OnboardingHint } from '@/components/ui/OnboardingHint';
 import type { ClassComplianceRosterData, ConsentStatus, UpdateStudentCompliancePayload } from '@/types';
 
 type BulkMinorValue = 'unchanged' | 'minor' | 'adult';
@@ -277,6 +278,13 @@ export function TeacherClassCompliancePage() {
           </Card>
         ))}
       </div>
+
+      {roster && (
+        <OnboardingHint
+          show={roster.summary.unknownConsentCount > 0 || roster.summary.guardianActionRequiredCount > 0}
+          message="Review consent status for students before enabling voice practice."
+        />
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <Card className="border-3 border-foreground p-6 shadow-stamp">

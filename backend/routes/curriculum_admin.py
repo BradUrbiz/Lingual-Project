@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from flask import Blueprint, jsonify, request
 
 from backend.route_deps import RouteDeps
@@ -18,6 +20,7 @@ from backend.services.assignment_resolver import (
     serialize_assignment,
     serialize_curriculum_mapping,
 )
+from backend.services.disclosure_logging import log_disclosure_if_new
 from backend.services.membership_context import SchoolContextPermissionError
 from backend.services.practice_analytics import (
     SUPPORTED_EVENT_TYPES,
@@ -135,6 +138,50 @@ def _require_assignment_teacher_access(deps: RouteDeps, assignment_id: str):
         raise ValueError('Assignment not found.')
     _require_teacher_context(deps, assignment.get('class_id'))
     return assignment
+
+
+def _parse_iso_date(value: str | None) -> datetime | None:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace('Z', '+00:00')).astimezone(UTC)
+    except (ValueError, TypeError):
+        return None
+
+
+def _get_session_started_at(session: dict) -> datetime | None:
+    ts = session.get('started_at') or session.get('created_at')
+    if ts is None:
+        return None
+    if isinstance(ts, datetime):
+        return ts
+    if hasattr(ts, 'seconds'):
+        return datetime.fromtimestamp(ts.seconds, UTC)
+    if isinstance(ts, str):
+        return _parse_iso_date(ts)
+    return None
+
+
+def _filter_sessions_by_date(
+    sessions: list[dict],
+    date_from: str | None,
+    date_to: str | None,
+) -> list[dict]:
+    parsed_from = _parse_iso_date(date_from)
+    parsed_to = _parse_iso_date(date_to)
+    if not parsed_from and not parsed_to:
+        return sessions
+    filtered = []
+    for session in sessions:
+        ts = _get_session_started_at(session)
+        if ts is None:
+            continue
+        if parsed_from and ts < parsed_from:
+            continue
+        if parsed_to and ts > parsed_to:
+            continue
+        filtered.append(session)
+    return filtered
 
 
 def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
@@ -501,6 +548,12 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             enrollments = deps.db.list_class_enrollments(class_id, status=None)
             all_sessions = deps.db.list_class_practice_sessions(class_id)
 
+            # Optional date range filtering on sessions
+            date_from = request.args.get('dateFrom')
+            date_to = request.args.get('dateTo')
+            if date_from or date_to:
+                all_sessions = _filter_sessions_by_date(all_sessions, date_from, date_to)
+
             student_uids = set()
             for enrollment in enrollments:
                 uid = enrollment.get('student_uid')
@@ -551,6 +604,14 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 student_sessions,
                 student_events,
                 student_profile,
+            )
+            log_disclosure_if_new(
+                org_id=_context.active_organization_id,
+                actor_uid=_context.uid,
+                actor_role='teacher',
+                student_uid=student_uid,
+                event_type='disclosure.practice_data_viewed',
+                payload={'endpoint': f'/api/teacher/classes/{class_id}/students/{student_uid}/analytics', 'class_id': class_id},
             )
             return jsonify({
                 'success': True,

@@ -1,7 +1,7 @@
 # School Integration Tasks
 
 Status: Active
-Last updated: 2026-03-09
+Last updated: 2026-03-13
 Owner: Engineering + Product
 
 ## Status legend
@@ -151,7 +151,7 @@ Owner: Engineering + Product
 - [x] Add assignment analytics drill-down UI.
 - [x] Add class analytics drill-down UI.
 - [x] Add student drill-down UI.
-- [ ] Add dashboard filters for date range, class, and assignment.
+- [x] Add dashboard filters for date range, class, and assignment.
 
 ## Phase 6: Compliance, privacy, and retention
 
@@ -170,17 +170,18 @@ Owner: Engineering + Product
 - [x] Block voice session creation when `voice_allowed` is false.
 - [x] Apply the same compliance gate to pronunciation voice flows as assignment practice.
 - [x] Block pronunciation audio storage when policy forbids it.
-- [-] Log sensitive access and disclosure events required by policy.
+- [x] Log sensitive access and disclosure events required by policy.
 - [x] Add class-scoped bulk consent operations for teacher and school-admin workflows.
 - [x] Add class-scoped consent audit export.
-- [ ] Add admin tools for school-wide consent review and audit export.
+- [x] Add admin tools for school-wide consent review and audit export.
 
 Current completion state:
 
 1. Class-scoped compliance roster, bulk consent operations, and audit export are shipped.
 2. Epic A guardian consent packets are shipped with secure-link guardian response, teacher/admin packet management, and packet status surfaces in class compliance plus student drill-down.
 3. `downloadable_notice` remains a staff-managed beta path; it records packet state without generating a rendered handout artifact.
-4. The remaining hardening work is now centered on Epic B deletion requests/execution, followed by school-wide admin tooling.
+4. Epic B deletion requests/execution is shipped.
+5. School-wide admin compliance tooling is shipped (org summary, filterable roster, guardian packet tracking, org audit export).
 
 ### Epic A: Guardian Consent Packets
 
@@ -193,12 +194,12 @@ Current completion state:
 
 ### Epic B: Deletion Requests and Execution
 
-- [ ] Freeze request scope rules and approval matrix.
-- [ ] Add `deletion_requests` model.
-- [ ] Add `deletion_execution_runs` model.
-- [ ] Add request create/review/detail endpoints for admin workflows.
-- [ ] Add async execution worker for Firestore and Storage cleanup.
-- [ ] Add execution summary, retry handling, and partial-failure recovery rules.
+- [x] Freeze request scope rules and approval matrix.
+- [x] Add `deletion_requests` model.
+- [x] Add `deletion_execution_runs` model.
+- [x] Add request create/review/detail endpoints for admin workflows.
+- [x] Add synchronous execution worker for Firestore cleanup (Storage placeholder for post-beta).
+- [x] Add execution summary, retry handling, and partial-failure recovery rules.
 
 Recommended sequence for the remaining hardening work:
 

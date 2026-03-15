@@ -1,7 +1,7 @@
 # School Integration Limitations
 
 Status: Active
-Last updated: 2026-03-10
+Last updated: 2026-03-13
 Owner: Engineering
 
 ## Purpose
@@ -67,3 +67,7 @@ Planned follow-up: async deletion execution if needed post-beta, Firebase Storag
 10. Firestore rules are now school-aware and validated via Firebase Emulator rule tests (`firebase-tests/`). Deployment rehearsal is still pending before pilot hardening is complete.
 Impact: rule logic is validated against emulator tests covering all school collections and role-based access patterns.
 Planned follow-up: deployment verification during hardening.
+
+11. Disclosure logging covers two endpoints (teacher student analytics drill-down, admin compliance roster) but not all sensitive read paths.
+Impact: the admin roster view logs a single org-scoped event (`student_uid=''`) rather than per-student events to avoid N+1 writes. Other endpoints that surface student data (e.g., class analytics, student drill-down compliance tab, guardian packet views) do not yet emit disclosure events.
+Planned follow-up: extend disclosure logging to remaining sensitive endpoints as the audit requirements are clarified with counsel.

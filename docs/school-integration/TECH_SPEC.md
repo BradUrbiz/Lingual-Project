@@ -1,7 +1,7 @@
 # School Integration Technical Spec
 
 Status: Draft v0.1
-Last updated: 2026-03-09
+Last updated: 2026-03-13
 Owner: Engineering
 
 Implementation note:
@@ -322,6 +322,19 @@ Purpose:
 
 Record both student-scoped consent mutations and class/org-scoped sensitive access operations such as audit export.
 
+#### Disclosure logging
+
+The `consent_events` collection also records read-side access disclosure events — when a teacher or admin views student data through sensitive endpoints. The `log_disclosure_if_new()` service in `backend/services/disclosure_logging.py` writes disclosure events with daily deduplication per `(actor_uid, student_uid, event_type)` using UTC calendar-day boundaries.
+
+Currently wired endpoints:
+
+| Endpoint | Actor role | Event type |
+|----------|-----------|------------|
+| `GET /api/teacher/classes/{classId}/students/{studentUid}/analytics` | teacher | `disclosure.practice_data_viewed` |
+| `GET /api/admin/compliance/roster` | school_admin | `disclosure.compliance_viewed` |
+
+The admin roster view logs org-scoped events (`student_uid=''`) rather than per-student events to avoid N+1 writes.
+
 ### `guardian_consent_packets/{packetId}`
 
 Epic A model for beta guardian collection. Current beta ships secure-link guardian response plus staff-managed `downloadable_notice` packet tracking.
@@ -383,32 +396,56 @@ Current beta API surface:
 
 ### `deletion_requests/{requestId}`
 
-Epic B request model for auditable deletion operations, not yet implemented.
+Epic B request model for auditable deletion operations.
 
 Fields:
 
 - `org_id`
 - `scope_type` (`student` | `class` | `org`)
-- `scope_id`
+- `scope_id` (student_uid for student scope, class_id for class scope, org_id for org scope)
 - `requested_by_uid`
 - `request_reason`
 - `status` (`requested` | `approved` | `rejected` | `in_progress` | `completed` | `failed` | `partially_completed`)
 - `approved_by_uid`
 - `review_notes`
-- `target_collections`
-- `target_storage_prefixes`
-- `execution_summary`
+- `target_collections` (list of collection names targeted for deletion)
+- `target_storage_prefixes` (list of Cloud Storage path prefixes targeted for deletion)
+- `execution_summary` (counts and outcome from the latest execution run)
 - `created_at`
 - `updated_at`
 - `completed_at`
 
 Purpose:
 
-Separate request intake, approval, and asynchronous execution for deletion so storage cleanup and partial failures are auditable.
+Separate request intake, approval, and synchronous execution for deletion so storage cleanup and partial failures are auditable.
+
+#### Frozen scope rules
+
+| Scope | Deletion targets | Preserved |
+|-------|-----------------|-----------|
+| `student` | practice_sessions, learning_events, student_compliance_records, consent_events, guardian_consent_packets, and stored audio for one student within the org | users/{uid} identity, consumer-era chats, enrollment, membership, analytics_rollups |
+| `class` | practice_sessions, learning_events, and stored audio for all students in the class | compliance records, enrollments, memberships, class document, curriculum_mappings, assignments |
+| `org` | All org-scoped data: practice_sessions, learning_events, student_compliance_records, consent_events, guardian_consent_packets, classes, enrollments, memberships, curriculum_mappings, assignments, and stored audio | users/{uid} identity, consumer-era chats, analytics_rollups |
+
+Key rule: `student`-scope deletion removes only privacy-sensitive practice data. The student's enrollment and membership are preserved. Enrollment removal is a separate roster management action.
+
+#### Frozen approval matrix
+
+| Scope | Who can request | Who can approve | Self-approve allowed |
+|-------|----------------|----------------|---------------------|
+| `student` | `teacher`, `school_admin` | `school_admin` | Yes, if requester is `school_admin` |
+| `class` | `teacher` (own class), `school_admin` | `school_admin` | Yes, if requester is `school_admin` |
+| `org` | `school_admin` | `school_admin` | Yes (only role with org-wide access in beta) |
+
+#### Deletion SLA
+
+Target: 7 days from approval to completion.
+
+Beta execution strategy: synchronous (Flask endpoint triggers deletion immediately on approval or retry). Upgradeable to async Cloud Tasks worker post-beta.
 
 ### `deletion_execution_runs/{runId}`
 
-Epic B execution model for asynchronous deletion workers, not yet implemented.
+Epic B execution model for tracking deletion attempts independently from the approval request.
 
 Fields:
 
@@ -416,45 +453,46 @@ Fields:
 - `org_id`
 - `scope_type`
 - `scope_id`
-- `status` (`queued` | `running` | `completed` | `failed` | `partially_completed`)
+- `status` (`running` | `completed` | `failed` | `partially_completed`)
 - `attempt_number`
-- `firestore_counts`
-- `storage_counts`
-- `error_summary`
+- `firestore_counts` (dict: `{targeted, deleted, failed, by_collection}`)
+- `storage_counts` (dict: `{targeted, deleted, failed}`)
+- `error_summary` (list of error strings from failed operations)
 - `started_at`
 - `finished_at`
-- `worker_ref`
 
 Purpose:
 
-Track every async execution attempt independently from the human approval request so retries and partial failures remain auditable.
+Track every execution attempt independently from the human approval request so retries and partial failures remain auditable.
 
 Request state model:
 
 - `requested`: request submitted and awaiting review
-- `approved`: request accepted and queued for execution
+- `approved`: request accepted, ready for execution
 - `rejected`: request denied with review notes
-- `in_progress`: at least one execution run is active
+- `in_progress`: execution run is active
 - `completed`: deletion finished successfully
 - `failed`: terminal failure without successful cleanup
-- `partially_completed`: some targets were deleted but manual intervention is still required
+- `partially_completed`: some targets were deleted but others failed; retryable
 
 Execution rules:
 
 - Approval and execution are separate steps.
-- Firestore records and Firebase Storage artifacts must be enumerated from the same request scope snapshot.
-- Execution must be idempotent and retryable.
-- Every request, approval, rejection, queue, execution start, retry, completion, and failure action must emit a `consent_events` or deletion-specific audit event.
+- Execution is triggered explicitly (approve does not auto-execute; a separate execute/retry action runs the deletion).
+- Firestore records and Firebase Storage artifacts are enumerated from the request scope at execution time.
+- Execution must be idempotent and retryable — already-deleted docs are counted as successful.
+- Every request, approval, rejection, execution start, completion, partial failure, and retry must emit a `consent_events` audit row.
 - The UI must show both the request state and the latest execution run summary.
 
-Suggested API surface:
+API surface:
 
-- `GET /api/admin/deletion-requests`
-- `POST /api/admin/deletion-requests`
-- `GET /api/admin/deletion-requests/<request_id>`
-- `POST /api/admin/deletion-requests/<request_id>/approve`
-- `POST /api/admin/deletion-requests/<request_id>/reject`
-- `POST /api/admin/deletion-requests/<request_id>/retry`
+- `GET /api/admin/deletion-requests` — list requests for the org
+- `POST /api/admin/deletion-requests` — create a new request
+- `GET /api/admin/deletion-requests/<request_id>` — request detail + latest execution run
+- `POST /api/admin/deletion-requests/<request_id>/approve` — approve (school_admin only)
+- `POST /api/admin/deletion-requests/<request_id>/reject` — reject with review notes
+- `POST /api/admin/deletion-requests/<request_id>/execute` — trigger deletion (approved requests only)
+- `POST /api/admin/deletion-requests/<request_id>/retry` — retry a failed/partially_completed execution
 
 ### `practice_sessions/{sessionId}`
 
@@ -955,7 +993,32 @@ Integration:
 - consent revocation blocks new voice sessions
 - budget exhaustion downgrades a session from voice to text
 
-## 10. Compliance references
+## 10. Pilot readiness features
+
+### Contextual onboarding hints
+
+State-driven `OnboardingHint` banners guide teachers through setup workflows without requiring persistent dismissal state. Hints derive their visibility from data already loaded on each page (e.g., class count, student count, assignment count).
+
+Component: `frontend/src/components/ui/OnboardingHint.tsx`
+
+Placements:
+
+- **TeacherDashboardPage**: no classes, no students, no assignments (3 hints, priority order)
+- **TeacherClassAnalyticsPage**: no enrollments, no assignments, assignments with zero sessions (3 hints)
+- **TeacherClassCompliancePage**: students with unknown or pending consent (1 hint)
+
+### Public compliance information page
+
+A static page at `/compliance` (public, no auth required) provides school administrators evaluating Lingual with a summary of data collection, consent workflows, access scoping, retention defaults, deletion process, and compliance posture.
+
+Component: `frontend/src/pages/CompliancePage.tsx`
+Route: `<Route path="/compliance" />` in `App.tsx`, outside the `ProtectedRoute` wrapper.
+
+### Firestore rules emulator tests
+
+A standalone test project in `firebase-tests/` validates all Firestore security rules against the emulator using `@firebase/rules-unit-testing` and Vitest. Tests cover all 11 school-integration collections plus catch-all deny rules (44 test cases).
+
+## 11. Compliance references
 
 This spec is not legal advice. Counsel review is required before production rollout.
 
@@ -973,7 +1036,7 @@ Official references used to shape the architecture:
   - https://www.ilga.gov/Documents/Legislation/PublicActs/95/PDF/095-0994.pdf
   - https://www.ilga.gov/documents/legislation/ilcs/documents/074000140k10.htm
 
-## 11. Open technical questions
+## 12. Open technical questions
 
 - Should analytics rollups run in Flask, Cloud Functions, or scheduled GCP jobs for beta?
 - Should curriculum package payloads live fully in Firestore, Cloud Storage, or a mixed model?

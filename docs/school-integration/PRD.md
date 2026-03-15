@@ -1,7 +1,7 @@
 # School Integration PRD
 
 Status: Draft v0.1
-Last updated: 2026-03-09
+Last updated: 2026-03-13
 Owner: Product + Engineering
 
 ## 1. Why this exists
@@ -266,6 +266,10 @@ Average weekly speaking minutes per active student outside normal class time.
 - consent workflow
 - retention controls
 - audit logging
+- disclosure logging for sensitive data access (teacher student-data views, admin roster views)
+- contextual onboarding hints for teacher setup workflows
+- public compliance information page for school evaluators
+- Firestore rules emulator validation
 - LMS connectors
 
 ## 11. Risks and mitigations

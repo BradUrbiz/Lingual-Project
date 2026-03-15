@@ -92,8 +92,16 @@ export const createTeacherClass = async (
   return response.data.class;
 };
 
-export const getClassAnalytics = async (classId: string): Promise<ClassAnalyticsData> => {
-  const response = await api.get<ClassAnalyticsResponse>(`/teacher/classes/${classId}/analytics`);
+export const getClassAnalytics = async (
+  classId: string,
+  filters?: { dateFrom?: string; dateTo?: string },
+): Promise<ClassAnalyticsData> => {
+  const params: Record<string, string> = {};
+  if (filters?.dateFrom) params.dateFrom = filters.dateFrom;
+  if (filters?.dateTo) params.dateTo = filters.dateTo;
+  const response = await api.get<ClassAnalyticsResponse>(`/teacher/classes/${classId}/analytics`, {
+    params: Object.keys(params).length > 0 ? params : undefined,
+  });
   return response.data.analytics;
 };
 

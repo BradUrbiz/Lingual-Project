@@ -225,6 +225,35 @@ Schema:
     - turn_index: int | None
     - payload: dict (includes curriculum/pedagogy metadata for analytics alignment)
     - created_at: timestamp
+
+- deletion_requests/{request_id}
+    - org_id: str
+    - scope_type: str ('student' | 'class' | 'org')
+    - scope_id: str
+    - requested_by_uid: str
+    - request_reason: str
+    - status: str ('requested' | 'approved' | 'rejected' | 'in_progress' | 'completed' | 'failed' | 'partially_completed')
+    - approved_by_uid: str
+    - review_notes: str
+    - target_collections: list[str]
+    - target_storage_prefixes: list[str]
+    - execution_summary: dict
+    - created_at: timestamp
+    - updated_at: timestamp
+    - completed_at: timestamp | None
+
+- deletion_execution_runs/{run_id}
+    - request_id: str
+    - org_id: str
+    - scope_type: str
+    - scope_id: str
+    - status: str ('running' | 'completed' | 'failed' | 'partially_completed')
+    - attempt_number: int
+    - firestore_counts: dict (targeted, deleted, failed, by_collection)
+    - storage_counts: dict (targeted, deleted, failed)
+    - error_summary: list[str]
+    - started_at: timestamp
+    - finished_at: timestamp | None
 """
 
 import secrets
@@ -300,6 +329,16 @@ def get_guardian_consent_packets_collection():
     return get_db().collection('guardian_consent_packets')
 
 
+def get_deletion_requests_collection():
+    """Get deletion requests collection."""
+    return get_db().collection('deletion_requests')
+
+
+def get_deletion_execution_runs_collection():
+    """Get deletion execution runs collection."""
+    return get_db().collection('deletion_execution_runs')
+
+
 def get_practice_sessions_collection():
     """Get practice sessions collection."""
     return get_db().collection('practice_sessions')
@@ -353,6 +392,16 @@ def get_consent_event_ref(event_id):
 def get_guardian_consent_packet_ref(packet_id):
     """Get guardian consent packet reference."""
     return get_guardian_consent_packets_collection().document(packet_id)
+
+
+def get_deletion_request_ref(request_id):
+    """Get deletion request document reference."""
+    return get_deletion_requests_collection().document(request_id)
+
+
+def get_deletion_execution_run_ref(run_id):
+    """Get deletion execution run document reference."""
+    return get_deletion_execution_runs_collection().document(run_id)
 
 
 def get_practice_session_ref(session_id):
@@ -1077,6 +1126,39 @@ def list_class_guardian_consent_packets(class_id, student_uid=None, limit=500):
     return packets[:limit]
 
 
+def list_org_student_compliance_records(org_id, limit=1000):
+    """List all student compliance records for an organization."""
+    query = get_student_compliance_records_collection().where('org_id', '==', org_id)
+    docs = query.stream()
+
+    records = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        records.append(data)
+    return records[:limit]
+
+
+def list_org_guardian_consent_packets(org_id, limit=1000):
+    """List all guardian consent packets for an organization."""
+    query = get_guardian_consent_packets_collection().where('org_id', '==', org_id)
+    docs = query.stream()
+
+    packets = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        packets.append(data)
+    packets.sort(
+        key=lambda item: (
+            getattr(item.get('updated_at'), 'isoformat', lambda: '')(),
+            getattr(item.get('created_at'), 'isoformat', lambda: '')(),
+        ),
+        reverse=True,
+    )
+    return packets[:limit]
+
+
 def find_guardian_consent_packet_by_token_hash(token_hash):
     """Find a guardian consent packet by hashed public token."""
     query = get_guardian_consent_packets_collection().where('token_hash', '==', token_hash).limit(1)
@@ -1730,3 +1812,134 @@ def get_minigame_summary(uid, limit=200):
         'byGame': by_game,
         'recentAttempts': attempts[:10]
     }
+
+
+# --- Deletion requests ---
+
+def create_deletion_request(
+    *,
+    org_id,
+    scope_type,
+    scope_id,
+    requested_by_uid,
+    request_reason='',
+    request_id=None,
+):
+    """Create a deletion request."""
+    doc_ref = get_deletion_request_ref(request_id) if request_id else get_deletion_requests_collection().document()
+    request_data = {
+        'org_id': org_id,
+        'scope_type': scope_type,
+        'scope_id': scope_id,
+        'requested_by_uid': requested_by_uid,
+        'request_reason': request_reason,
+        'status': 'requested',
+        'approved_by_uid': '',
+        'review_notes': '',
+        'target_collections': [],
+        'target_storage_prefixes': [],
+        'execution_summary': {},
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+        'completed_at': None,
+    }
+    doc_ref.set(request_data)
+    return doc_ref.id
+
+
+def get_deletion_request(request_id):
+    """Get a deletion request by ID."""
+    doc = get_deletion_request_ref(request_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict() or {}
+    data['id'] = doc.id
+    return data
+
+
+def update_deletion_request(request_id, updates):
+    """Update a deletion request."""
+    doc_ref = get_deletion_request_ref(request_id)
+    payload = dict(updates or {})
+    payload['updated_at'] = firestore.SERVER_TIMESTAMP
+    doc_ref.update(payload)
+    return doc_ref.id
+
+
+def list_deletion_requests(org_id, status_filter=None, limit=100):
+    """List deletion requests for an org, optionally filtered by status."""
+    query = get_deletion_requests_collection().where('org_id', '==', org_id)
+    if status_filter:
+        query = query.where('status', 'in', status_filter)
+    docs = query.stream()
+    requests = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        requests.append(data)
+    requests.sort(
+        key=lambda r: getattr(r.get('created_at'), 'isoformat', lambda: '')(),
+        reverse=True,
+    )
+    return requests[:limit]
+
+
+# --- Deletion execution runs ---
+
+def create_deletion_execution_run(
+    *,
+    request_id,
+    org_id,
+    scope_type,
+    scope_id,
+    attempt_number=1,
+    run_id=None,
+):
+    """Create a deletion execution run."""
+    doc_ref = get_deletion_execution_run_ref(run_id) if run_id else get_deletion_execution_runs_collection().document()
+    run_data = {
+        'request_id': request_id,
+        'org_id': org_id,
+        'scope_type': scope_type,
+        'scope_id': scope_id,
+        'status': 'running',
+        'attempt_number': attempt_number,
+        'firestore_counts': {'targeted': 0, 'deleted': 0, 'failed': 0, 'by_collection': {}},
+        'storage_counts': {'targeted': 0, 'deleted': 0, 'failed': 0},
+        'error_summary': [],
+        'started_at': firestore.SERVER_TIMESTAMP,
+        'finished_at': None,
+    }
+    doc_ref.set(run_data)
+    return doc_ref.id
+
+
+def get_deletion_execution_run(run_id):
+    """Get a deletion execution run by ID."""
+    doc = get_deletion_execution_run_ref(run_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict() or {}
+    data['id'] = doc.id
+    return data
+
+
+def update_deletion_execution_run(run_id, updates):
+    """Update a deletion execution run."""
+    doc_ref = get_deletion_execution_run_ref(run_id)
+    payload = dict(updates or {})
+    doc_ref.update(payload)
+    return doc_ref.id
+
+
+def list_deletion_execution_runs(request_id, limit=20):
+    """List execution runs for a deletion request."""
+    query = get_deletion_execution_runs_collection().where('request_id', '==', request_id)
+    docs = query.stream()
+    runs = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        runs.append(data)
+    runs.sort(key=lambda r: r.get('attempt_number', 0))
+    return runs[:limit]

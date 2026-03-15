@@ -153,6 +153,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /deletion_requests/{requestId} {
+      allow read: if resource.data.org_id is string
+        && activeMembershipInOrg(resource.data.org_id)
+        && hasActiveRole('school_admin');
+      allow write: if false;
+    }
+
+    match /deletion_execution_runs/{runId} {
+      allow read: if resource.data.org_id is string
+        && activeMembershipInOrg(resource.data.org_id)
+        && hasActiveRole('school_admin');
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

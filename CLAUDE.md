@@ -83,7 +83,7 @@ npm run test     # Vitest
 ### Running Tests
 ```bash
 # Backend unit tests
-python3 -m unittest backend.tests.test_curriculum_admin_routes backend.tests.test_realtime_chat backend.tests.test_school_foundation_routes backend.tests.test_auth_memberships
+python3 -m unittest backend.tests.test_curriculum_admin_routes backend.tests.test_realtime_chat backend.tests.test_school_foundation_routes backend.tests.test_auth_memberships backend.tests.test_deletion_requests
 
 # Frontend tests
 cd frontend && npm run test -- --run src/pages/TeacherAssignmentAnalyticsPage.test.tsx src/components/layout/TeacherRoute.test.tsx

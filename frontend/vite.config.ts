@@ -90,7 +90,13 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      ...(hasCubismSdk ? { '@cubism': cubismSdkPath } : {}),
+      ...(hasCubismSdk
+        ? { '@cubism': cubismSdkPath }
+        : {
+            // Stub out Live2DAvatarPanel so the build succeeds without the Cubism SDK.
+            // The panel is behind LIVE2D_CHAT_ENABLED (false) so the stub never renders.
+            '@/components/avatar/Live2DAvatarPanel': path.resolve(__dirname, './src/stubs/live2d-panel-stub.ts'),
+          }),
     },
   },
   test: {

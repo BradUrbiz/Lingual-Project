@@ -255,3 +255,99 @@ export interface ClassRosterStudent {
   enrolledAt?: string | null;
   status: string;
 }
+
+// --- Org-wide compliance (school-wide admin tooling) ---
+
+export interface OrgComplianceSummary {
+  studentCount: number;
+  voiceAllowedCount: number;
+  voiceBlockedCount: number;
+  guardianActionRequiredCount: number;
+  unknownConsentCount: number;
+  rawAudioRestrictedCount: number;
+  textBlockedCount: number;
+}
+
+export interface OrgComplianceStudentEntry {
+  uid: string;
+  displayName: string;
+  classIds: string[];
+  classNames: string[];
+  compliance: StudentComplianceRecord;
+  blockedReasons: string[];
+}
+
+export interface OrgComplianceRosterData {
+  summary: OrgComplianceSummary;
+  students: OrgComplianceStudentEntry[];
+}
+
+export interface OrgGuardianPacketsData {
+  packets: GuardianConsentPacket[];
+  statusCounts: Record<string, number>;
+  totalCount: number;
+}
+
+// --- Deletion requests (Epic B) ---
+
+export type DeletionScopeType = 'student' | 'class' | 'org';
+
+export type DeletionRequestStatus =
+  | 'requested'
+  | 'approved'
+  | 'rejected'
+  | 'in_progress'
+  | 'completed'
+  | 'failed'
+  | 'partially_completed';
+
+export type DeletionRunStatus = 'running' | 'completed' | 'failed' | 'partially_completed';
+
+export interface DeletionRequest {
+  id: string;
+  orgId: string;
+  scopeType: DeletionScopeType;
+  scopeId: string;
+  requestedByUid: string;
+  requestReason: string;
+  status: DeletionRequestStatus;
+  approvedByUid: string;
+  reviewNotes: string;
+  targetCollections: string[];
+  targetStoragePrefixes: string[];
+  executionSummary: Record<string, unknown>;
+  createdAt: string | null;
+  updatedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface DeletionExecutionRun {
+  id: string;
+  requestId: string;
+  orgId: string;
+  scopeType: DeletionScopeType;
+  scopeId: string;
+  status: DeletionRunStatus;
+  attemptNumber: number;
+  firestoreCounts: {
+    targeted: number;
+    deleted: number;
+    failed: number;
+    by_collection?: Record<string, { targeted: number; deleted: number; failed: number }>;
+  };
+  storageCounts: { targeted: number; deleted: number; failed: number };
+  errorSummary: string[];
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface CreateDeletionRequestPayload {
+  scopeType: DeletionScopeType;
+  scopeId: string;
+  requestReason?: string;
+}
+
+export interface DeletionRequestDetail {
+  request: DeletionRequest;
+  runs: DeletionExecutionRun[];
+}

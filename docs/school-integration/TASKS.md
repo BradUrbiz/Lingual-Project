@@ -216,8 +216,9 @@ Recommended sequence for the remaining hardening work:
 
 - [ ] Recruit 5-10 co-design teachers.
 - [ ] Create pilot feedback loop and weekly issue triage.
-- [ ] Prepare teacher onboarding guide.
-- [ ] Prepare compliance and data-handling one-pager for pilot schools.
+- [x] Add contextual onboarding hints for teacher setup workflows (7 hints across 3 pages).
+- [x] Add public compliance information page at `/compliance` for school evaluators.
+- [x] Add Firestore rules emulator tests (`firebase-tests/`, 44 test cases).
 - [ ] Define beta support process for consent, roster, and integration issues.
 
 ## Recommended build order

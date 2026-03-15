@@ -278,6 +278,17 @@ export type {
   JoinClassResult,
   MembershipStatus,
   SchoolRole,
+  DeletionScopeType,
+  DeletionRequestStatus,
+  DeletionRunStatus,
+  DeletionRequest,
+  DeletionExecutionRun,
+  CreateDeletionRequestPayload,
+  DeletionRequestDetail,
+  OrgComplianceSummary,
+  OrgComplianceStudentEntry,
+  OrgComplianceRosterData,
+  OrgGuardianPacketsData,
 } from './school';
 
 export type {

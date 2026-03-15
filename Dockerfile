@@ -12,6 +12,9 @@ RUN npm ci
 # Copy frontend source
 COPY frontend/ ./
 
+# Copy Cubism SDK for Live2D avatar build (auto-detected by vite.config.ts)
+COPY CubismSdkForWeb-5-r.4/Framework/dist /app/CubismSdkForWeb-5-r.4/Framework/dist
+
 # Build the React app
 RUN npm run build
 
@@ -42,6 +45,7 @@ RUN pip install --no-cache-dir gunicorn
 
 # Copy application code
 COPY main.py scoring.py ai.py database.py ./
+COPY backend/ ./backend/
 COPY data/ ./data/
 
 # Copy static assets (images, etc.) - not templates

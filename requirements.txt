@@ -5,6 +5,7 @@ python-dotenv==1.2.1
 openai==2.9.0
 firebase-admin==6.7.0
 requests==2.32.4
+cryptography==44.0.3
 gunicorn==23.0.0
 pygame==2.6.1
 simple-websocket==1.1.0

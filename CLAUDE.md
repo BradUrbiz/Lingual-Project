@@ -200,6 +200,29 @@ learning_events/{eventId}      (assignment_id, session_id, event_type, turn_inde
 - `frontend/src/contexts/MembershipContext.tsx` - Active org, role, classes
 - `frontend/src/components/layout/TeacherRoute.tsx` - Role-gated route wrapper
 
+## Development Workflow Agents
+
+This project has a local plugin (`lingual-dev-agents`) with 5 agents. Dispatch them at phase boundaries — they are not optional nice-to-haves, they are part of the workflow.
+
+### Dispatch Rules
+
+| Agent | When to dispatch | Skip when |
+|-------|-----------------|-----------|
+| `spec-agent` | Before implementing any TASKS.md item or feature that touches architecture, data model, or API surface | Pure UI polish, copy changes, or bug fixes confined to one file |
+| `backend-impl` | During implementation, in parallel with `frontend-impl` when backend/frontend work is independent | Feature is frontend-only |
+| `frontend-impl` | During implementation, in parallel with `backend-impl` when work is independent; sequentially after backend when frontend depends on new API | Feature is backend-only |
+| `cross-layer-review` | After completing a feature that spans backend + frontend, especially if it touches compliance, pedagogy, or analytics | Change is isolated to one layer with no cross-layer contract |
+| `doc-sync` | After completing a TASKS.md phase or any change that introduces new collections, endpoints, or domain concepts | Trivial bug fixes that don't change architecture or shipped behavior |
+
+### Parallel Dispatch Pattern
+
+When a feature decomposes into independent backend + frontend work, dispatch `backend-impl` and `frontend-impl` simultaneously with `isolation: "worktree"`. Review both results, then run `cross-layer-review` on the merged state.
+
+### Agent Output Rules
+
+- `spec-agent`, `cross-layer-review`, and `doc-sync` are advisory — they propose, they don't modify files. Review their output before acting on it.
+- `backend-impl` and `frontend-impl` write code in isolated worktrees. Review their changes before merging.
+
 ## Environment Variables
 
 Required in `.env`:

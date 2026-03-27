@@ -11,9 +11,12 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { createAssignment, createCurriculumMapping, getCurriculumMappings, getTeacherAssignments, getTeacherCurriculumPackages } from '@/api/assignments';
+import { getCanvasContentForClass, linkAssignmentToCanvas, unlinkAssignmentFromCanvas } from '@/api/canvas';
 import { getSampleCurriculumPackage } from '@/api/curriculum';
 import { getTeacherClasses } from '@/api/teacher';
 import { Alert, AlertDescription, Badge, Button, Card, Input, Textarea } from '@/components/ui';
+import { CanvasLinkPicker } from '@/components/canvas/CanvasLinkPicker';
+import type { CanvasCourseContentItem } from '@/types/canvas';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { resolveActivityTemplates } from '@/utils/curriculumTemplates';
 import type {
@@ -205,6 +208,7 @@ export function TeacherAssignmentBuilderPage() {
   const [assignments, setAssignments] = useState<StudentAssignmentSummary[]>([]);
   const [mappingForm, setMappingForm] = useState<MappingFormState>(DEFAULT_MAPPING_FORM);
   const [assignmentForm, setAssignmentForm] = useState<AssignmentFormState>(DEFAULT_ASSIGNMENT_FORM);
+  const [canvasContent, setCanvasContent] = useState<CanvasCourseContentItem[]>([]);
 
   const activeClass = teacherClasses.find((item) => item.id === classId) || null;
   const selectedModule = curriculum?.modules.find((module) => module.id === mappingForm.moduleId) || null;
@@ -244,6 +248,14 @@ export function TeacherAssignmentBuilderPage() {
     setCurriculum(sampleCurriculum);
     setMappings(classMappings);
     setAssignments(classAssignments);
+
+    // Load Canvas content (best-effort — not all classes have Canvas).
+    try {
+      const items = await getCanvasContentForClass(nextClassId);
+      setCanvasContent(items);
+    } catch {
+      setCanvasContent([]);
+    }
   };
 
   useEffect(() => {
@@ -1311,6 +1323,32 @@ export function TeacherAssignmentBuilderPage() {
                         </Button>
                       </div>
                     </div>
+                    {canvasContent.length > 0 && (
+                      <div className="mt-3 border-t border-border pt-3">
+                        <p className="mb-2 text-xs font-medium text-muted-foreground">Canvas link</p>
+                        <CanvasLinkPicker
+                          items={canvasContent}
+                          linkedItemId={assignment.canvasModuleItemId || null}
+                          onLink={async (item) => {
+                            try {
+                              await linkAssignmentToCanvas(assignment.id, item.id, item.canvasItemId);
+                              if (classId) await loadClassData(classId);
+                            } catch { /* best-effort */ }
+                          }}
+                          onUnlink={async () => {
+                            const linked = canvasContent.find(
+                              (c) => c.canvasItemId === assignment.canvasModuleItemId,
+                            );
+                            if (linked) {
+                              try {
+                                await unlinkAssignmentFromCanvas(assignment.id, linked.id);
+                                if (classId) await loadClassData(classId);
+                              } catch { /* best-effort */ }
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))
               )}

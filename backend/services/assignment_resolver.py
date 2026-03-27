@@ -146,6 +146,7 @@ def serialize_assignment(assignment: dict[str, Any] | None) -> dict[str, Any] | 
         "createdByUid": assignment.get("created_by_uid", ""),
         "createdAt": _timestamp_to_iso(assignment.get("created_at")),
         "updatedAt": _timestamp_to_iso(assignment.get("updated_at")),
+        "canvasModuleItemId": assignment.get("canvas_module_item_id", ""),
     }
 
 

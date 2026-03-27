@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, MessageSquare, Gamepad2, Mic, TrendingUp, GraduationCap, Loader2 } from 'lucide-react';
 import { getStudentAssignments } from '@/api/assignments';
+import { getStudentCanvasContent } from '@/api/canvas';
 import { Alert, AlertDescription, Badge, Button } from '@/components/ui';
+import { CanvasModuleView } from '@/components/canvas/CanvasModuleView';
 import { DashboardStatsBar, ServiceNavigationCard } from '@/components/dashboard';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { StudentAssignmentSummary } from '@/types';
+import type { CanvasCourseContentItem } from '@/types/canvas';
 
 // Mock stats — will be replaced with real backend data later
 const MOCK_STATS = {
@@ -22,6 +25,7 @@ export function AppLearningPage() {
   const [assignments, setAssignments] = useState<StudentAssignmentSummary[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
   const [assignmentError, setAssignmentError] = useState<string | null>(null);
+  const [canvasContent, setCanvasContent] = useState<CanvasCourseContentItem[]>([]);
 
   useEffect(() => {
     let isActive = true;
@@ -32,6 +36,14 @@ export function AppLearningPage() {
         if (!isActive) return;
         setAssignments(nextAssignments);
         setAssignmentError(null);
+
+        // Load Canvas content for each class the student has assignments in.
+        const classIds = [...new Set(nextAssignments.map((a) => a.classId).filter(Boolean))];
+        const contentResults = await Promise.all(
+          classIds.map((cid) => getStudentCanvasContent(cid).catch(() => [] as CanvasCourseContentItem[])),
+        );
+        if (!isActive) return;
+        setCanvasContent(contentResults.flat());
       } catch (error) {
         if (!isActive) return;
         setAssignmentError(error instanceof Error ? error.message : 'Failed to load assignments.');
@@ -133,6 +145,30 @@ export function AppLearningPage() {
           </div>
         )}
       </section>
+
+      {canvasContent.length > 0 && (
+        <section className={`${surfaceClass} p-6`}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-display font-bold text-foreground">Course modules</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Canvas course content from your enrolled classes.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5">
+            <CanvasModuleView
+              items={canvasContent}
+              linkedAssignments={Object.fromEntries(
+                canvasContent
+                  .filter((c) => c.lingualAssignmentId)
+                  .map((c) => [c.canvasItemId, c.lingualAssignmentId!]),
+              )}
+              onLaunchAssignment={(assignmentId) => navigate(`/app/assignments/${assignmentId}`)}
+            />
+          </div>
+        </section>
+      )}
 
       <section className={`${surfaceClass} p-6`}>
         <div className="mb-5">

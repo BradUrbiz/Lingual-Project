@@ -80,6 +80,7 @@ export interface AssignmentDto {
   taskType: AssignmentTaskType | string;
   successCriteria: string[];
   createdByUid: string;
+  canvasModuleItemId?: string;
   createdAt?: string | null;
   updatedAt?: string | null;
 }

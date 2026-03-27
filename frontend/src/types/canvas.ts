@@ -63,4 +63,5 @@ export interface CanvasCourseContentItem {
   title: string;
   itemType: string;
   itemPosition: number;
+  lingualAssignmentId?: string | null;
 }

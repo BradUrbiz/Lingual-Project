@@ -217,6 +217,67 @@ def create_integrations_blueprint(deps: RouteDeps) -> Blueprint:
             'contentCount': content_count,
         })
 
+    # -- List Canvas course content for a class ------------------------------
+
+    @bp.route('/api/teacher/classes/<class_id>/canvas/content')
+    @deps.login_required
+    def canvas_content_list(class_id):
+        try:
+            ctx = _require_teacher_context()
+        except (PermissionError, SchoolContextPermissionError):
+            return jsonify({'success': False, 'error': 'Forbidden'}), 403
+
+        class_record = _require_class_access(ctx, class_id)
+        if not class_record:
+            return jsonify({'success': False, 'error': 'Class not found'}), 404
+
+        items = deps.db.list_canvas_course_content_for_class(class_id)
+        return jsonify({
+            'items': [
+                {
+                    'id': item.get('id', ''),
+                    'connectionId': item.get('connection_id', ''),
+                    'classId': item.get('class_id', ''),
+                    'canvasModuleId': str(item.get('canvas_module_id', '')),
+                    'canvasModuleName': item.get('canvas_module_name', ''),
+                    'canvasModulePosition': item.get('canvas_module_position', 0),
+                    'canvasItemId': str(item.get('canvas_item_id', '')),
+                    'title': item.get('title', ''),
+                    'itemType': item.get('item_type', ''),
+                    'itemPosition': item.get('item_position', 0),
+                    'lingualAssignmentId': item.get('lingual_assignment_id') or None,
+                }
+                for item in items
+            ],
+        })
+
+    # -- Student: list Canvas content for enrolled class --------------------
+
+    @bp.route('/api/student/classes/<class_id>/canvas/content')
+    @deps.login_required
+    def student_canvas_content(class_id):
+        uid = deps.get_current_user_uid()
+        if not uid:
+            return jsonify({'success': False, 'error': 'Auth required'}), 401
+
+        items = deps.db.list_canvas_course_content_for_class(class_id)
+        return jsonify({
+            'items': [
+                {
+                    'id': item.get('id', ''),
+                    'canvasModuleId': str(item.get('canvas_module_id', '')),
+                    'canvasModuleName': item.get('canvas_module_name', ''),
+                    'canvasModulePosition': item.get('canvas_module_position', 0),
+                    'canvasItemId': str(item.get('canvas_item_id', '')),
+                    'title': item.get('title', ''),
+                    'itemType': item.get('item_type', ''),
+                    'itemPosition': item.get('item_position', 0),
+                    'lingualAssignmentId': item.get('lingual_assignment_id') or None,
+                }
+                for item in items
+            ],
+        })
+
     # -- Disconnect --------------------------------------------------------
 
     @bp.route('/api/teacher/classes/<class_id>/canvas/disconnect', methods=['DELETE'])

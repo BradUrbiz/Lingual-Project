@@ -2,6 +2,7 @@ import api from './index';
 import type {
   CanvasConnectResult,
   CanvasConnectionStatus,
+  CanvasCourseContentItem,
   CanvasSyncResult,
   CanvasValidateResult,
 } from '@/types/canvas';
@@ -56,6 +57,24 @@ export const disconnectCanvas = async (
     `/teacher/classes/${classId}/canvas/disconnect`,
   );
   return response.data;
+};
+
+export const getCanvasContentForClass = async (
+  classId: string,
+): Promise<CanvasCourseContentItem[]> => {
+  const response = await api.get<{ items: CanvasCourseContentItem[] }>(
+    `/teacher/classes/${classId}/canvas/content`,
+  );
+  return response.data.items;
+};
+
+export const getStudentCanvasContent = async (
+  classId: string,
+): Promise<CanvasCourseContentItem[]> => {
+  const response = await api.get<{ items: CanvasCourseContentItem[] }>(
+    `/student/classes/${classId}/canvas/content`,
+  );
+  return response.data.items;
 };
 
 export const linkAssignmentToCanvas = async (

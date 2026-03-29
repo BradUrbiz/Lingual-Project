@@ -245,6 +245,9 @@ def create_integrations_blueprint(deps: RouteDeps) -> Blueprint:
                     'title': item.get('item_title') or item.get('title', ''),
                     'itemType': item.get('item_type', ''),
                     'itemPosition': item.get('item_position', 0),
+                    'dueAt': item.get('due_at'),
+                    'pointsPossible': item.get('points_possible'),
+                    'htmlUrl': item.get('item_html_url') or None,
                     'lingualAssignmentId': item.get('lingual_assignment_id') or None,
                 }
                 for item in items
@@ -276,6 +279,9 @@ def create_integrations_blueprint(deps: RouteDeps) -> Blueprint:
                     'title': item.get('item_title') or item.get('title', ''),
                     'itemType': item.get('item_type', ''),
                     'itemPosition': item.get('item_position', 0),
+                    'dueAt': item.get('due_at'),
+                    'pointsPossible': item.get('points_possible'),
+                    'htmlUrl': item.get('item_html_url') or None,
                     'lingualAssignmentId': item.get('lingual_assignment_id') or None,
                 }
                 for item in items

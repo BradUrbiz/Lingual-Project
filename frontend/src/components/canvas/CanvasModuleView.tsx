@@ -77,8 +77,27 @@ export function CanvasModuleView({
                         key={item.canvasItemId}
                         className="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0"
                       >
-                        <span className="flex-1 text-sm">{item.title}</span>
-                        <span className="text-xs text-muted-foreground">{item.itemType}</span>
+                        <div className="min-w-0 flex-1">
+                          {item.htmlUrl ? (
+                            <a
+                              href={item.htmlUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm font-medium text-foreground hover:text-primary hover:underline"
+                            >
+                              {item.title}
+                            </a>
+                          ) : (
+                            <span className="text-sm">{item.title}</span>
+                          )}
+                          {(item.dueAt || item.pointsPossible != null) && (
+                            <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                              {item.dueAt && <span>{formatDueDate(item.dueAt)}</span>}
+                              {item.pointsPossible != null && <span>{item.pointsPossible} pts</span>}
+                            </div>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-xs text-muted-foreground">{item.itemType}</span>
                         {assignmentId && onLaunchAssignment ? (
                           <Button
                             size="sm"
@@ -98,9 +117,9 @@ export function CanvasModuleView({
                             <Sparkles size={14} className="mr-1" />
                             Create Practice
                           </Button>
-                        ) : canvasInstanceUrl ? (
+                        ) : item.htmlUrl ? (
                           <a
-                            href={`${canvasInstanceUrl}/courses`}
+                            href={item.htmlUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
@@ -120,6 +139,15 @@ export function CanvasModuleView({
       })}
     </div>
   );
+}
+
+function formatDueDate(isoDate: string): string {
+  try {
+    const date = new Date(isoDate);
+    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+  } catch {
+    return '';
+  }
 }
 
 function groupByModule(items: CanvasCourseContentItem[]): ModuleGroup[] {

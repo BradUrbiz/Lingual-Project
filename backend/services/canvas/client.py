@@ -61,7 +61,7 @@ class CanvasClient:
     def get_module_items(self, course_id: str, module_id: str) -> list[dict]:
         return self._get_paginated(
             f'{self.base_url}/api/v1/courses/{course_id}/modules/{module_id}/items',
-            params={'per_page': '50'},
+            params={'per_page': '50', 'include[]': 'content_details'},
         )
 
     def get_students(self, course_id: str) -> list[dict]:

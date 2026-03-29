@@ -130,6 +130,7 @@ def flatten_course_content(connection_id: str, class_id: str,
         module_id = module['id']
         module_items = items_by_module.get(module_id, [])
         for item in module_items:
+            content_details = item.get('content_details') or {}
             flat.append({
                 'connection_id': connection_id,
                 'class_id': class_id,
@@ -140,6 +141,9 @@ def flatten_course_content(connection_id: str, class_id: str,
                 'item_title': item.get('title', ''),
                 'item_type': item.get('type', ''),
                 'item_position': item.get('position', 0),
+                'item_html_url': item.get('html_url', ''),
+                'due_at': content_details.get('due_at'),
+                'points_possible': content_details.get('points_possible'),
             })
     return flat
 

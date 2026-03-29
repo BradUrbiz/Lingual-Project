@@ -2125,6 +2125,7 @@ def replace_canvas_course_content_for_connection(connection_id, class_id, items)
             'item_position': item.get('item_position', 0),
             'item_html_url': item.get('item_html_url', ''),
             'due_at': item.get('due_at'),
+            'points_possible': item.get('points_possible'),
             'lingual_assignment_id': item.get('lingual_assignment_id'),
             'updated_at': now,
         }

@@ -211,6 +211,22 @@ def build_teacher_dashboard_payload(deps: RouteDeps, context) -> dict:
     if context.active_membership:
         organization_name = context.active_membership.get("orgName", "")
 
+    # Aggregate speaking time across all accessible classes
+    total_speaking_seconds = 0
+    if hasattr(deps.db, 'list_class_practice_sessions'):
+        for cs in class_summaries:
+            class_id = cs.get("id") or cs.get("classId", "")
+            if not class_id:
+                continue
+            try:
+                sessions = deps.db.list_class_practice_sessions(class_id)
+                for session in sessions:
+                    summary = session.get("session_summary") or {}
+                    total_speaking_seconds += int(summary.get("estimated_speaking_time_seconds") or 0)
+            except Exception:
+                pass
+    speaking_minutes = round(total_speaking_seconds / 60)
+
     alerts = []
     if not class_summaries:
         alerts.append("Create your first class to start assignment delivery and reporting.")
@@ -222,7 +238,7 @@ def build_teacher_dashboard_payload(deps: RouteDeps, context) -> dict:
         "summary": {
             "classCount": len(class_summaries),
             "studentCount": student_count,
-            "speakingMinutes": 0,
+            "speakingMinutes": speaking_minutes,
             "assignmentCount": assignment_count,
         },
         "classes": class_summaries,

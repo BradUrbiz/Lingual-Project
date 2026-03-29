@@ -241,8 +241,8 @@ def create_integrations_blueprint(deps: RouteDeps) -> Blueprint:
                     'canvasModuleId': str(item.get('canvas_module_id', '')),
                     'canvasModuleName': item.get('canvas_module_name', ''),
                     'canvasModulePosition': item.get('canvas_module_position', 0),
-                    'canvasItemId': str(item.get('canvas_item_id', '')),
-                    'title': item.get('title', ''),
+                    'canvasItemId': str(item.get('item_id') or item.get('canvas_item_id') or ''),
+                    'title': item.get('item_title') or item.get('title', ''),
                     'itemType': item.get('item_type', ''),
                     'itemPosition': item.get('item_position', 0),
                     'lingualAssignmentId': item.get('lingual_assignment_id') or None,
@@ -260,6 +260,10 @@ def create_integrations_blueprint(deps: RouteDeps) -> Blueprint:
         if not uid:
             return jsonify({'success': False, 'error': 'Auth required'}), 401
 
+        enrollment = deps.db.get_student_class_enrollment(class_id, uid)
+        if not enrollment or enrollment.get('status') != 'active':
+            return jsonify({'success': False, 'error': 'Not enrolled in this class'}), 403
+
         items = deps.db.list_canvas_course_content_for_class(class_id)
         return jsonify({
             'items': [
@@ -268,8 +272,8 @@ def create_integrations_blueprint(deps: RouteDeps) -> Blueprint:
                     'canvasModuleId': str(item.get('canvas_module_id', '')),
                     'canvasModuleName': item.get('canvas_module_name', ''),
                     'canvasModulePosition': item.get('canvas_module_position', 0),
-                    'canvasItemId': str(item.get('canvas_item_id', '')),
-                    'title': item.get('title', ''),
+                    'canvasItemId': str(item.get('item_id') or item.get('canvas_item_id') or ''),
+                    'title': item.get('item_title') or item.get('title', ''),
                     'itemType': item.get('item_type', ''),
                     'itemPosition': item.get('item_position', 0),
                     'lingualAssignmentId': item.get('lingual_assignment_id') or None,

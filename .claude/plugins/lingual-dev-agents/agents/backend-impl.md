@@ -1,6 +1,6 @@
 ---
 name: backend-impl
-description: Use this agent during implementation when there is backend work (Flask routes, Firestore services, database helpers). Dispatch in parallel with frontend-impl using isolation "worktree" when backend and frontend work is independent. Skip when the feature is frontend-only.
+description: Use this agent during implementation when there is backend work (Backend routes (like Flask routes), DB services like Firestore services, database helpers, etc). Dispatch in parallel with frontend-impl using isolation "worktree" when backend and frontend work is independent. Skip when the feature is frontend-only.
 
 <example>
 Context: A feature needs both a new API endpoint and a new React page.

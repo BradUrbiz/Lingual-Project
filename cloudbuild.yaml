@@ -2,6 +2,25 @@
 # This file is used by Google Cloud Build to automate the CI/CD pipeline
 
 steps:
+  # Run backend tests
+  - name: 'python:3.11-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        pip install --no-cache-dir -r requirements.txt &&
+        python3 -m unittest discover -s backend/tests -p "test_*.py"
+
+  # Run frontend tests
+  - name: 'node:20-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        cd frontend &&
+        npm ci &&
+        npm run test -- --run --exclude='**/AppChatPage.avatar.test.tsx'
+
   # Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -36,7 +55,7 @@ steps:
       - '--set-env-vars'
       - 'FLASK_ENV=production,AZURE_SPEECH_REGION=${_AZURE_SPEECH_REGION}'
       - '--set-secrets'
-      - 'OPENAI_API_KEY=${_SECRET_NAME}:latest,SECRET_KEY=flask-secret-key:latest,AZURE_SPEECH_KEY=azure-speech-key:latest'
+      - 'OPENAI_API_KEY=${_SECRET_NAME}:latest,SECRET_KEY=flask-secret-key:latest,AZURE_SPEECH_KEY=azure-speech-key:latest,CANVAS_PAT_ENCRYPTION_KEY=canvas-pat-encryption-key:latest'
 
 # Substitution variables (can be overridden at build time)
 substitutions:

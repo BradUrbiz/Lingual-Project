@@ -52,6 +52,8 @@ export interface CurriculumMappingDto {
   createdByUid: string;
   createdAt?: string | null;
   updatedAt?: string | null;
+  generatedScenario?: string;
+  sourceCanvasItemTitle?: string;
 }
 
 export interface TeacherCurriculumPackageSummary {

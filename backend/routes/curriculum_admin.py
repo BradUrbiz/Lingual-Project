@@ -249,7 +249,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             if not module_id:
                 return jsonify({'success': False, 'error': 'moduleId is required.'}), 400
 
-            _ensure_sample_mapping_references(deps, package_id, module_id, situation_ids, objective_ids)
+            if package_id != 'canvas-generated':
+                _ensure_sample_mapping_references(deps, package_id, module_id, situation_ids, objective_ids)
 
             mapping_id = deps.db.create_curriculum_mapping(
                 org_id=class_record.get('org_id'),

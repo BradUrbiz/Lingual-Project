@@ -209,6 +209,10 @@ export function TeacherAssignmentBuilderPage() {
   const [mappingForm, setMappingForm] = useState<MappingFormState>(DEFAULT_MAPPING_FORM);
   const [assignmentForm, setAssignmentForm] = useState<AssignmentFormState>(DEFAULT_ASSIGNMENT_FORM);
   const [canvasContent, setCanvasContent] = useState<CanvasCourseContentItem[]>([]);
+  const [quickMode, setQuickMode] = useState(true);
+  const [quickTitle, setQuickTitle] = useState('');
+  const [quickDescription, setQuickDescription] = useState('');
+  const [savingQuick, setSavingQuick] = useState(false);
 
   const activeClass = teacherClasses.find((item) => item.id === classId) || null;
   const selectedModule = curriculum?.modules.find((module) => module.id === mappingForm.moduleId) || null;
@@ -453,6 +457,83 @@ export function TeacherAssignmentBuilderPage() {
     }
   };
 
+  const handleQuickPublish = async () => {
+    if (!classId) return;
+    if (!mappingForm.moduleId || !mappingForm.situationId) {
+      setError('Please select a module and speaking situation.');
+      return;
+    }
+
+    const title = quickTitle.trim() || (selectedSituation
+      ? `${getLocalizedText(selectedModule?.title, lang, '')} — ${selectedSituation.seed.setting || selectedSituation.id}`
+      : 'Speaking assignment');
+
+    setSavingQuick(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      // Step 1: Create mapping with all defaults
+      const mappingPayload: CreateCurriculumMappingPayload = {
+        packageId: mappingForm.packageId || selectedPackageId,
+        moduleId: mappingForm.moduleId,
+        objectiveIds: moduleObjectives.map((o) => o.id),
+        situationIds: [mappingForm.situationId],
+        targetExpressions: [],
+        focusGrammar: [],
+        allowedContextTags: [],
+        rubricFocus: [],
+        teacherNotes: '',
+        feedbackPolicy: {
+          mode: 'balanced',
+          targetOnlyStrict: false,
+          recastDefault: true,
+          elicitationRepeatThreshold: 3,
+          endReviewEnabled: true,
+        },
+        scaffoldPolicy: {
+          silenceToleranceMs: 3000,
+          hintLadder: ['wait', 'context_hint', 'choice_prompt', 'model_and_retry'],
+          maxModelingSteps: 1,
+        },
+        outputPolicy: {
+          minStudentTurnWords: 8,
+          followUpPressure: 'balanced',
+          allowClarificationRequests: true,
+        },
+        modalityPolicy: {
+          mode: 'hybrid',
+          voiceMinutesCap: null,
+          textFallbackEnabled: true,
+        },
+      };
+
+      const createdMapping = await createCurriculumMapping(classId, mappingPayload);
+
+      // Step 2: Create and publish assignment
+      const assignmentPayload: CreateAssignmentPayload = {
+        mappingId: createdMapping.id,
+        title,
+        description: quickDescription.trim(),
+        status: 'published',
+        taskType: 'decision_making',
+        successCriteria: [],
+        maxAttempts: null,
+      };
+
+      await createAssignment(classId, assignmentPayload);
+      await loadClassData(classId);
+      setQuickTitle('');
+      setQuickDescription('');
+      setMappingForm(DEFAULT_MAPPING_FORM);
+      setSuccessMessage('Assignment published! Students can now launch it from their learning dashboard.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Failed to create assignment.');
+    } finally {
+      setSavingQuick(false);
+    }
+  };
+
   const handleCreateAssignment = async () => {
     if (!classId) return;
 
@@ -539,8 +620,7 @@ export function TeacherAssignmentBuilderPage() {
             </div>
             <h1 className="text-3xl font-display font-bold text-foreground">{activeClass.name}</h1>
             <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-              Build the curriculum mapping first, then publish an assignment that bootstraps assignment-aware realtime
-              practice for this class.
+              Choose what your students will practice, customize the AI tutor's behavior, then publish an assignment.
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-3">
@@ -580,6 +660,136 @@ export function TeacherAssignmentBuilderPage() {
         </Alert>
       ))}
 
+      {/* Mode toggle */}
+      <div className="flex items-center gap-3">
+        <Button
+          variant={quickMode ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setQuickMode(true)}
+        >
+          Quick assign
+        </Button>
+        <Button
+          variant={!quickMode ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setQuickMode(false)}
+        >
+          Advanced
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          {quickMode ? 'Pick a topic and publish in seconds' : 'Full control over curriculum mapping and policies'}
+        </span>
+      </div>
+
+      {/* ── Quick Assignment Mode ──────────────────────────────────────── */}
+      {quickMode && (
+        <Card className="border-3 border-foreground p-6 shadow-stamp">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
+              <Sparkles size={22} strokeWidth={2.5} />
+            </div>
+            <div>
+              <h2 className="text-xl font-display font-bold text-foreground">Quick assignment</h2>
+              <p className="text-sm text-muted-foreground">
+                Pick a speaking topic, name it, and publish. All tutor settings use sensible defaults.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="space-y-2">
+              <label htmlFor="quick-module" className="text-sm font-semibold text-foreground">
+                Unit / Module
+              </label>
+              <select
+                id="quick-module"
+                value={mappingForm.moduleId}
+                onChange={(event) => {
+                  handleMappingField('moduleId', event.target.value);
+                  handleMappingField('situationId', '');
+                  handleMappingField('objectiveIds', []);
+                }}
+                className="h-11 w-full rounded-xl border-2 border-border bg-card px-4 text-sm text-foreground focus:border-primary focus:outline-none"
+              >
+                <option value="">Select a module...</option>
+                {curriculum?.modules.map((module) => (
+                  <option key={module.id} value={module.id}>
+                    {getLocalizedText(module.title, lang, module.id)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="quick-situation" className="text-sm font-semibold text-foreground">
+                Speaking situation
+              </label>
+              <select
+                id="quick-situation"
+                value={mappingForm.situationId}
+                onChange={(event) => handleMappingField('situationId', event.target.value)}
+                className="h-11 w-full rounded-xl border-2 border-border bg-card px-4 text-sm text-foreground focus:border-primary focus:outline-none"
+                disabled={!mappingForm.moduleId}
+              >
+                <option value="">Select a situation...</option>
+                {speakingSituations.map((situation) => (
+                  <option key={situation.id} value={situation.id}>
+                    {situation.seed.setting || situation.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {selectedSituation && (
+            <div className="mt-4 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+              <p className="text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">Roles:</span>{' '}
+                {(selectedSituation.seed.roles || []).join(', ') || 'n/a'}
+                {' · '}
+                <span className="font-semibold text-foreground">Register:</span>{' '}
+                {selectedSituation.seed.register || 'n/a'}
+              </p>
+            </div>
+          )}
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <Input
+              label="Assignment title"
+              value={quickTitle}
+              onChange={(event) => setQuickTitle(event.target.value)}
+              placeholder={selectedSituation
+                ? `${getLocalizedText(selectedModule?.title, lang, '')} — ${selectedSituation.seed.setting || ''}`
+                : 'e.g., Ordering food at a cafe'
+              }
+            />
+            <Input
+              label="Description (optional)"
+              value={quickDescription}
+              onChange={(event) => setQuickDescription(event.target.value)}
+              placeholder="Brief instructions for students"
+            />
+          </div>
+
+          <div className="mt-6 flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Tutor: balanced feedback · hybrid mode · default scaffold.{' '}
+              <button
+                onClick={() => setQuickMode(false)}
+                className="text-primary underline underline-offset-2 hover:text-primary/80"
+              >
+                Customize in advanced mode
+              </button>
+            </p>
+            <Button onClick={handleQuickPublish} loading={savingQuick} disabled={!mappingForm.situationId}>
+              Publish assignment
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* ── Advanced Mode ──────────────────────────────────────────────── */}
+      {!quickMode && (
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="border-3 border-foreground p-6 shadow-stamp">
           <div className="flex items-center gap-3">
@@ -1284,7 +1494,7 @@ export function TeacherAssignmentBuilderPage() {
             <div className="mt-5 space-y-3">
               {assignments.length === 0 ? (
                 <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
-                  No assignments created yet.
+                  {quickMode ? 'No assignments yet. Pick a speaking topic above and publish your first one!' : 'No assignments created yet.'}
                 </div>
               ) : (
                 assignments.map((assignment) => (
@@ -1356,6 +1566,59 @@ export function TeacherAssignmentBuilderPage() {
           </Card>
         </div>
       </div>
+      )}
+
+      {/* Assignments list — visible in both modes */}
+      {assignments.length > 0 && quickMode && (
+        <Card className="border-3 border-foreground p-6 shadow-stamp">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
+              <GraduationCap size={22} strokeWidth={2.5} />
+            </div>
+            <div>
+              <h2 className="text-xl font-display font-bold text-foreground">Your assignments</h2>
+              <p className="text-sm text-muted-foreground">
+                Published assignments are live on your students' dashboards.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 space-y-3">
+            {assignments.map((assignment) => (
+              <div key={assignment.id} className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={formatStatusVariant(assignment.status)} size="sm">
+                        {assignment.status}
+                      </Badge>
+                    </div>
+                    <h3 className="mt-2 text-lg font-display font-bold text-foreground">{assignment.title}</h3>
+                    {assignment.description && (
+                      <p className="mt-1 text-sm text-muted-foreground">{assignment.description}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/app/teacher/classes/${classId}/assignments/${assignment.id}/analytics`)}
+                    >
+                      View analytics
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/app/assignments/${assignment.id}`)}
+                    >
+                      Preview
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

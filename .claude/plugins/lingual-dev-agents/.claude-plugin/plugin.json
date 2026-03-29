@@ -1,5 +1,5 @@
 {
   "name": "lingual-dev-agents",
   "version": "1.0.0",
-  "description": "Development workflow agents for Lingual's document-driven development process. Provides spec review, parallel backend/frontend implementation, cross-layer review, and doc sync agents dispatched autonomously at phase boundaries."
+  "description": "Development workflow agents for document-driven development process. Provides spec review, parallel backend/frontend implementation, cross-layer review, and doc sync agents dispatched autonomously at phase boundaries."
 }

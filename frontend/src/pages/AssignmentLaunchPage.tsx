@@ -459,19 +459,33 @@ export function AssignmentLaunchPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
-          <Card className="border-3 border-foreground p-6 shadow-stamp">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
-                <BookOpen size={22} strokeWidth={2.5} />
-              </div>
-              <div>
-                <h2 className="text-xl font-display font-bold text-foreground">Curriculum scope</h2>
-                <p className="text-sm text-muted-foreground">
-                  The realtime tutor is launched from this resolved curriculum context plus the assignment overlay.
-                </p>
-              </div>
-            </div>
+          <details className="group">
+            <summary className="cursor-pointer list-none">
+              <Card className="border-3 border-foreground p-5 shadow-stamp transition-colors group-open:border-primary/40">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
+                      <BookOpen size={22} strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-display font-bold text-foreground">About this assignment</h2>
+                      <p className="text-sm text-muted-foreground">
+                        Curriculum scope, objectives, and teacher instructions
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-medium text-muted-foreground group-open:hidden">Show details</span>
+                  <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">Hide details</span>
+                </div>
+              </Card>
+            </summary>
 
+          <Card className="mt-3 border-3 border-foreground p-6 shadow-stamp">
+            <h2 className="text-lg font-display font-bold text-foreground">
+              {bootstrap.curriculum.package?.id === 'canvas-generated' ? 'Practice scope' : 'Curriculum scope'}
+            </h2>
+
+            {bootstrap.curriculum.unit && bootstrap.curriculum.module ? (
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Unit</p>
@@ -489,12 +503,21 @@ export function AssignmentLaunchPage() {
                 </p>
               </div>
             </div>
+            ) : bootstrap.mapping?.generatedScenario ? (
+            <div className="mt-6 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Conversation scenario</p>
+              <p className="mt-2 text-sm text-foreground">{bootstrap.mapping.generatedScenario}</p>
+              {bootstrap.mapping.sourceCanvasItemTitle && (
+                <p className="mt-2 text-xs text-muted-foreground">Based on: {bootstrap.mapping.sourceCanvasItemTitle}</p>
+              )}
+            </div>
+            ) : null}
 
             <div className="mt-5 rounded-2xl border-2 border-border bg-secondary/40 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Situation</p>
-              <p className="mt-2 font-semibold text-foreground">{bootstrap.curriculum.situation.id}</p>
+              <p className="mt-2 font-semibold text-foreground">{bootstrap.curriculum.situation?.id || 'Canvas-generated'}</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {formatModeLabel(bootstrap.curriculum.situation.kind)} · {String(bootstrap.curriculum.situation.seed.setting || 'context not specified')}
+                {formatModeLabel(bootstrap.curriculum.situation?.kind)} · {String(bootstrap.curriculum.situation?.seed?.setting || 'context not specified')}
               </p>
             </div>
 
@@ -565,6 +588,7 @@ export function AssignmentLaunchPage() {
               </div>
             </div>
           </Card>
+          </details>
         </div>
 
         <div className="space-y-6">
@@ -574,9 +598,9 @@ export function AssignmentLaunchPage() {
                 <Mic size={22} strokeWidth={2.5} />
               </div>
               <div>
-                <h2 className="text-xl font-display font-bold text-foreground">Launch practice</h2>
+                <h2 className="text-xl font-display font-bold text-foreground">Start speaking</h2>
                 <p className="text-sm text-muted-foreground">
-                  Start a realtime session that already includes this assignment’s curriculum and pedagogy context.
+                  Practice with your AI speaking partner. The conversation follows your teacher’s lesson plan.
                 </p>
               </div>
             </div>

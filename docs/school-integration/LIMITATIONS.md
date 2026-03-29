@@ -33,8 +33,8 @@ Impact: teachers can generate/regenerate/deactivate join codes, students can joi
 Planned follow-up: CSV roster import, email-based invitations, and Google Classroom integration.
 
 3. Teacher analytics are available at class, assignment, and student level with basic filtering, but are still heuristic-based.
-Impact: teachers can now navigate from the dashboard to class analytics (aggregated across assignments), student drill-down (per-student across assignments), and per-assignment analytics. The dashboard now supports a class filter that recalculates summary stats for a single class, and the class analytics page supports date range filtering (server-side session filtering) and assignment status filtering (client-side). However, all metrics (speaking time, rubric scores, error detection) are still heuristic estimates from transcript-level signals, not model-verified or provider-accurate. The dashboard-level speaking minutes stat remains hardcoded at 0 until session aggregation is wired to the dashboard endpoint.
-Planned follow-up: cross-class trends, richer visualization, dashboard-level session aggregation, and model-backed scoring calibration.
+Impact: teachers can now navigate from the dashboard to class analytics (aggregated across assignments), student drill-down (per-student across assignments), and per-assignment analytics. The dashboard now supports a class filter that recalculates summary stats for a single class, and the class analytics page supports date range filtering (server-side session filtering) and assignment status filtering (client-side). However, all metrics (speaking time, rubric scores, error detection) are still heuristic estimates from transcript-level signals, not model-verified or provider-accurate. The dashboard-level speaking minutes stat now aggregates estimated speaking time from practice sessions across the teacher's classes.
+Planned follow-up: cross-class trends, richer visualization, and model-backed scoring calibration.
 
 ### Curriculum mapping and assignments
 

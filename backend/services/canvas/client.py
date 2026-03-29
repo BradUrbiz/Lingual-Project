@@ -79,7 +79,7 @@ class CanvasClient:
         self._raise_for_status(resp)
         return resp.json()
 
-    def _get_paginated(self, url: str, params: dict | None = None) -> list[dict]:
+    def _get_paginated(self, url: str, params: dict | None = None, max_pages: int = 20) -> list[dict]:
         results: list[dict] = []
         resp = requests.get(
             url, headers=self._headers, params=params, timeout=self._timeout,
@@ -87,7 +87,8 @@ class CanvasClient:
         self._raise_for_status(resp)
         results.extend(resp.json())
 
-        while True:
+        pages_fetched = 1
+        while pages_fetched < max_pages:
             next_url = self._parse_next_link(resp.headers.get('Link', ''))
             if not next_url:
                 break
@@ -96,6 +97,7 @@ class CanvasClient:
             )
             self._raise_for_status(resp)
             results.extend(resp.json())
+            pages_fetched += 1
 
         return results
 
@@ -110,6 +112,14 @@ class CanvasClient:
         if resp.status_code == 429:
             raise CanvasRateLimitError('Rate limited by Canvas', 429)
         resp.raise_for_status()
+
+    def get_page(self, course_id: str, page_url: str) -> dict:
+        """Fetch a Canvas Page's content by its page URL slug."""
+        return self._get(f'{self.base_url}/api/v1/courses/{course_id}/pages/{page_url}')
+
+    def get_canvas_assignment(self, course_id: str, assignment_id: str) -> dict:
+        """Fetch a Canvas assignment's details including description."""
+        return self._get(f'{self.base_url}/api/v1/courses/{course_id}/assignments/{assignment_id}')
 
     @staticmethod
     def _parse_next_link(link_header: str) -> str | None:

@@ -1,0 +1,18 @@
+[run]
+source = backend
+omit =
+    backend/tests/*
+    */node_modules/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if __name__ == .__main__
+    raise NotImplementedError
+show_missing = True
+skip_covered = True
+fail_under = 0
+
+[html]
+directory = coverage_html

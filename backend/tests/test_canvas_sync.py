@@ -239,7 +239,7 @@ class FlattenCourseContentTest(unittest.TestCase):
         self.assertEqual(flat[0]['canvas_module_name'], 'Week 1')
         self.assertEqual(flat[0]['canvas_module_position'], 1)
         self.assertEqual(flat[0]['item_position'], 1)
-        self.assertEqual(flat[0]['title'], 'Reading')
+        self.assertEqual(flat[0]['item_title'], 'Reading')
         self.assertEqual(flat[2]['canvas_module_position'], 2)
 
     def test_empty_modules(self):

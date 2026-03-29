@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, ExternalLink, Play } from 'lucide-react';
+import { ChevronDown, ChevronRight, ExternalLink, Play, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui';
 import type { CanvasCourseContentItem } from '@/types/canvas';
 
@@ -9,6 +9,10 @@ interface Props {
   /** Map of canvasItemId → Lingual assignmentId for linked items. */
   linkedAssignments?: Record<string, string>;
   onLaunchAssignment?: (assignmentId: string) => void;
+  /** When true, shows "Create Practice" buttons for unlinked items. */
+  isTeacherView?: boolean;
+  /** Called when teacher clicks "Create Practice" on an item. */
+  onCreatePractice?: (item: CanvasCourseContentItem) => void;
 }
 
 interface ModuleGroup {
@@ -23,6 +27,8 @@ export function CanvasModuleView({
   canvasInstanceUrl,
   linkedAssignments = {},
   onLaunchAssignment,
+  isTeacherView = false,
+  onCreatePractice,
 }: Props) {
   const modules = groupByModule(items);
   const [expandedModules, setExpandedModules] = useState<Set<string>>(
@@ -81,6 +87,16 @@ export function CanvasModuleView({
                           >
                             <Play size={14} className="mr-1" />
                             Start Practice
+                          </Button>
+                        ) : isTeacherView && !assignmentId && onCreatePractice ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onCreatePractice(item)}
+                            data-testid={`create-practice-${item.canvasItemId}`}
+                          >
+                            <Sparkles size={14} className="mr-1" />
+                            Create Practice
                           </Button>
                         ) : canvasInstanceUrl ? (
                           <a

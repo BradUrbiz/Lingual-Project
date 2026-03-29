@@ -67,6 +67,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // E2E test bypass: when localStorage has __e2e_uid__, fetch user from the test
+    // harness verify endpoint instead of going through Firebase Auth.
+    // Only works when the backend has the test harness active (FLASK_ENV=development).
+    const e2eUid = localStorage.getItem('__e2e_uid__');
+    if (e2eUid) {
+      (async () => {
+        try {
+          const res = await fetch('/api/test/verify', { credentials: 'include' });
+          const data = await res.json();
+          if (data.success && data.user) {
+            setUser(data.user as User);
+          }
+        } catch {
+          // Fall through to normal Firebase auth
+        }
+        setLoading(false);
+      })();
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
 

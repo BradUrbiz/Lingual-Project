@@ -10,3 +10,8 @@ node_modules/
 frontend/dist/
 *.log
 CubismSdkForWeb-5-r.4/
+coverage_html/
+.coverage
+htmlcov/
+e2e/snapshots/
+.playwright-cli/

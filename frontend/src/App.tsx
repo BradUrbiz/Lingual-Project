@@ -40,6 +40,7 @@ const GuardianConsentPage = lazy(() => import('./pages/GuardianConsentPage').the
 const AdminDeletionRequestsPage = lazy(() => import('./pages/AdminDeletionRequestsPage').then((module) => ({ default: module.AdminDeletionRequestsPage })));
 const AdminCompliancePage = lazy(() => import('./pages/AdminCompliancePage').then((module) => ({ default: module.AdminCompliancePage })));
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));
+const CanvasPracticeBuilderPage = lazy(() => import('./pages/CanvasPracticeBuilderPage').then((module) => ({ default: module.CanvasPracticeBuilderPage })));
 
 function RouteLoadingScreen() {
   return (
@@ -135,6 +136,14 @@ function AnimatedRoutes() {
             element={withRouteSuspense(
               <TeacherRoute>
                 <CanvasConnectPage />
+              </TeacherRoute>
+            )}
+          />
+          <Route
+            path="teacher/classes/:classId/canvas-practice/:canvasContentId"
+            element={withRouteSuspense(
+              <TeacherRoute>
+                <CanvasPracticeBuilderPage />
               </TeacherRoute>
             )}
           />

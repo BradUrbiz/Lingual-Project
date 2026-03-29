@@ -204,6 +204,23 @@ export function TeacherDashboardPage() {
     }
   };
 
+  const filteredClasses = useMemo(() => {
+    if (!dashboard || !classFilter) return dashboard?.classes ?? [];
+    return dashboard.classes.filter((c) => c.id === classFilter);
+  }, [dashboard, classFilter]);
+
+  const filteredSummary = useMemo(() => {
+    if (!dashboard || !classFilter) return dashboard?.summary ?? { classCount: 0, studentCount: 0, speakingMinutes: 0, assignmentCount: 0 };
+    const studentCount = filteredClasses.reduce((sum, c) => sum + c.studentCount, 0);
+    const assignmentCount = filteredClasses.reduce((sum, c) => sum + (c.assignmentCount ?? 0), 0);
+    return {
+      classCount: filteredClasses.length,
+      studentCount,
+      speakingMinutes: dashboard.summary.speakingMinutes,
+      assignmentCount,
+    };
+  }, [dashboard, classFilter, filteredClasses]);
+
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -224,23 +241,6 @@ export function TeacherDashboardPage() {
       </div>
     );
   }
-
-  const filteredClasses = useMemo(() => {
-    if (!classFilter) return dashboard.classes;
-    return dashboard.classes.filter((c) => c.id === classFilter);
-  }, [dashboard.classes, classFilter]);
-
-  const filteredSummary = useMemo(() => {
-    if (!classFilter) return dashboard.summary;
-    const studentCount = filteredClasses.reduce((sum, c) => sum + c.studentCount, 0);
-    const assignmentCount = filteredClasses.reduce((sum, c) => sum + (c.assignmentCount ?? 0), 0);
-    return {
-      classCount: filteredClasses.length,
-      studentCount,
-      speakingMinutes: dashboard.summary.speakingMinutes,
-      assignmentCount,
-    };
-  }, [dashboard.summary, classFilter, filteredClasses]);
 
   const stats = [
     {
@@ -281,8 +281,7 @@ export function TeacherDashboardPage() {
             {dashboard.organizationName || 'Teacher workspace'}
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            This dashboard now reads from the school domain model rather than hardcoded mock data. Classes created
-            here are attached to a real organization and teacher membership context.
+            Manage your classes, create speaking assignments, and track student progress.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -418,7 +417,7 @@ export function TeacherDashboardPage() {
             <div>
               <h2 className="text-xl font-display font-bold text-foreground">Classes</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                This is the first real teacher class list for the school track.
+                Your active classes and their student rosters.
               </p>
             </div>
             <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
@@ -527,8 +526,7 @@ export function TeacherDashboardPage() {
           <DialogHeader>
             <DialogTitle className="font-display text-2xl">Create class</DialogTitle>
             <DialogDescription>
-              This writes a real `classes/{'{classId}'}` record under the active organization and attaches it to the
-              active teacher membership.
+              Set up a new class for your students. You can invite students after creating it.
             </DialogDescription>
           </DialogHeader>
 

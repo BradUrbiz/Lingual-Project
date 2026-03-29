@@ -494,6 +494,16 @@ def get_or_create_user(uid, email, name):
     return user
 
 
+def get_user_by_email(email):
+    """Look up a user by email address. Returns the first match or None."""
+    docs = get_db().collection('users').where('email', '==', email).limit(1).stream()
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['uid'] = doc.id
+        return data
+    return None
+
+
 def update_user_profile(uid, display_name=None, age=None, gender=None,
                         rigor=None, frequency=None, frequency_unit=None,
                         level_objective=None, assessment_preference=None,
@@ -1217,6 +1227,10 @@ def create_curriculum_mapping(
     teacher_notes='',
     created_by_uid='',
     mapping_id=None,
+    generated_scenario='',
+    canvas_content_id='',
+    source_canvas_item_title='',
+    source_canvas_item_type='',
 ):
     """Create a curriculum mapping document."""
     doc_ref = get_curriculum_mapping_ref(mapping_id) if mapping_id else get_curriculum_mappings_collection().document()
@@ -1237,6 +1251,10 @@ def create_curriculum_mapping(
         'rubric_focus': _normalize_string_list(rubric_focus or []),
         'teacher_notes': teacher_notes or '',
         'created_by_uid': created_by_uid,
+        'generated_scenario': generated_scenario or '',
+        'canvas_content_id': canvas_content_id or '',
+        'source_canvas_item_title': source_canvas_item_title or '',
+        'source_canvas_item_type': source_canvas_item_type or '',
         'created_at': firestore.SERVER_TIMESTAMP,
         'updated_at': firestore.SERVER_TIMESTAMP,
     }
@@ -2118,6 +2136,16 @@ def replace_canvas_course_content_for_connection(connection_id, class_id, items)
             count = 0
     if count > 0:
         batch.commit()
+
+
+def get_canvas_course_content(content_id):
+    """Get a canvas course content document by ID."""
+    doc = get_canvas_course_content_ref(content_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict() or {}
+    data['id'] = doc.id
+    return data
 
 
 def list_canvas_course_content_for_class(class_id):

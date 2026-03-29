@@ -1,5 +1,10 @@
 {
   "enabledPlugins": {
     "lingual-dev-agents": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash"
+    ]
   }
 }

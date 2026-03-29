@@ -117,6 +117,12 @@ def serialize_curriculum_mapping(mapping: dict[str, Any] | None) -> dict[str, An
         "createdAt": _timestamp_to_iso(mapping.get("created_at")),
         "updatedAt": _timestamp_to_iso(mapping.get("updated_at")),
     }
+    if mapping.get("generated_scenario"):
+        serialized["generatedScenario"] = mapping["generated_scenario"]
+    if mapping.get("canvas_content_id"):
+        serialized["canvasContentId"] = mapping["canvas_content_id"]
+    if mapping.get("source_canvas_item_title"):
+        serialized["sourceCanvasItemTitle"] = mapping["source_canvas_item_title"]
     if isinstance(raw_output_policy, dict) and raw_output_policy:
         serialized["outputPolicy"] = serialize_output_policy(
             raw_output_policy,
@@ -366,6 +372,18 @@ def resolve_assignment_bootstrap(
     if not mapping_dto or not assignment_dto:
         raise ValueError("Assignment bootstrap requires both mapping and assignment records.")
 
+    # Canvas-generated assignments bypass the curriculum package lookup
+    if mapping_dto["packageId"] == "canvas-generated":
+        return _resolve_canvas_generated_bootstrap(
+            deps,
+            mapping=mapping,
+            mapping_dto=mapping_dto,
+            assignment=assignment,
+            assignment_dto=assignment_dto,
+            class_record=class_record,
+            ui_language=ui_language,
+        )
+
     package = deps.load_sample_curriculum_package()
     package_summary = build_sample_package_summary(package)
     if mapping_dto["packageId"] != package_summary["id"]:
@@ -505,6 +523,132 @@ def resolve_assignment_bootstrap(
             "Bootstrap currently supports only the bundled sample curriculum package.",
             "Teacher mapping controls are returned in bootstrap data and only partially injected into live prompt assembly.",
         ],
+    }
+
+
+def _resolve_canvas_generated_bootstrap(
+    deps: Any,
+    *,
+    mapping: dict[str, Any],
+    mapping_dto: dict[str, Any],
+    assignment: dict[str, Any],
+    assignment_dto: dict[str, Any],
+    class_record: dict[str, Any],
+    ui_language: str = "en",
+) -> dict[str, Any]:
+    """Build a bootstrap payload for canvas-generated assignments.
+
+    Uses the mapping's generated_scenario, target_expressions, and
+    focus_grammar directly instead of looking up a curriculum package.
+    """
+    scenario = mapping.get("generated_scenario", "")
+    target_expressions = _normalize_string_list(mapping.get("target_expressions"))
+    focus_grammar = _normalize_string_list(mapping.get("focus_grammar"))
+    success_criteria = _normalize_string_list(assignment.get("success_criteria"))
+    task_type = assignment_dto.get("taskType", "information_gap")
+
+    # Build a system prompt from the scenario and mapping fields
+    locale_label = class_record.get("learning_locale", "ko-KR")
+    class_name = class_record.get("name", "")
+    subject = class_record.get("subject", "")
+    source_title = mapping.get("source_canvas_item_title", "")
+
+    prompt_parts = [
+        f"You are an AI language tutor helping a student practice spoken {locale_label} in a {subject} class ({class_name}).",
+        "",
+        f"## Scenario\n{scenario}",
+    ]
+    if source_title:
+        prompt_parts.append(f"\nThis practice is based on the course material: \"{source_title}\".")
+    if target_expressions:
+        prompt_parts.append(f"\n## Target Expressions\nThe student should practice using: {', '.join(target_expressions)}")
+    if focus_grammar:
+        prompt_parts.append(f"\n## Focus Grammar\nPay attention to: {', '.join(focus_grammar)}")
+    if success_criteria:
+        prompt_parts.append(f"\n## Success Criteria\n" + "\n".join(f"- {c}" for c in success_criteria))
+    prompt_parts.append(f"\n## Task Type: {task_type.replace('_', ' ').title()}")
+    prompt_parts.append("\nGuide the conversation naturally. Encourage the student to speak in the target language. Provide gentle corrections and scaffolding when needed.")
+
+    system_prompt_preview = "\n".join(prompt_parts)
+
+    # Pedagogy context (minimal defaults)
+    pedagogy_context = {
+        "taskModel": task_type,
+        "evidence": {"minTurns": 4, "maxTurns": 12, "timeLimitSec": 300},
+        "objectiveIds": [],
+        "rubricIds": [],
+        "activityTemplates": [],
+        "templateRefs": [],
+    }
+
+    launch_modality = normalize_modality_policy(
+        assignment_dto.get("modalityOverride") or mapping_dto.get("modalityPolicy") or {}
+    )
+
+    mapping_dto["outputPolicy"] = serialize_output_policy(
+        mapping.get("output_policy"),
+        task_type=task_type,
+        evidence=pedagogy_context.get("evidence"),
+        feedback_mode=(mapping_dto.get("feedbackPolicy") or {}).get("mode", "balanced"),
+    )
+
+    return {
+        "assignment": assignment_dto,
+        "mapping": mapping_dto,
+        "class": {
+            "id": class_record.get("id"),
+            "orgId": class_record.get("org_id"),
+            "name": class_name,
+            "term": class_record.get("term", ""),
+            "subject": subject,
+            "learningLocale": locale_label,
+            "gradeBand": class_record.get("grade_band", ""),
+            "status": class_record.get("status", "active"),
+        },
+        "curriculum": {
+            "package": {
+                "id": "canvas-generated",
+                "title": {"en": "Canvas-Generated Practice"},
+                "learningLocale": locale_label,
+                "levelBand": "adaptive",
+            },
+            "unit": None,
+            "module": None,
+            "situation": {
+                "id": "canvas-generated",
+                "kind": "interpersonal_speaking",
+                "seed": {"setting": {"en": scenario[:200]}, "register": "informal"},
+                "objectiveIds": [],
+            },
+            "objectives": [],
+            "rubrics": [],
+            "pedagogy": pedagogy_context,
+        },
+        "launch": {
+            "configuredMode": launch_modality.get("mode", "hybrid"),
+            "modality": serialize_modality_policy(launch_modality),
+            "voiceAllowed": launch_modality.get("mode") in {"voice_only", "hybrid"},
+            "textAllowed": launch_modality.get("mode") in {"text_only", "hybrid"},
+            "fallbackApplied": False,
+            "blockedReasons": [],
+            "retentionPolicy": None,
+            "maxAttempts": assignment_dto.get("maxAttempts"),
+            "taskType": task_type,
+        },
+        "realtimeSessionParams": {
+            "uiLanguage": ui_language,
+            "practice": {
+                "type": "canvas_generated",
+                "assignmentId": assignment_dto["id"],
+                "classId": assignment_dto["classId"],
+                "mappingId": mapping_dto["id"],
+                "taskModel": task_type,
+                "objectiveIds": [],
+                "rubricIds": [],
+            },
+        },
+        "systemPromptPreview": system_prompt_preview,
+        "limitations": [],
     }
 
 

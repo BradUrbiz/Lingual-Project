@@ -12,7 +12,10 @@ from firebase_admin import credentials, auth as firebase_auth
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+_secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+if os.environ.get('FLASK_ENV') == 'production' and _secret_key == 'dev-secret-key-change-in-production':
+    raise RuntimeError('SECRET_KEY must be set in production — do not use the dev fallback')
+app.secret_key = _secret_key
 
 # Session cookie configuration for production (Cloud Run uses HTTPS)
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
@@ -89,6 +92,7 @@ from backend.routes.teacher import create_teacher_blueprint
 from backend.routes.curriculum_admin import create_curriculum_admin_blueprint
 from backend.routes.admin import create_admin_blueprint
 from backend.routes.integrations import create_integrations_blueprint
+from backend.routes.canvas_practice import create_canvas_practice_blueprint
 from backend.services.membership_context import (
     SchoolContextNotFoundError,
     resolve_school_request_context,
@@ -528,7 +532,17 @@ def register_domain_blueprints():
     app.register_blueprint(create_curriculum_admin_blueprint(deps))
     app.register_blueprint(create_admin_blueprint(deps))
     app.register_blueprint(create_integrations_blueprint(deps))
+    app.register_blueprint(create_canvas_practice_blueprint(deps))
     register_avatar_chat_routes(app, deps)
+
+    # E2E test harness — development/testing only
+    if os.environ.get('FLASK_ENV') in ('development', 'testing'):
+        try:
+            from backend.routes.test_harness import create_test_harness_blueprint
+            app.register_blueprint(create_test_harness_blueprint(deps))
+            print('[test_harness] E2E test endpoints registered at /api/test/*')
+        except ImportError:
+            pass
 
 
 register_domain_blueprints()

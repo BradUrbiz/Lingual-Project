@@ -312,6 +312,9 @@ describe('TeacherAssignmentBuilderPage', () => {
       expect(screen.getByText('French 2 - Period 3')).toBeInTheDocument();
     });
 
+    // Switch to advanced mode (Quick Assignment is the default)
+    fireEvent.click(screen.getByText('Advanced'));
+
     await screen.findByText('Interaction contract preview');
     await screen.findByText('Act as the server and make the learner drive the ordering process.');
     await screen.findByText('Opening moves');

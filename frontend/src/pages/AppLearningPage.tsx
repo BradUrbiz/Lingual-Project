@@ -5,18 +5,10 @@ import { getStudentAssignments } from '@/api/assignments';
 import { getStudentCanvasContent } from '@/api/canvas';
 import { Alert, AlertDescription, Badge, Button } from '@/components/ui';
 import { CanvasModuleView } from '@/components/canvas/CanvasModuleView';
-import { DashboardStatsBar, ServiceNavigationCard } from '@/components/dashboard';
+import { ServiceNavigationCard } from '@/components/dashboard';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { StudentAssignmentSummary } from '@/types';
 import type { CanvasCourseContentItem } from '@/types/canvas';
-
-// Mock stats — will be replaced with real backend data later
-const MOCK_STATS = {
-  streak: 7,
-  weeklyMinutes: 204,
-  weeklyXP: 250,
-  achievementCount: 3,
-};
 
 export function AppLearningPage() {
   const navigate = useNavigate();
@@ -77,19 +69,12 @@ export function AppLearningPage() {
         </div>
       </header>
 
-      <section className={`${surfaceClass} p-5`}>
-        <h2 className="mb-4 text-lg font-display font-bold text-foreground">
-          {t('app.dashboard.snapshot') || 'Weekly Snapshot'}
-        </h2>
-        <DashboardStatsBar stats={MOCK_STATS} t={t} />
-      </section>
-
       <section className={`${surfaceClass} p-6`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-lg font-display font-bold text-foreground">Assigned practice</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Published school assignments appear here with their assignment-aware launch page.
+              Practice assignments from your teachers appear here.
             </p>
           </div>
           <Badge variant="secondary" size="sm">

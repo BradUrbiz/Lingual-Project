@@ -12,7 +12,7 @@ RUN npm ci
 # Copy frontend source
 COPY frontend/ ./
 
-# Copy Cubism SDK for Live2D avatar build (auto-detected by vite.config.ts)
+# Copy Cubism SDK for Live2D avatar build (uploaded from local disk by gcloud builds submit)
 COPY CubismSdkForWeb-5-r.4/Framework/dist /app/CubismSdkForWeb-5-r.4/Framework/dist
 
 # Build the React app
@@ -47,6 +47,7 @@ RUN pip install --no-cache-dir gunicorn
 COPY main.py scoring.py ai.py database.py ./
 COPY backend/ ./backend/
 COPY data/ ./data/
+COPY ["Curriculum Data/", "./Curriculum Data/"]
 
 # Copy static assets (images, etc.) - not templates
 COPY static/ ./static/
@@ -58,4 +59,4 @@ COPY --from=frontend-builder /app/frontend/dist ./static/react
 EXPOSE 8080
 
 # Run with gunicorn for production
-CMD exec gunicorn --bind :${PORT:-8080} --workers 1 --threads 8 --timeout 0 main:app
+CMD exec gunicorn --bind :${PORT:-8080} --workers 1 --threads 8 --timeout 120 main:app

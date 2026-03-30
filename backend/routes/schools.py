@@ -306,4 +306,193 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
             print(f"Class join error: {exc}")
             return jsonify({"success": False, "error": str(exc)}), 500
 
+    # ------------------------------------------------------------------
+    # Teacher invite codes (school admin generates, teacher uses to join)
+    # ------------------------------------------------------------------
+
+    @bp.route("/api/schools/teacher-invite-code", methods=["POST"])
+    @deps.login_required
+    def api_generate_teacher_invite_code():
+        try:
+            ctx = deps.get_school_request_context()
+            ctx.require_any_role({"school_admin"})
+            org_id = ctx.active_organization_id
+            if not org_id:
+                return jsonify({"success": False, "error": "No active organization."}), 400
+            code = deps.db.generate_teacher_invite_code(org_id)
+            return jsonify({"success": True, "inviteCode": code})
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @bp.route("/api/schools/teacher-invite-code")
+    @deps.login_required
+    def api_get_teacher_invite_code():
+        try:
+            ctx = deps.get_school_request_context()
+            ctx.require_any_role({"school_admin"})
+            org = deps.db.get_organization(ctx.active_organization_id)
+            return jsonify({
+                "success": True,
+                "inviteCode": org.get("teacher_invite_code") if org.get("teacher_invite_code_active") else None,
+                "active": bool(org.get("teacher_invite_code_active")),
+                "generatedAt": str(org.get("teacher_invite_code_generated_at")) if org.get("teacher_invite_code_generated_at") else None,
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+
+    @bp.route("/api/schools/teacher-invite-code", methods=["DELETE"])
+    @deps.login_required
+    def api_deactivate_teacher_invite_code():
+        try:
+            ctx = deps.get_school_request_context()
+            ctx.require_any_role({"school_admin"})
+            deps.db.deactivate_teacher_invite_code(ctx.active_organization_id)
+            return jsonify({"success": True})
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+
+    # ------------------------------------------------------------------
+    # Join school as teacher (teacher enters invite code)
+    # ------------------------------------------------------------------
+
+    @bp.route("/api/schools/join-as-teacher", methods=["POST"])
+    @deps.login_required
+    def api_join_as_teacher():
+        try:
+            uid = deps.get_current_user_uid()
+            if not uid:
+                return jsonify({"success": False, "error": "Authentication required."}), 401
+
+            data = request.get_json() or {}
+            raw_code = (data.get("inviteCode") or "").strip().upper()
+            if not raw_code or len(raw_code) != 6:
+                return jsonify({"success": False, "error": "A valid 6-character invite code is required."}), 400
+
+            org = deps.db.get_org_by_teacher_invite_code(raw_code)
+            if not org:
+                return jsonify({"success": False, "error": "Invalid or expired invite code."}), 404
+
+            org_id = org["id"]
+
+            # Check if already a member
+            memberships = deps.db.get_user_memberships(uid)
+            for m in memberships:
+                if m.get("orgId") == org_id:
+                    return jsonify({"success": False, "error": "You are already a member of this school."}), 409
+
+            # Check if already has pending invitation
+            existing_invite = deps.db.get_teacher_invitation_by_user(org_id, uid)
+            if existing_invite:
+                return jsonify({"success": False, "error": "You already have a pending invitation for this school."}), 409
+
+            user = deps.db.get_user(uid)
+            invitation_id = deps.db.create_teacher_invitation(
+                org_id=org_id,
+                uid=uid,
+                email=user.get("email", "") if user else "",
+                name=user.get("name", "") if user else "",
+            )
+
+            return jsonify({
+                "success": True,
+                "invitationId": invitation_id,
+                "orgName": org.get("name", ""),
+                "status": "pending",
+            }), 201
+        except Exception as exc:
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    # ------------------------------------------------------------------
+    # Teacher invitations (school admin reviews)
+    # ------------------------------------------------------------------
+
+    @bp.route("/api/schools/teacher-invitations")
+    @deps.login_required
+    def api_list_teacher_invitations():
+        try:
+            ctx = deps.get_school_request_context()
+            ctx.require_any_role({"school_admin"})
+            status_filter = request.args.get("status")
+            invitations = deps.db.list_teacher_invitations(ctx.active_organization_id, status_filter=status_filter)
+            return jsonify({
+                "success": True,
+                "invitations": [
+                    {
+                        "id": inv.get("id"),
+                        "orgId": inv.get("org_id"),
+                        "uid": inv.get("uid"),
+                        "email": inv.get("email", ""),
+                        "name": inv.get("name", ""),
+                        "status": inv.get("status"),
+                        "createdAt": str(inv["created_at"]) if inv.get("created_at") else None,
+                    }
+                    for inv in invitations
+                ],
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+
+    @bp.route("/api/schools/teacher-invitations/<invitation_id>/approve", methods=["POST"])
+    @deps.login_required
+    def api_approve_teacher_invitation(invitation_id):
+        try:
+            ctx = deps.get_school_request_context()
+            ctx.require_any_role({"school_admin"})
+
+            invitation = deps.db.get_teacher_invitation(invitation_id)
+            if not invitation:
+                return jsonify({"success": False, "error": "Invitation not found."}), 404
+            if invitation.get("org_id") != ctx.active_organization_id:
+                return jsonify({"success": False, "error": "Invitation does not belong to your organization."}), 403
+            if invitation.get("status") != "pending":
+                return jsonify({"success": False, "error": f"Invitation is already {invitation['status']}."}), 409
+
+            membership_id = deps.db.create_membership(
+                org_id=ctx.active_organization_id,
+                uid=invitation["uid"],
+                roles=["teacher"],
+            )
+            deps.db.set_user_last_active_membership(invitation["uid"], membership_id)
+
+            from datetime import UTC, datetime
+            deps.db.update_teacher_invitation(invitation_id, {
+                "status": "approved",
+                "reviewed_by_uid": deps.get_current_user_uid(),
+                "reviewed_at": datetime.now(UTC).isoformat(),
+            })
+
+            return jsonify({"success": True, "membershipId": membership_id})
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @bp.route("/api/schools/teacher-invitations/<invitation_id>/reject", methods=["POST"])
+    @deps.login_required
+    def api_reject_teacher_invitation(invitation_id):
+        try:
+            ctx = deps.get_school_request_context()
+            ctx.require_any_role({"school_admin"})
+
+            invitation = deps.db.get_teacher_invitation(invitation_id)
+            if not invitation:
+                return jsonify({"success": False, "error": "Invitation not found."}), 404
+            if invitation.get("org_id") != ctx.active_organization_id:
+                return jsonify({"success": False, "error": "Invitation does not belong to your organization."}), 403
+            if invitation.get("status") != "pending":
+                return jsonify({"success": False, "error": f"Invitation is already {invitation['status']}."}), 409
+
+            from datetime import UTC, datetime
+            deps.db.update_teacher_invitation(invitation_id, {
+                "status": "rejected",
+                "reviewed_by_uid": deps.get_current_user_uid(),
+                "reviewed_at": datetime.now(UTC).isoformat(),
+            })
+
+            return jsonify({"success": True})
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+
     return bp

@@ -31,9 +31,7 @@ export function CanvasModuleView({
   onCreatePractice,
 }: Props) {
   const modules = groupByModule(items);
-  const [expandedModules, setExpandedModules] = useState<Set<string>>(
-    new Set(modules.map((m) => m.moduleId)),
-  );
+  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
 
   const toggleModule = (moduleId: string) => {
     setExpandedModules((prev) => {

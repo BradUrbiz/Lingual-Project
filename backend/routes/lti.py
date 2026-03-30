@@ -23,6 +23,7 @@ from backend.services.lti.keys import get_jwks
 from backend.services.membership_context import SchoolContextPermissionError
 
 SCHOOL_ADMIN_ROLES = {'school_admin'}
+TEACHER_ALLOWED_ROLES = {'teacher', 'school_admin'}
 
 
 def create_lti_blueprint(deps: RouteDeps) -> Blueprint:
@@ -519,6 +520,57 @@ def create_lti_blueprint(deps: RouteDeps) -> Blueprint:
         except Exception as exc:
             import traceback
             traceback.print_exc()
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    # ══════════════════════════════════════════════════════════════════
+    # 10. POST /api/teacher/assignments/<id>/grade-config — Set grade config
+    # ══════════════════════════════════════════════════════════════════
+
+    @bp.route('/api/teacher/assignments/<assignment_id>/grade-config', methods=['POST'])
+    @deps.login_required
+    def api_set_grade_config(assignment_id):
+        try:
+            ctx = deps.get_school_request_context()
+            ctx.require_any_role(TEACHER_ALLOWED_ROLES)
+            data = request.get_json() or {}
+            metric = data.get('metric')
+            points = data.get('points')
+            if metric and metric != 'completion':
+                return jsonify({'success': False, 'error': 'Only "completion" metric is supported.'}), 400
+            # Update the assignment's grade fields
+            assignment = deps.db.get_assignment(assignment_id)
+            if not assignment:
+                return jsonify({'success': False, 'error': 'Assignment not found.'}), 404
+            # Use a direct Firestore update
+            from google.cloud import firestore as gc_firestore
+            deps.db.get_assignment_ref(assignment_id).update({
+                'grade_metric': metric,
+                'grade_points': float(points) if points else None,
+                'updated_at': gc_firestore.SERVER_TIMESTAMP,
+            })
+            return jsonify({'success': True})
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except Exception as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    # ══════════════════════════════════════════════════════════════════
+    # 11. GET /api/teacher/assignments/<id>/grade-config — Get grade config
+    # ══════════════════════════════════════════════════════════════════
+
+    @bp.route('/api/teacher/assignments/<assignment_id>/grade-config')
+    @deps.login_required
+    def api_get_grade_config(assignment_id):
+        try:
+            assignment = deps.db.get_assignment(assignment_id)
+            if not assignment:
+                return jsonify({'success': False, 'error': 'Assignment not found.'}), 404
+            return jsonify({
+                'success': True,
+                'metric': assignment.get('grade_metric'),
+                'points': assignment.get('grade_points'),
+            })
+        except Exception as exc:
             return jsonify({'success': False, 'error': str(exc)}), 500
 
     return bp

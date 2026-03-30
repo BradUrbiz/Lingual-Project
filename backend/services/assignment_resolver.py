@@ -743,10 +743,6 @@ def resolve_assignment_bootstrap_for_user(
         **launch_policy,
     }
     bootstrap["teacherPreview"] = teacher_preview
-    if bootstrap["launch"].get("fallbackApplied"):
-        bootstrap.setdefault("limitations", []).append(
-            "Voice launch is blocked for this user, so this assignment has been downgraded to assignment-scoped text practice.",
-        )
     if not bootstrap["launch"].get("voiceAllowed") and not bootstrap["launch"].get("textAllowed"):
         bootstrap.setdefault("limitations", []).append(
             "This assignment is currently blocked because neither voice nor text launch is permitted under the active consent and modality policy.",

@@ -51,6 +51,8 @@ import {
   rejectTeacherInvitation,
 } from '@/api/schoolRequests';
 import type { TeacherInviteCodeData } from '@/api/schoolRequests';
+import { getLtiPlatform, registerLtiPlatform, deleteLtiPlatform } from '@/api/lti';
+import type { LtiPlatformConfig } from '@/api/lti';
 import { useMembership } from '@/contexts/MembershipContext';
 import { OnboardingHint } from '@/components/ui/OnboardingHint';
 import type {
@@ -107,6 +109,19 @@ export function TeacherDashboardPage() {
   const [pendingInvitations, setPendingInvitations] = useState<TeacherInvitation[]>([]);
   const [pendingInvitationsLoading, setPendingInvitationsLoading] = useState(false);
   const [processingInvitationId, setProcessingInvitationId] = useState<string | null>(null);
+
+  // LTI configuration state (school_admin only)
+  const [ltiPlatform, setLtiPlatform] = useState<LtiPlatformConfig | null>(null);
+  const [ltiLoading, setLtiLoading] = useState(false);
+  const [ltiSaving, setLtiSaving] = useState(false);
+  const [ltiForm, setLtiForm] = useState({
+    issuer: '',
+    clientId: '',
+    deploymentId: '',
+    authLoginUrl: '',
+    authTokenUrl: '',
+    keySetUrl: '',
+  });
 
   const loadDashboard = async () => {
     try {
@@ -252,6 +267,16 @@ export function TeacherDashboardPage() {
     } finally {
       setPendingInvitationsLoading(false);
     }
+    // Load LTI platform config
+    setLtiLoading(true);
+    try {
+      const platform = await getLtiPlatform();
+      setLtiPlatform(platform);
+    } catch {
+      setLtiPlatform(null);
+    } finally {
+      setLtiLoading(false);
+    }
   }, [isSchoolAdmin]);
 
   useEffect(() => {
@@ -286,6 +311,34 @@ export function TeacherDashboardPage() {
     await navigator.clipboard.writeText(code);
     setTeacherInviteCodeCopied(true);
     setTimeout(() => setTeacherInviteCodeCopied(false), 2000);
+  };
+
+  const handleRegisterLtiPlatform = async () => {
+    setLtiSaving(true);
+    setError(null);
+    try {
+      await registerLtiPlatform(ltiForm);
+      const platform = await getLtiPlatform();
+      setLtiPlatform(platform);
+      setLtiForm({ issuer: '', clientId: '', deploymentId: '', authLoginUrl: '', authTokenUrl: '', keySetUrl: '' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to register LTI platform.');
+    } finally {
+      setLtiSaving(false);
+    }
+  };
+
+  const handleRemoveLtiPlatform = async () => {
+    setLtiSaving(true);
+    setError(null);
+    try {
+      await deleteLtiPlatform();
+      setLtiPlatform(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove LTI platform.');
+    } finally {
+      setLtiSaving(false);
+    }
   };
 
   const handleApproveInvitation = async (invitationId: string) => {
@@ -764,6 +817,186 @@ export function TeacherDashboardPage() {
             )}
           </Card>
         </div>
+      )}
+
+      {/* ── LTI Configuration (school_admin only) ──────────────────── */}
+      {isSchoolAdmin && (
+        <Card className="border-3 border-foreground p-6 shadow-stamp">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-foreground bg-primary/10 text-primary">
+              <LinkIcon size={20} strokeWidth={2.5} />
+            </div>
+            <div>
+              <h2 className="text-xl font-display font-bold text-foreground">LTI 1.3 Configuration</h2>
+              <p className="text-sm text-muted-foreground">
+                Connect Canvas via LTI 1.3 for single sign-on and deep linking.
+              </p>
+            </div>
+          </div>
+
+          {ltiLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : ltiPlatform ? (
+            <div className="space-y-5">
+              <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4 space-y-3">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Registered Platform
+                </h3>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Issuer</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">{ltiPlatform.issuer}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Client ID</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">{ltiPlatform.clientId}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Deployment ID</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">{ltiPlatform.deploymentId}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4 space-y-3">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Your Lingual LTI URLs
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Enter these in your Canvas Developer Key / LTI tool configuration.
+                </p>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Login URL</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/login
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Launch URL</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/callback
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">JWKS URL</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/jwks
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Redirect URI</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/callback
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRemoveLtiPlatform}
+                  loading={ltiSaving}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 size={14} className="mr-1.5" />
+                  Remove LTI Platform
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4 space-y-3 mb-4">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Your Lingual LTI URLs
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Enter these in your Canvas Developer Key / LTI tool configuration.
+                </p>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Login URL</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/login
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Launch URL</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/callback
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">JWKS URL</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/jwks
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Redirect URI</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/callback
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <h3 className="text-base font-display font-bold text-foreground">Register Canvas Platform</h3>
+              <p className="text-sm text-muted-foreground">
+                Enter the LTI 1.3 configuration values from your Canvas Developer Key.
+              </p>
+              <div className="grid gap-3">
+                <Input
+                  label="Issuer"
+                  value={ltiForm.issuer}
+                  onChange={(e) => setLtiForm((f) => ({ ...f, issuer: e.target.value }))}
+                  placeholder="https://canvas.instructure.com"
+                />
+                <Input
+                  label="Client ID"
+                  value={ltiForm.clientId}
+                  onChange={(e) => setLtiForm((f) => ({ ...f, clientId: e.target.value }))}
+                  placeholder="10000000000001"
+                />
+                <Input
+                  label="Deployment ID"
+                  value={ltiForm.deploymentId}
+                  onChange={(e) => setLtiForm((f) => ({ ...f, deploymentId: e.target.value }))}
+                  placeholder="1"
+                />
+                <Input
+                  label="Auth Login URL"
+                  value={ltiForm.authLoginUrl}
+                  onChange={(e) => setLtiForm((f) => ({ ...f, authLoginUrl: e.target.value }))}
+                  placeholder="https://canvas.instructure.com/api/lti/authorize_redirect"
+                />
+                <Input
+                  label="Auth Token URL"
+                  value={ltiForm.authTokenUrl}
+                  onChange={(e) => setLtiForm((f) => ({ ...f, authTokenUrl: e.target.value }))}
+                  placeholder="https://canvas.instructure.com/login/oauth2/token"
+                />
+                <Input
+                  label="Key Set URL"
+                  value={ltiForm.keySetUrl}
+                  onChange={(e) => setLtiForm((f) => ({ ...f, keySetUrl: e.target.value }))}
+                  placeholder="https://canvas.instructure.com/api/lti/security/jwks"
+                />
+              </div>
+              <Button
+                onClick={handleRegisterLtiPlatform}
+                loading={ltiSaving}
+                disabled={!ltiForm.issuer || !ltiForm.clientId || !ltiForm.deploymentId || !ltiForm.authLoginUrl || !ltiForm.authTokenUrl || !ltiForm.keySetUrl}
+              >
+                Register Platform
+              </Button>
+            </div>
+          )}
+        </Card>
       )}
 
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>

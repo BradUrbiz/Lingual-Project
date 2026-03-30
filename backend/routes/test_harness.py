@@ -83,6 +83,10 @@ def create_test_harness_blueprint(deps: RouteDeps) -> Blueprint:
             _ensure_user(TEST_STUDENT_UID, TEST_STUDENT_EMAIL, "E2E Student", 16)
             _ensure_user(TEST_ADMIN_UID, TEST_ADMIN_EMAIL, "E2E Admin", 40)
 
+            # Set lingual_admin flag on the admin user for testing
+            if hasattr(deps.db, 'get_user_ref'):
+                deps.db.get_user_ref(TEST_ADMIN_UID).update({"lingual_admin": True})
+
             org_id = E2E_ORG_ID
             teacher_mem_id = E2E_TEACHER_MEM_ID
             student_mem_id = E2E_STUDENT_MEM_ID

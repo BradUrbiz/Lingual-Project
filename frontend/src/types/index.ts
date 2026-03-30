@@ -289,6 +289,8 @@ export type {
   OrgComplianceStudentEntry,
   OrgComplianceRosterData,
   OrgGuardianPacketsData,
+  SchoolRequest,
+  TeacherInvitation,
 } from './school';
 
 export type {

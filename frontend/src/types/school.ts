@@ -351,3 +351,34 @@ export interface DeletionRequestDetail {
   request: DeletionRequest;
   runs: DeletionExecutionRun[];
 }
+
+// --- School requests (onboarding approval flow) ---
+
+export interface SchoolRequest {
+  id: string;
+  schoolName: string;
+  orgType: string;
+  websiteUrl: string;
+  canvasInstanceUrl: string;
+  requesterUid: string;
+  requesterEmail: string;
+  requesterName: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewedByUid: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  createdOrgId: string | null;
+  createdAt: string | null;
+}
+
+export interface TeacherInvitation {
+  id: string;
+  orgId: string;
+  uid: string;
+  email: string;
+  name: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewedByUid: string | null;
+  reviewedAt: string | null;
+  createdAt: string | null;
+}

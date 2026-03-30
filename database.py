@@ -2306,3 +2306,112 @@ def update_school_request(request_id, updates):
     """Update fields on a school request."""
     updates['updated_at'] = firestore.SERVER_TIMESTAMP
     get_school_request_ref(request_id).update(updates)
+
+
+# ---------------------------------------------------------------------------
+# Teacher invite codes
+# ---------------------------------------------------------------------------
+
+def generate_teacher_invite_code(org_id):
+    """Generate or regenerate a 6-char teacher invite code for an org."""
+    code = ''.join(secrets.choice(JOIN_CODE_ALPHABET) for _ in range(JOIN_CODE_LENGTH))
+    get_organization_ref(org_id).update({
+        'teacher_invite_code': code,
+        'teacher_invite_code_active': True,
+        'teacher_invite_code_generated_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    })
+    return code
+
+
+def get_org_by_teacher_invite_code(code):
+    """Look up an org by its active teacher invite code."""
+    docs = (
+        get_organizations_collection()
+        .where('teacher_invite_code', '==', code)
+        .where('teacher_invite_code_active', '==', True)
+        .where('status', '==', 'active')
+        .limit(1)
+        .stream()
+    )
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        return data
+    return None
+
+
+def deactivate_teacher_invite_code(org_id):
+    """Deactivate the teacher invite code."""
+    get_organization_ref(org_id).update({
+        'teacher_invite_code_active': False,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Teacher invitations CRUD
+# ---------------------------------------------------------------------------
+
+def get_teacher_invitations_collection():
+    return get_db().collection('teacher_invitations')
+
+
+def create_teacher_invitation(org_id, uid, email, name):
+    """Create a teacher invitation (pending status)."""
+    doc_ref = get_teacher_invitations_collection().document()
+    doc_ref.set({
+        'org_id': org_id,
+        'uid': uid,
+        'email': email,
+        'name': name,
+        'status': 'pending',
+        'reviewed_by_uid': None,
+        'reviewed_at': None,
+        'created_at': firestore.SERVER_TIMESTAMP,
+    })
+    return doc_ref.id
+
+
+def get_teacher_invitation(invitation_id):
+    doc = get_teacher_invitations_collection().document(invitation_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict() or {}
+    data['id'] = doc.id
+    return data
+
+
+def list_teacher_invitations(org_id, status_filter=None):
+    query = get_teacher_invitations_collection().where('org_id', '==', org_id)
+    if status_filter:
+        query = query.where('status', '==', status_filter)
+    docs = query.order_by('created_at', direction=firestore.Query.DESCENDING).stream()
+    results = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        results.append(data)
+    return results
+
+
+def get_teacher_invitation_by_user(org_id, uid):
+    """Check if a user already has a pending invitation for this org."""
+    docs = (
+        get_teacher_invitations_collection()
+        .where('org_id', '==', org_id)
+        .where('uid', '==', uid)
+        .where('status', '==', 'pending')
+        .limit(1)
+        .stream()
+    )
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        return data
+    return None
+
+
+def update_teacher_invitation(invitation_id, updates):
+    updates['updated_at'] = firestore.SERVER_TIMESTAMP
+    get_teacher_invitations_collection().document(invitation_id).update(updates)

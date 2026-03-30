@@ -7,16 +7,19 @@ const ITEMS: CanvasCourseContentItem[] = [
     id: 'c1', connectionId: 'conn1', classId: 'class-1',
     canvasModuleId: 'm1', canvasModuleName: 'Week 1', canvasModulePosition: 1,
     canvasItemId: 'i100', title: 'Reading', itemType: 'Page', itemPosition: 1,
+    htmlUrl: 'https://school.instructure.com/courses/1/pages/reading',
   },
   {
     id: 'c2', connectionId: 'conn1', classId: 'class-1',
     canvasModuleId: 'm1', canvasModuleName: 'Week 1', canvasModulePosition: 1,
     canvasItemId: 'i101', title: 'Speaking Practice', itemType: 'Assignment', itemPosition: 2,
+    htmlUrl: 'https://school.instructure.com/courses/1/assignments/101',
   },
   {
     id: 'c3', connectionId: 'conn1', classId: 'class-1',
     canvasModuleId: 'm2', canvasModuleName: 'Week 2', canvasModulePosition: 2,
     canvasItemId: 'i200', title: 'Essay', itemType: 'Assignment', itemPosition: 1,
+    htmlUrl: 'https://school.instructure.com/courses/1/assignments/200',
   },
 ];
 

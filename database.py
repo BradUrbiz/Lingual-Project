@@ -2023,6 +2023,12 @@ def create_canvas_connection(
     canvas_course_name='',
     encrypted_pat='',
     connection_id=None,
+    auth_method='pat',
+    lti_deployment_id='',
+    lti_context_id='',
+    lti_lineitem_url='',
+    grade_metric=None,
+    grade_points=None,
 ):
     """Create a canvas connection record (server-only, never client-readable)."""
     doc_ref = get_canvas_connection_ref(connection_id) if connection_id else get_canvas_connections_collection().document()
@@ -2034,6 +2040,12 @@ def create_canvas_connection(
         'canvas_course_id': str(canvas_course_id),
         'canvas_course_name': canvas_course_name or '',
         'encrypted_pat': encrypted_pat,
+        'auth_method': auth_method,
+        'lti_deployment_id': lti_deployment_id or '',
+        'lti_context_id': lti_context_id or '',
+        'lti_lineitem_url': lti_lineitem_url or '',
+        'grade_metric': grade_metric,
+        'grade_points': grade_points,
         'last_synced_at': None,
         'sync_status': 'idle',
         'created_at': firestore.SERVER_TIMESTAMP,
@@ -2415,3 +2427,138 @@ def get_teacher_invitation_by_user(org_id, uid):
 def update_teacher_invitation(invitation_id, updates):
     updates['updated_at'] = firestore.SERVER_TIMESTAMP
     get_teacher_invitations_collection().document(invitation_id).update(updates)
+
+
+# ── LTI platform CRUD ────────────────────────────────────────────────────
+
+
+def get_lti_platforms_collection():
+    """Get LTI platforms collection."""
+    return get_db().collection('lti_platforms')
+
+
+def create_lti_platform(
+    org_id,
+    issuer,
+    client_id,
+    deployment_id,
+    auth_login_url,
+    auth_token_url,
+    key_set_url,
+    platform_id=None,
+):
+    """Create an LTI 1.3 platform registration."""
+    doc_ref = (
+        get_lti_platforms_collection().document(platform_id)
+        if platform_id
+        else get_lti_platforms_collection().document()
+    )
+    platform_data = {
+        'org_id': org_id,
+        'issuer': issuer,
+        'client_id': client_id,
+        'deployment_id': deployment_id,
+        'auth_login_url': auth_login_url,
+        'auth_token_url': auth_token_url,
+        'key_set_url': key_set_url,
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    }
+    doc_ref.set(platform_data)
+    return doc_ref.id
+
+
+def get_lti_platform(platform_id):
+    """Get an LTI platform by ID."""
+    doc = get_lti_platforms_collection().document(platform_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict() or {}
+    data['id'] = doc.id
+    return data
+
+
+def get_lti_platform_by_org(org_id):
+    """Get the LTI platform for an organization (at most one per org)."""
+    docs = (
+        get_lti_platforms_collection()
+        .where('org_id', '==', org_id)
+        .limit(1)
+        .stream()
+    )
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        return data
+    return None
+
+
+def get_lti_platform_by_issuer(issuer):
+    """Get the LTI platform for a given issuer URL."""
+    docs = (
+        get_lti_platforms_collection()
+        .where('issuer', '==', issuer)
+        .limit(1)
+        .stream()
+    )
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        return data
+    return None
+
+
+def delete_lti_platform(platform_id):
+    """Delete an LTI platform registration."""
+    get_lti_platforms_collection().document(platform_id).delete()
+
+
+# ── LTI session CRUD ─────────────────────────────────────────────────────
+
+
+def get_lti_sessions_collection():
+    """Get LTI sessions collection."""
+    return get_db().collection('lti_sessions')
+
+
+def create_lti_session(
+    user_uid,
+    platform_id,
+    canvas_user_id,
+    canvas_course_id,
+    roles,
+    access_token='',
+    token_expires_at=None,
+):
+    """Create an LTI session record linking a Lingual user to an LTI launch."""
+    doc_ref = get_lti_sessions_collection().document()
+    session_data = {
+        'user_uid': user_uid,
+        'platform_id': platform_id,
+        'canvas_user_id': str(canvas_user_id),
+        'canvas_course_id': str(canvas_course_id),
+        'roles': _normalize_string_list(roles) if isinstance(roles, list) else [roles] if roles else [],
+        'access_token': access_token or '',
+        'token_expires_at': token_expires_at,
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    }
+    doc_ref.set(session_data)
+    return doc_ref.id
+
+
+def get_lti_session_for_user(user_uid, canvas_course_id):
+    """Get the most recent LTI session for a user in a given Canvas course."""
+    docs = (
+        get_lti_sessions_collection()
+        .where('user_uid', '==', user_uid)
+        .where('canvas_course_id', '==', str(canvas_course_id))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(1)
+        .stream()
+    )
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        return data
+    return None

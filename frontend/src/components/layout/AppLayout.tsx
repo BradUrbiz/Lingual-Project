@@ -120,22 +120,7 @@ export function AppLayout() {
 
           {/* Right: Progress & User */}
           <div className="flex items-center gap-4">
-            {/* Streak */}
-            <div className="hidden sm:flex items-center space-x-1.5 text-accent-foreground bg-accent/20 px-4 py-2 rounded-full border-2 border-accent">
-              <Flame size={18} fill="currentColor" />
-              <span className="text-sm font-bold">12</span>
-            </div>
-
-            {/* Notifications */}
-            <button
-              type="button"
-              aria-label="Notifications"
-              className="p-2.5 text-muted-foreground hover:text-primary hover:bg-secondary rounded-xl border-2 border-transparent hover:border-border transition-colors relative"
-            >
-              <Bell size={20} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-destructive rounded-full border border-background"></span>
-            </button>
-
+            
             {/* User Dropdown */}
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>

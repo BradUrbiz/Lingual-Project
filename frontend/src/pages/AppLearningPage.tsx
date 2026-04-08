@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, MessageSquare, Gamepad2, Mic, TrendingUp, GraduationCap, Loader2 } from 'lucide-react';
+import { BookOpen, MessageSquare, Gamepad2, TrendingUp, GraduationCap, Loader2 } from 'lucide-react';
 import { getStudentAssignments } from '@/api/assignments';
 import { getStudentCanvasContent } from '@/api/canvas';
 import { Alert, AlertDescription, Badge, Button } from '@/components/ui';

@@ -158,7 +158,7 @@ export function AppLearningPage() {
       <section className={`${surfaceClass} p-6`}>
         <div className="mb-5">
           <h2 className="text-lg font-display font-bold text-foreground">
-            {t('app.dashboard.services') || 'Continue Learning'}
+            {t('app.dashboard.services') || 'Free Practice'}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {t('app.dashboard.nextStep') || 'Pick your next practice route.'}

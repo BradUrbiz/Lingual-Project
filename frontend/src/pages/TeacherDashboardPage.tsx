@@ -490,7 +490,7 @@ export function TeacherDashboardPage() {
         </>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid gap-6 grid-cols-1 xl:grid-cols-2">
         <Card className="border-3 border-foreground p-6 shadow-stamp">
           <h2 className="text-xl font-display font-bold text-foreground">Setup checklist</h2>
           <p className="mt-2 text-sm text-muted-foreground">

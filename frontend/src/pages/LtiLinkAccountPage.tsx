@@ -62,7 +62,7 @@ export function LtiLinkAccountPage() {
                   Signed in as
                 </p>
                 <p className="mt-1 font-medium text-foreground">
-                  {user.email || user.displayName || 'Lingual user'}
+                  {user.email || user.name || 'Lingual user'}
                 </p>
               </div>
               <Button onClick={handleLinkAccount} className="w-full" loading={loading}>

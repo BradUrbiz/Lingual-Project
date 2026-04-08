@@ -22,7 +22,6 @@ import {
 import {
   Alert,
   AlertDescription,
-  Badge,
   Button,
   Card,
   Dialog,
@@ -1156,33 +1155,48 @@ export function TeacherDashboardPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {roster.map((student) => (
-                  <div
-                    key={student.uid}
-                    className="flex items-center justify-between rounded-xl border border-border bg-secondary/40 px-4 py-3"
-                  >
-                    <div>
-                      <p className="font-medium text-foreground">{student.displayName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {student.joinSource === 'join_code' ? 'Joined via code' : student.joinSource || 'Enrolled'}
-                        {student.enrolledAt ? ` · ${new Date(student.enrolledAt).toLocaleDateString()}` : ''}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveStudent(student.uid)}
-                      disabled={removingUid === student.uid}
-                      className="text-destructive hover:text-destructive"
+                {roster.map((student, idx) => {
+                  const isPending = student.status === 'pending_sync';
+                  const key = student.uid || student.canvasEmail || `pending-${idx}`;
+                  const subtitle = isPending
+                    ? `Awaiting Lingual signup${student.canvasEmail ? ` · ${student.canvasEmail}` : ''}`
+                    : `${student.joinSource === 'join_code' ? 'Joined via code' : student.joinSource || 'Enrolled'}${
+                        student.enrolledAt ? ` · ${new Date(student.enrolledAt).toLocaleDateString()}` : ''
+                      }`;
+                  return (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between rounded-xl border border-border bg-secondary/40 px-4 py-3"
                     >
-                      {removingUid === student.uid ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 size={14} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-foreground truncate">{student.displayName}</p>
+                          {isPending && (
+                            <span className="rounded-full border border-amber-500/40 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                              Canvas pending
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{subtitle}</p>
+                      </div>
+                      {!isPending && student.uid && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveStudent(student.uid)}
+                          disabled={removingUid === student.uid}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          {removingUid === student.uid ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 size={14} />
+                          )}
+                        </Button>
                       )}
-                    </Button>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

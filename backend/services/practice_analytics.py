@@ -1392,8 +1392,8 @@ def _event_pedagogy_payload(session_record: dict[str, Any]) -> dict[str, Any]:
     pedagogy = _pedagogy_snapshot(session_record)
     curriculum_snapshot = session_record.get('curriculum_snapshot', {}) if isinstance(session_record, dict) else {}
     mapping_snapshot = session_record.get('mapping_snapshot', {}) if isinstance(session_record, dict) else {}
-    situation = curriculum_snapshot.get('situation', {}) if isinstance(curriculum_snapshot, dict) else {}
-    module = curriculum_snapshot.get('module', {}) if isinstance(curriculum_snapshot, dict) else {}
+    situation = (curriculum_snapshot.get('situation') or {}) if isinstance(curriculum_snapshot, dict) else {}
+    module = (curriculum_snapshot.get('module') or {}) if isinstance(curriculum_snapshot, dict) else {}
     return {
         'moduleId': module.get('id'),
         'situationId': situation.get('id'),

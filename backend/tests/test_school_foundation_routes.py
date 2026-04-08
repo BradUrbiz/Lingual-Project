@@ -163,11 +163,11 @@ class FakeSchoolDb:
     def get_class(self, class_id):
         return self.classes.get(class_id)
 
-    def list_class_enrollments(self, class_id):
+    def list_class_enrollments(self, class_id, status='active'):
         return [
             dict(enrollment)
             for enrollment in self.enrollments.values()
-            if enrollment.get('class_id') == class_id and enrollment.get('status') == 'active'
+            if enrollment.get('class_id') == class_id and (not status or enrollment.get('status') == status)
         ]
 
     def get_student_class_enrollment(self, class_id, student_uid):
@@ -821,7 +821,7 @@ class SchoolFoundationRoutesTestCase(unittest.TestCase):
 
         roster_response = self.client.get(f'/api/teacher/classes/{class_id}/roster')
         self.assertEqual(roster_response.status_code, 200)
-        students = roster_response.get_json()['students']
+        students = roster_response.get_json()['roster']
         self.assertEqual(len(students), 1)
         self.assertEqual(students[0]['displayName'], 'Student One')
         self.assertEqual(students[0]['joinSource'], 'join_code')
@@ -832,7 +832,7 @@ class SchoolFoundationRoutesTestCase(unittest.TestCase):
 
         # Roster should be empty after removal (soft delete)
         refreshed = self.client.get(f'/api/teacher/classes/{class_id}/roster')
-        self.assertEqual(len(refreshed.get_json()['students']), 0)
+        self.assertEqual(len(refreshed.get_json()['roster']), 0)
 
 
 if __name__ == '__main__':

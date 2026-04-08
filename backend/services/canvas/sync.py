@@ -51,6 +51,7 @@ def reconcile_enrollments(*, db, class_id: str, org_id: str,
     for student in canvas_students:
         canvas_user_id = str(student['id'])
         email = (student.get('email') or '').lower().strip()
+        canvas_name = (student.get('name') or student.get('sortable_name') or '').strip()
 
         # Skip if already enrolled via this Canvas user ID.
         if canvas_user_id in existing_by_canvas_id:
@@ -87,6 +88,7 @@ def reconcile_enrollments(*, db, class_id: str, org_id: str,
                 student_membership_id=membership_id,
                 status='active', join_source='canvas',
                 canvas_user_id=canvas_user_id, canvas_email=email,
+                canvas_name=canvas_name,
                 enrollment_id=f'{class_id}_{uid}',
             )
             result.matched += 1
@@ -98,6 +100,7 @@ def reconcile_enrollments(*, db, class_id: str, org_id: str,
                 class_id=class_id, student_uid='',
                 status='pending_sync', join_source='canvas',
                 canvas_user_id=canvas_user_id, canvas_email=email,
+                canvas_name=canvas_name,
                 enrollment_id=enrollment_id,
             )
             result.unmatched += 1

@@ -254,6 +254,8 @@ export interface ClassRosterStudent {
   joinSource?: string;
   enrolledAt?: string | null;
   status: string;
+  canvasEmail?: string;
+  canvasName?: string;
 }
 
 // --- Org-wide compliance (school-wide admin tooling) ---

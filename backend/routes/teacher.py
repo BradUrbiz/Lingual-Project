@@ -760,9 +760,11 @@ def create_teacher_blueprint(deps: RouteDeps) -> Blueprint:
     def api_get_class_roster(class_id):
         try:
             _context, _class_record = _require_teacher_class_context(deps, class_id)
-            enrollments = deps.db.list_class_enrollments(class_id)
+            # Fetch active enrollments (joined students) and pending_sync enrollments (Canvas-imported, awaiting signup).
+            active_enrollments = deps.db.list_class_enrollments(class_id)
+            pending_enrollments = deps.db.list_class_enrollments(class_id, status="pending_sync") if hasattr(deps.db, "list_class_enrollments") else []
             students = []
-            for enrollment in enrollments:
+            for enrollment in active_enrollments:
                 student_uid = _normalize_string(enrollment.get("student_uid"))
                 if not student_uid:
                     continue
@@ -774,9 +776,27 @@ def create_teacher_blueprint(deps: RouteDeps) -> Blueprint:
                     "joinSource": _normalize_string(enrollment.get("join_source")),
                     "enrolledAt": _timestamp_to_iso(enrollment.get("created_at")),
                     "status": _normalize_string(enrollment.get("status")) or "active",
+                    "canvasEmail": _normalize_string(enrollment.get("canvas_email")),
+                    "canvasName": _normalize_string(enrollment.get("canvas_name")),
+                })
+            for enrollment in pending_enrollments:
+                # Pending Canvas students don't have a student_uid yet — show by Canvas identity.
+                canvas_email = _normalize_string(enrollment.get("canvas_email"))
+                canvas_name = _normalize_string(enrollment.get("canvas_name"))
+                canvas_user_id = _normalize_string(enrollment.get("canvas_user_id"))
+                display_name = canvas_name or canvas_email or f"Canvas user {canvas_user_id}"
+                students.append({
+                    "uid": "",  # No Lingual UID until they sign up
+                    "displayName": display_name,
+                    "studentNumber": _normalize_string(enrollment.get("student_number")),
+                    "joinSource": _normalize_string(enrollment.get("join_source")),
+                    "enrolledAt": _timestamp_to_iso(enrollment.get("created_at")),
+                    "status": "pending_sync",
+                    "canvasEmail": canvas_email,
+                    "canvasName": canvas_name,
                 })
             students.sort(key=lambda item: item.get("displayName", "").lower())
-            return jsonify({"success": True, "students": students})
+            return jsonify({"success": True, "roster": students})
         except SchoolContextPermissionError as exc:
             return jsonify({"success": False, "error": str(exc)}), 403
         except Exception as exc:

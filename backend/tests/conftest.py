@@ -466,8 +466,11 @@ class FakeDbBase:
         enr = self.enrollments.get(f"{class_id}_{student_uid}")
         return dict(enr) if enr else None
 
-    def list_class_enrollments(self, class_id: str):
-        return [dict(e) for e in self.enrollments.values() if e.get("class_id") == class_id and e.get("status") == "active"]
+    def list_class_enrollments(self, class_id: str, status: str = "active"):
+        return [
+            dict(e) for e in self.enrollments.values()
+            if e.get("class_id") == class_id and (not status or e.get("status") == status)
+        ]
 
     def deactivate_enrollment(self, class_id: str, student_uid: str):
         key = f"{class_id}_{student_uid}"

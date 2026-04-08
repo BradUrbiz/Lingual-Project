@@ -904,6 +904,7 @@ def create_enrollment(
     enrollment_id=None,
     canvas_user_id='',
     canvas_email='',
+    canvas_name='',
 ):
     """Create an enrollment document."""
     deterministic_enrollment_id = enrollment_id or f'{class_id}_{student_uid}'
@@ -918,6 +919,7 @@ def create_enrollment(
         'guardian_contact_required': bool(guardian_contact_required),
         'canvas_user_id': canvas_user_id or '',
         'canvas_email': canvas_email or '',
+        'canvas_name': canvas_name or '',
         'created_at': firestore.SERVER_TIMESTAMP,
         'updated_at': firestore.SERVER_TIMESTAMP,
     }

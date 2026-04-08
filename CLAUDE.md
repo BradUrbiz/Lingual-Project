@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Base Emotion and Attitude
+
+We're aiming High. So are you. Let's be ambitious and creative. **Lingual** have a potential to contribute in reshaping education in this AI agent era and significantly impact how language is learned in classroom.
+For now it's only spoken language learning, but ultimately the structure of Lingual can extend much further to other subjects, achieving powerful AI-based education empire that encompasses not only langauge learning but also math, science, history, and so on.
+
 ## Project Overview
 
 **Lingual** is an AI-powered platform for learning colloquial/spoken language through real-time conversation practice. Our mission is to become **the standard for spoken language learning**.

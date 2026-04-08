@@ -218,10 +218,10 @@ class FakeDb:
             if c.get('org_id') == org_id and (not status or c.get('status') == status)
         ]
 
-    def list_class_enrollments(self, class_id):
+    def list_class_enrollments(self, class_id, status='active'):
         return [
             dict(e) for e in self.enrollments.values()
-            if e.get('class_id') == class_id and e.get('status') == 'active'
+            if e.get('class_id') == class_id and (not status or e.get('status') == status)
         ]
 
     # -- Compliance records --

@@ -209,6 +209,28 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "consent_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "actor_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "student_uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "event_type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

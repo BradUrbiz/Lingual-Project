@@ -19,14 +19,30 @@ export function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const redirectPath =
-    (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || '/general';
+
+  // Compute the post-login destination based on user role.
+  // If the user followed a protected-route redirect, honor that path.
+  // Otherwise, route teachers/admins to the teacher dashboard,
+  // Lingual admins to the admin panel, and learners to /general.
+  const intendedFrom = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
 
   useEffect(() => {
     if (user && !loading) {
-      navigate(redirectPath, { replace: true });
+      if (intendedFrom) {
+        navigate(intendedFrom, { replace: true });
+        return;
+      }
+      const userWithFlags = user as { activeRoles?: string[]; lingualAdmin?: boolean };
+      const roles = userWithFlags.activeRoles || [];
+      if (userWithFlags.lingualAdmin) {
+        navigate('/app/admin/school-requests', { replace: true });
+      } else if (roles.includes('school_admin') || roles.includes('teacher')) {
+        navigate('/app/teacher', { replace: true });
+      } else {
+        navigate('/general', { replace: true });
+      }
     }
-  }, [user, loading, navigate, redirectPath]);
+  }, [user, loading, navigate, intendedFrom]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

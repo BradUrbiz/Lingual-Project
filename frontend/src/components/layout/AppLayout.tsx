@@ -1,42 +1,43 @@
 import { useEffect, useState } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Languages,
   BookOpen,
   MessageSquare,
   Gamepad2,
-  TrendingUp,
   User,
   Settings,
   LogOut,
-  Flame,
-  Bell,
   Menu,
   X,
   LayoutDashboard,
   Mic,
+  CircleUserRound,
+  ChevronDown,
+  Check,
+  Loader2,
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { motion } from 'motion/react';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useMembership } from '@/contexts/MembershipContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useLearningLocale } from '@/contexts/LearningLocaleContext';
 import { LEARNING_LOCALES } from '@/lib/learningLocales';
-import { getUserProfile } from '@/api/user';
+import { getUserProfile, updateLearningLocale } from '@/api/user';
 import type { UserProfile } from '@/types';
 
-const FALLBACK_AVATAR = '/imgs/landing/student.jpg';
-
 export function AppLayout() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, avatarUrl, updateAvatarUrl } = useAuth();
   const { hasAnyRole, activeMembership } = useMembership();
   const { t } = useLanguage();
-  const { learningLocale } = useLearningLocale();
+  const { learningLocale, setLearningLocale } = useLearningLocale();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isUpdatingLocale, setIsUpdatingLocale] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -47,8 +48,9 @@ export function AppLayout() {
   }, [user, updateAvatarUrl]);
 
   const displayName = profile?.displayName || user?.name || 'Student';
-  const userAvatar = avatarUrl || profile?.avatarUrl || FALLBACK_AVATAR;
+  const userAvatar = avatarUrl || profile?.avatarUrl || null;
   const canAccessTeacherView = hasAnyRole(['teacher', 'school_admin']);
+  const isTeacherView = location.pathname.startsWith('/app/teacher');
   const roleLabel = canAccessTeacherView
     ? activeMembership?.orgName
       ? `${t('app.layout.nav.teacher')} · ${activeMembership.orgName}`
@@ -57,12 +59,15 @@ export function AppLayout() {
     ? `${t('app.layout.role.learner')} · ${profile.gradeLevel}`
     : t('app.layout.role.learner');
   const localeOption = LEARNING_LOCALES.find((locale) => locale.value === learningLocale);
+  const homeDestination = canAccessTeacherView && isTeacherView ? '/app/teacher' : '/app/learn';
+  const homeLabel = canAccessTeacherView && isTeacherView
+    ? 'Go to teacher dashboard'
+    : 'Go to learning dashboard';
   const mobilePrimaryNav = [
     { icon: BookOpen, label: t('app.layout.nav.learning'), path: '/app/learn' },
     { icon: MessageSquare, label: t('app.layout.nav.chat'), path: '/app/chat' },
     { icon: Mic, label: t('app.layout.nav.practice'), path: '/app/practice' },
     { icon: Gamepad2, label: t('app.layout.nav.games'), path: '/app/games' },
-    { icon: TrendingUp, label: t('app.layout.nav.progress'), path: '/app/progress' },
   ];
   const mobileMenuNav = [
     { icon: User, label: t('nav.profile'), path: '/app/profile' },
@@ -74,7 +79,29 @@ export function AppLayout() {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/auth');
+    navigate('/', { replace: true });
+  };
+
+  const handleHomeNavigation = () => {
+    navigate(homeDestination);
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleLocaleChange = async (nextLocale: (typeof LEARNING_LOCALES)[number]['value']) => {
+    if (nextLocale === learningLocale || isUpdatingLocale) return;
+
+    setIsUpdatingLocale(true);
+    try {
+      await updateLearningLocale(nextLocale);
+      setLearningLocale(nextLocale);
+      setProfile((current) => (current ? { ...current, learningLocale: nextLocale } : current));
+      toast.success('Default practice language updated. Teacher assignments can still override it.');
+    } catch (error) {
+      console.error('Failed to update learning locale:', error);
+      toast.error('Failed to update practice language.');
+    } finally {
+      setIsUpdatingLocale(false);
+    }
   };
 
   return (
@@ -98,8 +125,8 @@ export function AppLayout() {
             <button
               type="button"
               className="flex items-center gap-3 cursor-pointer"
-              onClick={() => navigate('/app/learn')}
-              aria-label="Go to learning dashboard"
+              onClick={handleHomeNavigation}
+              aria-label={homeLabel}
             >
               <div className="w-12 h-12 bg-primary border-3 border-foreground rounded-xl flex items-center justify-center text-primary-foreground shadow-stamp-sm">
                 <Languages size={26} strokeWidth={2.5} />
@@ -110,41 +137,72 @@ export function AppLayout() {
             </button>
 
             {/* Learning Locale */}
-            <div className="hidden md:flex items-center gap-2 bg-card rounded-full px-4 py-2 ml-6 border-2 border-border">
-              <span className="text-lg">{localeOption?.flag || '🌐'}</span>
-              <span className="text-sm font-semibold text-foreground">
-                {localeOption?.shortLabel || t('app.layout.language.korean')}
-              </span>
-            </div>
+            {!isTeacherView ? (
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <button
+                    type="button"
+                    className="ml-1 inline-flex items-center gap-2 rounded-full border-2 border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary hover:bg-secondary sm:ml-4"
+                    aria-label="Select practice language"
+                    disabled={isUpdatingLocale}
+                  >
+                    <span className="text-lg leading-none">{localeOption?.flag || '🌐'}</span>
+                    <span className="hidden md:block">
+                      {localeOption?.shortLabel || t('app.layout.language.korean')}
+                    </span>
+                    {isUpdatingLocale ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content
+                    className="min-w-[220px] rounded-2xl border-3 border-foreground bg-card p-2 shadow-stamp z-50"
+                    align="start"
+                    sideOffset={8}
+                  >
+                    {LEARNING_LOCALES.map((locale) => (
+                      <DropdownMenu.Item
+                        key={locale.value}
+                        className="flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium text-foreground outline-none hover:bg-secondary"
+                        onSelect={() => {
+                          void handleLocaleChange(locale.value);
+                        }}
+                      >
+                        <span className="flex items-center gap-3">
+                          <span className="text-lg leading-none">{locale.flag}</span>
+                          <span>{locale.shortLabel}</span>
+                        </span>
+                        {locale.value === learningLocale ? (
+                          <Check className="h-4 w-4 text-primary" />
+                        ) : null}
+                      </DropdownMenu.Item>
+                    ))}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+            ) : null}
           </div>
 
-          {/* Right: Progress & User */}
+          {/* Right: User */}
           <div className="flex items-center gap-4">
-            {/* Streak */}
-            <div className="hidden sm:flex items-center space-x-1.5 text-accent-foreground bg-accent/20 px-4 py-2 rounded-full border-2 border-accent">
-              <Flame size={18} fill="currentColor" />
-              <span className="text-sm font-bold">12</span>
-            </div>
-
-            {/* Notifications */}
-            <button
-              type="button"
-              aria-label="Notifications"
-              className="p-2.5 text-muted-foreground hover:text-primary hover:bg-secondary rounded-xl border-2 border-transparent hover:border-border transition-colors relative"
-            >
-              <Bell size={20} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-destructive rounded-full border border-background"></span>
-            </button>
-
             {/* User Dropdown */}
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
                 <button className="flex items-center gap-2 pl-2 rounded-full hover:bg-secondary transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30">
-                  <img
-                    src={userAvatar}
-                    alt="User"
-                    className="w-10 h-10 rounded-full border-2 border-border object-cover"
-                  />
+                  {userAvatar ? (
+                    <img
+                      src={userAvatar}
+                      alt={displayName}
+                      className="w-10 h-10 rounded-full border-2 border-border object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-border bg-card text-muted-foreground">
+                      <CircleUserRound className="h-6 w-6" />
+                    </div>
+                  )}
                   <div className="hidden lg:block text-left mr-2">
                     <div className="text-sm font-semibold text-foreground leading-none">
                       {displayName}
@@ -171,18 +229,6 @@ export function AppLayout() {
                     onClick={() => navigate('/app/settings')}
                   >
                     <Settings size={16} className="mr-2" /> {t('nav.settings')}
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    className="flex items-center px-3 py-2.5 text-sm font-medium text-foreground rounded-xl hover:bg-secondary cursor-pointer outline-none"
-                    onClick={() => navigate('/app/learn')}
-                  >
-                    <BookOpen size={16} className="mr-2" /> {t('app.layout.nav.learning')}
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    className="flex items-center px-3 py-2.5 text-sm font-medium text-foreground rounded-xl hover:bg-secondary cursor-pointer outline-none"
-                    onClick={() => navigate('/app/practice')}
-                  >
-                    <Mic size={16} className="mr-2" /> {t('app.layout.nav.practice')}
                   </DropdownMenu.Item>
                   {canAccessTeacherView ? (
                     <DropdownMenu.Item
@@ -215,7 +261,7 @@ export function AppLayout() {
         className="fixed inset-x-0 bottom-0 z-30 border-t-3 border-foreground bg-card/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-2 backdrop-blur md:hidden"
         aria-label="Primary app navigation"
       >
-        <div className="grid grid-cols-5 gap-1">
+        <div className="grid grid-cols-4 gap-1">
           {mobilePrimaryNav.map((item) => (
             <NavLink
               key={item.path}
@@ -251,12 +297,17 @@ export function AppLayout() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleHomeNavigation}
+                className="flex items-center gap-3"
+                aria-label={homeLabel}
+              >
                 <div className="w-11 h-11 bg-primary border-3 border-foreground rounded-xl flex items-center justify-center text-primary-foreground shadow-stamp-sm">
                   <Languages size={22} strokeWidth={2.5} />
                 </div>
                 <span className="text-2xl font-display font-bold">Lingual</span>
-              </div>
+              </button>
               <button
                 type="button"
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -266,6 +317,34 @@ export function AppLayout() {
                 <X size={20} />
               </button>
             </div>
+
+            {!isTeacherView ? (
+              <div className="mb-6 rounded-2xl border-2 border-border bg-secondary/50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
+                  Practice Language
+                </p>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {LEARNING_LOCALES.map((locale) => (
+                    <button
+                      key={locale.value}
+                      type="button"
+                      onClick={() => {
+                        void handleLocaleChange(locale.value);
+                      }}
+                      disabled={isUpdatingLocale}
+                      className={`rounded-xl border-2 px-2 py-2 text-center text-xs font-semibold transition-colors ${
+                        locale.value === learningLocale
+                          ? 'border-foreground bg-primary text-primary-foreground'
+                          : 'border-border bg-card text-foreground hover:border-primary'
+                      }`}
+                    >
+                      <div className="text-base leading-none">{locale.flag}</div>
+                      <div className="mt-1">{locale.shortLabel}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <nav className="space-y-2">
               {mobileMenuNav.map((item) => (

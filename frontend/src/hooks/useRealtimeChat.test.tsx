@@ -218,4 +218,74 @@ describe('useRealtimeChat directive continuation', () => {
       },
     ]);
   });
+
+  it('deletes ignored stray user turns instead of creating a response', async () => {
+    render(<HookHarness />);
+
+    await act(async () => {
+      await latestHookState?.connect();
+    });
+
+    act(() => {
+      activeDataChannel?.open();
+    });
+
+    await waitFor(() => {
+      expect(latestHookState?.isConnected).toBe(true);
+    });
+
+    act(() => {
+      activeDataChannel?.emitServerEvent({
+        type: 'input_audio_buffer.speech_started',
+      });
+      activeDataChannel?.emitServerEvent({
+        type: 'input_audio_buffer.speech_stopped',
+      });
+      activeDataChannel?.emitServerEvent({
+        type: 'conversation.item.input_audio_transcription.done',
+        item_id: 'user_1',
+        transcript: 'okay',
+      });
+    });
+
+    expect(sentClientEvents).toContainEqual({
+      type: 'conversation.item.delete',
+      item_id: 'user_1',
+    });
+
+    expect(sentClientEvents).not.toContainEqual({
+      type: 'response.create',
+    });
+  });
+
+  it('creates a response for accepted learner turns after transcription completes', async () => {
+    render(<HookHarness />);
+
+    await act(async () => {
+      await latestHookState?.connect();
+    });
+
+    act(() => {
+      activeDataChannel?.open();
+    });
+
+    await waitFor(() => {
+      expect(latestHookState?.isConnected).toBe(true);
+    });
+
+    act(() => {
+      activeDataChannel?.emitServerEvent({
+        type: 'input_audio_buffer.speech_started',
+      });
+      activeDataChannel?.emitServerEvent({
+        type: 'conversation.item.input_audio_transcription.done',
+        item_id: 'user_2',
+        transcript: 'Can you help me practice ordering coffee?',
+      });
+    });
+
+    expect(sentClientEvents).toContainEqual({
+      type: 'response.create',
+    });
+  });
 });

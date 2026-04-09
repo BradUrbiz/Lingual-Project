@@ -7,11 +7,8 @@ import { Card, Button, Alert, AlertDescription } from '@/components/ui';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useLearningLocale } from '@/contexts/LearningLocaleContext';
 import { getUserProfile, saveInitialOnboarding } from '@/api/user';
+import { LEARNING_LOCALES } from '@/lib/learningLocales';
 import type { AssessmentPreference, LearningLocale } from '@/types';
-
-const LANGUAGE_OPTIONS: Array<{ value: LearningLocale; label: string; flag: string }> = [
-  { value: 'ko-KR', label: 'Korean (Korea)', flag: '🇰🇷' },
-];
 
 export function InitialOnboardingPage() {
   const navigate = useNavigate();
@@ -124,7 +121,7 @@ export function InitialOnboardingPage() {
             </h2>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            {LANGUAGE_OPTIONS.map((option) => (
+            {LEARNING_LOCALES.map((option) => (
               <button
                 type="button"
                 key={option.value}

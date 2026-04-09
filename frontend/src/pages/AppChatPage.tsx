@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   BookOpen,
-  History,
   MonitorPlay,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -30,11 +29,9 @@ import { getUserProfile } from '@/api/user';
 import { getAssessmentResults } from '@/api/assessment';
 import { ChatSessionsSidebar } from '@/components/learning';
 import {
-  Button,
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui';
@@ -109,7 +106,6 @@ export function AppChatPage() {
   const [mode, setMode] = useState<Mode>('realtime');
   const [inputValue, setInputValue] = useState('');
   const [isSendingText, setIsSendingText] = useState(false);
-  const [deleteDialogChatId, setDeleteDialogChatId] = useState<string | null>(null);
   const [isDeletingChat, setIsDeletingChat] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [isSidebarDialogOpen, setIsSidebarDialogOpen] = useState(false);
@@ -613,14 +609,9 @@ export function AppChatPage() {
     }
   };
 
-  const handleDeleteChat = (chatId: string, e: React.MouseEvent) => {
+  const handleDeleteChat = async (chatId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setDeleteDialogChatId(chatId);
-  };
-
-  const handleConfirmDeleteChat = async () => {
-    if (!deleteDialogChatId || isDeletingChat) return;
-    const chatId = deleteDialogChatId;
+    if (isDeletingChat) return;
     setIsDeletingChat(true);
 
     try {
@@ -647,7 +638,6 @@ export function AppChatPage() {
       setError('Failed to delete chat');
     } finally {
       setIsDeletingChat(false);
-      setDeleteDialogChatId(null);
     }
   };
 
@@ -657,9 +647,6 @@ export function AppChatPage() {
     Boolean(currentChatId) &&
     Boolean(mostRecentSession) &&
     mostRecentSession?.id !== currentChatId;
-  const pendingDeleteSession = deleteDialogChatId
-    ? sessions.find((session) => session.id === deleteDialogChatId) ?? null
-    : null;
 
   const focusAreas = profileSummary?.selectedCategories ?? [];
   const domainEntries = assessmentResults?.domainBands
@@ -749,15 +736,6 @@ export function AppChatPage() {
             className="inline-flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
             <BookOpen size={18} strokeWidth={2.5} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsSidebarExpanded(true)}
-            aria-label={t('app.learn.sessions.title')}
-            title={t('app.learn.sessions.title')}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          >
-            <History size={18} strokeWidth={2.5} />
           </button>
         </div>
       </div>
@@ -1064,46 +1042,6 @@ export function AppChatPage() {
               />
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(deleteDialogChatId)}
-        onOpenChange={(open) => {
-          if (!open && !isDeletingChat) {
-            setDeleteDialogChatId(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-[420px] rounded-2xl border-3 border-foreground bg-card shadow-stamp">
-          <DialogHeader>
-            <DialogTitle className="font-display text-xl text-foreground">
-              {t('app.learn.sessions.deleteTitle') || 'Delete conversation?'}
-            </DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
-              {pendingDeleteSession?.title
-                ? `${pendingDeleteSession.title} — ${t('chat.deleteConfirm') || 'Are you sure you want to delete this chat?'}`
-                : t('chat.deleteConfirm') || 'Are you sure you want to delete this chat?'}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDeleteDialogChatId(null)}
-              disabled={isDeletingChat}
-            >
-              {t('logout.cancel') || 'Cancel'}
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleConfirmDeleteChat}
-              loading={isDeletingChat}
-            >
-              {t('app.learn.sessions.deleteAction') || 'Delete chat'}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

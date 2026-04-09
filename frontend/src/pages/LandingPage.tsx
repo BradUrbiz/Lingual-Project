@@ -10,7 +10,6 @@ import {
   Menu,
   X,
   ArrowRight,
-  Star,
   Loader2,
   Sparkles,
 } from 'lucide-react';
@@ -21,8 +20,6 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { staggerContainer, staggerItem, cardVariants } from '@/lib/animations';
 
 const HERO_IMAGE = '/imgs/landing/hero.jpg';
-const TEACHER_IMAGE = '/imgs/landing/teacher.jpg';
-const STUDENT_IMAGE = '/imgs/landing/student.jpg';
 const AVATAR_IMAGES = [
   '/imgs/avatars/user-1.svg',
   '/imgs/avatars/user-2.svg',
@@ -475,27 +472,23 @@ export function LandingPage() {
 
             {/* Stats grid - brutalist boxes */}
             <div className="grid grid-cols-2 gap-4">
-              {[
-                { value: '3x', label: t('landing.schools.stats.speaking'), color: 'bg-primary' },
-                { value: '40%', label: t('landing.schools.stats.grading'), color: 'bg-accent' },
-              ].map((stat, idx) => (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: idx * 0.1 }}
-                  className={`${stat.color} p-6 rounded-2xl border-3 border-background`}
-                >
-                  <div className="text-4xl font-display font-bold text-background mb-2">{stat.value}</div>
-                  <div className="text-background/80 font-medium">{stat.label}</div>
-                </motion.div>
-              ))}
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
-                transition={{ delay: 0.2 }}
+                transition={{ delay: 0 }}
+                className="col-span-2 bg-primary p-6 rounded-2xl border-3 border-background"
+              >
+                <div className="text-4xl font-display font-bold text-background mb-2">3x</div>
+                <div className="text-background/80 font-medium">
+                  {t('landing.schools.stats.speaking')}
+                </div>
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.1 }}
                 className="col-span-2 bg-success p-6 rounded-2xl border-3 border-background"
               >
                 <div className="text-4xl font-display font-bold text-background mb-2">100%</div>
@@ -504,66 +497,6 @@ export function LandingPage() {
                 </div>
               </motion.div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials - Brutalist quote cards */}
-      <section className="py-20 bg-background">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl lg:text-5xl font-display font-bold">
-              {t('landing.testimonials.title')}
-            </h2>
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            {[
-              {
-                image: TEACHER_IMAGE,
-                name: 'Sarah Johnson',
-                role: t('landing.testimonials.teacher.role'),
-                quote: t('landing.testimonials.teacher.quote'),
-              },
-              {
-                image: STUDENT_IMAGE,
-                name: 'Michael Chen',
-                role: t('landing.testimonials.student.role'),
-                quote: t('landing.testimonials.student.quote'),
-              },
-            ].map((testimonial, idx) => (
-              <motion.div
-                key={testimonial.name}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: idx * 0.15 }}
-                className="bg-card p-8 rounded-2xl border-3 border-foreground shadow-stamp relative"
-              >
-                <div className="absolute -top-4 -right-4 w-12 h-12 bg-accent rounded-xl border-3 border-foreground flex items-center justify-center rotate-12">
-                  <Star size={24} fill="currentColor" className="text-accent-foreground" />
-                </div>
-                <div className="flex items-center gap-4 mb-6">
-                  <img
-                    src={testimonial.image}
-                    alt={testimonial.name}
-                    className="w-16 h-16 rounded-xl object-cover border-3 border-foreground"
-                  />
-                  <div>
-                    <div className="font-display font-bold text-xl">{testimonial.name}</div>
-                    <div className="text-muted-foreground font-medium">{testimonial.role}</div>
-                  </div>
-                </div>
-                <p className="text-lg leading-relaxed italic text-foreground/80">
-                  "{testimonial.quote}"
-                </p>
-              </motion.div>
-            ))}
           </div>
         </div>
       </section>

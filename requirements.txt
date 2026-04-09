@@ -8,5 +8,4 @@ requests==2.32.4
 cryptography==44.0.3
 gunicorn==23.0.0
 PyLTI1p3>=2.0.0
-pygame==2.6.1
 simple-websocket==1.1.0

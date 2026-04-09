@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Gamepad2, Headphones, Loader2, Puzzle, MessageSquare } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { clsx } from 'clsx';
+import curriculumExampleEs from '@/data/curriculum_example_es.json';
+import curriculumExampleFr from '@/data/curriculum_example_fr.json';
+import curriculumExampleHe from '@/data/curriculum_example_he.json';
 import curriculumExampleKo from '@/data/curriculum_example_ko.json';
+import curriculumExampleRu from '@/data/curriculum_example_ru.json';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useLearningLocale } from '@/contexts/LearningLocaleContext';
 import { getChatSessions } from '@/api/chat';
@@ -16,7 +20,7 @@ import {
 import { FlashcardFlip, GrammarChallenge, ListeningQuiz, WordMatch } from '@/components/minigames';
 import type { MinigameCompletionResult } from '@/components/minigames/ListeningQuiz';
 import { generateFlashcards, saveMinigameAttempt, type Flashcard } from '@/api/minigames';
-import type { ChatSession, MinigameType } from '@/types';
+import type { ChatSession, LearningLocale, MinigameType } from '@/types';
 
 type CurriculumObjective = {
   id: string;
@@ -45,7 +49,13 @@ type ActiveGameContext = {
   scenarioTitle: string;
 };
 
-const curriculum = curriculumExampleKo as Curriculum;
+const curriculaByLocale: Partial<Record<LearningLocale, Curriculum>> = {
+  'ko-KR': curriculumExampleKo as Curriculum,
+  'es-ES': curriculumExampleEs as Curriculum,
+  'fr-FR': curriculumExampleFr as Curriculum,
+  'ru-RU': curriculumExampleRu as Curriculum,
+  'he-IL': curriculumExampleHe as Curriculum,
+};
 
 export function AppGamesPage() {
   const { t } = useLanguage();
@@ -74,24 +84,27 @@ export function AppGamesPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const curriculumMatchesLocale = curriculum.locale === learningLocale;
+  const curriculum = useMemo(() => curriculaByLocale[learningLocale] ?? null, [learningLocale]);
   const objectives = useMemo(
-    () => (curriculumMatchesLocale ? curriculum.objectives : []),
-    [curriculumMatchesLocale]
+    () => curriculum?.objectives ?? [],
+    [curriculum]
   );
   const scenarios = useMemo(
-    () => (curriculumMatchesLocale ? curriculum.practice_scenarios : []),
-    [curriculumMatchesLocale]
+    () => curriculum?.practice_scenarios ?? [],
+    [curriculum]
   );
 
   useEffect(() => {
-    if (!curriculumMatchesLocale || !objectives.length) {
+    if (!objectives.length) {
       setSelectedObjectiveId(null);
       setSelectedScenarioId(null);
       return;
     }
-    setSelectedObjectiveId((prev) => prev ?? objectives[0].id);
-  }, [curriculumMatchesLocale, objectives]);
+    setSelectedObjectiveId((prev) => {
+      const stillValid = prev && objectives.some((objective) => objective.id === prev);
+      return stillValid ? prev : objectives[0].id;
+    });
+  }, [objectives]);
 
   const filteredScenarios = useMemo(() => {
     if (!selectedObjectiveId) return scenarios;
@@ -311,18 +324,18 @@ export function AppGamesPage() {
         </div>
       )}
 
-      {!curriculumMatchesLocale ? (
+      {!curriculum ? (
         <section className={`${surfaceClass} p-8 text-center`}>
           <p className="text-lg font-display font-bold text-foreground">
             {t('app.games.noCurriculum') || 'No game curriculum available for this locale yet'}
           </p>
           <p className="text-sm text-muted-foreground mt-2">
-            {t('app.games.noCurriculumDesc') || 'Switch to Korean to play objective-based games for now'}
+            {t('app.games.noCurriculumDesc') || 'Try another learning language or continue with conversation games for now'}
           </p>
         </section>
       ) : (
         <>
-          <section className={`${surfaceClass} space-y-5 p-6`}>
+          <section className={`${surfaceClass} space-y-6 p-6`}>
             <div>
               <label
                 htmlFor="games-objective-select"
@@ -381,13 +394,21 @@ export function AppGamesPage() {
                 </p>
               )}
             </div>
-          </section>
 
-          <section className={`${surfaceClass} p-6`}>
-            <h2 className="mb-4 text-lg font-display font-bold text-foreground">
-              {t('app.games.chooseGame') || 'Choose a game'}
-            </h2>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="border-t-2 border-border pt-6">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-display font-bold text-foreground">
+                    {t('app.games.chooseGame') || 'Choose a game'}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedScenario
+                      ? `For ${selectedScenario.title}`
+                      : (t('app.games.noScenario') || 'No scenarios for this objective yet')}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <button
                 type="button"
                 onClick={launchListeningQuiz}
@@ -430,9 +451,10 @@ export function AppGamesPage() {
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {t('app.games.grammarChallengeDesc') || 'Fill in missing particles and strengthen grammar patterns'}
+                  {t('app.games.grammarChallengeDesc') || 'Fill in missing words and strengthen core language patterns'}
                 </p>
               </button>
+            </div>
             </div>
           </section>
         </>
@@ -562,6 +584,7 @@ export function AppGamesPage() {
         {showListeningQuiz && listeningQuestions.length > 0 && activeGameContext && (
           <ListeningQuiz
             questions={listeningQuestions}
+            locale={learningLocale}
             scenarioTitle={activeGameContext.scenarioTitle}
             onClose={closeListeningQuiz}
             onComplete={onListeningComplete}

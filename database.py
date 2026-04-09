@@ -18,7 +18,7 @@ Schema:
         - level_objective: str (user's goal description)
         - assessment_preference: str ('take' | 'skip' | None)
         - ui_language: str ('en' or 'ko')
-        - learning_locale: str ('ko-KR', 'es-ES', 'fr-FR')
+        - learning_locale: str ('ko-KR', 'es-ES', 'fr-FR', 'ru-RU', 'he-IL')
         - avatar_url: str (profile image URL or data URI)
         - contact_email: str (editable email address for profile)
         - grade_level: str (e.g. "10th Grade")
@@ -655,6 +655,7 @@ def get_user_profile_context(uid):
             'frequency_unit': profile.get('frequency_unit'),
             'level_objective': profile.get('level_objective', ''),
             'assessment_preference': profile.get('assessment_preference'),
+            'learning_locale': profile.get('learning_locale', 'ko-KR'),
             'results': user.get('results'),
             'selected_categories': user.get('selected_categories', [])
         }
@@ -850,6 +851,15 @@ def add_primary_class_to_membership(membership_id, class_id):
     membership_ref = get_membership_ref(membership_id)
     membership_ref.update({
         'primary_class_ids': firestore.ArrayUnion([class_id]),
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    })
+
+
+def remove_primary_class_from_membership(membership_id, class_id):
+    """Detach a class from a membership's primary class list."""
+    membership_ref = get_membership_ref(membership_id)
+    membership_ref.update({
+        'primary_class_ids': firestore.ArrayRemove([class_id]),
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
 
@@ -1396,6 +1406,23 @@ def list_student_assignments(student_uid, statuses=None):
     return assignments
 
 
+def list_student_classes(student_uid):
+    """List active classes a student is enrolled in."""
+    enrollments = list_student_enrollments(student_uid)
+    classes = []
+    seen_class_ids = set()
+    for enrollment in enrollments:
+        class_id = enrollment.get('class_id')
+        if not isinstance(class_id, str) or not class_id or class_id in seen_class_ids:
+            continue
+        class_record = get_class(class_id)
+        if not class_record or class_record.get('status') != 'active':
+            continue
+        classes.append(class_record)
+        seen_class_ids.add(class_id)
+    return classes
+
+
 def create_practice_session(session_data, session_id=None):
     """Create a practice session document."""
     doc_ref = get_practice_session_ref(session_id) if session_id else get_practice_sessions_collection().document()
@@ -1833,6 +1860,8 @@ def get_minigame_summary(uid, limit=200):
             'bestScore': 0,
             'totalQuestions': 0,
             'totalCorrectAnswers': 0,
+            'totalDurationSeconds': 0,
+            'durationSecondsByLocale': {},
             'byGame': {},
             'recentAttempts': []
         }
@@ -1846,10 +1875,15 @@ def get_minigame_summary(uid, limit=200):
         else 0
     )
     best_score = max(item.get('score', 0) for item in attempts)
+    total_duration_seconds = 0
 
     by_game = {}
+    duration_by_locale = {}
     for attempt in attempts:
         game_type = attempt.get('gameType') or 'unknown'
+        locale = attempt.get('locale')
+        duration_seconds = max(0, attempt.get('durationSeconds') or 0)
+        total_duration_seconds += duration_seconds
         if game_type not in by_game:
             by_game[game_type] = {
                 'attempts': 0,
@@ -1862,6 +1896,8 @@ def get_minigame_summary(uid, limit=200):
             by_game[game_type]['bestScore'],
             attempt.get('score', 0)
         )
+        if locale:
+            duration_by_locale[locale] = duration_by_locale.get(locale, 0) + duration_seconds
 
     for game_type, stats in by_game.items():
         attempts_count = stats['attempts']
@@ -1877,6 +1913,8 @@ def get_minigame_summary(uid, limit=200):
         'bestScore': best_score,
         'totalQuestions': total_questions,
         'totalCorrectAnswers': total_correct,
+        'totalDurationSeconds': total_duration_seconds,
+        'durationSecondsByLocale': duration_by_locale,
         'byGame': by_game,
         'recentAttempts': attempts[:10]
     }

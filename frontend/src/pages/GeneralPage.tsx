@@ -5,7 +5,6 @@ import { Loader2, ChevronLeft, ChevronRight, Check, AlertTriangle } from 'lucide
 import { useLanguage } from '../contexts/LanguageContext';
 import {
   Button,
-  Slider,
   AnimatedCard,
   Alert,
   AlertDescription,
@@ -14,7 +13,7 @@ import {
 } from '@/components/ui';
 import { AnimatedPage } from '@/components/layout/AnimatedPage';
 import { updateProfile, getUserProfile } from '../api/user';
-import type { Gender, Rigor, FrequencyUnit, ProfileFormData } from '../types';
+import type { Gender, Rigor, ProfileFormData } from '../types';
 
 const GENDER_OPTIONS: { id: Gender; labelKey: string }[] = [
   { id: 'male', labelKey: 'general.male' },
@@ -31,13 +30,7 @@ const RIGOR_OPTIONS: { id: Rigor; labelKey: string; description: string }[] = [
   { id: 'intense', labelKey: 'general.intense', description: '60+ min/session' },
 ];
 
-const FREQUENCY_UNIT_OPTIONS: { id: FrequencyUnit; labelKey: string }[] = [
-  { id: 'day', labelKey: 'general.perDay' },
-  { id: 'week', labelKey: 'general.perWeek' },
-  { id: 'month', labelKey: 'general.perMonth' },
-];
-
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 4;
 
 // Animation variants for step transitions
 const stepVariants = {
@@ -84,7 +77,7 @@ export function GeneralPage() {
       // If profile is complete and NOT in edit mode, redirect to appropriate page
       if (profile.profileCompleted && !isEditMode) {
         if (profile.assessed) {
-          navigate('/chat', { replace: true });
+          navigate('/app/learn', { replace: true });
         } else if (profile.assessmentPreference === 'skip') {
           navigate('/app/learn', { replace: true });
         } else if (profile.assessmentPreference === 'take') {
@@ -134,8 +127,6 @@ export function GeneralPage() {
       case 3:
         return !!formData.rigor;
       case 4:
-        return !!(formData.frequency && formData.frequencyUnit);
-      case 5:
         return true; // Level objective is optional
       default:
         return false;
@@ -179,11 +170,6 @@ export function GeneralPage() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const getFrequencyLabel = (value: number): string => {
-    if (value === 1) return `1 ${t('general.time')}`;
-    return `${value} ${t('general.times')}`;
   };
 
   if (loading) {
@@ -318,46 +304,6 @@ export function GeneralPage() {
     <div className="space-y-6">
       <div className="text-center mb-6">
         <h2 className="text-xl font-display font-semibold text-foreground">
-          {t('general.frequencyLabel')} *
-        </h2>
-        <p className="text-sm text-muted-foreground mt-2">
-          {t('general.frequencyDescription')}
-        </p>
-      </div>
-
-      <div className="space-y-6">
-        <div className="px-4 py-4 rounded-2xl border-2 border-border bg-secondary">
-          <Slider
-            min={1}
-            max={14}
-            value={[formData.frequency || 3]}
-            onValueChange={(values) => updateField('frequency', values[0])}
-            displayValue={getFrequencyLabel(formData.frequency || 3)}
-          />
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          {FREQUENCY_UNIT_OPTIONS.map(({ id, labelKey }) => (
-            <motion.div key={id} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
-              <Button
-                variant="option"
-                selected={formData.frequencyUnit === id}
-                onClick={() => updateField('frequencyUnit', id)}
-                className="rounded-full border-border bg-card hover:border-primary hover:text-foreground"
-              >
-                {t(labelKey)}
-              </Button>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderStep5 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <h2 className="text-xl font-display font-semibold text-foreground">
           {t('general.levelObjectiveLabel')}
         </h2>
         <p className="text-sm text-muted-foreground mt-2">
@@ -393,8 +339,6 @@ export function GeneralPage() {
         return renderStep3();
       case 4:
         return renderStep4();
-      case 5:
-        return renderStep5();
       default:
         return null;
     }

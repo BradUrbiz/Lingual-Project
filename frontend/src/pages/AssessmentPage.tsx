@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Loader2, AlertTriangle, Info, Lightbulb, BookOpen } from 'lucide-react';
+import { Loader2, AlertTriangle, Info, BookOpen } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Button, Progress, Badge, Card, Alert, AlertDescription } from '@/components/ui';
 import { AnimatedPage } from '@/components/layout/AnimatedPage';
@@ -17,16 +17,6 @@ import type { AssessmentItem } from '../types';
 export function AssessmentPage() {
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
-  const domainLabels: Record<string, string> = {
-    grammar: 'Grammar',
-    vocabulary: 'Vocabulary',
-    pragmatics: 'Pragmatics',
-    pronunciation: 'Pronunciation',
-    interpretive_comprehension: 'Interpretive Comprehension',
-    interpersonal_communication: 'Interpersonal Communication',
-    presentational_communication: 'Presentational Communication',
-    language_control: 'Language Control',
-  };
 
   const [items, setItems] = useState<AssessmentItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -127,77 +117,13 @@ export function AssessmentPage() {
     return lang === 'ko' ? currentItem.ui.prompt_ko : currentItem.ui.prompt_en;
   };
 
-  const getInstructions = (): string | undefined => {
-    if (!currentItem) return undefined;
-    return lang === 'ko' ? currentItem.ui.instructions_ko : currentItem.ui.instructions_en;
-  };
-
-  const countWords = (value: string): number =>
-    value.trim().split(/\s+/).filter(Boolean).length;
-  const formatSectionLabel = (value: string): string =>
-    value
+  const formatSectionLabel = (value: string): string => {
+    if (value === 'self_assessment' || value === 'self_assesment') {
+      return 'Self Assesment';
+    }
+    return value
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (char) => char.toUpperCase());
-
-  const getItemTypeLabel = (): string => {
-    if (!currentItem) return 'Question';
-    switch (currentItem.item_type) {
-      case 'mcq_single':
-        return 'Multiple choice';
-      case 'text_short':
-        return 'Short answer';
-      case 'audio_read':
-        return 'Read aloud';
-      default:
-        return 'Question';
-    }
-  };
-
-  const getItemTips = (): string[] => {
-    if (!currentItem) return [];
-    const tips: string[] = [];
-    const domainEntries = Object.entries(currentItem.domains || {});
-    const topDomain = domainEntries.sort((a, b) => b[1] - a[1])[0];
-
-    if (topDomain && topDomain[1] > 0) {
-      tips.push(`Focus: ${domainLabels[topDomain[0]] || topDomain[0]}`);
-    } else if (currentItem.section) {
-      tips.push(`Section: ${formatSectionLabel(currentItem.section)}`);
-    }
-
-    if (currentItem.item_type === 'mcq_single') {
-      const optionCount = currentItem.content.options?.length ?? 0;
-      if (optionCount > 0) tips.push(`${optionCount} answer choices`);
-    }
-
-    if (currentItem.item_type === 'text_short') {
-      const promptWords = countWords(getPrompt());
-      if (promptWords > 0) tips.push(`Prompt: ${promptWords} words`);
-    }
-
-    if (currentItem.item_type === 'audio_read') {
-      const sentences = currentItem.content.sentences ?? [];
-      const wordCount = countWords(sentences.join(' '));
-      if (sentences.length > 0) tips.push(`${sentences.length} sentences to read`);
-      if (wordCount > 0) tips.push(`~${wordCount} words total`);
-    }
-
-    if (currentItem.ui.context) {
-      const contextWords = countWords(currentItem.ui.context);
-      if (contextWords > 0) tips.push(`Context: ${contextWords} words`);
-    }
-
-    const baseTips =
-      currentItem.item_type === 'mcq_single'
-        ? ['Scan for key words before choosing.', 'Eliminate one option first.']
-        : currentItem.item_type === 'text_short'
-        ? ['Use 1–2 complete sentences.', 'Focus on clarity over length.']
-        : currentItem.item_type === 'audio_read'
-        ? ['Speak naturally and pause at commas.', 'Re-record if you stumble.']
-        : [];
-
-    const merged = Array.from(new Set([...tips, ...baseTips]));
-    return merged.slice(0, 4);
   };
 
   const canSubmit = (): boolean => {
@@ -283,7 +209,7 @@ export function AssessmentPage() {
             animate={{ opacity: 1, x: 0 }}
           >
             <Badge variant="accent" size="lg">
-              {currentItem.section}
+              {formatSectionLabel(currentItem.section)}
             </Badge>
           </motion.div>
         </div>
@@ -307,107 +233,66 @@ export function AssessmentPage() {
 
         {/* Main Content */}
         <div className="border-t-2 border-border pt-6">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
-            {/* Question Area */}
-            <div>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={currentIndex}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                  className="mb-6"
-                >
-                  <p className="text-xl font-display font-semibold text-foreground mb-4">
-                    {getPrompt()}
-                  </p>
-                  {currentItem.ui.context && (
-                    <div className="mt-4 rounded-xl border-2 border-border bg-secondary p-4 relative overflow-hidden">
-                      <div className="absolute left-0 top-3 bottom-3 w-1 bg-primary rounded-full" />
-                      <div className="pl-4">
-                        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-                          <Info className="h-4 w-4" />
-                          Context
-                        </div>
-                        <pre className="text-foreground whitespace-pre-wrap font-body text-base leading-relaxed">
-                          {currentItem.ui.context}
-                        </pre>
-                      </div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentIndex}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="mb-6"
+            >
+              <p className="text-xl font-display font-semibold text-foreground mb-4">
+                {getPrompt()}
+              </p>
+              {currentItem.ui.context && (
+                <div className="mt-4 rounded-xl border-2 border-border bg-secondary p-4 relative overflow-hidden">
+                  <div className="absolute left-0 top-3 bottom-3 w-1 bg-primary rounded-full" />
+                  <div className="pl-4">
+                    <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+                      <Info className="h-4 w-4" />
+                      Context
                     </div>
-                  )}
-                </motion.div>
-              </AnimatePresence>
-
-              {/* Answer Input */}
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={`answer-${currentIndex}`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 30, delay: 0.1 }}
-                  className="mb-8"
-                >
-                  {currentItem.item_type === 'mcq_single' && currentItem.content.options && (
-                    <MCQQuestion
-                      options={currentItem.content.options}
-                      selectedId={selectedOption}
-                      onChange={setSelectedOption}
-                    />
-                  )}
-
-                  {currentItem.item_type === 'text_short' && (
-                    <TextQuestion value={textAnswer} onChange={setTextAnswer} />
-                  )}
-
-                  {currentItem.item_type === 'audio_read' && (
-                    <AudioQuestion
-                      wordList={currentItem.content.word_list}
-                      sentences={currentItem.content.sentences}
-                      onTranscriptChange={setAudioTranscript}
-                    />
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            {/* Side Panel - Instructions & Tips */}
-            <div className="lg:pt-2">
-              <div className="rounded-xl border-2 border-border bg-secondary p-5 space-y-5">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                      Instructions
-                    </p>
-                    <Badge variant="outline" size="sm">
-                      {getItemTypeLabel()}
-                    </Badge>
+                    <pre className="text-foreground whitespace-pre-wrap font-body text-base leading-relaxed">
+                      {currentItem.ui.context}
+                    </pre>
                   </div>
-                  <p className="text-foreground leading-relaxed">
-                    {getInstructions() || 'Answer clearly and keep your response concise.'}
-                  </p>
                 </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
 
-                {getItemTips().length > 0 && (
-                  <div className="rounded-xl border-2 border-border bg-card p-4">
-                    <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">
-                      <Lightbulb className="h-4 w-4 text-accent" />
-                      Tips
-                    </div>
-                    <div className="space-y-3">
-                      {getItemTips().map((tip) => (
-                        <div key={tip} className="flex items-start gap-3 text-sm text-foreground">
-                          <span className="mt-1.5 h-2 w-2 rounded-full bg-primary flex-shrink-0" />
-                          {tip}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          {/* Answer Input */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={`answer-${currentIndex}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30, delay: 0.1 }}
+              className="mb-8"
+            >
+              {currentItem.item_type === 'mcq_single' && currentItem.content.options && (
+                <MCQQuestion
+                  options={currentItem.content.options}
+                  selectedId={selectedOption}
+                  onChange={setSelectedOption}
+                />
+              )}
+
+              {currentItem.item_type === 'text_short' && (
+                <TextQuestion value={textAnswer} onChange={setTextAnswer} />
+              )}
+
+              {currentItem.item_type === 'audio_read' && (
+                <AudioQuestion
+                  wordList={currentItem.content.word_list}
+                  sentences={currentItem.content.sentences}
+                  onTranscriptChange={setAudioTranscript}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         {/* Action Buttons */}

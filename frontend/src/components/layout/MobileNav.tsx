@@ -52,7 +52,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
     setLoggingOut(true);
     try {
       await logout();
-      navigate('/auth');
+      navigate('/', { replace: true });
     } catch (error) {
       console.error('Logout failed:', error);
     } finally {

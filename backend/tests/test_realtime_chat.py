@@ -297,6 +297,11 @@ class FakeRealtimeRouteDb:
         self.consent_events.append(dict(payload))
         return f'event-{len(self.consent_events)}'
 
+    def get_user_profile_context(self, _uid):
+        return {
+            'learning_locale': 'fr-FR',
+        }
+
 
 class FakeRealtimeSessionResponse:
     status_code = 200
@@ -346,8 +351,10 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
         with patch.dict('os.environ', {}, clear=False):
             payload = build_realtime_session_request('Base instructions')
 
-        self.assertEqual(payload['instructions'], 'Base instructions')
+        self.assertIn('Base instructions', payload['instructions'])
+        self.assertIn('Ignore accidental noise', payload['instructions'])
         self.assertEqual(payload['turn_detection']['threshold'], 0.7)
+        self.assertEqual(payload['turn_detection']['create_response'], False)
         self.assertNotIn('tool_choice', payload)
         self.assertNotIn('tools', payload)
 
@@ -409,7 +416,9 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
             },
             login_required=passthrough_login_required,
             get_user_proficiency_context=lambda: 'Intermediate Mid',
-            build_system_prompt=lambda context: f'Generic prompt: {context}',
+            build_system_prompt=lambda context, learning_locale='ko-KR': (
+                f'Generic prompt: {context} ({learning_locale})'
+            ),
             load_sample_curriculum_package=lambda: SAMPLE_PACKAGE,
             get_curriculum_practice_context=lambda **kwargs: build_test_curriculum_context(
                 kwargs['module_id'],

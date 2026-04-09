@@ -197,16 +197,22 @@ def build_realtime_session_request(
     *,
     enable_avatar_directives: bool | None = None,
 ) -> dict[str, Any]:
+    guarded_instructions = (
+        f'{system_instructions}\n\n'
+        'Voice-input guardrail: Ignore accidental noise, background conversations, and speech not directed at you. '
+        'Only respond when the learner is clearly addressing you.'
+    )
     request_payload: dict[str, Any] = {
         'model': REALTIME_MODEL,
         'voice': 'coral',
-        'instructions': system_instructions,
+        'instructions': guarded_instructions,
         'input_audio_transcription': {'model': 'whisper-1'},
         'turn_detection': {
             'type': 'server_vad',
             'threshold': 0.7,
             'prefix_padding_ms': 300,
-            'silence_duration_ms': 350,
+            'silence_duration_ms': 320,
+            'create_response': False,
             'interrupt_response': True,
         },
     }
@@ -216,7 +222,7 @@ def build_realtime_session_request(
 
     if enable_avatar_directives:
         request_payload['instructions'] = (
-            f'{system_instructions}\n\n{build_avatar_realtime_instructions()}'
+            f'{guarded_instructions}\n\n{build_avatar_realtime_instructions()}'
         )
         request_payload['tool_choice'] = 'auto'
         request_payload['tools'] = [build_avatar_directive_tool()]
@@ -264,9 +270,9 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
             if ui_language not in deps.supported_ui_languages:
                 ui_language = 'en'
 
+            uid = deps.get_current_user_uid()
             assignment_id = _extract_assignment_id(payload)
             if assignment_id:
-                uid = deps.get_current_user_uid()
                 context = deps.get_school_request_context()
                 bootstrap = resolve_assignment_bootstrap_for_user(
                     deps,
@@ -330,7 +336,9 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     )
                 else:
                     proficiency_context = deps.get_user_proficiency_context()
-                    system_instructions = deps.build_system_prompt(proficiency_context)
+                    profile_context = deps.db.get_user_profile_context(uid) or {}
+                    learning_locale = profile_context.get('learning_locale', 'ko-KR')
+                    system_instructions = deps.build_system_prompt(proficiency_context, learning_locale)
 
             response = requests.post(
                 'https://api.openai.com/v1/realtime/sessions',
@@ -638,7 +646,9 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 system_prompt = build_assignment_system_prompt(bootstrap)
             else:
                 proficiency_context = deps.get_user_proficiency_context()
-                system_prompt = deps.build_system_prompt(proficiency_context)
+                profile_context = deps.db.get_user_profile_context(uid) or {}
+                learning_locale = profile_context.get('learning_locale', 'ko-KR')
+                system_prompt = deps.build_system_prompt(proficiency_context, learning_locale)
 
             messages = [{'role': 'system', 'content': system_prompt}]
             for msg in chat_messages[-10:]:

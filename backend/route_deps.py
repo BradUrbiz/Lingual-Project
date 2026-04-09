@@ -17,7 +17,7 @@ class RouteDeps:
     get_proficiency_description: Callable[..., Mapping[str, str]]
     login_required: Callable[[Callable[..., Any]], Callable[..., Any]]
     get_user_proficiency_context: Callable[[], str]
-    build_system_prompt: Callable[[str], str]
+    build_system_prompt: Callable[..., str]
     load_sample_curriculum_package: Callable[[], dict]
     get_curriculum_practice_context: Callable[..., Any]
     build_curriculum_system_prompt: Callable[..., str]

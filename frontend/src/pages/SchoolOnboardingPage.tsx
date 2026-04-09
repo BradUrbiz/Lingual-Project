@@ -6,18 +6,13 @@ import { AnimatedPage } from '@/components/layout';
 import { Alert, AlertDescription, Button, Card, Input } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
 import { getCurrentSchool, createSchool } from '@/api/schools';
+import { LEARNING_LOCALES } from '@/lib/learningLocales';
 import type { CreateSchoolPayload, LearningLocale, OrganizationType } from '@/types';
 
 const ORG_TYPE_OPTIONS: Array<{ value: OrganizationType; label: string }> = [
   { value: 'school', label: 'School' },
   { value: 'district', label: 'District' },
   { value: 'program', label: 'Program' },
-];
-
-const LOCALE_OPTIONS: Array<{ value: LearningLocale; label: string }> = [
-  { value: 'ko-KR', label: 'Korean (Korea)' },
-  { value: 'es-ES', label: 'Spanish (Spain)' },
-  { value: 'fr-FR', label: 'French (France)' },
 ];
 
 export function SchoolOnboardingPage() {
@@ -189,7 +184,7 @@ export function SchoolOnboardingPage() {
                 onChange={(event) => updateField('learningLocale', event.target.value as LearningLocale)}
                 className="h-12 w-full rounded-xl border-3 border-border bg-card px-4 text-base text-foreground focus:border-primary focus:outline-none"
               >
-                {LOCALE_OPTIONS.map((option) => (
+                {LEARNING_LOCALES.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>

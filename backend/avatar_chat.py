@@ -477,7 +477,10 @@ def resolve_system_instructions(deps: RouteDeps, payload: dict[str, Any]) -> str
         )
 
     proficiency_context = deps.get_user_proficiency_context()
-    return deps.build_system_prompt(proficiency_context)
+    uid = deps.get_current_user_uid()
+    profile_context = deps.db.get_user_profile_context(uid) or {}
+    learning_locale = profile_context.get('learning_locale', 'ko-KR')
+    return deps.build_system_prompt(proficiency_context, learning_locale)
 
 
 def send_ws_event(ws: Any, event_type: str, payload: dict[str, Any] | None = None) -> None:

@@ -314,6 +314,61 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
             print(f"Class join error: {exc}")
             return jsonify({"success": False, "error": str(exc)}), 500
 
+    @bp.route("/api/student/classes")
+    @deps.login_required
+    def api_list_student_classes():
+        try:
+            uid = deps.get_current_user_uid()
+            if not uid:
+                raise SchoolContextPermissionError("Authentication required.")
+
+            class_summaries = []
+            for class_record in deps.db.list_student_classes(uid):
+                summary = build_class_summary(deps, class_record)
+                if summary:
+                    class_summaries.append(summary)
+
+            return jsonify({
+                "success": True,
+                "classes": class_summaries,
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            print(f"Student classes error: {exc}")
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @bp.route("/api/student/classes/<class_id>", methods=["DELETE"])
+    @deps.login_required
+    def api_leave_student_class(class_id):
+        try:
+            uid = deps.get_current_user_uid()
+            if not uid:
+                raise SchoolContextPermissionError("Authentication required.")
+
+            enrollment = deps.db.get_student_class_enrollment(class_id, uid)
+            if not enrollment or enrollment.get("status") != "active":
+                return jsonify({"success": False, "error": "Active class enrollment not found."}), 404
+
+            membership_id = _normalize_string(enrollment.get("student_membership_id"))
+            if membership_id:
+                deps.db.remove_primary_class_from_membership(membership_id, class_id)
+            deps.db.deactivate_enrollment(class_id, uid)
+
+            class_record = deps.db.get_class(class_id)
+            return jsonify({
+                "success": True,
+                "class": {
+                    "id": class_id,
+                    "name": (class_record or {}).get("name", ""),
+                },
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            print(f"Student leave class error: {exc}")
+            return jsonify({"success": False, "error": str(exc)}), 500
+
     # ------------------------------------------------------------------
     # Teacher invite codes (school admin generates, teacher uses to join)
     # ------------------------------------------------------------------

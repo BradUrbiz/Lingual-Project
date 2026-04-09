@@ -53,6 +53,7 @@ import type { TeacherInviteCodeData } from '@/api/schoolRequests';
 import { getLtiPlatform, registerLtiPlatform, deleteLtiPlatform } from '@/api/lti';
 import type { LtiPlatformConfig } from '@/api/lti';
 import { useMembership } from '@/contexts/MembershipContext';
+import { LEARNING_LOCALES } from '@/lib/learningLocales';
 import { OnboardingHint } from '@/components/ui/OnboardingHint';
 import type {
   ClassJoinCodeData,
@@ -69,12 +70,6 @@ const DEFAULT_CLASS_FORM: CreateTeacherClassPayload = {
   gradeBand: '',
   learningLocale: 'ko-KR',
 };
-
-const LOCALE_OPTIONS = [
-  { value: 'ko-KR', label: 'Korean (Korea)' },
-  { value: 'es-ES', label: 'Spanish (Spain)' },
-  { value: 'fr-FR', label: 'French (France)' },
-];
 
 export function TeacherDashboardPage() {
   const navigate = useNavigate();
@@ -1042,7 +1037,7 @@ export function TeacherDashboardPage() {
                 onChange={(event) => updateClassField('learningLocale', event.target.value)}
                 className="h-12 w-full rounded-xl border-3 border-border bg-card px-4 text-base text-foreground focus:border-primary focus:outline-none"
               >
-                {LOCALE_OPTIONS.map((option) => (
+                {LEARNING_LOCALES.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>

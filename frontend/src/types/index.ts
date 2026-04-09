@@ -230,6 +230,8 @@ export interface MinigameSummary {
   bestScore: number;
   totalQuestions: number;
   totalCorrectAnswers: number;
+  totalDurationSeconds?: number;
+  durationSecondsByLocale?: Partial<Record<LearningLocale, number>>;
   byGame: Record<string, MinigameSummaryByGame>;
   recentAttempts: MinigameAttempt[];
 }
@@ -243,7 +245,7 @@ export interface ApiResponse<T = unknown> {
 
 // Language Type
 export type Language = 'en' | 'ko';
-export type LearningLocale = 'ko-KR' | 'es-ES' | 'fr-FR';
+export type LearningLocale = 'ko-KR' | 'es-ES' | 'fr-FR' | 'ru-RU' | 'he-IL';
 
 // Curriculum Types
 export type {

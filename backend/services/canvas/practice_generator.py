@@ -18,6 +18,7 @@ _LOCALE_LABELS = {
     "fr-FR": "French",
     "es-ES": "Spanish",
     "ru-RU": "Russian",
+    "he-IL": "Hebrew",
     "en-US": "English",
 }
 

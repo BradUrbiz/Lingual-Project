@@ -1,5 +1,4 @@
 import { useCallback, useRef, useState } from 'react';
-import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
 import { getSpeechToken } from '@/api/pronunciation';
 import type {
   LearningLocale,
@@ -14,6 +13,7 @@ type AssessOptions = {
 };
 
 const TOKEN_REFRESH_BUFFER_MS = 60_000;
+let speechSdkModule: any | null = null;
 
 const parseScores = (assessment?: Record<string, unknown>): PronunciationScoreSet => ({
   accuracy: typeof assessment?.AccuracyScore === 'number' ? assessment.AccuracyScore : undefined,
@@ -221,13 +221,26 @@ const logRawWordPhonemePayload = (
 const formatNoMatchReason = (reason: number | string | undefined) => {
   if (reason === undefined || reason === null) return '';
   if (typeof reason === 'string') return reason;
-  return SpeechSDK.NoMatchReason[reason] ?? `${reason}`;
+  return speechSdkModule?.NoMatchReason?.[reason] ?? `${reason}`;
 };
 
 const formatCancellationReason = (reason: number | string | undefined) => {
   if (reason === undefined || reason === null) return '';
   if (typeof reason === 'string') return reason;
-  return SpeechSDK.CancellationReason[reason] ?? `${reason}`;
+  return speechSdkModule?.CancellationReason?.[reason] ?? `${reason}`;
+};
+
+const loadSpeechSdk = async (): Promise<any> => {
+  if (speechSdkModule) return speechSdkModule;
+  try {
+    const moduleName = 'microsoft-cognitiveservices-speech-sdk';
+    speechSdkModule = await import(/* @vite-ignore */ moduleName);
+    return speechSdkModule;
+  } catch {
+    throw new Error(
+      'Speech SDK is not available in this environment. Install microsoft-cognitiveservices-speech-sdk to enable pronunciation practice.'
+    );
+  }
 };
 
 const getMicrophoneStream = async (): Promise<MediaStream> => {
@@ -237,9 +250,9 @@ const getMicrophoneStream = async (): Promise<MediaStream> => {
   return navigator.mediaDevices.getUserMedia({ audio: true });
 };
 
-const createAudioConfigFromStream = (stream: MediaStream): SpeechSDK.AudioConfig => {
-  const maybeFromStream = (SpeechSDK.AudioConfig as unknown as {
-    fromStreamInput?: (input: MediaStream) => SpeechSDK.AudioConfig;
+const createAudioConfigFromStream = (stream: MediaStream, SpeechSDK: any): any => {
+  const maybeFromStream = (SpeechSDK.AudioConfig as {
+    fromStreamInput?: (input: MediaStream) => any;
   }).fromStreamInput;
   if (typeof maybeFromStream === 'function') {
     return maybeFromStream(stream);
@@ -275,6 +288,7 @@ export function usePronunciationPractice() {
       setError(null);
       setStatus('listening');
 
+      const SpeechSDK = await loadSpeechSdk();
       const { token, region } = await ensureToken();
       const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
       speechConfig.speechRecognitionLanguage = locale;
@@ -288,13 +302,13 @@ export function usePronunciationPractice() {
         '2000'
       );
 
-      let audioConfig: SpeechSDK.AudioConfig;
+      let audioConfig: any;
       let micStream: MediaStream | null = null;
       let mediaRecorder: MediaRecorder | null = null;
       let audioBlobPromise: Promise<Blob | null> | null = null;
       try {
         micStream = await getMicrophoneStream();
-        audioConfig = createAudioConfigFromStream(micStream);
+        audioConfig = createAudioConfigFromStream(micStream, SpeechSDK);
 
         if (typeof MediaRecorder !== 'undefined' && micStream) {
           const preferredMime =
@@ -348,20 +362,20 @@ export function usePronunciationPractice() {
       pronunciationConfig.applyTo(recognizer);
 
       // Helpful debug hooks for NoMatch issues
-      recognizer.recognizing = (_sender, event) => {
+      recognizer.recognizing = (_sender: any, event: any) => {
         if (event?.result?.text) {
           console.log('Recognizing:', event.result.text);
         }
       };
-      recognizer.recognized = (_sender, event) => {
+      recognizer.recognized = (_sender: any, event: any) => {
         console.log('Recognized:', event?.result?.text, event?.result?.reason);
       };
-      recognizer.canceled = (_sender, event) => {
+      recognizer.canceled = (_sender: any, event: any) => {
         console.error('Recognition canceled:', event?.reason, event?.errorDetails);
       };
 
       try {
-        const result: SpeechSDK.SpeechRecognitionResult = await new Promise((resolve, reject) => {
+        const result: any = await new Promise((resolve, reject) => {
           recognizer.recognizeOnceAsync(resolve, reject);
         });
 

@@ -1,54 +1,171 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, MessageSquare, Gamepad2, Mic, TrendingUp, GraduationCap, Loader2 } from 'lucide-react';
+import {
+  ArrowRight,
+  BookOpen,
+  CheckCircle2,
+  Gamepad2,
+  GraduationCap,
+  Loader2,
+  MessageSquare,
+  Users,
+} from 'lucide-react';
 import { getStudentAssignments } from '@/api/assignments';
 import { getStudentCanvasContent } from '@/api/canvas';
-import { Alert, AlertDescription, Badge, Button } from '@/components/ui';
+import { getStudentClasses, leaveStudentClass, setActiveMembership, joinClassByCode } from '@/api/schools';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+} from '@/components/ui';
 import { CanvasModuleView } from '@/components/canvas/CanvasModuleView';
 import { ServiceNavigationCard } from '@/components/dashboard';
 import { useLanguage } from '@/contexts/LanguageContext';
-import type { StudentAssignmentSummary } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
+import type { StudentAssignmentSummary, TeacherClassSummary } from '@/types';
 import type { CanvasCourseContentItem } from '@/types/canvas';
 
 export function AppLearningPage() {
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { refreshUser } = useAuth();
   const surfaceClass = 'rounded-2xl border-3 border-foreground bg-card shadow-stamp';
+  const [classes, setClasses] = useState<TeacherClassSummary[]>([]);
+  const [classesLoading, setClassesLoading] = useState(true);
+  const [classError, setClassError] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<StudentAssignmentSummary[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
   const [assignmentError, setAssignmentError] = useState<string | null>(null);
   const [canvasContent, setCanvasContent] = useState<CanvasCourseContentItem[]>([]);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [joinSuccess, setJoinSuccess] = useState<string | null>(null);
+  const [selectedClass, setSelectedClass] = useState<TeacherClassSummary | null>(null);
+  const [isLeavingClass, setIsLeavingClass] = useState(false);
+
+  const loadDashboardData = useCallback(async () => {
+    setClassesLoading(true);
+    setAssignmentsLoading(true);
+    try {
+      const [classesResult, assignmentsResult] = await Promise.allSettled([
+        getStudentClasses(),
+        getStudentAssignments(),
+      ]);
+
+      let classIds: string[] = [];
+
+      if (classesResult.status === 'fulfilled') {
+        setClasses(classesResult.value);
+        setClassError(null);
+        classIds = classesResult.value.map((classSummary) => classSummary.id);
+      } else {
+        setClasses([]);
+        setClassError(classesResult.reason instanceof Error ? classesResult.reason.message : 'Failed to load classes.');
+      }
+
+      if (assignmentsResult.status === 'fulfilled') {
+        setAssignments(assignmentsResult.value);
+        setAssignmentError(null);
+        if (!classIds.length) {
+          classIds = assignmentsResult.value.map((assignment) => assignment.classId).filter(Boolean) as string[];
+        }
+      } else {
+        setAssignments([]);
+        setAssignmentError(
+          assignmentsResult.reason instanceof Error
+            ? assignmentsResult.reason.message
+            : 'Failed to load assignments.'
+        );
+      }
+
+      const uniqueClassIds = [...new Set(classIds)];
+      const contentResults = await Promise.all(
+        uniqueClassIds.map((classId) =>
+          getStudentCanvasContent(classId).catch(() => [] as CanvasCourseContentItem[])
+        ),
+      );
+      setCanvasContent(contentResults.flat());
+    } catch (error) {
+      setClasses([]);
+      setAssignments([]);
+      setClassError(error instanceof Error ? error.message : 'Failed to load classes.');
+      setAssignmentError(error instanceof Error ? error.message : 'Failed to load assignments.');
+      setCanvasContent([]);
+    } finally {
+      setClassesLoading(false);
+      setAssignmentsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let isActive = true;
+    void loadDashboardData();
+  }, [loadDashboardData]);
 
-    const loadAssignments = async () => {
-      try {
-        const nextAssignments = await getStudentAssignments();
-        if (!isActive) return;
-        setAssignments(nextAssignments);
-        setAssignmentError(null);
+  const handleJoinCodeChange = (value: string) => {
+    setJoinCode(value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6));
+    setJoinError(null);
+    setJoinSuccess(null);
+  };
 
-        // Load Canvas content for each class the student has assignments in.
-        const classIds = [...new Set(nextAssignments.map((a) => a.classId).filter(Boolean))];
-        const contentResults = await Promise.all(
-          classIds.map((cid) => getStudentCanvasContent(cid).catch(() => [] as CanvasCourseContentItem[])),
-        );
-        if (!isActive) return;
-        setCanvasContent(contentResults.flat());
-      } catch (error) {
-        if (!isActive) return;
-        setAssignmentError(error instanceof Error ? error.message : 'Failed to load assignments.');
-      } finally {
-        if (isActive) setAssignmentsLoading(false);
+  const handleJoinClass = async () => {
+    if (joinCode.length !== 6) {
+      setJoinError('Enter the 6-character class code your teacher shared.');
+      return;
+    }
+
+    setJoinLoading(true);
+    setJoinError(null);
+    setJoinSuccess(null);
+
+    try {
+      const result = await joinClassByCode(joinCode);
+      if (result.membershipId) {
+        await setActiveMembership(result.membershipId);
       }
-    };
+      await refreshUser();
+      await loadDashboardData();
+      setJoinCode('');
+      setJoinSuccess(
+        result.alreadyEnrolled
+          ? `You are already enrolled in ${result.class.name}.`
+          : `Joined ${result.class.name}. New assignments will appear here when available.`,
+      );
+    } catch (error) {
+      setJoinError(error instanceof Error ? error.message : 'Failed to join class. Please try again.');
+    } finally {
+      setJoinLoading(false);
+    }
+  };
 
-    void loadAssignments();
-    return () => {
-      isActive = false;
-    };
-  }, []);
+  const handleLeaveClass = async () => {
+    if (!selectedClass) return;
+
+    setIsLeavingClass(true);
+    setJoinError(null);
+    setJoinSuccess(null);
+
+    try {
+      const leftClass = await leaveStudentClass(selectedClass.id);
+      await refreshUser();
+      await loadDashboardData();
+      setJoinSuccess(`Left ${leftClass.name}.`);
+      setSelectedClass(null);
+    } catch (error) {
+      setJoinError(error instanceof Error ? error.message : 'Failed to leave class. Please try again.');
+    } finally {
+      setIsLeavingClass(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -69,12 +186,79 @@ export function AppLearningPage() {
         </div>
       </header>
 
+      <section className={`${surfaceClass} p-5`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-foreground bg-primary/10 text-primary">
+                <Users size={20} strokeWidth={2.5} />
+              </div>
+              <div>
+                <h2 className="text-lg font-display font-bold text-foreground">Join a classroom</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Enter your teacher&apos;s 6-character class code to connect this dashboard to assigned practice.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex w-full flex-col gap-3 lg:max-w-md">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Input
+                value={joinCode}
+                onChange={(event) => handleJoinCodeChange(event.target.value)}
+                placeholder="ABC123"
+                maxLength={6}
+                className="text-center font-mono text-lg tracking-[0.28em] uppercase"
+                aria-label="Class join code"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    void handleJoinClass();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                onClick={() => {
+                  void handleJoinClass();
+                }}
+                disabled={joinLoading || joinCode.length !== 6}
+                className="sm:min-w-[170px]"
+              >
+                {joinLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Joining...
+                  </>
+                ) : (
+                  <>
+                    Join class
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </div>
+            {joinError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{joinError}</AlertDescription>
+              </Alert>
+            ) : null}
+            {joinSuccess ? (
+              <Alert variant="success">
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertTitle>Class connected</AlertTitle>
+                <AlertDescription>{joinSuccess}</AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
       <section className={`${surfaceClass} p-6`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-lg font-display font-bold text-foreground">Assigned practice</h2>
+            <h2 className="text-lg font-display font-bold text-foreground">Your classes and assignments</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Practice assignments from your teachers appear here.
+              See the classes you&apos;re in and the practice your teachers assign there.
             </p>
           </div>
           <Badge variant="secondary" size="sm">
@@ -82,11 +266,49 @@ export function AppLearningPage() {
           </Badge>
         </div>
 
+        {classError ? (
+          <Alert className="mt-5">
+            <AlertDescription>{classError}</AlertDescription>
+          </Alert>
+        ) : null}
+
         {assignmentError ? (
           <Alert className="mt-5">
             <AlertDescription>{assignmentError}</AlertDescription>
           </Alert>
         ) : null}
+
+        {classesLoading ? (
+          <div className="mt-5 flex items-center gap-3 rounded-2xl border-2 border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading classes...
+          </div>
+        ) : classes.length > 0 ? (
+          <div className="mt-5">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Classes you are in
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {classes.map((classSummary) => (
+                <button
+                  type="button"
+                  key={classSummary.id}
+                  onClick={() => setSelectedClass(classSummary)}
+                  className="inline-flex items-center gap-2 rounded-full border-2 border-border bg-secondary px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:border-foreground hover:bg-card"
+                >
+                  <span>{classSummary.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {classSummary.assignmentCount ?? 0} assignments
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 rounded-2xl border-2 border-dashed border-border bg-secondary/30 p-5 text-sm text-muted-foreground">
+            Join a classroom with your teacher&apos;s code and it will appear here.
+          </div>
+        )}
 
         {assignmentsLoading ? (
           <div className="mt-6 flex items-center gap-3 rounded-2xl border-2 border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
@@ -100,7 +322,9 @@ export function AppLearningPage() {
             </div>
             <h3 className="mt-4 text-xl font-display font-bold text-foreground">No school assignments yet</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              When a teacher publishes an assignment for your class, it will show up here.
+              {classes.length > 0
+                ? 'You are enrolled in classes. Assignments will show up here when your teacher publishes them.'
+                : 'When a teacher publishes an assignment for your class, it will show up here.'}
             </p>
           </div>
         ) : (
@@ -158,13 +382,13 @@ export function AppLearningPage() {
       <section className={`${surfaceClass} p-6`}>
         <div className="mb-5">
           <h2 className="text-lg font-display font-bold text-foreground">
-            {t('app.dashboard.services') || 'Continue Learning'}
+            {t('app.dashboard.services') || 'Free Practice'}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {t('app.dashboard.nextStep') || 'Pick your next practice route.'}
           </p>
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ServiceNavigationCard
             title={t('app.dashboard.card.chat.title') || 'AI Chat'}
             description={t('app.dashboard.card.chat.description') || 'Practice conversation with your AI tutor'}
@@ -173,35 +397,54 @@ export function AppLearningPage() {
             color="primary"
           />
           <ServiceNavigationCard
-            title={t('app.dashboard.card.curriculum.title') || 'Curriculum'}
-            description={t('app.dashboard.card.curriculum.description') || 'Sample AP French units and guided voice practice'}
-            icon={<BookOpen size={22} strokeWidth={2.5} />}
-            href="/app/curriculum"
-            color="success"
-          />
-          <ServiceNavigationCard
             title={t('app.dashboard.card.games.title') || 'Practice Games'}
             description={t('app.dashboard.card.games.description') || 'Flashcards, word matching, and more'}
             icon={<Gamepad2 size={22} strokeWidth={2.5} />}
             href="/app/games"
             color="accent"
           />
-          <ServiceNavigationCard
-            title={t('app.dashboard.card.pronunciation.title') || 'Pronunciation'}
-            description={t('app.dashboard.card.pronunciation.description') || 'Practice speaking and get feedback'}
-            icon={<Mic size={22} strokeWidth={2.5} />}
-            href="/app/practice"
-            color="success"
-          />
-          <ServiceNavigationCard
-            title={t('app.dashboard.card.progress.title') || 'Progress'}
-            description={t('app.dashboard.card.progress.description') || 'Track your skills and learning path'}
-            icon={<TrendingUp size={22} strokeWidth={2.5} />}
-            href="/app/progress"
-            color="primary"
-          />
         </div>
       </section>
+
+      <Dialog open={Boolean(selectedClass)} onOpenChange={(open) => {
+        if (!open && !isLeavingClass) {
+          setSelectedClass(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{selectedClass?.name || 'Classroom'}</DialogTitle>
+            <DialogDescription>
+              Leave this classroom if you no longer want assignments and course content from it on your dashboard.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedClass ? (
+            <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
+              {selectedClass.subject || 'Subject TBD'}
+              {selectedClass.term ? ` · ${selectedClass.term}` : ''}
+              {selectedClass.gradeBand ? ` · Grades ${selectedClass.gradeBand}` : ''}
+            </div>
+          ) : null}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setSelectedClass(null)}
+              disabled={isLeavingClass}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                void handleLeaveClass();
+              }}
+              loading={isLeavingClass}
+            >
+              Leave classroom
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

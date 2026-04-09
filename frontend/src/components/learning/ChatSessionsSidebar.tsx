@@ -63,7 +63,7 @@ function SessionItem({
       <button
         onClick={(e) => onDelete(session.id, e)}
         className="absolute right-2 top-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-        title={t('chat.deleteConfirm') || 'Delete chat'}
+        title={t('app.learn.sessions.deleteAction') || 'Delete chat'}
       >
         <Trash2 size={14} />
       </button>

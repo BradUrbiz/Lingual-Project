@@ -1,7 +1,7 @@
 import { useState, FormEvent, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Loader2, Languages, CheckCircle, Sparkles } from 'lucide-react';
+import { ArrowLeft, Loader2, Languages, CheckCircle, Sparkles } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Button, Input, Card, Alert, AlertDescription } from '@/components/ui';
@@ -94,7 +94,17 @@ export function AuthPage() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-background flex items-center justify-center p-6">
+    <AnimatedPage className="relative min-h-screen bg-background flex items-center justify-center p-6">
+      <button
+        type="button"
+        onClick={() => navigate('/')}
+        className="absolute left-6 top-6 z-10 inline-flex items-center gap-2 rounded-lg border-2 border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
+        aria-label="Back to landing page"
+      >
+        <ArrowLeft size={16} strokeWidth={2.5} />
+        <span>Back</span>
+      </button>
+
       <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-8 items-center">
         {/* Marketing Panel - Warm Brutalism */}
         <motion.div

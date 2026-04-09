@@ -1,0 +1,227 @@
+{
+  "curriculum_id": "he-core-v1",
+  "locale": "he-IL",
+  "title": "Hebrew Core Speaking (Example)",
+  "levels": [
+    {
+      "id": "L1",
+      "name": "Survival Basics",
+      "description": "Greetings, simple requests, and everyday phrases."
+    },
+    {
+      "id": "L2",
+      "name": "Everyday Interactions",
+      "description": "Ordering, directions, and common small talk."
+    }
+  ],
+  "objectives": [
+    {
+      "id": "OBJ-GREET-HE-01",
+      "level_id": "L1",
+      "title": "Basic greetings and introductions",
+      "skills": ["greeting", "self-introduction", "politeness"]
+    },
+    {
+      "id": "OBJ-ORDER-HE-01",
+      "level_id": "L2",
+      "title": "Order food and drinks politely",
+      "skills": ["ordering", "politeness", "numbers"]
+    },
+    {
+      "id": "OBJ-DIR-HE-01",
+      "level_id": "L2",
+      "title": "Ask for and confirm directions",
+      "skills": ["directions", "locations", "clarifying"]
+    }
+  ],
+  "practice_scenarios": [
+    {
+      "id": "SCN-GREET-HE-01",
+      "objective_id": "OBJ-GREET-HE-01",
+      "title": "Meeting a new classmate",
+      "setting": "Campus entrance",
+      "roles": ["student", "classmate"],
+      "difficulty": "easy",
+      "target_phrases": [
+        "שלום, קוראים לי נועה.",
+        "נעים מאוד.",
+        "אני סטודנטית."
+      ],
+      "success_criteria": [
+        "Open with a simple greeting",
+        "Say your name clearly",
+        "Share a basic detail about yourself"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-GREET-HE-01",
+          "sentence": "שלום, קוראים לי נועה.",
+          "masked_sentence": "שלום, (__) לי נועה.",
+          "answer": "קוראים",
+          "choices": ["קוראים", "רואים", "שותים", "כותבים"],
+          "explanation": "Use 'קוראים לי' in the phrase for saying your name."
+        },
+        {
+          "id": "GRAM-GREET-HE-02",
+          "sentence": "אני סטודנטית.",
+          "masked_sentence": "(__) סטודנטית.",
+          "answer": "אני",
+          "choices": ["אני", "אתה", "הוא", "אנחנו"],
+          "explanation": "Use 'אני' for 'I.'"
+        },
+        {
+          "id": "GRAM-GREET-HE-03",
+          "sentence": "נעים מאוד.",
+          "masked_sentence": "נעים (__) .",
+          "answer": "מאוד",
+          "choices": ["מאוד", "מעט", "כאן", "מחר"],
+          "explanation": "Use 'מאוד' to say 'very' in this greeting phrase."
+        },
+        {
+          "id": "GRAM-GREET-HE-04",
+          "sentence": "אני לומדת באוניברסיטה.",
+          "masked_sentence": "אני לומדת (__) .",
+          "answer": "באוניברסיטה",
+          "choices": ["באוניברסיטה", "בבית", "מהר", "מחר"],
+          "explanation": "Use 'באוניברסיטה' to say where you study."
+        }
+      ]
+    },
+    {
+      "id": "SCN-ORDER-HE-01",
+      "objective_id": "OBJ-ORDER-HE-01",
+      "title": "Ordering at a café",
+      "setting": "Coffee shop",
+      "roles": ["customer", "cashier"],
+      "difficulty": "medium",
+      "target_phrases": [
+        "אני רוצה קפה אחד, בבקשה.",
+        "כאן, בבקשה.",
+        "כמה זה עולה?"
+      ],
+      "success_criteria": [
+        "Order clearly",
+        "Say you are staying there",
+        "Ask about the price"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-ORDER-HE-01",
+          "sentence": "אני רוצה קפה אחד, בבקשה.",
+          "masked_sentence": "אני (__) קפה אחד, בבקשה.",
+          "answer": "רוצה",
+          "choices": ["רוצה", "שותה", "כותב", "לומד"],
+          "explanation": "Use 'רוצה' to say what you want."
+        },
+        {
+          "id": "GRAM-ORDER-HE-02",
+          "sentence": "כאן, בבקשה.",
+          "masked_sentence": "(__), בבקשה.",
+          "answer": "כאן",
+          "choices": ["כאן", "מחר", "מעט", "פתאום"],
+          "explanation": "Use 'כאן' to say you are having it here."
+        },
+        {
+          "id": "GRAM-ORDER-HE-03",
+          "sentence": "כמה זה עולה?",
+          "masked_sentence": "כמה זה (__) ?",
+          "answer": "עולה",
+          "choices": ["עולה", "יורד", "שואל", "לוקח"],
+          "explanation": "Use 'עולה' when asking how much something costs."
+        },
+        {
+          "id": "GRAM-ORDER-HE-04",
+          "sentence": "קפה אחד, בבקשה.",
+          "masked_sentence": "קפה (__) , בבקשה.",
+          "answer": "אחד",
+          "choices": ["אחד", "שתיים", "מהר", "חדש"],
+          "explanation": "Use 'אחד' to ask for one coffee."
+        }
+      ]
+    },
+    {
+      "id": "SCN-DIR-HE-01",
+      "objective_id": "OBJ-DIR-HE-01",
+      "title": "Finding the train station",
+      "setting": "Street",
+      "roles": ["pedestrian", "local"],
+      "difficulty": "medium",
+      "target_phrases": [
+        "איפה תחנת הרכבת?",
+        "זה רחוק מכאן?",
+        "אני צריך לפנות שמאלה?"
+      ],
+      "success_criteria": [
+        "Ask where a place is",
+        "Check if it is far",
+        "Confirm the direction"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-DIR-HE-01",
+          "sentence": "איפה תחנת הרכבת?",
+          "masked_sentence": "(__) תחנת הרכבת?",
+          "answer": "איפה",
+          "choices": ["איפה", "מתי", "כמה", "למה"],
+          "explanation": "Use 'איפה' to ask where something is."
+        },
+        {
+          "id": "GRAM-DIR-HE-02",
+          "sentence": "זה רחוק מכאן?",
+          "masked_sentence": "זה רחוק (__) ?",
+          "answer": "מכאן",
+          "choices": ["מכאן", "מחר", "לכאן", "עכשיו"],
+          "explanation": "Use 'מכאן' to mean 'from here.'"
+        },
+        {
+          "id": "GRAM-DIR-HE-03",
+          "sentence": "אני צריך לפנות שמאלה?",
+          "masked_sentence": "אני צריך (__) שמאלה?",
+          "answer": "לפנות",
+          "choices": ["לפנות", "לשבת", "לשתות", "לכתוב"],
+          "explanation": "Use 'לפנות' when asking whether to turn."
+        },
+        {
+          "id": "GRAM-DIR-HE-04",
+          "sentence": "התחנה נמצאת ליד הכיכר.",
+          "masked_sentence": "התחנה (__) ליד הכיכר.",
+          "answer": "נמצאת",
+          "choices": ["נמצאת", "שותה", "כותבת", "עומדים"],
+          "explanation": "Use 'נמצאת' to say where the station is located."
+        }
+      ]
+    }
+  ],
+  "pronunciation_prompts": [
+    {
+      "id": "PRON-GREET-HE-01",
+      "objective_id": "OBJ-GREET-HE-01",
+      "text": "שלום, קוראים לי נועה."
+    },
+    {
+      "id": "PRON-GREET-HE-02",
+      "objective_id": "OBJ-GREET-HE-01",
+      "text": "נעים מאוד."
+    },
+    {
+      "id": "PRON-ORDER-HE-01",
+      "objective_id": "OBJ-ORDER-HE-01",
+      "text": "אני רוצה קפה אחד, בבקשה."
+    },
+    {
+      "id": "PRON-ORDER-HE-02",
+      "objective_id": "OBJ-ORDER-HE-01",
+      "text": "כאן, בבקשה."
+    },
+    {
+      "id": "PRON-DIR-HE-01",
+      "objective_id": "OBJ-DIR-HE-01",
+      "text": "איפה תחנת הרכבת?"
+    },
+    {
+      "id": "PRON-DIR-HE-02",
+      "objective_id": "OBJ-DIR-HE-01",
+      "text": "זה רחוק מכאן?"
+    }
+  ]
+}

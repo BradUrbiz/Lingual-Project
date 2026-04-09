@@ -266,23 +266,29 @@ export function AppLearningPage() {
           </Badge>
         </div>
 
-        {classError ? (
-          <Alert className="mt-5">
-            <AlertDescription>{classError}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        {assignmentError ? (
-          <Alert className="mt-5">
-            <AlertDescription>{assignmentError}</AlertDescription>
-          </Alert>
-        ) : null}
-
         {classesLoading ? (
           <div className="mt-5 flex items-center gap-3 rounded-2xl border-2 border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading classes...
           </div>
+        ) : classError ? (
+          <Alert variant="destructive" className="mt-5">
+            <AlertTitle>Couldn&apos;t load your classes</AlertTitle>
+            <AlertDescription className="flex flex-col gap-3">
+              <span>{classError}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void loadDashboardData();
+                }}
+                className="self-start"
+              >
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
         ) : classes.length > 0 ? (
           <div className="mt-5">
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -306,7 +312,7 @@ export function AppLearningPage() {
           </div>
         ) : (
           <div className="mt-5 rounded-2xl border-2 border-dashed border-border bg-secondary/30 p-5 text-sm text-muted-foreground">
-            Join a classroom with your teacher&apos;s code and it will appear here.
+            You&apos;re not enrolled in any classes yet. Join a classroom with your teacher&apos;s code above and it will appear here.
           </div>
         )}
 
@@ -315,6 +321,24 @@ export function AppLearningPage() {
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading assignments...
           </div>
+        ) : assignmentError ? (
+          <Alert variant="destructive" className="mt-6">
+            <AlertTitle>Couldn&apos;t load your assignments</AlertTitle>
+            <AlertDescription className="flex flex-col gap-3">
+              <span>{assignmentError}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void loadDashboardData();
+                }}
+                className="self-start"
+              >
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
         ) : assignments.length === 0 ? (
           <div className="mt-6 rounded-3xl border-3 border-dashed border-border bg-secondary/40 p-8 text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-foreground bg-card">

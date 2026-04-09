@@ -185,6 +185,13 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const assistantTranscriptFinalRef = useRef('');
   const assistantSpeechStartedAtRef = useRef<number | null>(null);
   const inputSpeechStartedAtRef = useRef<number | null>(null);
+  // Authoritative start timestamp for the current user input turn. Unlike
+  // `inputSpeechStartedAtRef`, this is NOT cleared by transcription.completed
+  // or transcription.failed, so `input_audio_buffer.speech_stopped` can still
+  // compute a non-zero duration even if the transcription result lands first.
+  // Reset to 0 by speech_started, so any consumer checking `> 0` knows whether
+  // a turn is in progress.
+  const currentTurnStartedAtRef = useRef<number>(0);
   const currentInputTurnRef = useRef(createEmptyRealtimeInputTurnMetrics());
   const directiveResetTimeoutRef = useRef<number | null>(null);
   const directiveArgumentBufferRef = useRef<Map<string, string>>(new Map());
@@ -824,7 +831,11 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
           pendingDirectiveContinuationRef.current = false;
           pendingSpeechTurnHasDirectiveRef.current = false;
           currentSpeechTurnCountedRef.current = false;
-          inputSpeechStartedAtRef.current = performance.now();
+          {
+            const speechStartedAt = performance.now();
+            inputSpeechStartedAtRef.current = speechStartedAt;
+            currentTurnStartedAtRef.current = speechStartedAt;
+          }
           currentInputTurnRef.current = {
             ...createEmptyRealtimeInputTurnMetrics(),
             assistantPromptedUser: assistantPromptLikelyExpectsReply(assistantTranscriptFinalRef.current),
@@ -843,10 +854,18 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
 
         case 'input_audio_buffer.speech_stopped':
           reserveMessageOrder(undefined, itemId);
-          currentInputTurnRef.current.durationMs =
-            inputSpeechStartedAtRef.current === null
-              ? currentInputTurnRef.current.durationMs
-              : Math.max(0, Math.round(performance.now() - inputSpeechStartedAtRef.current));
+          {
+            const computedDuration = currentTurnStartedAtRef.current > 0
+              ? Math.max(0, Math.round(performance.now() - currentTurnStartedAtRef.current))
+              : 0;
+            // Prefer the larger of the computed duration and whatever
+            // transcription.completed may have already recorded, so out-of-order
+            // events never drop the duration back to 0.
+            currentInputTurnRef.current.durationMs = Math.max(
+              currentInputTurnRef.current.durationMs,
+              computedDuration,
+            );
+          }
           isListeningRef.current = false;
           setIsListening(false);
           flushQueuedAvatarContexts();

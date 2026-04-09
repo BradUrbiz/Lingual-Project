@@ -86,4 +86,22 @@ describe('AppGamesPage', () => {
     expect(screen.getByText('Listening Quiz')).toBeInTheDocument();
     expect(screen.getByText('Grammar Challenge')).toBeInTheDocument();
   });
+
+  it('loads objective-based games for Hebrew learners', async () => {
+    learningLocaleState.value = 'he-IL';
+    getChatSessionsMock.mockResolvedValue([]);
+
+    render(<AppGamesPage />);
+
+    // Scenario unique to the Hebrew curriculum (see curriculum_example_he.json).
+    // If the Hebrew JSON fails to import or parse, this waitFor will time out
+    // and act as a smoke check that the new locale ships a usable curriculum.
+    await waitFor(() => {
+      expect(screen.getByText('Meeting a new classmate')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('No game curriculum available for this locale yet')).not.toBeInTheDocument();
+    expect(screen.getByText('Listening Quiz')).toBeInTheDocument();
+    expect(screen.getByText('Grammar Challenge')).toBeInTheDocument();
+  });
 });

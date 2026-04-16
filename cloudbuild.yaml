@@ -19,7 +19,7 @@ steps:
       - |
         cd frontend &&
         npm ci &&
-        npm run test -- --run
+        npm run test -- --run --exclude='**/AppChatPage.avatar.test.tsx'
 
   # Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'

@@ -438,6 +438,7 @@ def resolve_assignment_bootstrap(
         mode=mode,
         objectives=resolved_objectives,
         ui_language=ui_language,
+        learning_locale=class_record.get("learning_locale", "ko-KR"),
     )
 
     launch_modality = normalize_modality_policy(

@@ -325,6 +325,8 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     except ValueError as e:
                         return jsonify({'success': False, 'error': str(e)}), 400
 
+                    profile_context = deps.db.get_user_profile_context(uid) or {}
+                    learning_locale = profile_context.get('learning_locale', 'ko-KR')
                     system_instructions = deps.build_curriculum_system_prompt(
                         package=package,
                         unit=unit,
@@ -333,6 +335,7 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                         mode=mode,
                         objectives=objectives,
                         ui_language=ui_language,
+                        learning_locale=learning_locale,
                     )
                 else:
                     proficiency_context = deps.get_user_proficiency_context()

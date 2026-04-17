@@ -236,7 +236,9 @@ export function TeacherAssignmentBuilderPage() {
   const [canvasFocusGrammar, setCanvasFocusGrammar] = useState<string[]>([]);
   const [canvasSuccessCriteria, setCanvasSuccessCriteria] = useState<string[]>([]);
   const [canvasTeacherNotes, setCanvasTeacherNotes] = useState('');
-  const [canvasStatus, setCanvasStatus] = useState<'draft' | 'published'>('published');
+  // Default to 'draft' so a misclick on Publish doesn't ship an un-reviewed
+  // assignment live to students. Teachers must explicitly choose Published.
+  const [canvasStatus, setCanvasStatus] = useState<'draft' | 'published'>('draft');
 
   const activeClass = teacherClasses.find((item) => item.id === classId) || null;
   const selectedModule = curriculum?.modules.find((module) => module.id === mappingForm.moduleId) || null;
@@ -494,7 +496,7 @@ export function TeacherAssignmentBuilderPage() {
     setCanvasFocusGrammar([]);
     setCanvasSuccessCriteria([]);
     setCanvasTeacherNotes('');
-    setCanvasStatus('published');
+    setCanvasStatus('draft');
   };
 
   const populateCanvasFormFromSuggestions = (suggestions: CanvasPracticeSuggestions) => {
@@ -572,7 +574,9 @@ export function TeacherAssignmentBuilderPage() {
         status: canvasStatus,
       });
       if (!result.success) {
-        throw new Error('Creation failed');
+        // Forward the server's error message so teachers see a real reason,
+        // not the hardcoded string.
+        throw new Error(result.error || 'Creation failed');
       }
       await loadClassData(classId);
       const publishedLabel = canvasStatus === 'published' ? 'published' : 'saved as draft';
@@ -590,6 +594,14 @@ export function TeacherAssignmentBuilderPage() {
 
   const handleCanvasRegenerate = () => {
     if (!selectedCanvasItemId) return;
+    // Regenerate overwrites every review-form field with a new AI draft, so
+    // guard against silent edit loss when the teacher is mid-review.
+    if (canvasPhase === 'reviewing') {
+      const confirmed = window.confirm(
+        'Regenerating will replace your current title, scenario, and other edits with a new AI draft. Continue?'
+      );
+      if (!confirmed) return;
+    }
     void handleCanvasGenerate(selectedCanvasItemId);
   };
 
@@ -995,10 +1007,16 @@ export function TeacherAssignmentBuilderPage() {
                   </div>
 
                   <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                    <p className="text-base font-semibold text-foreground">Status</p>
-                    <div className="flex gap-2">
+                    <p id="canvas-status-label" className="text-base font-semibold text-foreground">Status</p>
+                    <div
+                      className="flex gap-2"
+                      role="radiogroup"
+                      aria-labelledby="canvas-status-label"
+                    >
                       <button
                         type="button"
+                        role="radio"
+                        aria-checked={canvasStatus === 'draft'}
                         className={`flex-1 rounded-xl border-2 px-3 py-2 text-sm font-semibold transition-colors ${
                           canvasStatus === 'draft'
                             ? 'border-primary bg-primary/10 text-primary'
@@ -1010,6 +1028,8 @@ export function TeacherAssignmentBuilderPage() {
                       </button>
                       <button
                         type="button"
+                        role="radio"
+                        aria-checked={canvasStatus === 'published'}
                         className={`flex-1 rounded-xl border-2 px-3 py-2 text-sm font-semibold transition-colors ${
                           canvasStatus === 'published'
                             ? 'border-primary bg-primary/10 text-primary'

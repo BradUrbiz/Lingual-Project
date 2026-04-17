@@ -511,7 +511,10 @@ describe('TeacherAssignmentBuilderPage', () => {
     const titleInput = await screen.findByDisplayValue('Dinner at the bistro');
     fireEvent.change(titleInput, { target: { value: 'Dinner at the bistro (edited)' } });
 
-    // Ensure "Published" is selected (it is by default) then publish.
+    // Status defaults to Draft. Explicitly flip to Published before publishing.
+    fireEvent.click(screen.getByRole('radio', { name: 'Published' }));
+
+    // Publish.
     fireEvent.click(screen.getByRole('button', { name: /Publish assignment/i }));
 
     await waitFor(() => {

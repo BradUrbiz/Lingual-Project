@@ -8,10 +8,14 @@ import {
   Eye,
   GraduationCap,
   Loader2,
+  Plus,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { createAssignment, createCurriculumMapping, getCurriculumMappings, getTeacherAssignments, getTeacherCurriculumPackages } from '@/api/assignments';
 import { getCanvasContentForClass, linkAssignmentToCanvas, unlinkAssignmentFromCanvas } from '@/api/canvas';
+import { createCanvasPractice, generateCanvasPractice } from '@/api/canvasPractice';
+import type { CanvasItemContext, CanvasPracticeSuggestions } from '@/api/canvasPractice';
 import { getSampleCurriculumPackage } from '@/api/curriculum';
 import { getTeacherClasses } from '@/api/teacher';
 import { Alert, AlertDescription, Badge, Button, Card, Input, Textarea } from '@/components/ui';
@@ -30,6 +34,14 @@ import type {
   TeacherClassSummary,
   TeacherCurriculumPackageSummary,
 } from '@/types';
+
+type CanvasPracticePhase = 'idle' | 'generating' | 'reviewing' | 'saving' | 'error';
+
+const CANVAS_TASK_TYPE_OPTIONS: Array<{ value: AssignmentTaskType; label: string; description: string }> = [
+  { value: 'information_gap', label: 'Information gap', description: 'Students exchange missing information' },
+  { value: 'opinion_gap', label: 'Opinion gap', description: 'Students share and compare opinions' },
+  { value: 'decision_making', label: 'Decision making', description: 'Students discuss and reach a decision' },
+];
 
 type MappingFormState = {
   packageId: string;
@@ -210,9 +222,21 @@ export function TeacherAssignmentBuilderPage() {
   const [assignmentForm, setAssignmentForm] = useState<AssignmentFormState>(DEFAULT_ASSIGNMENT_FORM);
   const [canvasContent, setCanvasContent] = useState<CanvasCourseContentItem[]>([]);
   const [quickMode, setQuickMode] = useState(true);
-  const [quickTitle, setQuickTitle] = useState('');
-  const [quickDescription, setQuickDescription] = useState('');
-  const [savingQuick, setSavingQuick] = useState(false);
+
+  // ── Quick Assign (Canvas-powered) state ──────────────────────────────
+  const [canvasPhase, setCanvasPhase] = useState<CanvasPracticePhase>('idle');
+  const [canvasError, setCanvasError] = useState<string | null>(null);
+  const [selectedCanvasItemId, setSelectedCanvasItemId] = useState<string>('');
+  const [canvasItemContext, setCanvasItemContext] = useState<CanvasItemContext | null>(null);
+  const [canvasTitle, setCanvasTitle] = useState('');
+  const [canvasDescription, setCanvasDescription] = useState('');
+  const [canvasScenario, setCanvasScenario] = useState('');
+  const [canvasTaskType, setCanvasTaskType] = useState<AssignmentTaskType>('decision_making');
+  const [canvasTargetExpressions, setCanvasTargetExpressions] = useState<string[]>([]);
+  const [canvasFocusGrammar, setCanvasFocusGrammar] = useState<string[]>([]);
+  const [canvasSuccessCriteria, setCanvasSuccessCriteria] = useState<string[]>([]);
+  const [canvasTeacherNotes, setCanvasTeacherNotes] = useState('');
+  const [canvasStatus, setCanvasStatus] = useState<'draft' | 'published'>('published');
 
   const activeClass = teacherClasses.find((item) => item.id === classId) || null;
   const selectedModule = curriculum?.modules.find((module) => module.id === mappingForm.moduleId) || null;
@@ -457,81 +481,120 @@ export function TeacherAssignmentBuilderPage() {
     }
   };
 
-  const handleQuickPublish = async () => {
+  const resetCanvasPracticeState = () => {
+    setCanvasPhase('idle');
+    setCanvasError(null);
+    setSelectedCanvasItemId('');
+    setCanvasItemContext(null);
+    setCanvasTitle('');
+    setCanvasDescription('');
+    setCanvasScenario('');
+    setCanvasTaskType('decision_making');
+    setCanvasTargetExpressions([]);
+    setCanvasFocusGrammar([]);
+    setCanvasSuccessCriteria([]);
+    setCanvasTeacherNotes('');
+    setCanvasStatus('published');
+  };
+
+  const populateCanvasFormFromSuggestions = (suggestions: CanvasPracticeSuggestions) => {
+    setCanvasTitle(suggestions.suggestedTitle || '');
+    setCanvasDescription(suggestions.suggestedDescription || '');
+    setCanvasScenario(suggestions.scenario || '');
+    const suggestedTaskType = suggestions.taskType as AssignmentTaskType;
+    setCanvasTaskType(
+      CANVAS_TASK_TYPE_OPTIONS.some((opt) => opt.value === suggestedTaskType)
+        ? suggestedTaskType
+        : 'decision_making'
+    );
+    setCanvasTargetExpressions(suggestions.targetExpressions || []);
+    setCanvasFocusGrammar(suggestions.focusGrammar || []);
+    setCanvasSuccessCriteria(suggestions.successCriteria || []);
+    setCanvasTeacherNotes(suggestions.teacherNotes || '');
+  };
+
+  const handleCanvasGenerate = async (targetContentId?: string) => {
     if (!classId) return;
-    if (!mappingForm.moduleId || !mappingForm.situationId) {
-      setError('Please select a module and speaking situation.');
+    const contentId = targetContentId || selectedCanvasItemId;
+    if (!contentId) {
+      setCanvasError('Please select a Canvas item first.');
       return;
     }
 
-    const title = quickTitle.trim() || (selectedSituation
-      ? `${getLocalizedText(selectedModule?.title, lang, '')} — ${selectedSituation.seed.setting || selectedSituation.id}`
-      : 'Speaking assignment');
-
-    setSavingQuick(true);
+    setCanvasPhase('generating');
+    setCanvasError(null);
     setError(null);
     setSuccessMessage(null);
 
     try {
-      // Step 1: Create mapping with all defaults
-      const mappingPayload: CreateCurriculumMappingPayload = {
-        packageId: mappingForm.packageId || selectedPackageId,
-        moduleId: mappingForm.moduleId,
-        objectiveIds: moduleObjectives.map((o) => o.id),
-        situationIds: [mappingForm.situationId],
-        targetExpressions: [],
-        focusGrammar: [],
-        allowedContextTags: [],
-        rubricFocus: [],
-        teacherNotes: '',
-        feedbackPolicy: {
-          mode: 'balanced',
-          targetOnlyStrict: false,
-          recastDefault: true,
-          elicitationRepeatThreshold: 3,
-          endReviewEnabled: true,
-        },
-        scaffoldPolicy: {
-          silenceToleranceMs: 3000,
-          hintLadder: ['wait', 'context_hint', 'choice_prompt', 'model_and_retry'],
-          maxModelingSteps: 1,
-        },
-        outputPolicy: {
-          minStudentTurnWords: 8,
-          followUpPressure: 'balanced',
-          allowClarificationRequests: true,
-        },
-        modalityPolicy: {
-          mode: 'hybrid',
-          voiceMinutesCap: null,
-          textFallbackEnabled: true,
-        },
-      };
-
-      const createdMapping = await createCurriculumMapping(classId, mappingPayload);
-
-      // Step 2: Create and publish assignment
-      const assignmentPayload: CreateAssignmentPayload = {
-        mappingId: createdMapping.id,
-        title,
-        description: quickDescription.trim(),
-        status: 'published',
-        taskType: 'decision_making',
-        successCriteria: [],
-        maxAttempts: null,
-      };
-
-      await createAssignment(classId, assignmentPayload);
-      await loadClassData(classId);
-      setQuickTitle('');
-      setQuickDescription('');
-      setMappingForm(DEFAULT_MAPPING_FORM);
-      setSuccessMessage('Assignment published! Students can now launch it from their learning dashboard.');
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Failed to create assignment.');
-    } finally {
-      setSavingQuick(false);
+      const result = await generateCanvasPractice(classId, contentId);
+      if (!result.success) {
+        setCanvasError(result.error || 'Generation failed.');
+        setCanvasPhase('error');
+        return;
+      }
+      setCanvasItemContext(result.canvasItem);
+      populateCanvasFormFromSuggestions(result.suggestions);
+      setCanvasPhase('reviewing');
+    } catch (generateError) {
+      setCanvasError(
+        generateError instanceof Error ? generateError.message : 'Failed to generate practice.'
+      );
+      setCanvasPhase('error');
     }
+  };
+
+  const handleCanvasPublish = async () => {
+    if (!classId) return;
+    if (!selectedCanvasItemId) return;
+    if (!canvasTitle.trim() || !canvasScenario.trim()) {
+      setCanvasError('Title and scenario are required before publishing.');
+      return;
+    }
+
+    setCanvasPhase('saving');
+    setCanvasError(null);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const result = await createCanvasPractice(classId, {
+        canvasContentId: selectedCanvasItemId,
+        canvasModuleItemId: canvasItemContext?.canvasItemId || '',
+        title: canvasTitle.trim(),
+        description: canvasDescription.trim(),
+        scenario: canvasScenario.trim(),
+        targetExpressions: canvasTargetExpressions,
+        focusGrammar: canvasFocusGrammar,
+        successCriteria: canvasSuccessCriteria,
+        taskType: canvasTaskType,
+        teacherNotes: canvasTeacherNotes.trim(),
+        status: canvasStatus,
+      });
+      if (!result.success) {
+        throw new Error('Creation failed');
+      }
+      await loadClassData(classId);
+      const publishedLabel = canvasStatus === 'published' ? 'published' : 'saved as draft';
+      setSuccessMessage(
+        `"${canvasTitle.trim()}" has been ${publishedLabel}. Students will see it on their learning dashboard once published.`
+      );
+      resetCanvasPracticeState();
+    } catch (saveError) {
+      setCanvasError(
+        saveError instanceof Error ? saveError.message : 'Failed to create practice.'
+      );
+      setCanvasPhase('reviewing');
+    }
+  };
+
+  const handleCanvasRegenerate = () => {
+    if (!selectedCanvasItemId) return;
+    void handleCanvasGenerate(selectedCanvasItemId);
+  };
+
+  const handleCanvasPickDifferent = () => {
+    resetCanvasPracticeState();
   };
 
   const handleCreateAssignment = async () => {
@@ -681,7 +744,7 @@ export function TeacherAssignmentBuilderPage() {
         </span>
       </div>
 
-      {/* ── Quick Assignment Mode ──────────────────────────────────────── */}
+      {/* ── Quick Assignment Mode (Canvas-powered) ─────────────────────── */}
       {quickMode && (
         <Card className="border-3 border-foreground p-6 shadow-stamp">
           <div className="flex items-center gap-3 mb-6">
@@ -691,100 +754,303 @@ export function TeacherAssignmentBuilderPage() {
             <div>
               <h2 className="text-xl font-display font-bold text-foreground">Quick assignment</h2>
               <p className="text-sm text-muted-foreground">
-                Pick a speaking topic, name it, and publish. All tutor settings use sensible defaults.
+                Pick a Canvas page or assignment and let Lingual design a speaking practice tailored to it.
               </p>
             </div>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2">
-            <div className="space-y-2">
-              <label htmlFor="quick-module" className="text-sm font-semibold text-foreground">
-                Unit / Module
-              </label>
-              <select
-                id="quick-module"
-                value={mappingForm.moduleId}
-                onChange={(event) => {
-                  handleMappingField('moduleId', event.target.value);
-                  handleMappingField('situationId', '');
-                  handleMappingField('objectiveIds', []);
-                }}
-                className="h-11 w-full rounded-xl border-2 border-border bg-card px-4 text-sm text-foreground focus:border-primary focus:outline-none"
-              >
-                <option value="">Select a module...</option>
-                {curriculum?.modules.map((module) => (
-                  <option key={module.id} value={module.id}>
-                    {getLocalizedText(module.title, lang, module.id)}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {canvasError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{canvasError}</AlertDescription>
+            </Alert>
+          )}
 
-            <div className="space-y-2">
-              <label htmlFor="quick-situation" className="text-sm font-semibold text-foreground">
-                Speaking situation
-              </label>
-              <select
-                id="quick-situation"
-                value={mappingForm.situationId}
-                onChange={(event) => handleMappingField('situationId', event.target.value)}
-                className="h-11 w-full rounded-xl border-2 border-border bg-card px-4 text-sm text-foreground focus:border-primary focus:outline-none"
-                disabled={!mappingForm.moduleId}
-              >
-                <option value="">Select a situation...</option>
-                {speakingSituations.map((situation) => (
-                  <option key={situation.id} value={situation.id}>
-                    {situation.seed.setting || situation.id}
-                  </option>
-                ))}
-              </select>
+          {/* ── Empty Canvas state ───────────────────────────────────── */}
+          {canvasContent.length === 0 && (
+            <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-6 text-center">
+              <p className="text-sm font-semibold text-foreground">Connect a Canvas course first</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Quick assign generates speaking practice from your Canvas pages, assignments, and discussions.
+              </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-3">
+                <Button
+                  onClick={() => navigate(`/app/teacher/classes/${classId}/canvas/connect`)}
+                >
+                  Connect Canvas
+                </Button>
+                <Button variant="outline" onClick={() => setQuickMode(false)}>
+                  Use advanced mode instead
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
 
-          {selectedSituation && (
-            <div className="mt-4 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-              <p className="text-sm text-muted-foreground">
-                <span className="font-semibold text-foreground">Roles:</span>{' '}
-                {(selectedSituation.seed.roles || []).join(', ') || 'n/a'}
-                {' · '}
-                <span className="font-semibold text-foreground">Register:</span>{' '}
-                {selectedSituation.seed.register || 'n/a'}
+          {/* ── Idle phase: pick a Canvas item, click Generate ───────── */}
+          {canvasContent.length > 0 && canvasPhase === 'idle' && (
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <label htmlFor="canvas-item-picker" className="text-sm font-semibold text-foreground">
+                  Canvas item
+                </label>
+                <select
+                  id="canvas-item-picker"
+                  value={selectedCanvasItemId}
+                  onChange={(event) => {
+                    setSelectedCanvasItemId(event.target.value);
+                    setCanvasError(null);
+                  }}
+                  className="h-11 w-full rounded-xl border-2 border-border bg-card px-4 text-sm text-foreground focus:border-primary focus:outline-none"
+                >
+                  <option value="">Select a Canvas page or assignment...</option>
+                  {groupCanvasItemsByModule(canvasContent).map((group) => (
+                    <optgroup key={group.moduleName} label={group.moduleName}>
+                      {group.items.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.title} · {formatItemTypeBadge(item.itemType)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+
+              {selectedCanvasItemId && (() => {
+                const picked = canvasContent.find((item) => item.id === selectedCanvasItemId);
+                if (!picked) return null;
+                return (
+                  <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary" size="sm">{picked.canvasModuleName}</Badge>
+                      <Badge variant="outline" size="sm">{formatItemTypeBadge(picked.itemType)}</Badge>
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-foreground">{picked.title}</p>
+                  </div>
+                );
+              })()}
+
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">
+                  Lingual analyzes the Canvas item and drafts a scenario, target expressions, and success criteria.
+                </p>
+                <Button
+                  onClick={() => handleCanvasGenerate()}
+                  disabled={!selectedCanvasItemId}
+                >
+                  <Sparkles size={16} className="mr-2" />
+                  Generate practice from this item
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Generating phase ─────────────────────────────────────── */}
+          {canvasContent.length > 0 && canvasPhase === 'generating' && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Loader2 size={40} className="mb-4 animate-spin text-primary" />
+              <p className="text-base font-semibold text-foreground">AI is designing your speaking practice…</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Analyzing {canvasItemContext?.title || 'the selected Canvas item'} and generating a tailored scenario.
               </p>
             </div>
           )}
 
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <Input
-              label="Assignment title"
-              value={quickTitle}
-              onChange={(event) => setQuickTitle(event.target.value)}
-              placeholder={selectedSituation
-                ? `${getLocalizedText(selectedModule?.title, lang, '')} — ${selectedSituation.seed.setting || ''}`
-                : 'e.g., Ordering food at a cafe'
-              }
-            />
-            <Input
-              label="Description (optional)"
-              value={quickDescription}
-              onChange={(event) => setQuickDescription(event.target.value)}
-              placeholder="Brief instructions for students"
-            />
-          </div>
+          {/* ── Error phase ──────────────────────────────────────────── */}
+          {canvasContent.length > 0 && canvasPhase === 'error' && (
+            <div className="space-y-4">
+              <Alert variant="destructive">
+                <AlertDescription>{canvasError || 'Generation failed.'}</AlertDescription>
+              </Alert>
+              <div className="flex flex-wrap gap-3">
+                <Button onClick={handleCanvasRegenerate}>Try again</Button>
+                <Button variant="outline" onClick={handleCanvasPickDifferent}>
+                  Pick a different item
+                </Button>
+              </div>
+            </div>
+          )}
 
-          <div className="mt-6 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              Tutor: balanced feedback · hybrid mode · default scaffold.{' '}
-              <button
-                onClick={() => setQuickMode(false)}
-                className="text-primary underline underline-offset-2 hover:text-primary/80"
-              >
-                Customize in advanced mode
-              </button>
-            </p>
-            <Button onClick={handleQuickPublish} loading={savingQuick} disabled={!mappingForm.situationId}>
-              Publish assignment
-            </Button>
-          </div>
+          {/* ── Review / publish phase ───────────────────────────────── */}
+          {canvasContent.length > 0 && (canvasPhase === 'reviewing' || canvasPhase === 'saving') && (
+            <div className="space-y-5">
+              {canvasItemContext && (
+                <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary" size="sm">{canvasItemContext.moduleName || 'Canvas'}</Badge>
+                    <Badge variant="outline" size="sm">{formatItemTypeBadge(canvasItemContext.type)}</Badge>
+                    <Badge variant="accent" size="sm">AI draft</Badge>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-foreground">{canvasItemContext.title}</p>
+                </div>
+              )}
+
+              <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+                {/* Left column: core content */}
+                <div className="space-y-4">
+                  <Input
+                    label="Assignment title"
+                    value={canvasTitle}
+                    onChange={(event) => setCanvasTitle(event.target.value)}
+                    placeholder="What students will see"
+                  />
+                  <Textarea
+                    label="Description"
+                    value={canvasDescription}
+                    onChange={(event) => setCanvasDescription(event.target.value)}
+                    placeholder="Brief description shown on the student dashboard"
+                  />
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="canvas-scenario" className="text-base font-semibold text-foreground">
+                        Conversation scenario
+                      </label>
+                      <Badge variant="accent" size="sm">AI-generated</Badge>
+                    </div>
+                    <textarea
+                      id="canvas-scenario"
+                      value={canvasScenario}
+                      onChange={(event) => setCanvasScenario(event.target.value)}
+                      rows={5}
+                      placeholder="Describe the speaking scenario the tutor will run."
+                      className="w-full rounded-xl border-3 border-border bg-card px-4 py-3 text-base text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <p className="text-base font-semibold text-foreground">Target expressions</p>
+                      <Badge variant="accent" size="sm">AI-generated</Badge>
+                    </div>
+                    <TagListEditor
+                      items={canvasTargetExpressions}
+                      onChange={setCanvasTargetExpressions}
+                      placeholder="Add a target expression…"
+                      ariaLabel="Target expressions"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <p className="text-base font-semibold text-foreground">Focus grammar</p>
+                      <Badge variant="accent" size="sm">AI-generated</Badge>
+                    </div>
+                    <TagListEditor
+                      items={canvasFocusGrammar}
+                      onChange={setCanvasFocusGrammar}
+                      placeholder="Add a grammar point…"
+                      ariaLabel="Focus grammar"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <p className="text-base font-semibold text-foreground">Success criteria</p>
+                      <Badge variant="accent" size="sm">AI-generated</Badge>
+                    </div>
+                    <TagListEditor
+                      items={canvasSuccessCriteria}
+                      onChange={setCanvasSuccessCriteria}
+                      placeholder="Add a success criterion…"
+                      ariaLabel="Success criteria"
+                    />
+                  </div>
+                </div>
+
+                {/* Right column: task type + publish */}
+                <div className="space-y-4">
+                  <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+                    <p className="text-base font-semibold text-foreground">Task type</p>
+                    {CANVAS_TASK_TYPE_OPTIONS.map((option) => (
+                      <label
+                        key={option.value}
+                        className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 transition-colors ${
+                          canvasTaskType === option.value
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border bg-card hover:border-primary/50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="canvas-task-type"
+                          value={option.value}
+                          checked={canvasTaskType === option.value}
+                          onChange={() => setCanvasTaskType(option.value)}
+                          className="mt-1"
+                        />
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{option.label}</p>
+                          <p className="text-xs text-muted-foreground">{option.description}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+                    <Textarea
+                      label="Teacher notes"
+                      value={canvasTeacherNotes}
+                      onChange={(event) => setCanvasTeacherNotes(event.target.value)}
+                      placeholder="Notes about pedagogical intent (optional)"
+                    />
+                  </div>
+
+                  <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+                    <p className="text-base font-semibold text-foreground">Status</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className={`flex-1 rounded-xl border-2 px-3 py-2 text-sm font-semibold transition-colors ${
+                          canvasStatus === 'draft'
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border bg-card text-muted-foreground hover:border-primary/50'
+                        }`}
+                        onClick={() => setCanvasStatus('draft')}
+                      >
+                        Draft
+                      </button>
+                      <button
+                        type="button"
+                        className={`flex-1 rounded-xl border-2 px-3 py-2 text-sm font-semibold transition-colors ${
+                          canvasStatus === 'published'
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border bg-card text-muted-foreground hover:border-primary/50'
+                        }`}
+                        onClick={() => setCanvasStatus('published')}
+                      >
+                        Published
+                      </button>
+                    </div>
+
+                    <Button
+                      className="w-full"
+                      onClick={handleCanvasPublish}
+                      loading={canvasPhase === 'saving'}
+                      disabled={canvasPhase === 'saving' || !canvasTitle.trim() || !canvasScenario.trim()}
+                    >
+                      <Sparkles size={16} className="mr-2" />
+                      {canvasStatus === 'published' ? 'Publish assignment' : 'Save as draft'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleCanvasRegenerate}
+                      disabled={canvasPhase === 'saving'}
+                    >
+                      Regenerate suggestions
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="w-full"
+                      onClick={handleCanvasPickDifferent}
+                      disabled={canvasPhase === 'saving'}
+                    >
+                      Pick a different item
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
@@ -1568,8 +1834,8 @@ export function TeacherAssignmentBuilderPage() {
       </div>
       )}
 
-      {/* Assignments list — visible in both modes */}
-      {assignments.length > 0 && quickMode && (
+      {/* Assignments list — visible in Quick mode */}
+      {quickMode && (
         <Card className="border-3 border-foreground p-6 shadow-stamp">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
@@ -1583,42 +1849,155 @@ export function TeacherAssignmentBuilderPage() {
             </div>
           </div>
           <div className="mt-5 space-y-3">
-            {assignments.map((assignment) => (
-              <div key={assignment.id} className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={formatStatusVariant(assignment.status)} size="sm">
-                        {assignment.status}
-                      </Badge>
+            {assignments.length === 0 ? (
+              <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
+                No assignments yet. Pick a Canvas item above and publish your first one!
+              </div>
+            ) : (
+              assignments.map((assignment) => (
+                <div key={assignment.id} className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={formatStatusVariant(assignment.status)} size="sm">
+                          {assignment.status}
+                        </Badge>
+                      </div>
+                      <h3 className="mt-2 text-lg font-display font-bold text-foreground">{assignment.title}</h3>
+                      {assignment.description && (
+                        <p className="mt-1 text-sm text-muted-foreground">{assignment.description}</p>
+                      )}
                     </div>
-                    <h3 className="mt-2 text-lg font-display font-bold text-foreground">{assignment.title}</h3>
-                    {assignment.description && (
-                      <p className="mt-1 text-sm text-muted-foreground">{assignment.description}</p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/app/teacher/classes/${classId}/assignments/${assignment.id}/analytics`)}
-                    >
-                      View analytics
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/app/assignments/${assignment.id}`)}
-                    >
-                      Preview
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate(`/app/teacher/classes/${classId}/assignments/${assignment.id}/analytics`)}
+                      >
+                        View analytics
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate(`/app/assignments/${assignment.id}`)}
+                      >
+                        Preview
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </Card>
       )}
+    </div>
+  );
+}
+
+// ── Local helpers for Canvas Quick Assign ──────────────────────────────
+
+interface CanvasItemGroup {
+  moduleName: string;
+  items: CanvasCourseContentItem[];
+}
+
+function groupCanvasItemsByModule(items: CanvasCourseContentItem[]): CanvasItemGroup[] {
+  const byModule = new Map<string, CanvasCourseContentItem[]>();
+  for (const item of items) {
+    const key = item.canvasModuleName || 'Unassigned';
+    const bucket = byModule.get(key);
+    if (bucket) {
+      bucket.push(item);
+    } else {
+      byModule.set(key, [item]);
+    }
+  }
+  return Array.from(byModule.entries()).map(([moduleName, groupItems]) => ({
+    moduleName,
+    items: [...groupItems].sort((a, b) => a.itemPosition - b.itemPosition),
+  }));
+}
+
+function formatItemTypeBadge(itemType: string | undefined | null): string {
+  if (!itemType) return 'Item';
+  const cleaned = itemType.replace(/[_-]+/g, ' ').trim();
+  if (!cleaned) return 'Item';
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+/** Editable list of string tags with add/remove. Accepts an optional aria-label
+ *  so Testing Library can find it by accessible name.
+ */
+function TagListEditor({
+  items,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  items: string[];
+  onChange: (items: string[]) => void;
+  placeholder: string;
+  ariaLabel?: string;
+}) {
+  const [newValue, setNewValue] = useState('');
+
+  const handleAdd = () => {
+    const trimmed = newValue.trim();
+    if (trimmed && !items.includes(trimmed)) {
+      onChange([...items, trimmed]);
+      setNewValue('');
+    }
+  };
+
+  const handleRemove = (index: number) => {
+    onChange(items.filter((_, i) => i !== index));
+  };
+
+  const handleEdit = (index: number, value: string) => {
+    const updated = [...items];
+    updated[index] = value;
+    onChange(updated);
+  };
+
+  return (
+    <div className="space-y-2" aria-label={ariaLabel}>
+      {items.map((item, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Input
+            value={item}
+            onChange={(event) => handleEdit(i, event.target.value)}
+            className="flex-1"
+            aria-label={ariaLabel ? `${ariaLabel} ${i + 1}` : undefined}
+          />
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => handleRemove(i)}
+            aria-label={`Remove ${ariaLabel || 'item'} ${i + 1}`}
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ))}
+      <div className="flex items-center gap-2">
+        <Input
+          value={newValue}
+          onChange={(event) => setNewValue(event.target.value)}
+          placeholder={placeholder}
+          className="flex-1"
+          aria-label={ariaLabel ? `New ${ariaLabel}` : undefined}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              handleAdd();
+            }
+          }}
+        />
+        <Button variant="outline" size="sm" onClick={handleAdd} disabled={!newValue.trim()}>
+          <Plus size={14} />
+        </Button>
+      </div>
     </div>
   );
 }

@@ -51,11 +51,17 @@ export const generateCanvasPractice = async (
   return response.data;
 };
 
+export interface CreateCanvasPracticeResult {
+  success: boolean;
+  assignmentId: string;
+  status: string;
+}
+
 export const createCanvasPractice = async (
   classId: string,
   payload: CreateCanvasPracticePayload,
-): Promise<{ success: boolean; assignmentId: string; mappingId: string; status: string }> => {
-  const response = await api.post(
+): Promise<CreateCanvasPracticeResult> => {
+  const response = await api.post<CreateCanvasPracticeResult>(
     `/teacher/classes/${classId}/canvas-practice/create`,
     payload,
   );

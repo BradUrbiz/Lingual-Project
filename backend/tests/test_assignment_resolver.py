@@ -13,6 +13,7 @@ from backend.services.assignment_resolver import (
     _package_rubric_index,
     _build_bootstrap_pedagogy_context,
     resolve_assignment_bootstrap,
+    resolve_assignment_bootstrap_for_user,
 )
 from backend.services.membership_context import SchoolRequestContext
 
@@ -554,6 +555,94 @@ class TestResolveAssignmentBootstrap(unittest.TestCase):
                 class_record={"id": "c-1", "org_id": "org-1"},
             )
         self.assertIn("speaking situation", str(cm.exception))
+
+
+# ---------------------------------------------------------------------------
+# resolve_assignment_bootstrap_for_user — Canvas-first (no mapping row) path
+# ---------------------------------------------------------------------------
+class TestCanvasGeneratedBootstrapFromAssignment(unittest.TestCase):
+    """Test that the resolver correctly handles assignments with scenario fields
+    directly on the assignment document (no curriculum_mappings row)."""
+
+    def setUp(self):
+        self.db = FakeResolverDb()
+        self.deps = _make_deps(self.db)
+        self.context = _make_context(
+            uid="u1",
+            roles=("student",),
+            org_id="o1",
+            membership_id="m1",
+        )
+
+    def test_canvas_generated_bootstrap_reads_scenario_from_assignment(self):
+        """When an assignment has generated_scenario on its own doc (no mapping row),
+        the resolver must still produce a valid bootstrap with the scenario in the
+        system prompt and the correct learning locale enforced."""
+        # Seed a class with Spanish locale
+        self.db.classes["c1"] = {
+            "id": "c1",
+            "org_id": "o1",
+            "name": "Spanish",
+            "learning_locale": "es-ES",
+            "subject": "Spanish",
+            "teacher_membership_ids": ["m1"],
+            "status": "active",
+        }
+        # Student enrolled in the class
+        self.db.enrollments["c1_u1"] = {
+            "id": "c1_u1",
+            "class_id": "c1",
+            "student_uid": "u1",
+            "status": "active",
+            "join_source": "join_code",
+        }
+        # Seed an assignment with scenario fields DIRECTLY on the assignment doc,
+        # NOT via a curriculum_mapping row (Canvas-first path from Task A2).
+        asg_id = "asg-canvas-1"
+        self.db.assignments[asg_id] = {
+            "id": asg_id,
+            "org_id": "o1",
+            "class_id": "c1",
+            "mapping_id": None,
+            "title": "Canvas test",
+            "description": "",
+            "status": "published",
+            "task_type": "decision_making",
+            "success_criteria": [],
+            "created_by_uid": "uid-t",
+            "instructions": "Talk about your family.",
+            "generated_scenario": "You meet a new classmate. Tell them about your family.",
+            "target_expressions": ["Mi familia", "Tengo hermanos"],
+            "focus_grammar": ["possessive adjectives"],
+            "canvas_module_item_ref": {
+                "connection_id": "cn1",
+                "canvas_module_id": "mo1",
+                "item_id": "it1",
+            },
+        }
+
+        bootstrap = resolve_assignment_bootstrap_for_user(
+            deps=self.deps,
+            uid="u1",
+            context=self.context,
+            assignment_id=asg_id,
+            ui_language="en",
+        )
+
+        # Class locale honored
+        self.assertEqual(bootstrap["class"]["learningLocale"], "es-ES")
+        # System prompt contains the scenario + target expressions + focus grammar
+        self.assertIn("Mi familia", bootstrap.get("systemPromptPreview", ""))
+        self.assertIn("You meet a new classmate", bootstrap.get("systemPromptPreview", ""))
+        self.assertIn("possessive adjectives", bootstrap.get("systemPromptPreview", ""))
+        # Class name ("Spanish") appears in the prompt — locale enforcement signal
+        self.assertIn("Spanish", bootstrap.get("systemPromptPreview", ""))
+        # Mapping key is present (may be an empty/None-valued dto — just must exist)
+        self.assertIn("mapping", bootstrap)
+        # realtimeSessionParams uses the canvas_generated type
+        self.assertEqual(
+            bootstrap["realtimeSessionParams"]["practice"]["type"], "canvas_generated"
+        )
 
 
 if __name__ == "__main__":

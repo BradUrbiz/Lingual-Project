@@ -363,16 +363,33 @@ def resolve_assignment_bootstrap(
     deps: Any,
     *,
     assignment: dict[str, Any],
-    mapping: dict[str, Any],
+    mapping: dict[str, Any] | None,
     class_record: dict[str, Any],
     ui_language: str = "en",
 ) -> dict[str, Any]:
-    mapping_dto = serialize_curriculum_mapping(mapping)
     assignment_dto = serialize_assignment(assignment)
-    if not mapping_dto or not assignment_dto:
-        raise ValueError("Assignment bootstrap requires both mapping and assignment records.")
+    if not assignment_dto:
+        raise ValueError("Assignment bootstrap requires a valid assignment record.")
 
-    # Canvas-generated assignments bypass the curriculum package lookup
+    # Canvas-first path: new assignments have generated_scenario directly on the
+    # assignment doc and no mapping row at all (Task A2 / Task A3).
+    if assignment.get("generated_scenario") and not assignment.get("mapping_id"):
+        mapping_dto = _empty_canvas_mapping_dto()
+        return _resolve_canvas_generated_bootstrap(
+            deps,
+            mapping=None,
+            mapping_dto=mapping_dto,
+            assignment=assignment,
+            assignment_dto=assignment_dto,
+            class_record=class_record,
+            ui_language=ui_language,
+        )
+
+    mapping_dto = serialize_curriculum_mapping(mapping)
+    if not mapping_dto:
+        raise ValueError("Assignment bootstrap requires a mapping record (or generated_scenario on the assignment).")
+
+    # Legacy canvas-generated assignments bypass the curriculum package lookup
     if mapping_dto["packageId"] == "canvas-generated":
         return _resolve_canvas_generated_bootstrap(
             deps,
@@ -527,10 +544,34 @@ def resolve_assignment_bootstrap(
     }
 
 
+def _empty_canvas_mapping_dto() -> dict[str, Any]:
+    """Return a safe empty mapping_dto for Canvas-first assignments (no mapping row)."""
+    return {
+        "id": None,
+        "orgId": None,
+        "classId": None,
+        "packageId": "canvas-generated",
+        "moduleId": None,
+        "objectiveIds": [],
+        "situationIds": [],
+        "targetExpressions": [],
+        "focusGrammar": [],
+        "allowedContextTags": [],
+        "feedbackPolicy": serialize_feedback_policy(None),
+        "scaffoldPolicy": serialize_scaffold_policy(None),
+        "modalityPolicy": serialize_modality_policy(None),
+        "rubricFocus": [],
+        "teacherNotes": "",
+        "createdByUid": "",
+        "createdAt": None,
+        "updatedAt": None,
+    }
+
+
 def _resolve_canvas_generated_bootstrap(
     deps: Any,
     *,
-    mapping: dict[str, Any],
+    mapping: dict[str, Any] | None,
     mapping_dto: dict[str, Any],
     assignment: dict[str, Any],
     assignment_dto: dict[str, Any],
@@ -539,12 +580,26 @@ def _resolve_canvas_generated_bootstrap(
 ) -> dict[str, Any]:
     """Build a bootstrap payload for canvas-generated assignments.
 
-    Uses the mapping's generated_scenario, target_expressions, and
-    focus_grammar directly instead of looking up a curriculum package.
+    Prefers direct fields on the assignment document (new Canvas-first path from
+    Task A2). Falls back to the mapping for legacy rows where fields were stored
+    on the curriculum_mappings document. When mapping is None (no mapping row),
+    all mapping reads use safe defaults.
     """
-    scenario = mapping.get("generated_scenario", "")
-    target_expressions = _normalize_string_list(mapping.get("target_expressions"))
-    focus_grammar = _normalize_string_list(mapping.get("focus_grammar"))
+    # Prefer direct fields on the assignment; fall back to the legacy mapping
+    # for pre-migration rows. Commit C removes the mapping fallback entirely.
+    scenario = (
+        assignment.get("generated_scenario")
+        or (mapping.get("generated_scenario") if mapping else "")
+        or ""
+    )
+    target_expressions = _normalize_string_list(
+        assignment.get("target_expressions")
+        or (mapping.get("target_expressions") if mapping else [])
+    )
+    focus_grammar = _normalize_string_list(
+        assignment.get("focus_grammar")
+        or (mapping.get("focus_grammar") if mapping else [])
+    )
     success_criteria = _normalize_string_list(assignment.get("success_criteria"))
     task_type = assignment_dto.get("taskType", "information_gap")
 
@@ -552,7 +607,7 @@ def _resolve_canvas_generated_bootstrap(
     locale_label = class_record.get("learning_locale", "ko-KR")
     class_name = class_record.get("name", "")
     subject = class_record.get("subject", "")
-    source_title = mapping.get("source_canvas_item_title", "")
+    source_title = mapping.get("source_canvas_item_title", "") if mapping else ""
 
     prompt_parts = [
         f"You are an AI language tutor helping a student practice spoken {locale_label} in a {subject} class ({class_name}).",
@@ -587,7 +642,7 @@ def _resolve_canvas_generated_bootstrap(
     )
 
     mapping_dto["outputPolicy"] = serialize_output_policy(
-        mapping.get("output_policy"),
+        mapping.get("output_policy") if mapping else None,
         task_type=task_type,
         evidence=pedagogy_context.get("evidence"),
         feedback_mode=(mapping_dto.get("feedbackPolicy") or {}).get("mode", "balanced"),
@@ -653,7 +708,7 @@ def _resolve_canvas_generated_bootstrap(
     }
 
 
-def load_assignment_bundle(deps: Any, assignment_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+def load_assignment_bundle(deps: Any, assignment_id: str) -> tuple[dict[str, Any], dict[str, Any] | None, dict[str, Any]]:
     assignment = deps.db.get_assignment(assignment_id)
     if not assignment:
         raise ValueError("Assignment not found.")
@@ -662,9 +717,14 @@ def load_assignment_bundle(deps: Any, assignment_id: str) -> tuple[dict[str, Any
     if not class_record:
         raise ValueError("Class not found for assignment.")
 
-    mapping = deps.db.get_curriculum_mapping(assignment.get("mapping_id"))
-    if not mapping:
-        raise ValueError("Assignment mapping not found.")
+    mapping_id = assignment.get("mapping_id")
+    if mapping_id:
+        mapping = deps.db.get_curriculum_mapping(mapping_id)
+        if not mapping:
+            raise ValueError("Assignment mapping not found.")
+    else:
+        # Canvas-first assignments (A2 path) have no mapping row.
+        mapping = None
 
     return assignment, mapping, class_record
 

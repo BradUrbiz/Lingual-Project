@@ -61,6 +61,8 @@ class CanvasPracticeCreateTest(unittest.TestCase):
         asg = self.db.assignments[data["assignmentId"]]
         self.assertEqual(asg["title"], "Family introductions")
         self.assertEqual(asg["status"], "published")
+        # Fallback logic: instructions is populated from description when not explicitly set.
+        self.assertEqual(asg["instructions"], "Practice introducing your family.")
         self.assertEqual(asg["target_expressions"], ["Mi familia es...", "Mi hermano se llama..."])
         self.assertEqual(asg["focus_grammar"], ["possessive adjectives"])
         self.assertEqual(asg["success_criteria"], ["Name at least 3 family members"])

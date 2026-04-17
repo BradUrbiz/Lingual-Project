@@ -458,11 +458,31 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
                 name=user.get("name", "") if user else "",
             )
 
+            # Pilot: auto-approve teacher invitations. The invitation doc is
+            # kept as an audit trail (marked approved immediately) but the
+            # membership is created in the same request so the teacher can
+            # start working without waiting for a school_admin to review.
+            # To restore the manual-approval flow, revert this commit.
+            membership_id = deps.db.create_membership(
+                org_id=org_id,
+                uid=uid,
+                roles=["teacher"],
+            )
+            deps.db.set_user_last_active_membership(uid, membership_id)
+
+            from datetime import UTC, datetime
+            deps.db.update_teacher_invitation(invitation_id, {
+                "status": "approved",
+                "reviewed_by_uid": "system:pilot_auto_approve",
+                "reviewed_at": datetime.now(UTC).isoformat(),
+            })
+
             return jsonify({
                 "success": True,
                 "invitationId": invitation_id,
+                "membershipId": membership_id,
                 "orgName": org.get("name", ""),
-                "status": "pending",
+                "status": "approved",
             }), 201
         except Exception as exc:
             return jsonify({"success": False, "error": str(exc)}), 500

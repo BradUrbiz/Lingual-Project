@@ -6,9 +6,11 @@ import { AnimatedPage } from '@/components/layout';
 import { Alert, AlertDescription, Button, Card, Input } from '@/components/ui';
 import { joinSchoolAsTeacher } from '@/api/schoolRequests';
 import type { JoinSchoolAsTeacherResult } from '@/api/schoolRequests';
+import { useAuth } from '@/hooks/useAuth';
 
 export function TeacherJoinSchoolPage() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +33,11 @@ export function TeacherJoinSchoolPage() {
 
     try {
       const joinResult = await joinSchoolAsTeacher(code);
+      // Pull down the newly-created teacher membership so TeacherRoute lets
+      // the user into /app/teacher when they click the button below.
+      // Without this refresh, MembershipContext still reflects the pre-join
+      // state (no memberships) and the guard bounces them to /school/setup.
+      await refreshUser();
       setResult(joinResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join school. Please check the code and try again.');
@@ -54,19 +61,14 @@ export function TeacherJoinSchoolPage() {
               </div>
 
               <div className="space-y-2">
-                <h1 className="text-2xl font-bold">Request Sent!</h1>
+                <h1 className="text-2xl font-bold">Welcome to {result.orgName}!</h1>
                 <p className="text-muted-foreground">
-                  Your request has been sent to the school admin for approval.
+                  You're in. Let's set up your first class.
                 </p>
               </div>
 
-              <div className="bg-muted/50 rounded-lg p-4 text-left space-y-1">
-                <p className="font-semibold text-lg">{result.orgName}</p>
-                <p className="text-sm text-muted-foreground">Status: Pending approval</p>
-              </div>
-
-              <Button onClick={() => navigate('/app/learn', { replace: true })} className="w-full">
-                Go to Learning
+              <Button onClick={() => navigate('/app/teacher', { replace: true })} className="w-full">
+                Go to Teacher Dashboard
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Card>

@@ -121,6 +121,7 @@ export const rejectTeacherInvitation = async (
 
 export interface JoinSchoolAsTeacherResult {
   invitationId: string;
+  membershipId?: string;
   orgName: string;
   status: string;
 }
@@ -134,6 +135,7 @@ export const joinSchoolAsTeacher = async (
   );
   return {
     invitationId: response.data.invitationId,
+    membershipId: response.data.membershipId,
     orgName: response.data.orgName,
     status: response.data.status,
   };

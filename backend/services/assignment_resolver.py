@@ -545,7 +545,12 @@ def resolve_assignment_bootstrap(
 
 
 def _empty_canvas_mapping_dto() -> dict[str, Any]:
-    """Return a safe empty mapping_dto for Canvas-first assignments (no mapping row)."""
+    """Return a safe empty mapping_dto for Canvas-first assignments (no mapping row).
+
+    If you add a key to ``serialize_curriculum_mapping`` (in this module), mirror
+    it here — otherwise the Canvas-first path will silently drop that field from
+    the bootstrap DTO while the legacy mapping path carries it through.
+    """
     return {
         "id": None,
         "orgId": None,

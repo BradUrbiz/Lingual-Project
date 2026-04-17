@@ -1,6 +1,7 @@
 import unittest
 from types import SimpleNamespace
 from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 from backend.services.assignment_resolver import (
     load_assignment_bundle,
@@ -635,14 +636,77 @@ class TestCanvasGeneratedBootstrapFromAssignment(unittest.TestCase):
         self.assertIn("Mi familia", bootstrap.get("systemPromptPreview", ""))
         self.assertIn("You meet a new classmate", bootstrap.get("systemPromptPreview", ""))
         self.assertIn("possessive adjectives", bootstrap.get("systemPromptPreview", ""))
-        # Class name ("Spanish") appears in the prompt — locale enforcement signal
-        self.assertIn("Spanish", bootstrap.get("systemPromptPreview", ""))
+        # The class's learning locale flows into the prompt. Asserting on the
+        # raw locale code ("es-ES") rather than the language name ("Spanish")
+        # avoids false positives from class name / subject occurrences.
+        self.assertIn("es-ES", bootstrap.get("systemPromptPreview", ""))
         # Mapping key is present (may be an empty/None-valued dto — just must exist)
         self.assertIn("mapping", bootstrap)
         # realtimeSessionParams uses the canvas_generated type
         self.assertEqual(
             bootstrap["realtimeSessionParams"]["practice"]["type"], "canvas_generated"
         )
+
+    def test_canvas_first_dispatch_skips_curriculum_mapping_lookup(self):
+        """Regression guard for dispatcher ordering. The Canvas-first branch
+        (generated_scenario + no mapping_id) must route directly to the
+        no-mapping resolver without touching db.get_curriculum_mapping. If a
+        future edit reorders the dispatcher branches, this test fails fast."""
+        # Same Canvas-first seed as the test above.
+        self.db.classes["c1"] = {
+            "id": "c1",
+            "org_id": "o1",
+            "name": "Spanish",
+            "learning_locale": "es-ES",
+            "subject": "Spanish",
+            "teacher_membership_ids": ["m1"],
+            "status": "active",
+        }
+        self.db.enrollments["c1_u1"] = {
+            "id": "c1_u1",
+            "class_id": "c1",
+            "student_uid": "u1",
+            "status": "active",
+            "join_source": "join_code",
+        }
+        asg_id = "asg-canvas-2"
+        self.db.assignments[asg_id] = {
+            "id": asg_id,
+            "org_id": "o1",
+            "class_id": "c1",
+            "mapping_id": None,
+            "title": "Dispatcher regression",
+            "description": "",
+            "status": "published",
+            "task_type": "decision_making",
+            "success_criteria": [],
+            "created_by_uid": "uid-t",
+            "instructions": "",
+            "generated_scenario": "You meet a classmate. Talk about your weekend.",
+            "target_expressions": ["Fui al parque"],
+            "focus_grammar": ["preterite"],
+            "canvas_module_item_ref": {
+                "connection_id": "cn1",
+                "canvas_module_id": "mo1",
+                "item_id": "it1",
+            },
+        }
+
+        # Intercept get_curriculum_mapping — calling it means the dispatcher
+        # fell through to the legacy path, which is a regression.
+        original_get = self.db.get_curriculum_mapping
+        tracker = MagicMock(side_effect=original_get)
+        self.db.get_curriculum_mapping = tracker
+
+        resolve_assignment_bootstrap_for_user(
+            deps=self.deps,
+            uid="u1",
+            context=self.context,
+            assignment_id=asg_id,
+            ui_language="en",
+        )
+
+        tracker.assert_not_called()
 
 
 if __name__ == "__main__":

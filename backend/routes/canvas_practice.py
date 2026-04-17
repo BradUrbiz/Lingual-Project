@@ -122,7 +122,7 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
             traceback.print_exc()
             return jsonify({'success': False, 'error': f'AI generation failed: {exc}'}), 500
 
-    # -- One-click create mapping + assignment + link ------------------------
+    # -- One-click create assignment + link (scenario lives on assignment) ----
 
     @bp.route('/api/teacher/classes/<class_id>/canvas-practice/create', methods=['POST'])
     @deps.login_required
@@ -134,19 +134,18 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
 
         data = request.get_json() or {}
 
-        # Validate required fields
         canvas_content_id = data.get('canvasContentId', '').strip()
         canvas_module_item_id = data.get('canvasModuleItemId', '').strip()
         title = data.get('title', '').strip()
         scenario = data.get('scenario', '').strip()
         task_type = data.get('taskType', 'information_gap')
+        instructions = (data.get('instructions') or data.get('description') or '').strip()
 
         if not canvas_content_id or not title or not scenario:
             return jsonify({'success': False, 'error': 'canvasContentId, title, and scenario are required'}), 400
         if task_type not in VALID_TASK_TYPES:
             return jsonify({'success': False, 'error': f'Invalid taskType. Must be one of: {", ".join(VALID_TASK_TYPES)}'}), 400
 
-        # Look up Canvas content for metadata
         content_item = deps.db.get_canvas_course_content(canvas_content_id)
         if not content_item:
             return jsonify({'success': False, 'error': 'Canvas content item not found'}), 404
@@ -154,31 +153,13 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
         org_id = class_record.get('org_id', '')
         teacher_uid = deps.get_current_user_uid()
 
-        try:
-            # 1. Create curriculum mapping
-            mapping_id = deps.db.create_curriculum_mapping(
-                org_id=org_id,
-                class_id=class_id,
-                package_id='canvas-generated',
-                module_id='canvas-generated',
-                objective_ids=[],
-                situation_ids=[],
-                target_expressions=data.get('targetExpressions', []),
-                focus_grammar=data.get('focusGrammar', []),
-                feedback_policy={'mode': 'balanced'},
-                scaffold_policy={},
-                output_policy={},
-                modality_policy={'mode': 'hybrid', 'text_fallback_enabled': True},
-                rubric_focus=[],
-                teacher_notes=data.get('teacherNotes', ''),
-                created_by_uid=teacher_uid,
-                generated_scenario=scenario,
-                canvas_content_id=canvas_content_id,
-                source_canvas_item_title=content_item.get('item_title', ''),
-                source_canvas_item_type=content_item.get('item_type', ''),
-            )
+        canvas_ref = {
+            'connection_id': content_item.get('connection_id', ''),
+            'canvas_module_id': content_item.get('canvas_module_id', ''),
+            'item_id': canvas_module_item_id or content_item.get('item_id', ''),
+        }
 
-            # 2. Create assignment
+        try:
             status = data.get('status', 'draft')
             if status not in ('draft', 'published'):
                 status = 'draft'
@@ -186,17 +167,22 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
             assignment_id = deps.db.create_assignment(
                 org_id=org_id,
                 class_id=class_id,
-                mapping_id=mapping_id,
+                mapping_id=None,
                 title=title,
                 description=data.get('description', ''),
                 status=status,
                 task_type=task_type,
                 success_criteria=data.get('successCriteria', []),
                 created_by_uid=teacher_uid,
-                canvas_module_item_id=canvas_module_item_id or None,
+                canvas_module_item_id=canvas_module_item_id or '',
+                instructions=instructions,
+                canvas_module_item_ref=canvas_ref,
+                objectives=data.get('objectives', []),
+                target_expressions=data.get('targetExpressions', []),
+                focus_grammar=data.get('focusGrammar', []),
+                generated_scenario=scenario,
             )
 
-            # 3. Link to Canvas item
             if canvas_module_item_id:
                 deps.db.link_assignment_to_canvas_item(
                     assignment_id, canvas_content_id, canvas_module_item_id,
@@ -205,7 +191,6 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({
                 'success': True,
                 'assignmentId': assignment_id,
-                'mappingId': mapping_id,
                 'status': status,
             }), 201
 

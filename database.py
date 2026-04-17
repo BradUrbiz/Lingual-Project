@@ -1354,12 +1354,12 @@ def create_assignment(
         'created_by_uid': created_by_uid,
         'canvas_module_item_id': canvas_module_item_id or '',
         # New direct scenario fields — preferred over curriculum_mappings path.
-        'instructions': instructions,
+        'instructions': instructions or '',
         'canvas_module_item_ref': canvas_module_item_ref,
         'objectives': list(objectives or []),
         'target_expressions': list(target_expressions or []),
         'focus_grammar': list(focus_grammar or []),
-        'generated_scenario': generated_scenario,
+        'generated_scenario': generated_scenario or '',
         'created_at': firestore.SERVER_TIMESTAMP,
         'updated_at': firestore.SERVER_TIMESTAMP,
     }

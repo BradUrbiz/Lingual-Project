@@ -385,6 +385,7 @@ class FakeDbBase:
         self.deletion_execution_runs: dict[str, dict] = {}
         self.user_active_memberships: dict[str, str] = {}
         self._counters: dict[str, int] = {}
+        self.canvas_course_content: dict[str, dict] = {}
 
     def _next_id(self, prefix: str) -> str:
         self._counters[prefix] = self._counters.get(prefix, 0) + 1
@@ -577,12 +578,12 @@ class FakeDbBase:
             'success_criteria': list(success_criteria or []),
             'created_by_uid': created_by_uid,
             'canvas_module_item_id': canvas_module_item_id or '',
-            'instructions': instructions,
+            'instructions': instructions or '',
             'canvas_module_item_ref': canvas_module_item_ref,
             'objectives': list(objectives or []),
             'target_expressions': list(target_expressions or []),
             'focus_grammar': list(focus_grammar or []),
-            'generated_scenario': generated_scenario,
+            'generated_scenario': generated_scenario or '',
             'created_at': datetime.now(UTC),
             'updated_at': datetime.now(UTC),
         }
@@ -613,6 +614,17 @@ class FakeDbBase:
 
     def list_class_curriculum_mappings(self, class_id: str):
         return [dict(m) for m in self.mappings.values() if m.get("class_id") == class_id]
+
+    # -- Canvas course content --
+
+    def get_canvas_course_content(self, content_id: str):
+        doc = self.canvas_course_content.get(content_id)
+        return dict(doc) if doc else None
+
+    def link_assignment_to_canvas_item(self, assignment_id: str, content_id: str, canvas_module_item_id: str):
+        asg = self.assignments.get(assignment_id)
+        if asg is not None:
+            asg['canvas_module_item_id'] = canvas_module_item_id
 
     # -- Practice sessions --
 

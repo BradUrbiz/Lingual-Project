@@ -67,6 +67,7 @@ class CanvasPracticeCreateTest(unittest.TestCase):
         self.assertEqual(asg["focus_grammar"], ["possessive adjectives"])
         self.assertEqual(asg["success_criteria"], ["Name at least 3 family members"])
         self.assertTrue(asg["generated_scenario"].startswith("You meet"))
+        self.assertEqual(asg["teacher_notes"], "Great for Week 1")
         self.assertEqual(asg["canvas_module_item_ref"], {
             "connection_id": "conn-1",
             "canvas_module_id": "mod-1",

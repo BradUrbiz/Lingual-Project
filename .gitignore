@@ -16,3 +16,5 @@ htmlcov/
 e2e/snapshots/
 .playwright-cli/
 .worktrees/
+.omc/
+frontend/.omc/

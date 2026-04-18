@@ -748,7 +748,7 @@ Expected: FAIL — current page has no Canvas item picker.
 
 Full-file rewrite guidance. Preserve:
 - Header region (class name, counts, locale badge).
-- "Advanced" tab scaffold (emptied in this task — implemented in B3).
+- "Advanced" tab scaffold (expanded in B3a/B3b).
 - "Your assignments" list and its existing analytics/preview actions.
 
 Replace:
@@ -789,16 +789,17 @@ reachable from Quick Assign."
 
 ---
 
-### Task B3: Add Advanced mode — manual objectives/expressions/grammar
+### Task B3a: Add Advanced mode — Canvas-structured objectives editor
+
+**Status note:** This is the subset of Advanced mode that actually shipped on the branch. It keeps Advanced on the Canvas-generated path and adds editable objectives. The original B3 text over-reached by also describing a non-Canvas path; that remaining scope is tracked explicitly in B3b below.
 
 **Files:**
 - Modify: `frontend/src/pages/TeacherAssignmentBuilderPage.tsx` (Advanced tab)
 
 **Spec:** Advanced mode starts from the same Canvas item picker and generates the same way. After suggestions arrive, Advanced adds:
 - Objectives chip list (editable, starts from `suggestions.objectives || []`).
-- A "no Canvas item" option: skip the picker, paste `instructions` manually, generate anyway.
 
-For the pilot, this is a thin layer on top of Quick Assign.
+For the pilot branch at this stage, this is still a thin layer on top of Quick Assign. Non-Canvas authoring is intentionally deferred to B3b.
 
 - [ ] **Step 1: Write failing test**
 
@@ -834,6 +835,161 @@ git commit -m "feat(teacher-builder): Advanced mode adds editable objectives
 Advanced mode shares the Canvas-generate flow with Quick Assign and
 adds an editable objectives chip list. Per Q2=c (hybrid: thin Quick,
 structured Advanced)."
+```
+
+---
+
+### Task B3b: Follow-up — non-Canvas Advanced authoring
+
+**Why this exists:** The product requirement is broader than the shipped Canvas-only Advanced subset. Teachers need to create assignments from two non-Canvas entry points as well:
+- **AI-assisted source mode:** teacher pastes a source packet such as key vocabulary, rubric notes, lesson context, or a custom teacher prompt; Lingual generates a draft assignment from that text.
+- **Manual authoring mode:** teacher writes the assignment directly, with minimum required fields `title + instructions + scenario + taskType`.
+
+**Decision:** Quick Assign remains Canvas-only. Advanced becomes the mixed authoring surface with three entry modes:
+- `Canvas item`
+- `AI-assisted source`
+- `Manual authoring`
+
+**Recommended API direction (focused follow-up, not a full rewrite):**
+- Add a new content-agnostic draft-generation endpoint:
+  - `POST /api/teacher/classes/<class_id>/assignment-drafts/generate`
+  - Request body: `{ sourceText: string }`
+  - Response shape: same draft fields used by Canvas generate (`suggestedTitle`, `suggestedDescription`, `scenario`, `targetExpressions`, `focusGrammar`, `successCriteria`, `taskType`, optional `objectives`, `teacherNotes`)
+- Broaden the generic assignment create endpoint so it can create direct-field assignments without `mappingId`:
+  - `POST /api/teacher/classes/<class_id>/assignments`
+  - Accepts direct scenario fields for non-Canvas assignments: `title`, `description`, `instructions`, `generatedScenario`, `objectives`, `targetExpressions`, `focusGrammar`, `successCriteria`, `taskType`, and optional `teacherNotes`
+- Keep `POST /canvas-practice/create` for Canvas-linked assignments only.
+
+**Files:**
+- Modify: `backend/routes/curriculum_admin.py` — allow direct-field assignment creation without `mappingId`
+- Create or modify: backend route for source-text draft generation (preferred: add to `backend/routes/canvas_practice.py` only if renamed/generalized; otherwise create a small teacher assignment drafts route)
+- Modify: `database.py` — verify generic assignment create path persists all direct fields needed by non-Canvas assignments
+- Modify: `frontend/src/pages/TeacherAssignmentBuilderPage.tsx` — Advanced mode picker + AI-assisted source form + manual authoring form
+- Modify: `frontend/src/api/assignments.ts` and/or add a dedicated draft-generation client
+- Modify: `frontend/src/pages/TeacherAssignmentBuilderPage.test.tsx`
+- Update: `docs/school-integration/LIMITATIONS.md` if this remains deferred after Commit C
+
+**B3b Spec:**
+
+1. **Advanced mode entry selector**
+   - Three mutually exclusive entry modes:
+     - `Canvas item`
+     - `AI-assisted source`
+     - `Manual authoring`
+   - Default selection: `Canvas item`
+
+2. **AI-assisted source mode**
+   - Required input: one large `sourceText` textarea
+   - Helper copy should explicitly allow vocabulary lists, rubric notes, lesson context, and custom prompts
+   - Generate button is disabled until `sourceText.trim()` is non-empty
+   - Generate response hydrates the same editable review form used by Canvas mode
+   - No Canvas item is attached to the final assignment
+
+3. **Manual authoring mode**
+   - Minimum required fields:
+     - `title`
+     - `instructions`
+     - `scenario`
+     - `taskType`
+   - Optional structured fields:
+     - `objectives`
+     - `targetExpressions`
+     - `focusGrammar`
+     - `successCriteria`
+     - `teacherNotes`
+   - No generate step required
+
+4. **Review/create behavior**
+   - All three Advanced modes end in the same editable assignment form surface
+   - `Canvas item` mode can keep using the Canvas-specific create route
+   - `AI-assisted source` and `Manual authoring` create via the generic assignment create route with direct fields only
+   - The assignments list refreshes on success, same as B2/B3a
+
+- [ ] **Step 1: Add failing backend test for direct non-Canvas assignment creation**
+
+```python
+# Add to backend/tests/test_curriculum_admin_routes.py or the fuller API suite
+def test_teacher_can_create_direct_field_assignment_without_mapping(self):
+    response = self.client.post(
+        f"/api/teacher/classes/{self.class_id}/assignments",
+        json={
+            "title": "Restaurant role-play",
+            "description": "Practice polite ordering.",
+            "instructions": "Use the target phrases naturally.",
+            "generatedScenario": "You are ordering dinner at a busy restaurant.",
+            "taskType": "information_gap",
+            "targetExpressions": ["Quisiera...", "La cuenta, por favor"],
+            "focusGrammar": ["conditional politeness"],
+            "successCriteria": ["Order two items and ask one follow-up question"],
+            "teacherNotes": "Push for full-sentence responses.",
+            "status": "draft",
+        },
+    )
+    self.assertEqual(response.status_code, 201)
+```
+
+- [ ] **Step 2: Add failing backend test for AI-assisted source draft generation**
+
+```python
+def test_generate_assignment_draft_from_source_text(self):
+    response = self.client.post(
+        f"/api/teacher/classes/{self.class_id}/assignment-drafts/generate",
+        json={
+            "sourceText": "Key vocabulary: reservar, mesa, camarero. Rubric note: students should ask for clarification politely.",
+        },
+    )
+    self.assertEqual(response.status_code, 200)
+    payload = response.get_json()
+    self.assertTrue(payload["success"])
+    self.assertIn("scenario", payload["suggestions"])
+```
+
+- [ ] **Step 3: Add failing frontend tests for the two non-Canvas Advanced paths**
+
+```typescript
+it('Advanced AI-assisted mode generates a draft from pasted source text', async () => {
+  // Switch to Advanced -> AI-assisted source -> paste source text -> generate
+  // -> assert review form is hydrated -> save draft via generic assignment create.
+})
+
+it('Advanced manual mode creates an assignment without Canvas selection', async () => {
+  // Switch to Advanced -> Manual authoring -> fill title/instructions/scenario/task type
+  // -> save draft -> assert generic assignment create payload omits Canvas refs.
+})
+```
+
+- [ ] **Step 4: Implement backend support**
+  - Add the new source-text draft generation route
+  - Make generic assignment creation accept direct-field assignments without `mappingId`
+  - Keep teacher auth and class org checks identical to the existing assignment routes
+
+- [ ] **Step 5: Implement frontend Advanced mode selector + forms**
+  - Preserve Quick Assign as Canvas-only
+  - Add the `Canvas item` / `AI-assisted source` / `Manual authoring` selector only in Advanced
+  - Reuse the existing review form instead of inventing a second editing surface
+
+- [ ] **Step 6: Run focused tests**
+
+```bash
+python3 -m unittest backend.tests.test_curriculum_admin_routes backend.tests.test_curriculum_admin_api -v
+cd frontend && npm run test -- --run src/pages/TeacherAssignmentBuilderPage.test.tsx
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add backend/routes/curriculum_admin.py backend/routes/*.py database.py \
+        frontend/src/pages/TeacherAssignmentBuilderPage.tsx \
+        frontend/src/pages/TeacherAssignmentBuilderPage.test.tsx \
+        frontend/src/api/assignments.ts
+git commit -m "feat(teacher-builder): add non-Canvas advanced authoring follow-up
+
+Adds Advanced follow-up modes for:
+- AI-assisted source generation from pasted teacher materials
+- Manual authoring without Canvas linkage
+
+Quick Assign remains Canvas-only. Advanced is now the mixed authoring
+surface for both Canvas and non-Canvas assignments."
 ```
 
 ---
@@ -1104,7 +1260,7 @@ If all eleven steps pass, the migration is complete.
 
 # Self-Review
 
-**Spec coverage:** Phase 2 (delete curriculum_mappings, Q3=a) covered by Tasks A1–A3 + B2 + C1–C3. Phase 3 (Canvas content as AI source) covered by reusing existing canvas-practice code (verified in discovery) + Task A3 (resolver reads from assignment) + Task B2 (UI picker). Q2=c (Quick Assign thin, Advanced structured) covered by B2 + B3. Q1=a (class locale) already shipped in Phase 1 (commit 70f52a3).
+**Spec coverage:** Phase 2 (delete curriculum_mappings, Q3=a) covered by Tasks A1–A3 + B2 + C1–C3. Phase 3 (Canvas content as AI source) covered by reusing existing canvas-practice code (verified in discovery) + Task A3 (resolver reads from assignment) + Task B2 (UI picker). Q2=c (Quick Assign thin, Advanced structured) is partially covered by B2 + B3a; B3b tracks the remaining non-Canvas Advanced authoring modes. Q1=a (class locale) already shipped in Phase 1 (commit 70f52a3).
 
 **Placeholder scan:** A few steps reference "follow existing styling patterns" or "the existing dispatcher structure" — these are reasonable for a file-level rewrite where inlining 500+ lines of code into the plan would reduce readability. In those cases the task spec names the exact file path and the exact behavior change, so the executor can read the existing code at execution time. No `TODO`, `implement later`, or unresolved ambiguity in the task descriptions.
 

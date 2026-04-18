@@ -6,6 +6,8 @@ import type { CanvasCourseContentItem } from '@/types/canvas';
 const navigateMock = vi.fn();
 const getTeacherClassesMock = vi.fn();
 const getTeacherAssignmentsMock = vi.fn();
+const createAssignmentMock = vi.fn();
+const generateAssignmentDraftMock = vi.fn();
 const getCanvasContentForClassMock = vi.fn();
 const generateCanvasPracticeMock = vi.fn();
 const createCanvasPracticeMock = vi.fn();
@@ -25,6 +27,8 @@ vi.mock('@/api/teacher', () => ({
 
 vi.mock('@/api/assignments', () => ({
   getTeacherAssignments: (...args: unknown[]) => getTeacherAssignmentsMock(...args),
+  createAssignment: (...args: unknown[]) => createAssignmentMock(...args),
+  generateAssignmentDraft: (...args: unknown[]) => generateAssignmentDraftMock(...args),
 }));
 
 vi.mock('@/api/canvas', () => ({
@@ -97,6 +101,8 @@ describe('TeacherAssignmentBuilderPage', () => {
     navigateMock.mockReset();
     getTeacherClassesMock.mockReset();
     getTeacherAssignmentsMock.mockReset();
+    createAssignmentMock.mockReset();
+    generateAssignmentDraftMock.mockReset();
     getCanvasContentForClassMock.mockReset();
     generateCanvasPracticeMock.mockReset();
     createCanvasPracticeMock.mockReset();
@@ -287,5 +293,133 @@ describe('TeacherAssignmentBuilderPage', () => {
         status: 'draft',
       }),
     );
+  });
+
+  it('Advanced AI-assisted mode generates a draft from pasted source text and saves via direct assignment create', async () => {
+    getCanvasContentForClassMock.mockResolvedValue(CANVAS_ITEMS);
+    generateAssignmentDraftMock.mockResolvedValue({
+      success: true,
+      suggestions: {
+        scenario: 'Students use the pasted vocabulary packet to prepare for a restaurant role-play.',
+        targetExpressions: ['Quisiera...', 'La cuenta, por favor'],
+        focusGrammar: ['conditional politeness'],
+        successCriteria: ['Use at least two source expressions'],
+        taskType: 'information_gap',
+        suggestedTitle: 'Restaurant vocabulary rehearsal',
+        suggestedDescription: 'Use the pasted source packet to guide a speaking exchange.',
+        teacherNotes: 'Push learners to cite the pasted vocabulary naturally.',
+      },
+    });
+    createAssignmentMock.mockResolvedValue({
+      id: 'assignment-3',
+      orgId: 'org-1',
+      classId: 'class-1',
+      mappingId: null,
+      title: 'Restaurant vocabulary rehearsal',
+      description: 'Use the pasted source packet to guide a speaking exchange.',
+      status: 'draft',
+      taskType: 'information_gap',
+      successCriteria: ['Use at least two source expressions'],
+      modalityOverride: { mode: 'hybrid', voiceMinutesCap: null, textFallbackEnabled: true },
+      createdByUid: 'teacher-1',
+    });
+
+    render(<TeacherAssignmentBuilderPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('French 2 - Period 3')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'AI-assisted source' }));
+    fireEvent.change(screen.getByLabelText('Source packet'), {
+      target: { value: 'Key vocabulary: reservar, camarero, cuenta. Rubric note: ask for clarification politely.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Generate draft from source/i }));
+
+    await waitFor(() => {
+      expect(generateAssignmentDraftMock).toHaveBeenCalledWith(
+        'class-1',
+        'Key vocabulary: reservar, camarero, cuenta. Rubric note: ask for clarification politely.',
+      );
+    });
+
+    expect(await screen.findByDisplayValue('Restaurant vocabulary rehearsal')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Save as draft/i }));
+
+    await waitFor(() => {
+      expect(createAssignmentMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(createAssignmentMock).toHaveBeenCalledWith(
+      'class-1',
+      expect.objectContaining({
+        title: 'Restaurant vocabulary rehearsal',
+        description: 'Use the pasted source packet to guide a speaking exchange.',
+        instructions: 'Key vocabulary: reservar, camarero, cuenta. Rubric note: ask for clarification politely.',
+        generatedScenario: 'Students use the pasted vocabulary packet to prepare for a restaurant role-play.',
+        taskType: 'information_gap',
+        targetExpressions: ['Quisiera...', 'La cuenta, por favor'],
+        focusGrammar: ['conditional politeness'],
+        successCriteria: ['Use at least two source expressions'],
+        teacherNotes: 'Push learners to cite the pasted vocabulary naturally.',
+        status: 'draft',
+      }),
+    );
+  });
+
+  it('Advanced manual mode creates an assignment without Canvas selection', async () => {
+    getCanvasContentForClassMock.mockResolvedValue(CANVAS_ITEMS);
+    createAssignmentMock.mockResolvedValue({
+      id: 'assignment-4',
+      orgId: 'org-1',
+      classId: 'class-1',
+      mappingId: null,
+      title: 'Manual speaking task',
+      description: '',
+      status: 'draft',
+      taskType: 'opinion_gap',
+      successCriteria: [],
+      modalityOverride: { mode: 'hybrid', voiceMinutesCap: null, textFallbackEnabled: true },
+      createdByUid: 'teacher-1',
+    });
+
+    render(<TeacherAssignmentBuilderPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('French 2 - Period 3')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Manual authoring' }));
+    fireEvent.change(screen.getByLabelText('Assignment title'), {
+      target: { value: 'Manual speaking task' },
+    });
+    fireEvent.change(screen.getByLabelText('Instructions'), {
+      target: { value: 'Discuss your food preferences using full sentences.' },
+    });
+    fireEvent.change(screen.getByLabelText('Conversation scenario'), {
+      target: { value: 'You and a classmate are deciding what to order for lunch.' },
+    });
+    fireEvent.click(screen.getByRole('radio', { name: /Opinion gap/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save as draft/i }));
+
+    await waitFor(() => {
+      expect(createAssignmentMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(createAssignmentMock).toHaveBeenCalledWith(
+      'class-1',
+      expect.objectContaining({
+        title: 'Manual speaking task',
+        instructions: 'Discuss your food preferences using full sentences.',
+        generatedScenario: 'You and a classmate are deciding what to order for lunch.',
+        taskType: 'opinion_gap',
+        status: 'draft',
+      }),
+    );
+    expect(generateCanvasPracticeMock).not.toHaveBeenCalled();
+    expect(generateAssignmentDraftMock).not.toHaveBeenCalled();
+    expect(createCanvasPracticeMock).not.toHaveBeenCalled();
   });
 });

@@ -1335,6 +1335,7 @@ def create_assignment(
     target_expressions=None,
     focus_grammar=None,
     generated_scenario='',
+    teacher_notes='',
 ):
     """Create an assignment document."""
     doc_ref = get_assignment_ref(assignment_id) if assignment_id else get_assignments_collection().document()
@@ -1360,6 +1361,7 @@ def create_assignment(
         'target_expressions': list(target_expressions or []),
         'focus_grammar': list(focus_grammar or []),
         'generated_scenario': generated_scenario or '',
+        'teacher_notes': teacher_notes or '',
         'created_at': firestore.SERVER_TIMESTAMP,
         'updated_at': firestore.SERVER_TIMESTAMP,
     }

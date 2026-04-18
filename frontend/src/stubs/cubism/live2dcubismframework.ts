@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 export class Option {
   logFunction?: (message: string) => void;
   loggingLevel?: number;
@@ -12,4 +14,9 @@ export class CubismFramework {
   static startUp(_option?: Option) {}
   static initialize() {}
   static dispose() {}
+  static getIdManager() {
+    return {
+      getId: (id: string) => id,
+    };
+  }
 }

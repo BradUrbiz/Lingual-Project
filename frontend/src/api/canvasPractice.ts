@@ -59,6 +59,7 @@ export interface CreateCanvasPracticeResult {
   success: boolean;
   assignmentId: string;
   status: string;
+  error?: string;
 }
 
 export const createCanvasPractice = async (

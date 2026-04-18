@@ -615,6 +615,7 @@ class TestCanvasGeneratedBootstrapFromAssignment(unittest.TestCase):
             "generated_scenario": "You meet a new classmate. Tell them about your family.",
             "target_expressions": ["Mi familia", "Tengo hermanos"],
             "focus_grammar": ["possessive adjectives"],
+            "teacher_notes": "Keep the exchange informal and supportive.",
             "canvas_module_item_ref": {
                 "connection_id": "cn1",
                 "canvas_module_id": "mo1",
@@ -642,6 +643,13 @@ class TestCanvasGeneratedBootstrapFromAssignment(unittest.TestCase):
         self.assertIn("es-ES", bootstrap.get("systemPromptPreview", ""))
         # Mapping key is present (may be an empty/None-valued dto — just must exist)
         self.assertIn("mapping", bootstrap)
+        # Direct Canvas assignment fields must be exposed in the mapping-shaped
+        # DTO because launch UI, prompt overlays, and analytics snapshots still
+        # read these values from bootstrap["mapping"] during this migration.
+        self.assertEqual(bootstrap["mapping"]["generatedScenario"], "You meet a new classmate. Tell them about your family.")
+        self.assertEqual(bootstrap["mapping"]["targetExpressions"], ["Mi familia", "Tengo hermanos"])
+        self.assertEqual(bootstrap["mapping"]["focusGrammar"], ["possessive adjectives"])
+        self.assertEqual(bootstrap["mapping"]["teacherNotes"], "Keep the exchange informal and supportive.")
         # realtimeSessionParams uses the canvas_generated type
         self.assertEqual(
             bootstrap["realtimeSessionParams"]["practice"]["type"], "canvas_generated"

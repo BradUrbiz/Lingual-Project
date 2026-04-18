@@ -181,6 +181,7 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
                 target_expressions=data.get('targetExpressions', []),
                 focus_grammar=data.get('focusGrammar', []),
                 generated_scenario=scenario,
+                teacher_notes=data.get('teacherNotes', ''),
             )
 
             if canvas_module_item_id:

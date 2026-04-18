@@ -71,7 +71,7 @@ export interface AssignmentDto {
   id: string;
   orgId: string;
   classId: string;
-  mappingId: string;
+  mappingId: string | null;
   title: string;
   description: string;
   status: AssignmentStatus | string;
@@ -83,6 +83,12 @@ export interface AssignmentDto {
   successCriteria: string[];
   createdByUid: string;
   canvasModuleItemId?: string;
+  instructions?: string;
+  generatedScenario?: string;
+  objectives?: string[];
+  targetExpressions?: string[];
+  focusGrammar?: string[];
+  teacherNotes?: string;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
@@ -402,7 +408,7 @@ export interface CreateCurriculumMappingPayload {
 }
 
 export interface CreateAssignmentPayload {
-  mappingId: string;
+  mappingId?: string;
   title: string;
   description?: string;
   status?: AssignmentStatus;
@@ -412,6 +418,12 @@ export interface CreateAssignmentPayload {
   maxAttempts?: number | null;
   taskType?: AssignmentTaskType;
   successCriteria?: string[];
+  instructions?: string;
+  generatedScenario?: string;
+  objectives?: string[];
+  targetExpressions?: string[];
+  focusGrammar?: string[];
+  teacherNotes?: string;
 }
 
 export interface CreatePracticeSessionPayload {

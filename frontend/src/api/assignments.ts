@@ -54,6 +54,22 @@ interface AssignmentAnalyticsResponse {
   analytics: AssignmentAnalyticsData;
 }
 
+interface AssignmentDraftGenerateResponse {
+  success: boolean;
+  suggestions: {
+    scenario: string;
+    targetExpressions: string[];
+    focusGrammar: string[];
+    successCriteria: string[];
+    taskType: string;
+    suggestedTitle: string;
+    suggestedDescription: string;
+    teacherNotes: string;
+    objectives?: string[];
+  };
+  error?: string;
+}
+
 export const getTeacherCurriculumPackages = async (
   classId: string
 ): Promise<{ packages: TeacherCurriculumPackageSummary[]; limitations: string[] }> => {
@@ -88,6 +104,17 @@ export const createAssignment = async (
 ): Promise<AssignmentDto> => {
   const response = await api.post<AssignmentCreateResponse>(`/teacher/classes/${classId}/assignments`, payload);
   return response.data.assignment;
+};
+
+export const generateAssignmentDraft = async (
+  classId: string,
+  sourceText: string,
+): Promise<AssignmentDraftGenerateResponse> => {
+  const response = await api.post<AssignmentDraftGenerateResponse>(
+    `/teacher/classes/${classId}/assignment-drafts/generate`,
+    { sourceText },
+  );
+  return response.data;
 };
 
 export const getStudentAssignments = async (): Promise<StudentAssignmentSummary[]> => {

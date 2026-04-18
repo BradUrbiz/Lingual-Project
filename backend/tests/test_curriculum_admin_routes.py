@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from flask import Flask, session
@@ -9,6 +10,26 @@ from backend.services.membership_context import resolve_school_request_context
 
 def passthrough_login_required(func):
     return func
+
+
+class _FakeOpenAIResponse:
+    def __init__(self, payload):
+        self.choices = [type('Choice', (), {
+            'message': type('Message', (), {'content': json.dumps(payload)})()
+        })()]
+
+
+class _FakeOpenAIClient:
+    def __init__(self, payload):
+        self._payload = payload
+        self.chat = type('Chat', (), {
+            'completions': type('Completions', (), {
+                'create': self._create,
+            })()
+        })()
+
+    def _create(self, *args, **kwargs):
+        return _FakeOpenAIResponse(self._payload)
 
 
 SAMPLE_PACKAGE = {
@@ -360,6 +381,16 @@ def build_test_curriculum_context(module_id, situation_id):
 class CurriculumAdminRoutesTestCase(unittest.TestCase):
     def setUp(self):
         self.fake_db = FakeCurriculumAdminDb()
+        self.fake_openai_client = _FakeOpenAIClient({
+            'scenario': 'Students discuss a teacher-provided source packet and decide how to use the key vocabulary in context.',
+            'target_expressions': ['Quisiera practicar...', 'Segun la rubrica...'],
+            'focus_grammar': ['polite requests'],
+            'success_criteria': ['Use the source vocabulary naturally'],
+            'task_type': 'decision_making',
+            'suggested_title': 'Source-based speaking task',
+            'suggested_description': 'Use the pasted class materials to prepare a guided speaking task.',
+            'teacher_notes': 'Keep the discussion anchored to the pasted source packet.',
+        })
         self.app = Flask(__name__)
         self.app.secret_key = 'test-secret'
 
@@ -376,7 +407,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             db=self.fake_db,
             firebase_auth=None,
             get_current_user_uid=lambda: (session.get('user') or {}).get('uid'),
-            get_openai_client=lambda: None,
+            get_openai_client=lambda: self.fake_openai_client,
             get_assessment=lambda: {},
             compute_results=lambda *_args, **_kwargs: {},
             get_proficiency_description=lambda *_args, **_kwargs: {
@@ -451,6 +482,47 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         assignment_payload = assignment_response.get_json()['assignment']
         self.assertEqual(assignment_payload['status'], 'published')
         self.assertEqual(assignment_payload['mappingId'], mapping_payload['id'])
+
+    def test_teacher_can_create_direct_field_assignment_without_mapping(self):
+        self._set_session_user('teacher-1', 'mem-teacher')
+
+        response = self.client.post('/api/teacher/classes/class-1/assignments', json={
+            'title': 'Restaurant role-play',
+            'description': 'Practice polite ordering.',
+            'instructions': 'Use the target phrases naturally.',
+            'generatedScenario': 'You are ordering dinner at a busy restaurant.',
+            'taskType': 'information_gap',
+            'targetExpressions': ['Quisiera...', 'La cuenta, por favor'],
+            'focusGrammar': ['conditional politeness'],
+            'successCriteria': ['Order two items and ask one follow-up question'],
+            'teacherNotes': 'Push for full-sentence responses.',
+            'status': 'draft',
+        })
+        self.assertEqual(response.status_code, 201)
+        payload = response.get_json()
+        self.assertTrue(payload['success'])
+        assignment = payload['assignment']
+        self.assertEqual(assignment['title'], 'Restaurant role-play')
+        self.assertIsNone(assignment['mappingId'])
+        stored = self.fake_db.get_assignment(assignment['id'])
+        self.assertEqual(stored['instructions'], 'Use the target phrases naturally.')
+        self.assertEqual(stored['generated_scenario'], 'You are ordering dinner at a busy restaurant.')
+        self.assertEqual(stored['target_expressions'], ['Quisiera...', 'La cuenta, por favor'])
+        self.assertEqual(stored['focus_grammar'], ['conditional politeness'])
+        self.assertEqual(stored['teacher_notes'], 'Push for full-sentence responses.')
+
+    def test_teacher_can_generate_assignment_draft_from_source_text(self):
+        self._set_session_user('teacher-1', 'mem-teacher')
+
+        response = self.client.post('/api/teacher/classes/class-1/assignment-drafts/generate', json={
+            'sourceText': 'Key vocabulary: reservar, mesa, camarero. Rubric note: students should ask for clarification politely.',
+        })
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['success'])
+        self.assertEqual(payload['suggestions']['suggestedTitle'], 'Source-based speaking task')
+        self.assertIn('scenario', payload['suggestions'])
+        self.assertEqual(payload['suggestions']['taskType'], 'decision_making')
 
     def test_student_assignment_bootstrap_returns_realtime_params(self):
         self._set_session_user('teacher-1', 'mem-teacher')

@@ -605,6 +605,11 @@ def _resolve_canvas_generated_bootstrap(
         assignment.get("focus_grammar")
         or (mapping.get("focus_grammar") if mapping else [])
     )
+    teacher_notes = (
+        assignment.get("teacher_notes")
+        or (mapping.get("teacher_notes") if mapping else "")
+        or ""
+    )
     success_criteria = _normalize_string_list(assignment.get("success_criteria"))
     task_type = assignment_dto.get("taskType", "information_gap")
 
@@ -652,6 +657,10 @@ def _resolve_canvas_generated_bootstrap(
         evidence=pedagogy_context.get("evidence"),
         feedback_mode=(mapping_dto.get("feedbackPolicy") or {}).get("mode", "balanced"),
     )
+    mapping_dto["generatedScenario"] = scenario
+    mapping_dto["targetExpressions"] = target_expressions
+    mapping_dto["focusGrammar"] = focus_grammar
+    mapping_dto["teacherNotes"] = teacher_notes
 
     return {
         "assignment": assignment_dto,

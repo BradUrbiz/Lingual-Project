@@ -22,6 +22,7 @@ class CreateAssignmentDirectFieldsTest(unittest.TestCase):
             target_expressions=["Me gustaria", "La cuenta por favor"],
             focus_grammar=["conditional 'gustaria'"],
             generated_scenario="You are a waiter at a Madrid tapas bar...",
+            teacher_notes="Keep feedback focused on polite restaurant register.",
         )
         doc = self.db.get_assignment(assignment_id)
         self.assertEqual(doc["instructions"], "Practice ordering food in Spanish.")
@@ -30,6 +31,7 @@ class CreateAssignmentDirectFieldsTest(unittest.TestCase):
         self.assertEqual(doc["target_expressions"], ["Me gustaria", "La cuenta por favor"])
         self.assertEqual(doc["focus_grammar"], ["conditional 'gustaria'"])
         self.assertTrue(doc["generated_scenario"].startswith("You are a waiter"))
+        self.assertEqual(doc["teacher_notes"], "Keep feedback focused on polite restaurant register.")
 
     def test_create_assignment_default_fields_empty(self):
         assignment_id = self.db.create_assignment(
@@ -44,3 +46,4 @@ class CreateAssignmentDirectFieldsTest(unittest.TestCase):
         self.assertEqual(doc.get("focus_grammar", []), [])
         self.assertIsNone(doc.get("canvas_module_item_ref"))
         self.assertEqual(doc.get("generated_scenario", ""), "")
+        self.assertEqual(doc.get("teacher_notes", ""), "")

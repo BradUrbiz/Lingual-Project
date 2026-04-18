@@ -560,6 +560,7 @@ class FakeDbBase:
         target_expressions=None,
         focus_grammar=None,
         generated_scenario='',
+        teacher_notes='',
     ) -> str:
         aid = assignment_id or self._next_id("assign")
         self.assignments[aid] = {
@@ -584,6 +585,7 @@ class FakeDbBase:
             'target_expressions': list(target_expressions or []),
             'focus_grammar': list(focus_grammar or []),
             'generated_scenario': generated_scenario or '',
+            'teacher_notes': teacher_notes or '',
             'created_at': datetime.now(UTC),
             'updated_at': datetime.now(UTC),
         }

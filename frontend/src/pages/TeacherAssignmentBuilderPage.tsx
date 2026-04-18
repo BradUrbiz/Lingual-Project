@@ -8,7 +8,7 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { getTeacherAssignments } from '@/api/assignments';
+import { createAssignment, generateAssignmentDraft, getTeacherAssignments } from '@/api/assignments';
 import { getCanvasContentForClass } from '@/api/canvas';
 import { createCanvasPractice, generateCanvasPractice } from '@/api/canvasPractice';
 import type { CanvasItemContext, CanvasPracticeSuggestions } from '@/api/canvasPractice';
@@ -22,6 +22,8 @@ import type {
 } from '@/types';
 
 type CanvasPracticePhase = 'idle' | 'generating' | 'reviewing' | 'saving' | 'error';
+type BuilderMode = 'quick' | 'advanced';
+type AdvancedEntryMode = 'canvas' | 'source' | 'manual';
 
 const CANVAS_TASK_TYPE_OPTIONS: Array<{ value: AssignmentTaskType; label: string; description: string }> = [
   { value: 'information_gap', label: 'Information gap', description: 'Students exchange missing information' },
@@ -44,6 +46,10 @@ export function TeacherAssignmentBuilderPage() {
   const [teacherClasses, setTeacherClasses] = useState<TeacherClassSummary[]>([]);
   const [assignments, setAssignments] = useState<StudentAssignmentSummary[]>([]);
   const [canvasContent, setCanvasContent] = useState<CanvasCourseContentItem[]>([]);
+  const [builderMode, setBuilderMode] = useState<BuilderMode>('quick');
+  const [advancedEntryMode, setAdvancedEntryMode] = useState<AdvancedEntryMode>('canvas');
+  const [sourcePacketText, setSourcePacketText] = useState('');
+  const [draftInstructions, setDraftInstructions] = useState('');
 
   // ── Canvas-powered assignment state ──────────────────────────────────
   const [canvasPhase, setCanvasPhase] = useState<CanvasPracticePhase>('idle');
@@ -64,6 +70,7 @@ export function TeacherAssignmentBuilderPage() {
   const [canvasStatus, setCanvasStatus] = useState<'draft' | 'published'>('draft');
 
   const activeClass = teacherClasses.find((item) => item.id === classId) || null;
+  const usesCanvasWorkflow = builderMode === 'quick' || advancedEntryMode === 'canvas';
 
   const loadClassData = async (nextClassId: string) => {
     const [classes, classAssignments] = await Promise.all([
@@ -117,6 +124,8 @@ export function TeacherAssignmentBuilderPage() {
     setCanvasError(null);
     setSelectedCanvasItemId('');
     setCanvasItemContext(null);
+    setSourcePacketText('');
+    setDraftInstructions('');
     setCanvasTitle('');
     setCanvasDescription('');
     setCanvasScenario('');
@@ -129,10 +138,16 @@ export function TeacherAssignmentBuilderPage() {
     setCanvasStatus('draft');
   };
 
-  const populateCanvasFormFromSuggestions = (suggestions: CanvasPracticeSuggestions) => {
+  const populateCanvasFormFromSuggestions = (
+    suggestions: CanvasPracticeSuggestions,
+    nextInstructions?: string,
+  ) => {
     setCanvasTitle(suggestions.suggestedTitle || '');
     setCanvasDescription(suggestions.suggestedDescription || '');
     setCanvasScenario(suggestions.scenario || '');
+    if (nextInstructions !== undefined) {
+      setDraftInstructions(nextInstructions);
+    }
     const suggestedTaskType = suggestions.taskType as AssignmentTaskType;
     setCanvasTaskType(
       CANVAS_TASK_TYPE_OPTIONS.some((opt) => opt.value === suggestedTaskType)
@@ -179,9 +194,78 @@ export function TeacherAssignmentBuilderPage() {
     }
   };
 
-  const handleCanvasPublish = async () => {
+  const handleSourceDraftGenerate = async () => {
     if (!classId) return;
-    if (!selectedCanvasItemId) return;
+    const sourceText = sourcePacketText.trim();
+    if (!sourceText) {
+      setCanvasError('Please paste a source packet first.');
+      return;
+    }
+
+    setCanvasPhase('generating');
+    setCanvasError(null);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const result = await generateAssignmentDraft(classId, sourceText);
+      if (!result.success) {
+        setCanvasError(result.error || 'Generation failed.');
+        setCanvasPhase('error');
+        return;
+      }
+      setSelectedCanvasItemId('');
+      setCanvasItemContext(null);
+      populateCanvasFormFromSuggestions(result.suggestions, sourceText);
+      setCanvasPhase('reviewing');
+    } catch (generateError) {
+      setCanvasError(
+        generateError instanceof Error ? generateError.message : 'Failed to generate practice.'
+      );
+      setCanvasPhase('error');
+    }
+  };
+
+  const enterManualAuthoringMode = () => {
+    setCanvasError(null);
+    setSelectedCanvasItemId('');
+    setCanvasItemContext(null);
+    setCanvasTitle('');
+    setCanvasDescription('');
+    setDraftInstructions('');
+    setCanvasScenario('');
+    setCanvasTaskType('decision_making');
+    setCanvasTargetExpressions([]);
+    setCanvasFocusGrammar([]);
+    setCanvasSuccessCriteria([]);
+    setCanvasObjectives([]);
+    setCanvasTeacherNotes('');
+    setCanvasStatus('draft');
+    setCanvasPhase('reviewing');
+  };
+
+  const handleSelectAdvancedEntryMode = (mode: AdvancedEntryMode) => {
+    setAdvancedEntryMode(mode);
+    if (mode === 'manual') {
+      enterManualAuthoringMode();
+      return;
+    }
+    resetCanvasPracticeState();
+  };
+
+  const handleSelectBuilderMode = (mode: BuilderMode) => {
+    setBuilderMode(mode);
+    setCanvasError(null);
+    if (mode === 'quick') {
+      setAdvancedEntryMode('canvas');
+      resetCanvasPracticeState();
+      return;
+    }
+    handleSelectAdvancedEntryMode('canvas');
+  };
+
+  const handlePublishAssignment = async () => {
+    if (!classId) return;
     if (!canvasTitle.trim() || !canvasScenario.trim()) {
       setCanvasError('Title and scenario are required before publishing.');
       return;
@@ -193,24 +277,50 @@ export function TeacherAssignmentBuilderPage() {
     setSuccessMessage(null);
 
     try {
-      const result = await createCanvasPractice(classId, {
-        canvasContentId: selectedCanvasItemId,
-        canvasModuleItemId: canvasItemContext?.canvasItemId || '',
-        title: canvasTitle.trim(),
-        description: canvasDescription.trim(),
-        scenario: canvasScenario.trim(),
-        targetExpressions: canvasTargetExpressions,
-        focusGrammar: canvasFocusGrammar,
-        successCriteria: canvasSuccessCriteria,
-        objectives: canvasObjectives,
-        taskType: canvasTaskType,
-        teacherNotes: canvasTeacherNotes.trim(),
-        status: canvasStatus,
-      });
-      if (!result.success) {
-        // Forward the server's error message so teachers see a real reason,
-        // not the hardcoded string.
-        throw new Error(result.error || 'Creation failed');
+      if (usesCanvasWorkflow) {
+        if (!selectedCanvasItemId) {
+          setCanvasError('Please select a Canvas item first.');
+          setCanvasPhase('idle');
+          return;
+        }
+
+        const result = await createCanvasPractice(classId, {
+          canvasContentId: selectedCanvasItemId,
+          canvasModuleItemId: canvasItemContext?.canvasItemId || '',
+          title: canvasTitle.trim(),
+          description: canvasDescription.trim(),
+          scenario: canvasScenario.trim(),
+          targetExpressions: canvasTargetExpressions,
+          focusGrammar: canvasFocusGrammar,
+          successCriteria: canvasSuccessCriteria,
+          objectives: canvasObjectives,
+          taskType: canvasTaskType,
+          teacherNotes: canvasTeacherNotes.trim(),
+          status: canvasStatus,
+        });
+        if (!result.success) {
+          throw new Error(result.error || 'Creation failed');
+        }
+      } else {
+        if (!draftInstructions.trim()) {
+          setCanvasError('Instructions are required for non-Canvas assignments.');
+          setCanvasPhase('reviewing');
+          return;
+        }
+
+        await createAssignment(classId, {
+          title: canvasTitle.trim(),
+          description: canvasDescription.trim(),
+          status: canvasStatus,
+          taskType: canvasTaskType,
+          successCriteria: canvasSuccessCriteria,
+          instructions: draftInstructions.trim(),
+          generatedScenario: canvasScenario.trim(),
+          objectives: canvasObjectives,
+          targetExpressions: canvasTargetExpressions,
+          focusGrammar: canvasFocusGrammar,
+          teacherNotes: canvasTeacherNotes.trim(),
+        });
       }
       await loadClassData(classId);
       const publishedLabel = canvasStatus === 'published' ? 'published' : 'saved as draft';
@@ -227,6 +337,10 @@ export function TeacherAssignmentBuilderPage() {
   };
 
   const handleCanvasRegenerate = () => {
+    if (advancedEntryMode === 'source' && builderMode === 'advanced') {
+      void handleSourceDraftGenerate();
+      return;
+    }
     if (!selectedCanvasItemId) return;
     // Regenerate overwrites every review-form field with a new AI draft, so
     // guard against silent edit loss when the teacher is mid-review.
@@ -240,6 +354,10 @@ export function TeacherAssignmentBuilderPage() {
   };
 
   const handleCanvasPickDifferent = () => {
+    if (builderMode === 'advanced' && advancedEntryMode === 'manual') {
+      enterManualAuthoringMode();
+      return;
+    }
     resetCanvasPracticeState();
   };
 
@@ -308,21 +426,80 @@ export function TeacherAssignmentBuilderPage() {
         </Alert>
       )}
 
-      {/* ── Canvas-powered assignment form ─────────────────────────────── */}
-      {/* TODO(post-pilot): allow skipping Canvas picker and generating from
-          free-text instructions only. Requires a new backend endpoint. */}
       <Card className="border-3 border-foreground p-6 shadow-stamp">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
-              <Sparkles size={22} strokeWidth={2.5} />
-            </div>
-            <div>
-              <h2 className="text-xl font-display font-bold text-foreground">Create an assignment</h2>
-              <p className="text-sm text-muted-foreground">
-                Pick a Canvas page or assignment and let Lingual design a speaking practice tailored to it.
-              </p>
-            </div>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
+            <Sparkles size={22} strokeWidth={2.5} />
           </div>
+          <div>
+            <h2 className="text-xl font-display font-bold text-foreground">Create an assignment</h2>
+            <p className="text-sm text-muted-foreground">
+              {builderMode === 'quick'
+                ? 'Pick a Canvas page or assignment and let Lingual design a speaking practice tailored to it.'
+                : 'Use Advanced mode to build from Canvas, a pasted source packet, or a manual assignment draft.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-6 space-y-4">
+          <div className="flex gap-2" role="tablist" aria-label="Assignment builder mode">
+            <Button
+              type="button"
+              variant={builderMode === 'quick' ? 'default' : 'outline'}
+              onClick={() => handleSelectBuilderMode('quick')}
+            >
+              Quick Assign
+            </Button>
+            <Button
+              type="button"
+              variant={builderMode === 'advanced' ? 'default' : 'outline'}
+              onClick={() => handleSelectBuilderMode('advanced')}
+            >
+              Advanced
+            </Button>
+          </div>
+
+          {builderMode === 'advanced' && (
+            <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+              <p className="text-sm font-semibold text-foreground">Advanced entry mode</p>
+              <div role="radiogroup" aria-label="Advanced entry mode" className="grid gap-3 md:grid-cols-3">
+                {[
+                  {
+                    value: 'canvas' as const,
+                    label: 'Canvas item',
+                    description: 'Generate from synced Canvas content.',
+                  },
+                  {
+                    value: 'source' as const,
+                    label: 'AI-assisted source',
+                    description: 'Paste vocabulary, rubric notes, or lesson context.',
+                  },
+                  {
+                    value: 'manual' as const,
+                    label: 'Manual authoring',
+                    description: 'Write the assignment directly from scratch.',
+                  },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-label={option.label}
+                    aria-checked={advancedEntryMode === option.value}
+                    className={`rounded-xl border-2 p-4 text-left transition-colors ${
+                      advancedEntryMode === option.value
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border bg-card hover:border-primary/50'
+                    }`}
+                    onClick={() => handleSelectAdvancedEntryMode(option.value)}
+                  >
+                    <p className="font-semibold text-foreground">{option.label}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{option.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {canvasError && (
             <Alert variant="destructive" className="mb-4">
@@ -330,8 +507,7 @@ export function TeacherAssignmentBuilderPage() {
             </Alert>
           )}
 
-          {/* ── Empty Canvas state ───────────────────────────────────── */}
-          {canvasContent.length === 0 && (
+          {usesCanvasWorkflow && canvasContent.length === 0 && (
             <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-6 text-center">
               <p className="text-sm font-semibold text-foreground">Connect a Canvas course first</p>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -347,8 +523,7 @@ export function TeacherAssignmentBuilderPage() {
             </div>
           )}
 
-          {/* ── Idle phase: pick a Canvas item, click Generate ───────── */}
-          {canvasContent.length > 0 && canvasPhase === 'idle' && (
+          {usesCanvasWorkflow && canvasContent.length > 0 && canvasPhase === 'idle' && (
             <div className="space-y-5">
               <div className="space-y-2">
                 <label htmlFor="canvas-item-picker" className="text-sm font-semibold text-foreground">
@@ -405,19 +580,45 @@ export function TeacherAssignmentBuilderPage() {
             </div>
           )}
 
-          {/* ── Generating phase ─────────────────────────────────────── */}
-          {canvasContent.length > 0 && canvasPhase === 'generating' && (
+          {builderMode === 'advanced' && advancedEntryMode === 'source' && canvasPhase === 'idle' && (
+            <div className="space-y-5">
+              <Textarea
+                label="Source packet"
+                value={sourcePacketText}
+                onChange={(event) => {
+                  setSourcePacketText(event.target.value);
+                  setCanvasError(null);
+                }}
+                placeholder="Paste key vocabulary, rubric notes, lesson context, or a custom teacher prompt."
+              />
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">
+                  Lingual will turn the pasted packet into a draft scenario, target expressions, grammar focus, and success criteria.
+                </p>
+                <Button
+                  onClick={() => void handleSourceDraftGenerate()}
+                  disabled={!sourcePacketText.trim()}
+                >
+                  <Sparkles size={16} className="mr-2" />
+                  Generate draft from source
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {canvasPhase === 'generating' && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Loader2 size={40} className="mb-4 animate-spin text-primary" />
               <p className="text-base font-semibold text-foreground">AI is designing your speaking practice…</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Analyzing {canvasItemContext?.title || 'the selected Canvas item'} and generating a tailored scenario.
+                {usesCanvasWorkflow
+                  ? `Analyzing ${canvasItemContext?.title || 'the selected Canvas item'} and generating a tailored scenario.`
+                  : 'Analyzing your pasted source packet and generating a tailored scenario.'}
               </p>
             </div>
           )}
 
-          {/* ── Error phase ──────────────────────────────────────────── */}
-          {canvasContent.length > 0 && canvasPhase === 'error' && (
+          {canvasPhase === 'error' && (
             <div className="space-y-4">
               <Alert variant="destructive">
                 <AlertDescription>{canvasError || 'Generation failed.'}</AlertDescription>
@@ -425,14 +626,15 @@ export function TeacherAssignmentBuilderPage() {
               <div className="flex flex-wrap gap-3">
                 <Button onClick={handleCanvasRegenerate}>Try again</Button>
                 <Button variant="outline" onClick={handleCanvasPickDifferent}>
-                  Pick a different item
+                  {builderMode === 'advanced' && advancedEntryMode === 'source'
+                    ? 'Back to source input'
+                    : 'Pick a different item'}
                 </Button>
               </div>
             </div>
           )}
 
-          {/* ── Review / publish phase ───────────────────────────────── */}
-          {canvasContent.length > 0 && (canvasPhase === 'reviewing' || canvasPhase === 'saving') && (
+          {(canvasPhase === 'reviewing' || canvasPhase === 'saving') && (
             <div className="space-y-5">
               {canvasItemContext && (
                 <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
@@ -445,8 +647,17 @@ export function TeacherAssignmentBuilderPage() {
                 </div>
               )}
 
+              {builderMode === 'advanced' && advancedEntryMode === 'source' && !canvasItemContext && (
+                <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="accent" size="sm">Pasted source</Badge>
+                    <Badge variant="outline" size="sm">AI draft</Badge>
+                  </div>
+                  <p className="mt-2 text-sm text-foreground/80 line-clamp-4">{sourcePacketText || draftInstructions}</p>
+                </div>
+              )}
+
               <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
-                {/* Left column: core content */}
                 <div className="space-y-4">
                   <Input
                     label="Assignment title"
@@ -461,12 +672,23 @@ export function TeacherAssignmentBuilderPage() {
                     placeholder="Brief description shown on the student dashboard"
                   />
 
+                  {builderMode === 'advanced' && (
+                    <Textarea
+                      label="Instructions"
+                      value={draftInstructions}
+                      onChange={(event) => setDraftInstructions(event.target.value)}
+                      placeholder="Teacher instructions, pasted source packet, or guidance for the assignment."
+                    />
+                  )}
+
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <label htmlFor="canvas-scenario" className="text-base font-semibold text-foreground">
                         Conversation scenario
                       </label>
-                      <Badge variant="accent" size="sm">AI-generated</Badge>
+                      {advancedEntryMode !== 'manual' && (
+                        <Badge variant="accent" size="sm">AI-generated</Badge>
+                      )}
                     </div>
                     <textarea
                       id="canvas-scenario"
@@ -481,7 +703,9 @@ export function TeacherAssignmentBuilderPage() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <p className="text-base font-semibold text-foreground">Target expressions</p>
-                      <Badge variant="accent" size="sm">AI-generated</Badge>
+                      {advancedEntryMode !== 'manual' && (
+                        <Badge variant="accent" size="sm">AI-generated</Badge>
+                      )}
                     </div>
                     <TagListEditor
                       items={canvasTargetExpressions}
@@ -494,7 +718,9 @@ export function TeacherAssignmentBuilderPage() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <p className="text-base font-semibold text-foreground">Focus grammar</p>
-                      <Badge variant="accent" size="sm">AI-generated</Badge>
+                      {advancedEntryMode !== 'manual' && (
+                        <Badge variant="accent" size="sm">AI-generated</Badge>
+                      )}
                     </div>
                     <TagListEditor
                       items={canvasFocusGrammar}
@@ -507,7 +733,9 @@ export function TeacherAssignmentBuilderPage() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <p className="text-base font-semibold text-foreground">Success criteria</p>
-                      <Badge variant="accent" size="sm">AI-generated</Badge>
+                      {advancedEntryMode !== 'manual' && (
+                        <Badge variant="accent" size="sm">AI-generated</Badge>
+                      )}
                     </div>
                     <TagListEditor
                       items={canvasSuccessCriteria}
@@ -520,7 +748,9 @@ export function TeacherAssignmentBuilderPage() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <p className="text-base font-semibold text-foreground">Objectives</p>
-                      <Badge variant="accent" size="sm">AI-generated</Badge>
+                      {advancedEntryMode !== 'manual' && (
+                        <Badge variant="accent" size="sm">AI-generated</Badge>
+                      )}
                     </div>
                     <TagListEditor
                       items={canvasObjectives}
@@ -531,7 +761,6 @@ export function TeacherAssignmentBuilderPage() {
                   </div>
                 </div>
 
-                {/* Right column: task type + publish */}
                 <div className="space-y-4">
                   <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
                     <p className="text-base font-semibold text-foreground">Task type</p>
@@ -606,35 +835,40 @@ export function TeacherAssignmentBuilderPage() {
 
                     <Button
                       className="w-full"
-                      onClick={handleCanvasPublish}
+                      onClick={handlePublishAssignment}
                       loading={canvasPhase === 'saving'}
                       disabled={canvasPhase === 'saving' || !canvasTitle.trim() || !canvasScenario.trim()}
                     >
                       <Sparkles size={16} className="mr-2" />
                       {canvasStatus === 'published' ? 'Publish assignment' : 'Save as draft'}
                     </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={handleCanvasRegenerate}
-                      disabled={canvasPhase === 'saving'}
-                    >
-                      Regenerate suggestions
-                    </Button>
+                    {advancedEntryMode !== 'manual' && (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={handleCanvasRegenerate}
+                        disabled={canvasPhase === 'saving'}
+                      >
+                        Regenerate suggestions
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       className="w-full"
                       onClick={handleCanvasPickDifferent}
                       disabled={canvasPhase === 'saving'}
                     >
-                      Pick a different item
+                      {builderMode === 'advanced' && advancedEntryMode === 'manual'
+                        ? 'Start over'
+                        : 'Pick a different item'}
                     </Button>
                   </div>
                 </div>
               </div>
             </div>
           )}
-        </Card>
+        </div>
+      </Card>
 
       {/* Assignments list */}
       <Card className="border-3 border-foreground p-6 shadow-stamp">

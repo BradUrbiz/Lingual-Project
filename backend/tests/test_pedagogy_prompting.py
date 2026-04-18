@@ -1,7 +1,7 @@
 import unittest
 
-from backend.services.assignment_resolver import build_assignment_system_prompt
-from backend.services.pedagogy import (
+from backend.services.assignment_resolver import (
+    build_assignment_system_prompt,
     build_correction_ladder_prompt,
     build_feedback_mode_prompt,
     build_output_pressure_prompt,

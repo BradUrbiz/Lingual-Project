@@ -1,29 +1,847 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
 from backend.services.compliance import resolve_assignment_launch
-from backend.services.pedagogy import (
-    build_correction_ladder_prompt,
-    resolve_activity_templates,
-    build_feedback_mode_prompt,
-    build_output_pressure_prompt,
-    build_scaffold_ladder_prompt,
-    build_task_template_prompt,
-    normalize_feedback_policy,
-    normalize_output_policy,
-    normalize_scaffold_policy,
-    serialize_feedback_policy,
-    serialize_output_policy,
-    serialize_scaffold_policy,
-)
 
 
 SUPPORTED_ASSIGNMENT_STATUSES = {"draft", "published", "archived"}
 SUPPORTED_TASK_TYPES = {"information_gap", "opinion_gap", "decision_making"}
 SUPPORTED_MODALITY_MODES = {"text_only", "voice_only", "hybrid"}
+SUPPORTED_FEEDBACK_MODES = {"fluency_first", "balanced", "accuracy_first"}
+SUPPORTED_OUTPUT_PRESSURES = {"light", "balanced", "high"}
 TEACHER_ALLOWED_ROLES = {"teacher", "school_admin"}
+
+
+# ---------------------------------------------------------------------------
+# Inlined policy + prompt helpers (formerly backend/services/pedagogy/).
+#
+# These were extracted from the now-deleted ``backend/services/pedagogy/``
+# package (Task C1 of the Canvas-content migration). They power:
+#   * Policy normalization / serialization for feedback, scaffold, output —
+#     used by the Canvas-generated resolver and the surviving mapping CRUD.
+#   * Modular prompt section builders — used by
+#     ``build_assignment_system_prompt`` to overlay teacher policy,
+#     scaffolding, and task-template guidance onto every assignment prompt.
+# ---------------------------------------------------------------------------
+
+def _coerce_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, float):
+        return max(0, int(value))
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return max(0, int(value.strip()))
+    return None
+
+
+def _feedback_mode(value: Any) -> str:
+    mode = value.strip() if isinstance(value, str) else ""
+    return mode if mode in SUPPORTED_FEEDBACK_MODES else "balanced"
+
+
+def default_feedback_policy() -> dict[str, Any]:
+    return {
+        "mode": "balanced",
+        "target_only_strict": False,
+        "recast_default": True,
+        "elicitation_repeat_threshold": 3,
+        "end_review_enabled": True,
+    }
+
+
+def default_scaffold_policy() -> dict[str, Any]:
+    return {
+        "silence_tolerance_ms": 3000,
+        "hint_ladder": ["wait", "context_hint", "choice_prompt", "model_and_retry"],
+        "max_modeling_steps": 1,
+    }
+
+
+def default_output_policy() -> dict[str, Any]:
+    return {
+        "min_student_turn_words": 8,
+        "follow_up_pressure": "balanced",
+        "allow_clarification_requests": True,
+    }
+
+
+def normalize_feedback_policy(policy: Any) -> dict[str, Any]:
+    normalized = default_feedback_policy()
+    if isinstance(policy, dict):
+        normalized["mode"] = _feedback_mode(policy.get("mode"))
+
+        target_only_strict = policy.get("target_only_strict", policy.get("targetOnlyStrict"))
+        recast_default = policy.get("recast_default", policy.get("recastDefault"))
+        elicitation_repeat_threshold = policy.get(
+            "elicitation_repeat_threshold",
+            policy.get("elicitationRepeatThreshold"),
+        )
+        end_review_enabled = policy.get("end_review_enabled", policy.get("endReviewEnabled"))
+
+        if isinstance(target_only_strict, bool):
+            normalized["target_only_strict"] = target_only_strict
+        if isinstance(recast_default, bool):
+            normalized["recast_default"] = recast_default
+        if isinstance(elicitation_repeat_threshold, int):
+            normalized["elicitation_repeat_threshold"] = max(1, elicitation_repeat_threshold)
+        if isinstance(end_review_enabled, bool):
+            normalized["end_review_enabled"] = end_review_enabled
+    return normalized
+
+
+def normalize_scaffold_policy(policy: Any) -> dict[str, Any]:
+    normalized = default_scaffold_policy()
+    if isinstance(policy, dict):
+        silence_tolerance_ms = policy.get("silence_tolerance_ms", policy.get("silenceToleranceMs"))
+        hint_ladder = policy.get("hint_ladder", policy.get("hintLadder"))
+        max_modeling_steps = policy.get("max_modeling_steps", policy.get("maxModelingSteps"))
+
+        normalized_hint_ladder: list[str] = []
+        seen = set()
+        if isinstance(hint_ladder, list):
+            for item in hint_ladder:
+                cleaned = item.strip() if isinstance(item, str) else ""
+                if not cleaned or cleaned in seen:
+                    continue
+                normalized_hint_ladder.append(cleaned)
+                seen.add(cleaned)
+
+        if isinstance(silence_tolerance_ms, int):
+            normalized["silence_tolerance_ms"] = max(0, silence_tolerance_ms)
+        if normalized_hint_ladder:
+            normalized["hint_ladder"] = normalized_hint_ladder
+        if isinstance(max_modeling_steps, int):
+            normalized["max_modeling_steps"] = max(0, max_modeling_steps)
+    return normalized
+
+
+def _derived_output_policy_defaults(
+    *,
+    task_type: str = "",
+    evidence: dict[str, Any] | None = None,
+    feedback_mode: str = "balanced",
+) -> dict[str, Any]:
+    derived = default_output_policy()
+    normalized_task_type = task_type.strip() if isinstance(task_type, str) else ""
+    normalized_feedback_mode = _feedback_mode(feedback_mode)
+    evidence = evidence if isinstance(evidence, dict) else {}
+
+    if normalized_task_type == "information_gap":
+        derived["min_student_turn_words"] = 6
+        derived["follow_up_pressure"] = "balanced"
+    elif normalized_task_type == "opinion_gap":
+        derived["min_student_turn_words"] = 10
+        derived["follow_up_pressure"] = "high"
+    elif normalized_task_type == "decision_making":
+        derived["min_student_turn_words"] = 9
+        derived["follow_up_pressure"] = "high"
+
+    min_turns = _coerce_nonnegative_int(evidence.get("minTurns"))
+    if min_turns is not None and min_turns >= 5:
+        derived["min_student_turn_words"] = max(derived["min_student_turn_words"], 9)
+
+    if normalized_feedback_mode == "fluency_first":
+        derived["follow_up_pressure"] = "light"
+    elif normalized_feedback_mode == "accuracy_first":
+        derived["follow_up_pressure"] = "high"
+        derived["min_student_turn_words"] = max(derived["min_student_turn_words"], 8)
+
+    return derived
+
+
+def normalize_output_policy(
+    policy: Any,
+    *,
+    task_type: str = "",
+    evidence: dict[str, Any] | None = None,
+    feedback_mode: str = "balanced",
+) -> dict[str, Any]:
+    normalized = _derived_output_policy_defaults(
+        task_type=task_type,
+        evidence=evidence,
+        feedback_mode=feedback_mode,
+    )
+    if isinstance(policy, dict):
+        min_student_turn_words = policy.get(
+            "min_student_turn_words",
+            policy.get("minStudentTurnWords"),
+        )
+        follow_up_pressure_raw = policy.get("follow_up_pressure", policy.get("followUpPressure"))
+        follow_up_pressure = follow_up_pressure_raw.strip() if isinstance(follow_up_pressure_raw, str) else ""
+        allow_clarification_requests = policy.get(
+            "allow_clarification_requests",
+            policy.get("allowClarificationRequests"),
+        )
+
+        coerced_min_words = _coerce_nonnegative_int(min_student_turn_words)
+        if coerced_min_words is not None:
+            normalized["min_student_turn_words"] = max(1, coerced_min_words)
+        if follow_up_pressure in SUPPORTED_OUTPUT_PRESSURES:
+            normalized["follow_up_pressure"] = follow_up_pressure
+        if isinstance(allow_clarification_requests, bool):
+            normalized["allow_clarification_requests"] = allow_clarification_requests
+    return normalized
+
+
+def serialize_feedback_policy(policy: Any) -> dict[str, Any]:
+    normalized = normalize_feedback_policy(policy)
+    return {
+        "mode": normalized["mode"],
+        "targetOnlyStrict": normalized["target_only_strict"],
+        "recastDefault": normalized["recast_default"],
+        "elicitationRepeatThreshold": normalized["elicitation_repeat_threshold"],
+        "endReviewEnabled": normalized["end_review_enabled"],
+    }
+
+
+def serialize_scaffold_policy(policy: Any) -> dict[str, Any]:
+    normalized = normalize_scaffold_policy(policy)
+    return {
+        "silenceToleranceMs": normalized["silence_tolerance_ms"],
+        "hintLadder": normalized["hint_ladder"],
+        "maxModelingSteps": normalized["max_modeling_steps"],
+    }
+
+
+def serialize_output_policy(
+    policy: Any,
+    *,
+    task_type: str = "",
+    evidence: dict[str, Any] | None = None,
+    feedback_mode: str = "balanced",
+) -> dict[str, Any]:
+    normalized = normalize_output_policy(
+        policy,
+        task_type=task_type,
+        evidence=evidence,
+        feedback_mode=feedback_mode,
+    )
+    return {
+        "minStudentTurnWords": normalized["min_student_turn_words"],
+        "followUpPressure": normalized["follow_up_pressure"],
+        "allowClarificationRequests": normalized["allow_clarification_requests"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Prompt section builders (feedback mode, correction ladder, scaffold ladder,
+# output pressure, task-template directive). These assemble deterministic
+# text blocks that ``build_assignment_system_prompt`` overlays on top of the
+# scenario prompt for every assignment, Canvas-generated or legacy.
+# ---------------------------------------------------------------------------
+
+def build_feedback_mode_prompt(feedback_policy: dict[str, Any] | None) -> str:
+    feedback_policy = feedback_policy if isinstance(feedback_policy, dict) else {}
+    mode = feedback_policy.get("mode", "balanced")
+    target_only_strict = bool(feedback_policy.get("targetOnlyStrict", False))
+
+    if mode == "fluency_first":
+        lines = [
+            "Prioritize flow and confidence over interruption frequency.",
+            "Keep corrections short, embedded, and easy to ignore if the learner is still communicating successfully.",
+            "Do not turn every grammar issue into a teaching stop unless it blocks comprehension or the mapped target requires it.",
+        ]
+    elif mode == "accuracy_first":
+        lines = [
+            "Prioritize accurate production of the mapped targets over conversational speed.",
+            "Notice incorrect target-language forms early and move to guided self-correction sooner.",
+            "Use brief explicit cues when needed so the learner understands what form needs repair.",
+        ]
+    else:
+        lines = [
+            "Balance fluency support with timely corrective feedback.",
+            "Let the learner keep momentum, but do not ignore repeated target-language errors.",
+            "Escalate feedback only when the learner keeps missing the same target or the task goal is drifting.",
+        ]
+
+    if target_only_strict:
+        lines.append(
+            "Keep feedback tightly anchored to the mapped targets, focus grammar, and assignment success criteria."
+        )
+    else:
+        lines.append(
+            "Favor mapped targets first, but you may briefly support nearby language if it directly helps task completion."
+        )
+
+    return "FEEDBACK MODE DIRECTIVE:\n" + "\n".join(f"- {line}" for line in lines)
+
+
+def build_correction_ladder_prompt(feedback_policy: dict[str, Any] | None) -> str:
+    feedback_policy = feedback_policy if isinstance(feedback_policy, dict) else {}
+    recast_default = bool(feedback_policy.get("recastDefault", True))
+    elicitation_repeat_threshold = max(
+        1,
+        int(feedback_policy.get("elicitationRepeatThreshold", 3) or 3),
+    )
+    end_review_enabled = bool(feedback_policy.get("endReviewEnabled", True))
+
+    ladder_lines = []
+    if recast_default:
+        ladder_lines.append(
+            "First target error encounter: use a brief natural recast and continue the task without turning it into a lecture."
+        )
+    else:
+        ladder_lines.append(
+            "First target error encounter: move directly to a short elicitation cue instead of a silent recast."
+        )
+
+    ladder_lines.extend(
+        [
+            (
+                f"When the same error family repeats {elicitation_repeat_threshold} time(s), "
+                "pause briefly and ask the learner to repair it."
+            ),
+            "If the learner self-corrects, acknowledge briefly and resume the task immediately.",
+            "If the learner cannot self-correct after a short attempt, provide the model and ask for one retry before moving on.",
+        ]
+    )
+
+    if end_review_enabled:
+        ladder_lines.append(
+            "Near the end of the session, summarize 1-3 recurring issues with short metalinguistic review items tied to the learner's actual errors."
+        )
+    else:
+        ladder_lines.append(
+            "Do not add a formal end-of-session review block unless the learner explicitly asks for one."
+        )
+
+    return "CORRECTION LADDER:\n" + "\n".join(f"- {line}" for line in ladder_lines)
+
+
+_SCAFFOLD_STEP_INSTRUCTIONS = {
+    "wait": "Hold space first and let the learner try before you help.",
+    "context_hint": "Give a situational cue tied to the scenario, role, or communicative goal instead of supplying the answer.",
+    "choice_prompt": "Offer a small forced choice or contrast so the learner still has to select and produce language.",
+    "model_and_retry": "Model the target form only after earlier steps fail, then ask the learner to try again.",
+}
+
+
+def build_scaffold_ladder_prompt(scaffold_policy: dict[str, Any] | None) -> str:
+    scaffold_policy = scaffold_policy if isinstance(scaffold_policy, dict) else {}
+    silence_tolerance_ms = max(0, int(scaffold_policy.get("silenceToleranceMs", 3000) or 3000))
+    hint_ladder = scaffold_policy.get("hintLadder", [])
+    max_modeling_steps = max(0, int(scaffold_policy.get("maxModelingSteps", 1) or 1))
+
+    ordered_steps = [
+        step
+        for step in hint_ladder
+        if isinstance(step, str) and step.strip()
+    ] or ["wait", "context_hint", "choice_prompt", "model_and_retry"]
+
+    lines = [
+        f"Allow brief productive silence for up to about {silence_tolerance_ms} ms before stepping in.",
+        "Use the scaffold ladder in order instead of jumping straight to the full answer.",
+    ]
+
+    for index, step in enumerate(ordered_steps, start=1):
+        instruction = _SCAFFOLD_STEP_INSTRUCTIONS.get(
+            step,
+            "Use the configured support move without removing the learner's responsibility.",
+        )
+        lines.append(f"Step {index} ({step}): {instruction}")
+
+    if max_modeling_steps <= 0:
+        lines.append("Avoid full modeling unless task completion would otherwise stall completely.")
+    else:
+        lines.append(
+            f"Limit full model-and-retry support to about {max_modeling_steps} modeling step(s) for the same struggle point before moving on."
+        )
+
+    return "SCAFFOLD LADDER:\n" + "\n".join(f"- {line}" for line in lines)
+
+
+def build_output_pressure_prompt(
+    output_policy: dict[str, Any] | None,
+    *,
+    assignment: dict[str, Any] | None,
+    pedagogy: dict[str, Any] | None,
+) -> str:
+    output_policy = output_policy if isinstance(output_policy, dict) else {}
+    assignment = assignment if isinstance(assignment, dict) else {}
+    pedagogy = pedagogy if isinstance(pedagogy, dict) else {}
+
+    min_student_turn_words = max(1, int(output_policy.get("minStudentTurnWords", 8) or 8))
+    follow_up_pressure = output_policy.get("followUpPressure", "balanced")
+    allow_clarification_requests = bool(output_policy.get("allowClarificationRequests", True))
+    evidence = pedagogy.get("evidence", {}) if isinstance(pedagogy.get("evidence"), dict) else {}
+
+    lines = [
+        f"Aim for learner turns of roughly {min_student_turn_words}+ words when the task naturally allows it.",
+        "Do not accept one-word or fragment answers as task completion if the learner can reasonably elaborate.",
+    ]
+
+    if follow_up_pressure == "light":
+        lines.append(
+            "Use gentle expansion prompts such as asking for one more detail, reason, or example after short responses."
+        )
+    elif follow_up_pressure == "high":
+        lines.append(
+            "Actively press for elaboration with follow-up questions, comparisons, and justification until the learner produces fuller output."
+        )
+    else:
+        lines.append(
+            "Use moderate follow-up pressure: ask for clarification, justification, or one extra detail when the learner stays too brief."
+        )
+
+    if allow_clarification_requests:
+        lines.append(
+            "Allow the learner to ask for clarification or repetition, but answer in a way that returns responsibility to the learner."
+        )
+    else:
+        lines.append(
+            "Keep clarification support minimal so the learner must stay in productive output mode."
+        )
+
+    min_turns = evidence.get("minTurns")
+    if isinstance(min_turns, int) and min_turns > 0:
+        lines.append(f"Use follow-ups and wait time to help the learner reach the target turn volume of about {min_turns} turns.")
+
+    success_criteria = assignment.get("successCriteria", [])
+    if isinstance(success_criteria, list) and success_criteria:
+        lines.append("Tie elaboration requests back to the assignment success criteria whenever possible.")
+
+    return "OUTPUT PRESSURE:\n" + "\n".join(f"- {line}" for line in lines)
+
+
+# --- Task template directive (inlined from pedagogy/task_template.py + template_catalog.py) ---
+
+_TASK_TEMPLATE_RULES = {
+    "information_gap": {
+        "headline": (
+            "Treat the exchange as an information-gap task where the learner must uncover missing details "
+            "through targeted questions and confirmations."
+        ),
+        "phases": [
+            "Open by establishing what concrete information the learner still needs in order to complete the scenario.",
+            "Release missing details gradually across turns so the learner has to ask, confirm, and narrow down specifics.",
+            "Close by having the learner confirm the completed information, next action, or shared understanding.",
+        ],
+        "completion": (
+            "Do not treat the task as complete until the learner has actively filled the missing information "
+            "rather than passively receiving it."
+        ),
+    },
+    "opinion_gap": {
+        "headline": (
+            "Treat the exchange as an opinion-gap task where the learner must state a view, justify it, "
+            "respond to another perspective, and refine the position."
+        ),
+        "phases": [
+            "Open by inviting a clear preference, stance, or claim instead of a vague reaction.",
+            "Press for reasons, examples, comparisons, and follow-up defense when the learner stays superficial.",
+            "Close by making the learner restate or refine the final position after considering alternatives.",
+        ],
+        "completion": (
+            "Do not treat the task as complete until the learner has supported a viewpoint with reasons or "
+            "examples and responded to at least one alternate perspective."
+        ),
+    },
+    "decision_making": {
+        "headline": (
+            "Treat the exchange as a decision-making task where the learner must compare options, negotiate "
+            "trade-offs, and reach a justified choice."
+        ),
+        "phases": [
+            "Open by framing a concrete decision that cannot be resolved with a single isolated answer.",
+            "Surface trade-offs across at least two options so the learner has to compare, reject, or revise proposals.",
+            "Close by requiring a final recommendation, agreement, or explicit reason for rejecting the available options.",
+        ],
+        "completion": (
+            "Do not treat the task as complete until the learner has weighed options and reached, or explicitly "
+            "declined, a clear decision with justification."
+        ),
+    },
+}
+
+_TASK_MODEL_HINTS = {
+    "ap.conversation": (
+        "Use an interpersonal conversation shape: stay spontaneous, react to the learner's last turn, "
+        "and avoid turning the task into a scripted drill or quiz."
+    ),
+}
+
+_REGISTER_HINTS = {
+    "formal": "Keep the exchange in a formal or polite register unless the scenario explicitly requires quoting informal speech.",
+    "informal": "Keep the exchange natural and informal, like peers speaking casually inside the scenario.",
+    "mixed": "Allow natural shifts between polite and casual language when the roles or task require it, but stay school-appropriate.",
+}
+
+_COMMUNICATIVE_FUNCTION_HINTS = {
+    "ask_follow_up": "Create moments where the learner must ask a targeted follow-up question to move the task forward.",
+    "ask_for_clarification": "Leave enough ambiguity that the learner may need to ask for clarification or repetition before continuing.",
+    "summarize": "Before closing, require the learner to summarize the agreed information, opinion, or decision in their own words.",
+}
+
+_DISCOURSE_MOVE_HINTS = {
+    "turn_taking": "Keep turns responsive and balanced so the learner has to react to the previous turn rather than deliver an isolated monologue.",
+    "self_correction": "Leave space for brief self-repair when the learner notices a problem instead of instantly supplying the corrected form.",
+}
+
+_TEMPLATE_REF_HINTS = {
+    "roleplay": "Stay in character for the resolved roles instead of slipping into teacher explanation mode.",
+    "conversation": "Keep the exchange natural and collaborative rather than turning it into a checklist interview.",
+    "interview": "Use interviewer and interviewee turn logic with targeted follow-up questions and concrete answers.",
+    "debate": "Challenge reasons and require rebuttal or concession instead of accepting the learner's first opinion at face value.",
+    "negotiation": "Keep surfacing trade-offs until the learner responds to constraints and works toward an agreement.",
+    "problem_solving": "Introduce constraints that require the learner to propose, evaluate, and refine a solution.",
+}
+
+_VERSION_SEGMENT = re.compile(r"^v\d+$", re.IGNORECASE)
+_WORD_BOUNDARY_PATTERN = re.compile(r"[\s._-]+")
+
+
+def _humanize_identifier(value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        return ""
+
+    segments = [segment for segment in _WORD_BOUNDARY_PATTERN.split(normalized) if segment]
+    if segments and segments[0].lower() in {"tpl", "template"}:
+        segments = segments[1:]
+    if segments and _VERSION_SEGMENT.match(segments[-1]):
+        segments = segments[:-1]
+
+    return " ".join(segments)
+
+
+def _tt_normalize_string(value: Any) -> str:
+    return value.strip() if isinstance(value, str) and value.strip() else ""
+
+
+def _tt_normalize_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def _tt_unique_preserving_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        ordered.append(item)
+    return ordered
+
+
+def _resolve_situation_seed(curriculum: dict[str, Any]) -> dict[str, Any]:
+    situation = curriculum.get("situation", {}) if isinstance(curriculum.get("situation"), dict) else {}
+    return situation.get("seed", {}) if isinstance(situation.get("seed"), dict) else {}
+
+
+def _resolve_can_do_summaries(curriculum: dict[str, Any]) -> list[str]:
+    summaries: list[str] = []
+    for objective in curriculum.get("objectives", []):
+        if not isinstance(objective, dict):
+            continue
+        can_do = objective.get("canDo", {}) if isinstance(objective.get("canDo"), dict) else {}
+        summary = _tt_normalize_string(can_do.get("en")) or _tt_normalize_string(objective.get("id"))
+        if summary:
+            summaries.append(summary)
+    return summaries
+
+
+def _resolve_rubric_dimension_lookup(curriculum: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    lookup: dict[str, tuple[str, str]] = {}
+    for rubric in curriculum.get("rubrics", []):
+        if not isinstance(rubric, dict):
+            continue
+        for dimension in rubric.get("dimensions", []):
+            if not isinstance(dimension, dict):
+                continue
+            dimension_id = _tt_normalize_string(dimension.get("id"))
+            if not dimension_id:
+                continue
+            title_payload = dimension.get("title", {}) if isinstance(dimension.get("title"), dict) else {}
+            description_payload = (
+                dimension.get("description", {}) if isinstance(dimension.get("description"), dict) else {}
+            )
+            title = _tt_normalize_string(title_payload.get("en"))
+            description = _tt_normalize_string(description_payload.get("en"))
+            lookup[dimension_id] = (title or _humanize_identifier(dimension_id), description)
+    return lookup
+
+
+def _resolve_template_ref_hints(template_refs: list[str]) -> list[str]:
+    hints: list[str] = []
+    for template_ref in template_refs:
+        lowered_ref = template_ref.lower()
+        for keyword, hint in _TEMPLATE_REF_HINTS.items():
+            if keyword in lowered_ref:
+                hints.append(hint)
+    return _tt_unique_preserving_order(hints)
+
+
+def _resolve_activity_template_lines(activity_templates: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    for template in activity_templates:
+        if not isinstance(template, dict):
+            continue
+        title = _tt_normalize_string((template.get("title") or {}).get("en")) if isinstance(template.get("title"), dict) else ""
+        template_id = _tt_normalize_string(template.get("id"))
+        assistant_role = _tt_normalize_string(template.get("assistantRole"))
+        interaction = (
+            template.get("interactionPattern", {})
+            if isinstance(template.get("interactionPattern"), dict)
+            else {}
+        )
+
+        label = title or template_id
+        if label:
+            lines.append(f"Resolved structured activity template: {label}.")
+        if assistant_role:
+            lines.append(f"Template assistant role: {assistant_role}")
+
+        for move in _tt_normalize_string_list(interaction.get("openingMoves")):
+            lines.append(f"Template opening move: {move}")
+        for move in _tt_normalize_string_list(interaction.get("sustainMoves")):
+            lines.append(f"Template sustain move: {move}")
+        for move in _tt_normalize_string_list(interaction.get("closingMoves")):
+            lines.append(f"Template closing move: {move}")
+
+        completion_rule = _tt_normalize_string(interaction.get("completionRule"))
+        if completion_rule:
+            lines.append(f"Template completion rule: {completion_rule}")
+
+        for cue in _tt_normalize_string_list(template.get("promptCues")):
+            lines.append(f"Template cue: {cue}")
+
+    return _tt_unique_preserving_order(lines)
+
+
+def _resolve_function_lines(function_ids: list[str]) -> list[str]:
+    lines: list[str] = []
+    for function_id in function_ids:
+        lines.append(
+            _COMMUNICATIVE_FUNCTION_HINTS.get(
+                function_id,
+                f"Create a visible moment where the learner must perform {_humanize_identifier(function_id)}.",
+            )
+        )
+    return _tt_unique_preserving_order(lines)
+
+
+def _resolve_discourse_move_lines(move_ids: list[str]) -> list[str]:
+    lines: list[str] = []
+    for move_id in move_ids:
+        lines.append(
+            _DISCOURSE_MOVE_HINTS.get(
+                move_id,
+                f"Let the exchange visibly surface the discourse move {_humanize_identifier(move_id)}.",
+            )
+        )
+    return _tt_unique_preserving_order(lines)
+
+
+def build_task_template_prompt(
+    *,
+    task_type: str,
+    assignment: dict[str, Any] | None,
+    curriculum: dict[str, Any] | None,
+    pedagogy: dict[str, Any] | None,
+    mapping: dict[str, Any] | None = None,
+) -> str:
+    assignment = assignment if isinstance(assignment, dict) else {}
+    curriculum = curriculum if isinstance(curriculum, dict) else {}
+    pedagogy = pedagogy if isinstance(pedagogy, dict) else {}
+    mapping = mapping if isinstance(mapping, dict) else {}
+
+    evidence = pedagogy.get("evidence", {}) if isinstance(pedagogy.get("evidence"), dict) else {}
+    situation_seed = _resolve_situation_seed(curriculum)
+
+    template_rule = _TASK_TEMPLATE_RULES.get(task_type, _TASK_TEMPLATE_RULES["decision_making"])
+    lines = [
+        template_rule["headline"],
+        *[
+            f"Phase {index}: {phase}"
+            for index, phase in enumerate(template_rule["phases"], start=1)
+        ],
+        f"Completion gate: {template_rule['completion']}",
+    ]
+
+    task_model = _tt_normalize_string(pedagogy.get("taskModel"))
+    if task_model:
+        task_model_hint = _TASK_MODEL_HINTS.get(
+            task_model,
+            f"Keep the interaction consistent with the resolved task model {_humanize_identifier(task_model)}.",
+        )
+        lines.append(task_model_hint)
+
+    scenario_parts: list[str] = []
+    setting = _tt_normalize_string(situation_seed.get("setting"))
+    roles = _tt_normalize_string_list(situation_seed.get("roles"))
+    register = _tt_normalize_string(situation_seed.get("register"))
+
+    if setting:
+        scenario_parts.append(f"setting={setting}")
+    if roles:
+        scenario_parts.append(f"roles={', '.join(roles)}")
+    if register:
+        scenario_parts.append(f"register={register}")
+        register_hint = _REGISTER_HINTS.get(register)
+        if register_hint:
+            lines.append(register_hint)
+
+    if scenario_parts:
+        lines.append(f"Resolved scenario anchor: {'; '.join(scenario_parts)}.")
+
+    context_tags = _tt_normalize_string_list(pedagogy.get("contextTags"))
+    if context_tags:
+        lines.append(
+            f"Keep the exchange grounded in these curriculum context tags when possible: {', '.join(context_tags)}."
+        )
+
+    allowed_context_tags = _tt_normalize_string_list(mapping.get("allowedContextTags"))
+    if allowed_context_tags:
+        lines.append(f"Teacher-approved context bounds: {', '.join(allowed_context_tags)}.")
+
+    template_refs = _tt_normalize_string_list(pedagogy.get("templateRefs"))
+    activity_templates = pedagogy.get("activityTemplates", []) if isinstance(pedagogy.get("activityTemplates"), list) else []
+    if activity_templates:
+        lines.extend(_resolve_activity_template_lines(activity_templates))
+    if template_refs:
+        lines.append(f"Resolved curriculum template references: {', '.join(template_refs)}.")
+        if not activity_templates:
+            lines.extend(_resolve_template_ref_hints(template_refs))
+
+    communicative_functions = _tt_normalize_string_list(pedagogy.get("communicativeFunctions"))
+    if communicative_functions:
+        lines.append(
+            "Make the learner visibly perform these communicative functions when possible: "
+            + ", ".join(communicative_functions)
+            + "."
+        )
+        lines.extend(_resolve_function_lines(communicative_functions))
+
+    discourse_moves = _tt_normalize_string_list(pedagogy.get("discourseMoves"))
+    if discourse_moves:
+        lines.append(
+            "Surface these discourse moves in the interaction when possible: "
+            + ", ".join(discourse_moves)
+            + "."
+        )
+        lines.extend(_resolve_discourse_move_lines(discourse_moves))
+
+    rubric_focus = _tt_normalize_string_list(mapping.get("rubricFocus"))
+    if rubric_focus:
+        rubric_lookup = _resolve_rubric_dimension_lookup(curriculum)
+        lines.extend(
+            [
+                f"Bias the exchange toward rubric evidence for {rubric_lookup.get(dimension_id, (_humanize_identifier(dimension_id), ''))[0]}."
+                + (
+                    f" {rubric_lookup[dimension_id][1]}"
+                    if dimension_id in rubric_lookup and rubric_lookup[dimension_id][1]
+                    else ""
+                )
+                for dimension_id in rubric_focus
+            ]
+        )
+
+    can_do_summaries = _resolve_can_do_summaries(curriculum)
+    if can_do_summaries:
+        lines.append(
+            "Create visible evidence for these mapped curriculum outcomes: "
+            + "; ".join(can_do_summaries[:3])
+            + ("." if len(can_do_summaries) <= 3 else "; and the remaining mapped objectives.")
+        )
+
+    evidence_targets: list[str] = []
+    min_turns = evidence.get("minTurns")
+    max_turns = evidence.get("maxTurns")
+    time_limit_sec = evidence.get("timeLimitSec")
+    max_replays = evidence.get("maxReplays")
+    if isinstance(min_turns, int) and min_turns > 0:
+        evidence_targets.append(f"about {min_turns} learner turns")
+    if isinstance(max_turns, int) and max_turns > 0:
+        evidence_targets.append(f"no more than about {max_turns} total turns")
+    if isinstance(time_limit_sec, int) and time_limit_sec > 0:
+        evidence_targets.append(f"finish within about {time_limit_sec} seconds")
+    if evidence_targets:
+        lines.append(
+            "Plan the interaction to support "
+            + ", ".join(evidence_targets)
+            + " when the scenario naturally allows it."
+        )
+    if isinstance(max_replays, int) and max_replays >= 0:
+        lines.append(f"Avoid replaying the same prompt more than about {max_replays} time(s) before moving the task forward.")
+
+    success_criteria = _tt_normalize_string_list(assignment.get("successCriteria"))
+    if success_criteria:
+        lines.append(
+            "Do not close the task until the learner has materially demonstrated: "
+            + "; ".join(success_criteria)
+            + "."
+        )
+
+    description = _tt_normalize_string(assignment.get("description"))
+    if description:
+        lines.append(f"Assignment framing to preserve: {description}")
+
+    return "TASK TEMPLATE DIRECTIVE:\n" + "\n".join(f"- {line}" for line in _tt_unique_preserving_order(lines))
+
+
+# --- Activity template resolution (inlined from pedagogy/curriculum_templates.py) ---
+
+def _serialize_activity_template(template: dict[str, Any] | None) -> dict[str, Any]:
+    template = template if isinstance(template, dict) else {}
+    interaction = template.get("interactionPattern", {}) if isinstance(template.get("interactionPattern"), dict) else {}
+
+    def _norm_i18n(value: Any) -> dict[str, str]:
+        if not isinstance(value, dict):
+            return {}
+        return {
+            str(locale).strip(): text.strip()
+            for locale, text in value.items()
+            if isinstance(locale, str) and locale.strip() and isinstance(text, str) and text.strip()
+        }
+
+    return {
+        "id": _tt_normalize_string(template.get("id")),
+        "title": _norm_i18n(template.get("title")),
+        "mode": _tt_normalize_string(template.get("mode")),
+        "assistantRole": _tt_normalize_string(template.get("assistantRole")),
+        "interactionPattern": {
+            "openingMoves": _tt_normalize_string_list(interaction.get("openingMoves")),
+            "sustainMoves": _tt_normalize_string_list(interaction.get("sustainMoves")),
+            "closingMoves": _tt_normalize_string_list(interaction.get("closingMoves")),
+            "completionRule": _tt_normalize_string(interaction.get("completionRule")),
+        },
+        "promptCues": _tt_normalize_string_list(template.get("promptCues")),
+    }
+
+
+def resolve_activity_templates(
+    package: dict[str, Any] | None,
+    *,
+    template_refs: list[str] | None,
+) -> list[dict[str, Any]]:
+    refs = _tt_normalize_string_list(template_refs)
+    if not refs:
+        return []
+
+    package = package if isinstance(package, dict) else {}
+    templates_obj = package.get("templates", {}) if isinstance(package.get("templates"), dict) else {}
+    template_index: dict[str, dict[str, Any]] = {}
+    for template in templates_obj.get("activityTemplates", []) or []:
+        if not isinstance(template, dict):
+            continue
+        serialized = _serialize_activity_template(template)
+        tid = serialized.get("id")
+        if tid:
+            template_index[tid] = serialized
+
+    resolved: list[dict[str, Any]] = []
+    for template_ref in refs:
+        template = template_index.get(template_ref)
+        if template:
+            resolved.append(template)
+    return resolved
 
 
 def _normalize_string(value: Any) -> str:

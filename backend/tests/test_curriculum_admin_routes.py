@@ -293,6 +293,15 @@ class FakeCurriculumAdminDb:
         record = self.student_compliance_records.get(f'{org_id}_{student_uid}')
         return dict(record) if record else None
 
+    def upsert_student_compliance_record(self, org_id, student_uid, record):
+        self.student_compliance_records[f'{org_id}_{student_uid}'] = dict(record)
+
+    def get_user(self, uid):
+        return {'uid': uid, 'profile': {'age': 15}}
+
+    def get_organization(self, org_id):
+        return self.organizations.get(org_id)
+
     def create_consent_event(self, **payload):
         self.consent_events.append(dict(payload))
         return f'event-{len(self.consent_events)}'
@@ -620,6 +629,52 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         self.assertEqual(analytics['pedagogy']['evidence']['minTurns'], 4)
         self.assertEqual(analytics['pedagogy']['objectives'], [])
         self.assertEqual(analytics['pedagogy']['rubrics'], [])
+
+    def _reset_student_voice_consent(self):
+        record = self.fake_db.student_compliance_records['org-1_student-1']
+        record['voice_consent_status'] = 'unknown'
+        record['voice_allowed'] = False
+
+    def test_student_self_consent_grants_voice(self):
+        self._reset_student_voice_consent()
+        self._set_session_user('student-1', 'mem-student')
+        response = self.client.post(
+            '/api/student/voice-consent',
+            json={'status': 'granted'},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertTrue(body['success'])
+        self.assertEqual(body['compliance']['voiceConsentStatus'], 'granted')
+        self.assertTrue(body['compliance']['voiceAllowed'])
+        stored = self.fake_db.get_student_compliance_record('org-1', 'student-1')
+        self.assertEqual(stored['voice_consent_status'], 'granted')
+
+    def test_student_self_consent_revoke(self):
+        self._set_session_user('student-1', 'mem-student')
+        response = self.client.post(
+            '/api/student/voice-consent',
+            json={'status': 'revoked'},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(body['compliance']['voiceConsentStatus'], 'revoked')
+        self.assertFalse(body['compliance']['voiceAllowed'])
+
+    def test_student_self_consent_invalid_status_rejected(self):
+        self._set_session_user('student-1', 'mem-student')
+        response = self.client.post('/api/student/voice-consent', json={'status': 'maybe'})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()['error'], 'invalid_status')
+
+    def test_student_self_consent_logs_event(self):
+        self._reset_student_voice_consent()
+        self._set_session_user('student-1', 'mem-student')
+        self.client.post('/api/student/voice-consent', json={'status': 'granted'})
+        events = [e for e in self.fake_db.consent_events if e.get('event_type') == 'voice_consent_granted']
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]['actor_type'], 'student')
+        self.assertEqual(events[0]['actor_id'], 'student-1')
 
 
 if __name__ == '__main__':

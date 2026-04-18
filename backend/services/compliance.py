@@ -121,9 +121,15 @@ def _compute_voice_allowed(
     guardian_consent_status: str,
     voice_consent_status: str,
 ) -> bool:
+    # Pilot: student self-consent is sufficient for voice. An explicit
+    # guardian revoke still blocks voice (parent opt-out is honored), but
+    # guardian=unknown no longer blocks. To restore the guardian gate,
+    # reinstate the ``is_minor and guardian_consent_status != 'granted'``
+    # check below.
+    del is_minor
     if voice_consent_status != "granted":
         return False
-    if is_minor and guardian_consent_status != "granted":
+    if guardian_consent_status == "revoked":
         return False
     return True
 
@@ -340,8 +346,10 @@ def create_consent_event(
 
 def build_voice_block_reasons(record: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
-    if record.get("is_minor") and record.get("guardian_consent_status") != "granted":
-        reasons.append("Guardian consent is required before voice practice can start.")
+    # Pilot: only an explicit guardian revoke blocks voice. guardian=unknown
+    # is no longer a block reason — students self-consent on their own.
+    if record.get("guardian_consent_status") == "revoked":
+        reasons.append("Guardian has revoked voice consent for this student.")
     if record.get("voice_consent_status") != "granted":
         reasons.append("Voice consent has not been granted for this student.")
     return reasons

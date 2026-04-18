@@ -443,10 +443,21 @@ export function AssignmentLaunchPage() {
       {showTextFallbackNotice ? (
         <Alert>
           <MessageSquareText className="h-4 w-4" />
-          <AlertDescription>
-            {bootstrap.launch.fallbackApplied
-              ? 'Voice is blocked for this student, so this assignment has been downgraded to assignment-scoped text practice.'
-              : 'This assignment is configured to launch in assignment-scoped text mode.'}
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              {bootstrap.launch.fallbackApplied
+                ? 'Voice is blocked for this student, so this assignment has been downgraded to assignment-scoped text practice.'
+                : 'This assignment is configured to launch in assignment-scoped text mode.'}
+            </span>
+            {bootstrap.launch.fallbackApplied ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => navigate('/app/consent/voice')}
+              >
+                Grant voice consent
+              </Button>
+            ) : null}
           </AlertDescription>
         </Alert>
       ) : null}

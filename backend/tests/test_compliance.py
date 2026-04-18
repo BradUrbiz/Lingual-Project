@@ -273,11 +273,25 @@ class TestNormalizeComplianceVoiceAllowed(unittest.TestCase):
         )
         self.assertTrue(result["voice_allowed"])
 
-    def test_minor_without_guardian_consent(self):
+    def test_minor_without_guardian_consent_allowed_under_pilot(self):
+        """Pilot rule: guardian=unknown no longer blocks — student self-consent suffices."""
         result = normalize_student_compliance_record(
             {
                 "is_minor": True,
                 "guardian_consent_status": "unknown",
+                "voice_consent_status": "granted",
+            },
+            org_id="org-1",
+            student_uid="stu-1",
+        )
+        self.assertTrue(result["voice_allowed"])
+
+    def test_minor_with_guardian_revoked_still_blocks(self):
+        """Explicit guardian revoke is always honored, even under pilot."""
+        result = normalize_student_compliance_record(
+            {
+                "is_minor": True,
+                "guardian_consent_status": "revoked",
                 "voice_consent_status": "granted",
             },
             org_id="org-1",
@@ -379,15 +393,24 @@ class TestBuildVoiceBlockReasons(unittest.TestCase):
         }
         self.assertEqual(build_voice_block_reasons(record), [])
 
-    def test_guardian_reason_for_minor_without_guardian(self):
+    def test_no_reasons_for_minor_with_unknown_guardian(self):
+        """Pilot rule: guardian=unknown is no longer a block reason."""
         record = {
             "is_minor": True,
             "guardian_consent_status": "unknown",
             "voice_consent_status": "granted",
         }
+        self.assertEqual(build_voice_block_reasons(record), [])
+
+    def test_guardian_reason_when_explicitly_revoked(self):
+        record = {
+            "is_minor": True,
+            "guardian_consent_status": "revoked",
+            "voice_consent_status": "granted",
+        }
         reasons = build_voice_block_reasons(record)
         self.assertEqual(len(reasons), 1)
-        self.assertIn("Guardian", reasons[0])
+        self.assertIn("revoked", reasons[0])
 
     def test_voice_reason_when_not_granted(self):
         record = {
@@ -399,14 +422,16 @@ class TestBuildVoiceBlockReasons(unittest.TestCase):
         self.assertEqual(len(reasons), 1)
         self.assertIn("Voice consent", reasons[0])
 
-    def test_both_reasons_for_minor_without_any_consent(self):
+    def test_only_voice_reason_for_minor_without_any_consent(self):
+        """Pilot rule: minor+unknown_guardian+unknown_voice = one reason (voice), not two."""
         record = {
             "is_minor": True,
             "guardian_consent_status": "unknown",
             "voice_consent_status": "unknown",
         }
         reasons = build_voice_block_reasons(record)
-        self.assertEqual(len(reasons), 2)
+        self.assertEqual(len(reasons), 1)
+        self.assertIn("Voice consent", reasons[0])
 
 
 # ---------------------------------------------------------------------------
@@ -516,8 +541,8 @@ class TestApplyLaunchComplianceVoiceBlocked(unittest.TestCase):
                 "voice_allowed": False,
                 "text_allowed": True,
                 "is_minor": True,
-                "guardian_consent_status": "unknown",
-                "voice_consent_status": "granted",
+                "guardian_consent_status": "not_required",
+                "voice_consent_status": "unknown",
             },
         )
         self.assertEqual(result["modality"]["mode"], "text_only")
@@ -751,13 +776,13 @@ class TestResolveAssignmentLaunch(unittest.TestCase):
         self.assertTrue(launch["textAllowed"])
         self.assertFalse(launch["fallbackApplied"])
 
-    def test_fallback_for_minor_without_guardian(self):
+    def test_fallback_when_guardian_revoked(self):
         db = FakeComplianceDb()
         db.users["stu-1"] = {"uid": "stu-1", "profile": {"age": 14}}
         db.student_compliance_records["org-1_stu-1"] = {
             "is_minor": True,
             "voice_consent_status": "granted",
-            "guardian_consent_status": "unknown",
+            "guardian_consent_status": "revoked",
         }
         deps = _make_deps(db)
         launch, compliance = resolve_assignment_launch(

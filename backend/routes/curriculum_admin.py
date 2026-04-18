@@ -16,6 +16,11 @@ from backend.services.assignment_resolver import (
     serialize_assignment,
 )
 from backend.services.canvas.practice_generator import generate_canvas_practice
+from backend.services.compliance import (
+    create_consent_event,
+    serialize_student_compliance_record,
+    upsert_student_compliance_record,
+)
 from backend.services.disclosure_logging import log_disclosure_if_new
 from backend.services.membership_context import SchoolContextPermissionError
 from backend.services.practice_analytics import (
@@ -276,6 +281,43 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({'success': False, 'error': str(exc)}), 403
         except Exception as exc:
             print(f'Assignment creation error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/student/voice-consent', methods=['POST'])
+    @deps.login_required
+    def api_student_voice_consent():
+        try:
+            uid = deps.get_current_user_uid()
+            if not uid:
+                return jsonify({'success': False, 'error': 'not_authenticated'}), 401
+            context = deps.get_school_request_context()
+            org_id = getattr(context, 'active_organization_id', None) if context else None
+            if not org_id:
+                return jsonify({'success': False, 'error': 'no_active_org'}), 400
+            data = request.get_json(silent=True) or {}
+            status = _normalize_string(data.get('status')).lower()
+            if status not in ('granted', 'revoked'):
+                return jsonify({'success': False, 'error': 'invalid_status'}), 400
+            record = upsert_student_compliance_record(
+                deps,
+                org_id=org_id,
+                student_uid=uid,
+                updates={'voice_consent_status': status},
+            )
+            create_consent_event(
+                deps,
+                org_id=org_id,
+                student_uid=uid,
+                event_type=f'voice_consent_{status}',
+                actor_type='student',
+                actor_id=uid,
+            )
+            return jsonify({
+                'success': True,
+                'compliance': serialize_student_compliance_record(record),
+            })
+        except Exception as exc:
+            print(f'Student voice consent error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
 
     @bp.route('/api/student/assignments', methods=['GET'])

@@ -7,6 +7,8 @@ user and ensures the student is enrolled in the appropriate class.
 
 from firebase_admin import firestore as _firestore
 
+from backend.services.compliance import auto_grant_voice_consent_for_pilot
+
 
 def match_lti_user(db, *, issuer, email, canvas_user_id, roles):
     """Match an LTI launch to a Lingual user account.
@@ -141,5 +143,7 @@ def auto_enroll_student(db, *, uid, org_id, class_id, membership_id=''):
         status='active',
         join_source='lti',
     )
+    # Pilot: auto-grant voice + guardian consent on enrollment.
+    auto_grant_voice_consent_for_pilot(db, org_id=org_id, student_uid=uid)
 
     return enrollment_id

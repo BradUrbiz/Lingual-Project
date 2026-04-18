@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+from backend.services.compliance import auto_grant_voice_consent_for_pilot
+
 
 @dataclass
 class SyncResult:
@@ -91,6 +93,8 @@ def reconcile_enrollments(*, db, class_id: str, org_id: str,
                 canvas_name=canvas_name,
                 enrollment_id=f'{class_id}_{uid}',
             )
+            # Pilot: auto-grant voice + guardian consent on enrollment.
+            auto_grant_voice_consent_for_pilot(db, org_id=org_id, student_uid=uid)
             result.matched += 1
             result.created += 1
         else:

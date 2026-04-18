@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from backend.services.compliance import (
     RETENTION_POLICIES,
     apply_launch_compliance,
+    auto_grant_voice_consent_for_pilot,
     build_voice_block_reasons,
     create_consent_event,
     get_retention_policy,
@@ -802,6 +803,72 @@ class TestIsSchoolVoiceContext(unittest.TestCase):
 
     def test_false_for_none_context(self):
         self.assertFalse(is_school_voice_context(None))
+
+
+class TestAutoGrantVoiceConsentForPilot(unittest.TestCase):
+    """Pilot: enrollment auto-grants voice + guardian consent. Revoked is preserved."""
+
+    def _setup_db(self, *, student_age=15):
+        db = FakeComplianceDb()
+        db.organizations["org-1"] = {"id": "org-1", "name": "Pilot School"}
+        db.users["stu-1"] = {"uid": "stu-1", "profile": {"age": student_age}}
+        return db
+
+    def test_grants_voice_and_guardian_for_minor_with_no_record(self):
+        db = self._setup_db(student_age=15)
+        auto_grant_voice_consent_for_pilot(db, org_id="org-1", student_uid="stu-1")
+        record = db.get_student_compliance_record("org-1", "stu-1")
+        self.assertIsNotNone(record)
+        self.assertEqual(record["voice_consent_status"], "granted")
+        self.assertEqual(record["guardian_consent_status"], "granted")
+        self.assertTrue(record["voice_allowed"])
+
+    def test_grants_voice_only_for_adult(self):
+        db = self._setup_db(student_age=20)
+        auto_grant_voice_consent_for_pilot(db, org_id="org-1", student_uid="stu-1")
+        record = db.get_student_compliance_record("org-1", "stu-1")
+        self.assertEqual(record["voice_consent_status"], "granted")
+        self.assertEqual(record["guardian_consent_status"], "not_required")
+        self.assertTrue(record["voice_allowed"])
+
+    def test_does_not_override_revoked_voice(self):
+        db = self._setup_db(student_age=15)
+        db.student_compliance_records["org-1_stu-1"] = {
+            "id": "org-1_stu-1",
+            "org_id": "org-1",
+            "student_uid": "stu-1",
+            "is_minor": True,
+            "voice_consent_status": "revoked",
+            "guardian_consent_status": "granted",
+        }
+        auto_grant_voice_consent_for_pilot(db, org_id="org-1", student_uid="stu-1")
+        record = db.get_student_compliance_record("org-1", "stu-1")
+        self.assertEqual(record["voice_consent_status"], "revoked")
+        # No write should have happened — voice is revoked, guardian already granted
+        self.assertEqual(db.upserted_records, [])
+
+    def test_does_not_override_revoked_guardian(self):
+        db = self._setup_db(student_age=15)
+        db.student_compliance_records["org-1_stu-1"] = {
+            "id": "org-1_stu-1",
+            "org_id": "org-1",
+            "student_uid": "stu-1",
+            "is_minor": True,
+            "voice_consent_status": "unknown",
+            "guardian_consent_status": "revoked",
+        }
+        auto_grant_voice_consent_for_pilot(db, org_id="org-1", student_uid="stu-1")
+        record = db.get_student_compliance_record("org-1", "stu-1")
+        self.assertEqual(record["voice_consent_status"], "granted")
+        self.assertEqual(record["guardian_consent_status"], "revoked")
+        self.assertFalse(record["voice_allowed"])
+
+    def test_idempotent_when_already_granted(self):
+        db = self._setup_db(student_age=15)
+        auto_grant_voice_consent_for_pilot(db, org_id="org-1", student_uid="stu-1")
+        first_upserts = len(db.upserted_records)
+        auto_grant_voice_consent_for_pilot(db, org_id="org-1", student_uid="stu-1")
+        self.assertEqual(len(db.upserted_records), first_upserts)
 
 
 if __name__ == "__main__":

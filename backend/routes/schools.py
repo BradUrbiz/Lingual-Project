@@ -5,6 +5,7 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request
 
 from backend.route_deps import RouteDeps
+from backend.services.compliance import auto_grant_voice_consent_for_pilot
 from backend.services.membership_context import (
     SchoolContextNotFoundError,
     SchoolContextPermissionError,
@@ -293,6 +294,13 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
                     student_membership_id=membership_id,
                     join_source="join_code",
                 )
+
+            # Pilot: auto-grant voice + guardian consent on enrollment.
+            # Teachers can still revoke per-student on the compliance page.
+            # To restore explicit consent, revert the helper call here.
+            auto_grant_voice_consent_for_pilot(
+                deps.db, org_id=org_id, student_uid=uid,
+            )
 
             deps.db.set_user_last_active_membership(uid, membership_id)
 

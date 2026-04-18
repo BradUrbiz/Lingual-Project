@@ -258,6 +258,58 @@ def upsert_student_compliance_record(
     return normalized
 
 
+def auto_grant_voice_consent_for_pilot(
+    db: Any,
+    *,
+    org_id: str,
+    student_uid: str,
+) -> None:
+    """Pilot: auto-grant voice + guardian consent on student enrollment.
+
+    Pilot schools opt in to voice practice as part of onboarding, so each
+    student enrollment writes a compliance record with voice_consent_status
+    and (for minors) guardian_consent_status set to ``granted``. Teachers and
+    admins can still revoke per-student on the compliance page — an explicit
+    ``revoked`` value is never overridden. Idempotent: when the record is
+    already fully granted, no write happens. To restore the explicit-consent
+    flow, revert this helper and its callers.
+    """
+    if not hasattr(db, "upsert_student_compliance_record"):
+        return
+    user = db.get_user(student_uid) if hasattr(db, "get_user") else None
+    organization = db.get_organization(org_id) if hasattr(db, "get_organization") else None
+    stored = (
+        db.get_student_compliance_record(org_id, student_uid)
+        if hasattr(db, "get_student_compliance_record")
+        else None
+    )
+    current = normalize_student_compliance_record(
+        stored,
+        org_id=org_id,
+        student_uid=student_uid,
+        user=user,
+        organization=organization,
+    )
+
+    updates: dict[str, Any] = {}
+    if current.get("voice_consent_status") not in {"granted", "revoked"}:
+        updates["voice_consent_status"] = "granted"
+    if current.get("is_minor") and current.get("guardian_consent_status") not in {"granted", "revoked"}:
+        updates["guardian_consent_status"] = "granted"
+    if not updates:
+        return
+
+    merged = {**current, **updates}
+    normalized = normalize_student_compliance_record(
+        merged,
+        org_id=org_id,
+        student_uid=student_uid,
+        user=user,
+        organization=organization,
+    )
+    db.upsert_student_compliance_record(org_id, student_uid, normalized)
+
+
 def create_consent_event(
     deps: Any,
     *,

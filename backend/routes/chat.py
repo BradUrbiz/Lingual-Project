@@ -246,16 +246,6 @@ def _extract_assignment_id(payload: dict[str, Any]) -> str | None:
 def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
     bp = Blueprint('chat_routes', __name__)
 
-    @bp.route('/api/curriculum/sample', methods=['GET'])
-    @deps.login_required
-    def api_get_sample_curriculum():
-        """Serve the sample AP French curriculum package."""
-        try:
-            package = deps.load_sample_curriculum_package()
-            return jsonify({'success': True, 'package': package})
-        except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
-
     @bp.route('/api/realtime/session', methods=['POST'])
     @deps.login_required
     def create_realtime_session():
@@ -300,48 +290,10 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     }), 403
                 system_instructions = build_assignment_system_prompt(bootstrap)
             else:
-                practice = payload.get('practice')
-                if isinstance(practice, dict) and practice.get('type') == 'curriculum_module':
-                    curriculum_id = practice.get('curriculumId')
-                    module_id = practice.get('moduleId')
-                    situation_id = practice.get('situationId')
-
-                    if not module_id or not situation_id:
-                        return jsonify({
-                            'success': False,
-                            'error': 'moduleId and situationId are required for curriculum practice.',
-                        }), 400
-
-                    package = deps.load_sample_curriculum_package()
-                    sample_curriculum_id = package.get('curriculum', {}).get('id')
-                    if curriculum_id and curriculum_id != sample_curriculum_id:
-                        return jsonify({'success': False, 'error': 'Unsupported curriculumId.'}), 400
-
-                    try:
-                        package, unit, module, situation, mode, objectives = deps.get_curriculum_practice_context(
-                            module_id=module_id,
-                            situation_id=situation_id,
-                        )
-                    except ValueError as e:
-                        return jsonify({'success': False, 'error': str(e)}), 400
-
-                    profile_context = deps.db.get_user_profile_context(uid) or {}
-                    learning_locale = profile_context.get('learning_locale', 'ko-KR')
-                    system_instructions = deps.build_curriculum_system_prompt(
-                        package=package,
-                        unit=unit,
-                        module=module,
-                        situation=situation,
-                        mode=mode,
-                        objectives=objectives,
-                        ui_language=ui_language,
-                        learning_locale=learning_locale,
-                    )
-                else:
-                    proficiency_context = deps.get_user_proficiency_context()
-                    profile_context = deps.db.get_user_profile_context(uid) or {}
-                    learning_locale = profile_context.get('learning_locale', 'ko-KR')
-                    system_instructions = deps.build_system_prompt(proficiency_context, learning_locale)
+                proficiency_context = deps.get_user_proficiency_context()
+                profile_context = deps.db.get_user_profile_context(uid) or {}
+                learning_locale = profile_context.get('learning_locale', 'ko-KR')
+                system_instructions = deps.build_system_prompt(proficiency_context, learning_locale)
 
             response = requests.post(
                 'https://api.openai.com/v1/realtime/sessions',

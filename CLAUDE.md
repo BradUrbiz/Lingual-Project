@@ -54,14 +54,14 @@ All school-integration work follows a document-first workflow. The four spec doc
 | Role | Capabilities |
 |------|-------------|
 | **Student** | Assessment, assignment-aware AI practice, progress tracking |
-| **Teacher** | Class management, curriculum mapping, assignment creation, analytics |
+| **Teacher** | Class management, Canvas-linked or teacher-authored assignment creation, analytics |
 | **Administrator** | School-wide analytics, multi-teacher management, billing |
 
 ### Core Learning Flow
 
-1. Teacher creates class → maps curriculum → publishes assignment
+1. Teacher creates class → authors assignment from Canvas content or teacher input → publishes assignment
 2. Student launches assignment-aware speaking practice (voice/text/hybrid)
-3. AI tutor follows curriculum mapping (target expressions, grammar, feedback policy)
+3. AI tutor follows assignment context (instructions, generated scenario, target expressions, focus grammar)
 4. System captures learning events → builds session summaries → rolls up analytics
 5. Teacher reviews class/assignment/student analytics to inform instruction
 
@@ -115,7 +115,6 @@ Backend is organized into:
 - `database.py` - Firestore CRUD helpers for all collections
 - `backend/routes/` - Blueprint modules (auth, chat, teacher, curriculum_admin, schools, pronunciation)
 - `backend/services/` - Domain services (assignment_resolver, practice_analytics, membership_context, compliance)
-- `backend/services/pedagogy/` - Pedagogy engine (task templates, curriculum template resolution, prompt section assembly)
 - `backend/route_deps.py` - Shared dependencies injected into routes
 - `scoring.py` - Assessment scoring (MCQ, heuristic text, domain aggregation)
 
@@ -140,7 +139,7 @@ Frontend is organized into:
 1. Firebase Auth issues ID token → `/api/auth/verify` creates session + returns memberships
 2. `MembershipContext` hydrates active org, role, classes
 3. `TeacherRoute` guards teacher-only pages by checking membership role
-4. Teacher creates assignment → curriculum mapping → assignment record
+4. Teacher creates assignment → assignment record stores instructions, generated scenario, and target fields directly
 5. Student launches assignment → backend resolves assignment context → creates practice session
 6. During practice: learning events emitted → session summary updated in real-time
 7. Teacher views analytics: backend aggregates sessions + events into typed payloads
@@ -158,8 +157,7 @@ organizations/{orgId}          (name, type, status, pilot_stage, policies)
 memberships/{membershipId}     (org_id, uid, roles[], status)
 classes/{classId}              (org_id, name, term, subject, teacher_membership_ids[])
 enrollments/{enrollmentId}     (class_id, student_uid, status, join_source)
-curriculum_mappings/{mappingId} (class_id, package_id, module_id, objectives, policies)
-assignments/{assignmentId}     (class_id, mapping_id, title, status, task_type)
+assignments/{assignmentId}     (class_id, title, status, task_type, instructions, generated_scenario, target_expressions, focus_grammar)
 practice_sessions/{sessionId}  (assignment_id, student_uid, session_summary, cost_summary)
 learning_events/{eventId}      (assignment_id, session_id, event_type, turn_index, payload)
 ```
@@ -172,8 +170,7 @@ learning_events/{eventId}      (assignment_id, session_id, event_type, turn_inde
 - `backend/routes/teacher.py` - Teacher dashboard, class CRUD
 - `backend/routes/schools.py` - School/org bootstrap and management
 - `backend/services/practice_analytics.py` - Session summary building, learning event processing, assignment analytics aggregation
-- `backend/services/assignment_resolver.py` - Assignment bootstrap, curriculum resolution, prompt assembly
-- `backend/services/pedagogy/` - Task template prompt assembly, curriculum template resolution, template catalog
+- `backend/services/assignment_resolver.py` - Assignment bootstrap and prompt assembly from assignment-owned fields
 - `backend/services/membership_context.py` - Request-level school context and role checking
 
 ### Backend - Core
@@ -185,7 +182,7 @@ learning_events/{eventId}      (assignment_id, session_id, event_type, turn_inde
 ### Frontend - Teacher Flow
 
 - `TeacherDashboardPage.tsx` - Class list, summary stats, setup checklist
-- `TeacherAssignmentBuilderPage.tsx` - Curriculum mapping, assignment authoring, interaction contract preview
+- `TeacherAssignmentBuilderPage.tsx` - Canvas-linked and teacher-authored assignment authoring, interaction contract preview
 - `TeacherAssignmentAnalyticsPage.tsx` - Per-assignment analytics drill-down
 - `frontend/src/api/teacher.ts` - Teacher dashboard and class API
 - `frontend/src/api/assignments.ts` - Assignment CRUD and analytics API
@@ -194,8 +191,8 @@ learning_events/{eventId}      (assignment_id, session_id, event_type, turn_inde
 
 ### Frontend - Student Flow
 
-- `AppCurriculumPage.tsx` - Curriculum browsing with template summaries
-- `AppCurriculumModulePage.tsx` - Module practice entry with interaction contract display
+- `AppLearningPage.tsx` - Student class and assignment landing surface
+- `AssignmentLaunchPage.tsx` - Assignment-aware launch, prompt overlay, and blocked-state handling
 - `ChatPage.tsx` - AI tutor conversation (legacy + assignment-aware)
 
 ### Frontend - Core
@@ -216,7 +213,7 @@ This project has a local plugin (`lingual-dev-agents`) with 5 agents. Dispatch t
 | `spec-agent` | Before implementing any TASKS.md item or feature that touches architecture, data model, or API surface | Pure UI polish, copy changes, or bug fixes confined to one file |
 | `backend-impl` | During implementation, in parallel with `frontend-impl` when backend/frontend work is independent | Feature is frontend-only |
 | `frontend-impl` | During implementation, in parallel with `backend-impl` when work is independent; sequentially after backend when frontend depends on new API | Feature is backend-only |
-| `cross-layer-review` | After completing a feature that spans backend + frontend, especially if it touches compliance, pedagogy, or analytics | Change is isolated to one layer with no cross-layer contract |
+| `cross-layer-review` | After completing a feature that spans backend + frontend, especially if it touches compliance, prompt assembly, or analytics | Change is isolated to one layer with no cross-layer contract |
 | `doc-sync` | After completing a TASKS.md phase or any change that introduces new collections, endpoints, or domain concepts | Trivial bug fixes that don't change architecture or shipped behavior |
 
 ### Parallel Dispatch Pattern

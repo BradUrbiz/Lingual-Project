@@ -173,11 +173,11 @@ class TestMakeTestDepsAndApp(unittest.TestCase):
         with app.test_client() as client:
             with client.session_transaction() as sess:
                 sess["user"] = {"uid": "teacher-1"}
-            resp = client.get(f"/api/teacher/classes/{cls_id}/curriculum/packages")
+            resp = client.get(f"/api/teacher/classes/{cls_id}/assignments")
             self.assertEqual(resp.status_code, 200)
             data = resp.get_json()
             self.assertTrue(data["success"])
-            self.assertEqual(len(data["packages"]), 1)
+            self.assertEqual(data["assignments"], [])
 
 
 if __name__ == "__main__":

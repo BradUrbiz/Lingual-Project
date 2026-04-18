@@ -1,7 +1,7 @@
 # School Integration Tasks
 
 Status: Active
-Last updated: 2026-03-13
+Last updated: 2026-04-18
 Owner: Engineering + Product
 
 ## Status legend
@@ -71,26 +71,27 @@ Owner: Engineering + Product
 - [x] Add Canvas link button to teacher dashboard class cards.
 - [ ] Add manual CSV fallback if LMS setup is delayed.
 
-## Phase 3: Curriculum mapping and assignment authoring
+## Phase 3: Canvas content and assignment authoring
 
-### Curriculum package delivery
+### Content sources
 
-- [ ] Replace sample-only package loading with school-aware package lookup.
-- [ ] Define package ownership rules: global vs organization.
-- [-] Add package selection endpoint for teachers.
+- [x] Replace sample-only package loading with Canvas-synced content and teacher-authored source text.
+- [x] Remove the sample package selection endpoint for teachers.
+- [x] Add Canvas content picker for assignment authoring.
+- [x] Add AI-assisted draft generation from teacher-provided source packets.
+- [x] Add manual advanced authoring without any Canvas item.
 
-### Mapping overlay
+### Assignment content model
 
-- [x] Create `curriculum_mappings` model.
-- [x] Build teacher UI to select package, module, objective IDs, and situations.
+- [x] Remove `curriculum_mappings` from the beta assignment path.
+- [x] Store assignment scenario fields directly on `assignments`.
 - [x] Add teacher controls for:
+  - objectives
   - target expressions
   - focus grammar
-  - rubric focus
-  - feedback mode
-  - scaffolding mode
+  - teacher notes
   - modality policy
-- [ ] Persist mapping versions for assignment reproducibility.
+  - task type / success criteria
 
 ### Assignments
 
@@ -106,24 +107,15 @@ Owner: Engineering + Product
 - [x] Add assignment resolver service.
 - [x] Add practice session bootstrap endpoint.
 - [x] Extend realtime session creation to accept `assignmentId`.
-- [x] Snapshot resolved mapping into each practice session.
+- [x] Snapshot resolved assignment context into each practice session.
 - [x] Expose rubric, task-model, and evidence metadata in assignment bootstrap.
 - [x] Enforce assignment-aware prompt assembly for school practice.
 
-### Pedagogy engine
+### Assignment prompt policy
 
-- [x] Encode default recast -> elicitation -> review ladder.
-- [x] Add teacher-configurable feedback modes.
-- [x] Add scaffold ladder settings.
-- [x] Support task templates:
-  - information gap
-  - opinion gap
-  - decision-making
-- [x] Add extended-output pressure settings.
-- [x] Promote task templates to structured definitions owned by curriculum packages.
-- [x] Add runtime template resolution from objective templateRefs to package-level activityTemplates.
+- [x] Encode assignment-aware prompt assembly around instructions, generated scenario, and teacher targets.
 - [x] Add interaction contract preview to teacher assignment builder.
-- [x] Add interaction contract display to curriculum browsing views (module page + listing).
+- [x] Remove the legacy sample-curriculum and pedagogy-engine prompt path.
 
 ### Modality and cost controls
 
@@ -235,7 +227,7 @@ Recommended sequence for the remaining hardening work:
 
 1. Auth, memberships, and teacher route protection.
 2. Class model and onboarding split.
-3. Curriculum mappings and assignments.
+3. Canvas content and assignments.
 4. Assignment-aware session bootstrap and prompt resolver.
 5. Learning events and dashboard APIs.
 6. Compliance enforcement and LMS hardening.
@@ -246,13 +238,13 @@ Recommended sequence for the remaining hardening work:
 - [x] Update auth contract to return memberships and active context.
 - [x] Add frontend `MembershipContext` and teacher route guard.
 - [x] Convert `/app/teacher` from mock-only access to role-aware dashboard shell.
-- [x] Define `curriculum_mappings` and `assignments` DTOs.
+- [x] Define assignment DTOs and bootstrap contracts.
 - [x] Add backend assignment bootstrap endpoint skeleton.
 
 ## Definition of done for beta entry
 
 - [x] Teacher can create or import a class.
-- [x] Teacher can create an assignment from curriculum mappings.
+- [x] Teacher can create an assignment from Canvas content or teacher-authored source material.
 - [x] Student can launch assignment-aware practice.
 - [x] Teacher can see class and student analytics tied to that assignment.
 - [x] Voice access respects consent and retention policy.

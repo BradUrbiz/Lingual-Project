@@ -181,7 +181,6 @@ class FakeCurriculumAdminDb:
                 'updated_at': None,
             }
         }
-        self.curriculum_mappings = {}
         self.assignments = {}
         self.practice_sessions = {}
         self.learning_events = {}
@@ -207,7 +206,6 @@ class FakeCurriculumAdminDb:
             }
         }
         self.consent_events = []
-        self.mapping_counter = 0
         self.assignment_counter = 0
         self.practice_session_counter = 0
         self.learning_event_counter = 0
@@ -247,27 +245,6 @@ class FakeCurriculumAdminDb:
 
     def get_class(self, class_id):
         return self.classes.get(class_id)
-
-    def create_curriculum_mapping(self, **payload):
-        self.mapping_counter += 1
-        mapping_id = f'mapping-{self.mapping_counter}'
-        self.curriculum_mappings[mapping_id] = {
-            'id': mapping_id,
-            **payload,
-            'created_at': None,
-            'updated_at': None,
-        }
-        return mapping_id
-
-    def get_curriculum_mapping(self, mapping_id):
-        return self.curriculum_mappings.get(mapping_id)
-
-    def list_class_curriculum_mappings(self, class_id):
-        return [
-            dict(mapping)
-            for mapping in self.curriculum_mappings.values()
-            if mapping.get('class_id') == class_id
-        ]
 
     def create_assignment(self, **payload):
         self.assignment_counter += 1
@@ -417,14 +394,6 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             login_required=passthrough_login_required,
             get_user_proficiency_context=lambda: '',
             build_system_prompt=lambda _context: '',
-            load_sample_curriculum_package=lambda: SAMPLE_PACKAGE,
-            get_curriculum_practice_context=lambda **kwargs: build_test_curriculum_context(
-                kwargs['module_id'],
-                kwargs['situation_id'],
-            ),
-            build_curriculum_system_prompt=lambda **kwargs: (
-                f"Prompt for {kwargs['module']['id']}::{kwargs['situation']['id']}"
-            ),
             get_school_request_context=get_school_request_context,
             set_active_school_membership=lambda _membership_id: None,
             allowed_learning_locales={'ko-KR', 'es-ES', 'fr-FR'},

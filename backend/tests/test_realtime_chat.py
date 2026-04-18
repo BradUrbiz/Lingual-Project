@@ -169,45 +169,11 @@ class FakeRealtimeRouteDb:
                 'status': 'active',
             }
         }
-        self.curriculum_mappings = {
-            'mapping-1': {
-                'id': 'mapping-1',
-                'org_id': 'org-1',
-                'class_id': 'class-1',
-                'package_id': 'sample-ap-french',
-                'module_id': 'M1',
-                'objective_ids': ['OBJ1'],
-                'situation_ids': ['S1'],
-                'target_expressions': ['Could I have', 'I would like'],
-                'focus_grammar': ['polite requests'],
-                'allowed_context_tags': ['restaurant'],
-                'feedback_policy': {
-                    'mode': 'accuracy_first',
-                    'target_only_strict': True,
-                    'recast_default': True,
-                    'elicitation_repeat_threshold': 2,
-                    'end_review_enabled': True,
-                },
-                'scaffold_policy': {
-                    'silence_tolerance_ms': 3500,
-                    'hint_ladder': ['wait', 'context_hint', 'choice_prompt'],
-                    'max_modeling_steps': 1,
-                },
-                'modality_policy': {
-                    'mode': 'hybrid',
-                    'voice_minutes_cap': 10,
-                    'text_fallback_enabled': True,
-                },
-                'rubric_focus': ['task_completion'],
-                'teacher_notes': 'Keep the student in the restaurant ordering lane.',
-            }
-        }
         self.assignments = {
             'assignment-1': {
                 'id': 'assignment-1',
                 'org_id': 'org-1',
                 'class_id': 'class-1',
-                'mapping_id': 'mapping-1',
                 'title': 'Restaurant Ordering Practice',
                 'description': 'Order a meal and ask one follow-up question.',
                 'status': 'published',
@@ -282,9 +248,6 @@ class FakeRealtimeRouteDb:
 
     def get_class(self, class_id):
         return self.classes.get(class_id)
-
-    def get_curriculum_mapping(self, mapping_id):
-        return self.curriculum_mappings.get(mapping_id)
 
     def get_student_class_enrollment(self, class_id, student_uid):
         return self.enrollments.get(f'{class_id}_{student_uid}')
@@ -419,14 +382,6 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
             build_system_prompt=lambda context, learning_locale='ko-KR': (
                 f'Generic prompt: {context} ({learning_locale})'
             ),
-            load_sample_curriculum_package=lambda: SAMPLE_PACKAGE,
-            get_curriculum_practice_context=lambda **kwargs: build_test_curriculum_context(
-                kwargs['module_id'],
-                kwargs['situation_id'],
-            ),
-            build_curriculum_system_prompt=lambda **kwargs: (
-                f"Prompt for {kwargs['module']['id']}::{kwargs['situation']['id']}"
-            ),
             get_school_request_context=get_school_request_context,
             set_active_school_membership=lambda _membership_id: None,
             allowed_learning_locales={'ko-KR', 'es-ES', 'fr-FR'},
@@ -484,6 +439,30 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         self.assertIn('Parisian bistro', instructions)
         self.assertIn('Could I have', instructions)
         self.assertIn('polite requests', instructions)
+
+    def test_realtime_session_curriculum_module_payload_without_assignment_uses_generic_prompt(self):
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-openai-key'}, clear=False):
+            with patch('backend.routes.chat.requests.post') as mocked_post:
+                mocked_post.return_value = FakeRealtimeSessionResponse()
+
+                response = self.client.post('/api/realtime/session', json={
+                    'uiLanguage': 'en',
+                    'practice': {
+                        'type': 'curriculum_module',
+                        'moduleId': 'M1',
+                        'situationId': 'S1',
+                    },
+                })
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['success'])
+
+        request_payload = mocked_post.call_args.kwargs['json']
+        instructions = request_payload['instructions']
+
+        self.assertIn('Generic prompt: Intermediate Mid (fr-FR)', instructions)
+        self.assertNotIn('Prompt for M1::S1', instructions)
 
     def test_realtime_session_blocks_voice_when_consent_is_missing(self):
         self.fake_db.student_compliance_records['org-1_student-1'].update({

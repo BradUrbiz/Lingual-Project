@@ -1,7 +1,7 @@
 # School Integration Limitations
 
 Status: Active
-Last updated: 2026-03-13
+Last updated: 2026-04-18
 Owner: Engineering
 
 ## Purpose
@@ -38,17 +38,17 @@ Planned follow-up: cross-class trends, richer visualization, and model-backed sc
 
 ### Curriculum mapping and assignments
 
-4. Curriculum mapping currently supports only the bundled sample curriculum package.
-Impact: the runtime now uses the canonical AP French sample JSON as its bundled package source, but teachers still cannot create mappings against organization-owned or imported packages.
-Planned follow-up: package ownership rules and school-aware package lookup.
+4. Imported curriculum packages are not part of the shipped beta path.
+Impact: the legacy bundled sample package and `curriculum_mappings` path have been removed. Teachers now author assignments from Canvas content, teacher-provided source packets, or manual advanced authoring. There is no package browser or imported-package workflow in the beta UI.
+Planned follow-up: revisit imported curriculum packages only if pilot schools need a non-Canvas managed content library.
 
 5. Assignment launch now supports assignment-scoped text fallback, but the text experience still lives in the assignment launch page instead of the shared chat shell.
 Impact: `text_only` or downgraded launches now work and remain assignment-aware, but text transcripts and follow-up review still do not reuse the main chat workspace UX or a richer text-specific teacher review surface.
 Planned follow-up: unify assignment text practice with the shared chat shell and extend text-mode review affordances.
 
-6. Live prompt generation now uses a modular pedagogy package, but it is still a pre-session prompt layer rather than a live intervention engine.
-Impact: `targetExpressions`, `focusGrammar`, `feedbackPolicy`, `scaffoldPolicy`, teacher-configurable `outputPolicy`, teacher notes, rubric/task/evidence metadata, curriculum pedagogy tags, teacher-approved context bounds, and rubric-focus cues now shape the prompt through `backend/services/pedagogy/`. Task templates now resolve against structured curriculum package definitions instead of ID heuristics, so the bundled sample package can define opening moves, sustain moves, closing moves, completion rules, assistant role, and prompt cues explicitly. However, `allowedContextTags` and `rubricFocus` still are not hard runtime constraints, and no mid-session server-side pedagogy orchestrator updates the realtime session once it starts.
-Planned follow-up: stricter prompt-policy enforcement, broader support for imported package template definitions, and a later event-driven intervention layer if beta evidence shows it is needed.
+6. Live prompt generation is assignment-driven, but it is still a pre-session prompt layer rather than a live intervention engine.
+Impact: `instructions`, `generatedScenario`, `objectives`, `targetExpressions`, `focusGrammar`, teacher notes, task type, success criteria, and compliance/modality metadata now shape the tutor prompt directly from the assignment document. This removes the old sample-curriculum and pedagogy-package path, but there is still no mid-session server-side intervention layer once a realtime session starts.
+Planned follow-up: stricter prompt-policy enforcement, stronger source-to-assignment traceability, and a later event-driven intervention layer if beta evidence shows it is needed.
 
 7. Practice analytics are improved, but still not equivalent to human scoring.
 Impact: assignment launch now creates `practice_sessions`, emits lifecycle and turn-level `learning_events`, and rolls them into per-session summaries plus a teacher-facing assignment analytics page. The runtime now also tracks repeated-error patterns, feedback-linked correction families, actual context-tag signals, rubric-dimension evidence, rubric thresholds/confidence, and locale-aware communicative-function / discourse-move / feedback detection for English and French. However, these detections and rubric scores are still rule-based heuristics rather than model-verified semantics or certified assessment scoring.
@@ -94,12 +94,12 @@ Planned follow-up: (a) decide recording architecture (client-side MediaRecorder 
 
 ### Curriculum content authored only for French; other locales get French scenarios in translation
 
-16. The only curriculum package in the catalog is `cur.fr.ap_french.fall2024.v1`. Non-French classes get the right AI *language* (fixed in OBS-17) but still reference French AP themes and scenarios.
-Impact: after OBS-17, a `AP Spanish Testing` class correctly receives Spanish AI responses. However, the curriculum mapping the teacher was forced to attach still points to the French package — so the situation setup (module title, target expressions, scenario seed, module goal) is authored for the AP French curriculum and only rendered in Spanish at conversation time. A Spanish teacher picking *"Family members and relationships"* in Quick Assign is actually getting a literal translation of AP French's *"La famille et les relations"* module, not a Spanish AP or SKLC-aligned scenario. The `TeacherAssignmentBuilderPage` also hides this mismatch — the unit dropdown only shows English translations of AP French unit titles, with no indication that the source package is French. For the pilot this is acceptable (the pedagogy templates are language-agnostic and the AI speaks Spanish), but it is not a real Spanish curriculum.
-Planned follow-up: this is the motivation for the Phase 2+3 Canvas-content refactor planned on `pilot/launch-v1`. Goals: (a) remove `curriculum_mappings` and the `backend/services/pedagogy/` sample-package code paths entirely; (b) make teacher-written `instructions` the primary AI context, optionally attaching a Canvas module item for reference; (c) extend Canvas sync to fetch page bodies / assignment descriptions (currently metadata-only) and feed them into the prompt; (d) drop the *"Teacher package selection is currently sample-only"* and *"Teacher mapping controls are only partially injected"* alerts that warn the user today.
+16. Resolved 2026-04-18 via Commit C of the Canvas content migration.
+Impact: the French-only sample curriculum path is gone. Assignment content now comes from Canvas material or teacher-authored input, so non-French classes are no longer forced through translated AP French scenarios just to launch practice.
+Resolution: Phase 2+3 Canvas migration removed `curriculum_mappings`, deleted the sample curriculum package loader, stored scenario fields directly on `assignments`, and removed the legacy curriculum override from realtime session creation.
 
 ### Pilot shortcut: teacher invitations auto-approve
 
-16. Teacher invitations are auto-approved during the pilot — the `school_admin` review step is bypassed.
+17. Teacher invitations are auto-approved during the pilot — the `school_admin` review step is bypassed.
 Impact: any teacher who enters a valid `teacher_invite_code` in `POST /api/schools/join-as-teacher` is immediately granted a `teacher` membership without `school_admin` approval. The `teacher_invitations` document is still created for audit trail (marked `status: "approved"` with `reviewed_by_uid: "system:pilot_auto_approve"`), and the `/api/schools/teacher-invitations/<id>/approve` admin endpoint still exists but now returns `409 "Invitation is already approved."` when called against an auto-approved invite. This was introduced to unblock the SSFS Pilot launch where no `school_admin` was available at the time teachers joined.
 Planned follow-up: (a) restore the manual-approval flow by reverting the `api_join_as_teacher` change in `backend/routes/schools.py` once the pilot is over, or (b) gate the auto-approval behind a per-org `auto_approve_teacher_joins` boolean on the organization document for long-term use in trust-first deployments (e.g., self-serve school signups where the same person is both admin and teacher).

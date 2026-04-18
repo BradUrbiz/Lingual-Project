@@ -1,7 +1,7 @@
 # School Integration Technical Spec
 
 Status: Draft v0.1
-Last updated: 2026-03-13
+Last updated: 2026-04-18
 Owner: Engineering
 
 Implementation note:
@@ -16,7 +16,7 @@ Recommended approach:
 
 Pragmatic balance.
 
-- Keep Firebase Auth, Flask sessions, Firestore, and the current curriculum package model.
+- Keep Firebase Auth, Flask sessions, Firestore, and assignment-owned scenario fields sourced from Canvas content or teacher-authored input.
 - Add an organization and assignment layer above the current `users/{uid}` model.
 - Move prompt resolution from "generic chat or sample curriculum" to "assignment-aware practice context."
 - Add compliance gating before voice features.
@@ -29,8 +29,8 @@ The current codebase has the right raw ingredients, but not the right school abs
 ### Existing strengths
 
 - React app shell and typed API-client pattern already exist in `frontend/src/api/*`.
-- Curriculum package schema is already defined in `frontend/src/types/curriculum.ts`.
-- Realtime practice already accepts curriculum context in `frontend/src/pages/AppCurriculumModulePage.tsx` and `backend/routes/chat.py`.
+- Canvas LMS content sync already provides a real content surface for classes.
+- Assignment launch already resolves assignment context in `backend/services/assignment_resolver.py` and `frontend/src/pages/AssignmentLaunchPage.tsx`.
 - A teacher dashboard visual shell already exists in `frontend/src/pages/TeacherDashboardPage.tsx`.
 
 ### Current blockers
@@ -38,7 +38,7 @@ The current codebase has the right raw ingredients, but not the right school abs
 - Auth is identity-only and session data only stores `uid`, `email`, `name`.
 - Firestore is user-centric; nearly everything hangs off `users/{uid}`.
 - `profile.school_name` is only a free-text field, not a real tenancy boundary.
-- Curriculum delivery is a single sample package loaded from disk.
+- Imported curriculum-package delivery is not part of the shipped beta path; assignment content comes from Canvas material or teacher-authored source text.
 - Teacher dashboard data is static and not role-protected.
 - Practice data is stored as generic chat history rather than assignment-bound session data.
 - Firestore rules are placeholder-only and not school-safe.
@@ -52,8 +52,8 @@ Relevant current files:
 - `backend/routes/pronunciation.py`
 - `frontend/src/contexts/AuthContext.tsx`
 - `frontend/src/App.tsx`
-- `frontend/src/pages/AppCurriculumPage.tsx`
-- `frontend/src/pages/AppCurriculumModulePage.tsx`
+- `frontend/src/pages/AppLearningPage.tsx`
+- `frontend/src/pages/AssignmentLaunchPage.tsx`
 - `frontend/src/pages/TeacherDashboardPage.tsx`
 - `firestore.rules`
 
@@ -66,15 +66,14 @@ The following foundation work is now in code:
 - organization, membership, class, and enrollment data model
 - secure Firestore rules for the current school collections
 - teacher dashboard data contract backed by school records instead of hardcoded mock data
-- curriculum mapping and assignment DTOs plus backend CRUD endpoints
+- assignment DTOs plus backend CRUD endpoints
 - assignment bootstrap endpoint that resolves assignment context into launch data for current realtime practice
-- assignment-aware pedagogy engine with feedback, scaffold, output, and task-template policies
-- structured activity template definitions owned by curriculum packages, resolved at assignment bootstrap time
+- Canvas-linked and teacher-authored assignment generation paths with direct scenario fields stored on assignments
 - learning event capture, per-session summaries, and teacher-facing analytics (class, assignment, student drill-down)
 - compliance gating for voice sessions, pronunciation audio retention, and consent state enforcement
 - guardian consent packet lifecycle with secure-link delivery and teacher/admin management
 - class compliance roster, bulk consent operations, and audit export
-- interaction contract visibility in teacher assignment builder (live preview), curriculum module page (full template cards), and curriculum listing (template name summary)
+- interaction contract visibility in the teacher assignment builder and assignment launch surfaces
 
 Current limitations for these shipped features live in `LIMITATIONS.md`.
 
@@ -92,25 +91,32 @@ Add first-class entities for:
 - memberships
 - classes
 - enrollments
-- curriculum packages
-- curriculum mappings
 - assignments
+- canvas connections and synced course content
 - compliance state
 - practice sessions
 - learning events
 - analytics rollups
 
-### 3.3 Keep canonical curriculum separate from teacher overlays
+### 3.3 Keep assignment content on the assignment document
 
-`CurriculumPackageV1` remains the canonical package format. Teacher customization should live in a separate mapping layer that references package, module, objective, and situation IDs.
+Teacher-managed beta content should resolve to one assignment record that carries the AI-ready fields directly:
 
-For task-template behavior, objectives should continue to reference `templateRefs`, but the package itself should own the structured definitions under `templates.activityTemplates[]`. Runtime prompt assembly should resolve objective refs against those package-level template definitions rather than inferring behavior from template IDs alone.
+- `instructions`
+- `generated_scenario`
+- `objectives`
+- `target_expressions`
+- `focus_grammar`
+- `teacher_notes`
+- optional `canvas_module_item_ref`
+
+This keeps prompt assembly assignment-centric and avoids a second overlay collection just to resolve practice context.
 
 ### 3.4 Route every teacher-managed practice session through an assignment resolver
 
 The prompt builder must no longer be called directly from a sample module selector alone. For school-managed practice, the flow becomes:
 
-assignment -> class context -> teacher mapping -> student profile -> compliance policy -> modality policy -> system prompt
+assignment -> class context -> student profile -> compliance policy -> modality policy -> system prompt
 
 ### 3.5 Voice gating must happen before session creation
 
@@ -215,57 +221,12 @@ Fields:
 - `created_at`
 - `updated_at`
 
-### `curriculum_packages/{packageId}`
-
-Fields:
-
-- `owner_scope` (`global`, `organization`)
-- `owner_id`
-- `schema_version`
-- `source_type` (`native`, `import`, `lms_import`)
-- `title`
-- `learning_locale`
-- `version`
-- `status`
-- `package_blob_ref` or normalized document payload
-- `created_at`
-- `updated_at`
-
-Beta note:
-
-It is acceptable to keep package JSON in Firestore or Cloud Storage with metadata in Firestore as long as lookup remains simple.
-
-### `curriculum_mappings/{mappingId}`
-
-Teacher-owned overlay that references canonical curriculum.
-
-Fields:
-
-- `org_id`
-- `class_id`
-- `package_id`
-- `module_id`
-- `objective_ids`
-- `situation_ids`
-- `target_expressions`
-- `focus_grammar`
-- `allowed_context_tags`
-- `feedback_policy`
-- `scaffold_policy`
-- `modality_policy`
-- `rubric_focus`
-- `teacher_notes`
-- `created_by_uid`
-- `created_at`
-- `updated_at`
-
 ### `assignments/{assignmentId}`
 
 Fields:
 
 - `org_id`
 - `class_id`
-- `mapping_id`
 - `title`
 - `description`
 - `status`
@@ -276,6 +237,13 @@ Fields:
 - `task_type`
 - `success_criteria`
 - `created_by_uid`
+- `instructions`
+- `generated_scenario`
+- `objectives`
+- `target_expressions`
+- `focus_grammar`
+- `teacher_notes`
+- `canvas_module_item_ref`
 - `created_at`
 - `updated_at`
 
@@ -424,8 +392,8 @@ Separate request intake, approval, and synchronous execution for deletion so sto
 | Scope | Deletion targets | Preserved |
 |-------|-----------------|-----------|
 | `student` | practice_sessions, learning_events, student_compliance_records, consent_events, guardian_consent_packets, and stored audio for one student within the org | users/{uid} identity, consumer-era chats, enrollment, membership, analytics_rollups |
-| `class` | practice_sessions, learning_events, and stored audio for all students in the class | compliance records, enrollments, memberships, class document, curriculum_mappings, assignments |
-| `org` | All org-scoped data: practice_sessions, learning_events, student_compliance_records, consent_events, guardian_consent_packets, classes, enrollments, memberships, curriculum_mappings, assignments, and stored audio | users/{uid} identity, consumer-era chats, analytics_rollups |
+| `class` | practice_sessions, learning_events, and stored audio for all students in the class | compliance records, enrollments, memberships, class document, assignments |
+| `org` | All org-scoped data: practice_sessions, learning_events, student_compliance_records, consent_events, guardian_consent_packets, classes, enrollments, memberships, assignments, and stored audio | users/{uid} identity, consumer-era chats, analytics_rollups |
 
 Key rule: `student`-scope deletion removes only privacy-sensitive practice data. The student's enrollment and membership are preserved. Enrollment removal is a separate roster management action.
 
@@ -613,9 +581,11 @@ Add route module:
 
 Core endpoints:
 
-- `GET /api/teacher/classes/<class_id>/curriculum/packages`
-- `POST /api/teacher/classes/<class_id>/curriculum/mappings`
-- `GET /api/teacher/classes/<class_id>/curriculum/mappings`
+- `GET /api/teacher/classes/<class_id>/canvas/content`
+- `POST /api/teacher/classes/<class_id>/canvas-practice/generate`
+- `POST /api/teacher/classes/<class_id>/canvas-practice/create`
+- `POST /api/teacher/classes/<class_id>/assignment-drafts/generate`
+- `GET /api/teacher/classes/<class_id>/assignments`
 - `POST /api/teacher/classes/<class_id>/assignments`
 - `GET /api/student/assignments`
 
@@ -624,7 +594,6 @@ Core endpoints:
 Add service modules:
 
 - `backend/services/assignment_resolver.py`
-- `backend/services/pedagogy/`
 - `backend/services/compliance.py`
 - `backend/services/events.py`
 - `backend/services/analytics.py`
@@ -633,7 +602,7 @@ New sequence for school practice:
 
 1. Student opens assignment.
 2. Frontend requests practice session bootstrap with `assignmentId`.
-3. Backend resolves class, mapping, curriculum package, learner state, compliance state, and modality.
+3. Backend resolves class, assignment-owned scenario fields, learner state, compliance state, and modality.
 4. Backend creates `practice_sessions/{sessionId}`.
 5. Backend returns practice bootstrap plus the allowed realtime session parameters.
 6. Voice routes call compliance service before creating a realtime session.
@@ -653,30 +622,28 @@ The prompt builder should move to layered assembly.
 - prohibited behaviors
 - language and role safety
 
-### Layer 2: assignment and curriculum context
+### Layer 2: assignment context
 
-- curriculum package
-- unit/module
-- target objectives
+- assignment instructions
+- generated scenario
+- teacher-authored objectives
 - target expressions
+- focus grammar
 - task type
-- scenario bounds
+- success criteria
+- optional Canvas source reference
 
-### Layer 3: pedagogical policy
+### Layer 3: tutoring policy
 
-- correction mode
-- elicitation threshold
-- scaffold ladder
-- curriculum-aware task template structure
+- modality limits
+- correction and coaching guidance embedded in assignment metadata
 - target-output pressure
 - preferred balance of fluency vs accuracy
 
 Implementation note:
 
 - keep `assignment_resolver.py` as the final assignment-aware prompt assembler
-- keep pedagogy-specific policy normalization and prompt sections in `backend/services/pedagogy/`
-- let task-template assembly compile situation seed, communicative functions, discourse moves, rubric focus, and resolved curriculum template definitions into deterministic prompt sections
-- keep the beta pedagogy engine deterministic and policy-driven before introducing any live intervention layer
+- keep prompt assembly deterministic and assignment-driven before introducing any live intervention layer
 
 ### Layer 4: learner personalization
 
@@ -914,7 +881,7 @@ This references stable `moduleId`, `objectiveIds`, and `situationId` values from
 - `frontend/src/contexts/MembershipContext.tsx`
 - `frontend/src/components/layout/TeacherRoute.tsx`
 - `frontend/src/pages/TeacherClassPage.tsx`
-- `frontend/src/pages/TeacherCurriculumPage.tsx`
+- `frontend/src/pages/TeacherAssignmentBuilderPage.tsx`
 - `frontend/src/pages/AssignmentLaunchPage.tsx`
 - `frontend/src/pages/StudentAssignmentReportPage.tsx`
 
@@ -925,8 +892,8 @@ This references stable `moduleId`, `objectiveIds`, and `situationId` values from
 - `frontend/src/components/layout/AppProtectedRoute.tsx`
 - `frontend/src/components/layout/AppLayout.tsx`
 - `frontend/src/pages/TeacherDashboardPage.tsx`
-- `frontend/src/pages/AppCurriculumPage.tsx`
-- `frontend/src/pages/AppCurriculumModulePage.tsx`
+- `frontend/src/pages/AppLearningPage.tsx`
+- `frontend/src/pages/TeacherAssignmentBuilderPage.tsx`
 - `frontend/src/types/index.ts`
 
 ## 8. Rollout phases

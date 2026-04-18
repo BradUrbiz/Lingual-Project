@@ -160,25 +160,7 @@ def create_test_harness_blueprint(deps: RouteDeps) -> Blueprint:
             # 6. Generate join code
             join_code = deps.db.generate_class_join_code(class_id)
 
-            # 7. Capture sample-package metadata for the seed response.
-            package = deps.load_sample_curriculum_package()
-            package_id = (package.get("curriculum") or {}).get("id", "")
-
-            top_modules = package.get("modules", [])
-            first_module = top_modules[0] if top_modules else {}
-            module_id = first_module.get("id", "")
-
-            situations_by_mode = first_module.get("situations", {})
-            is_situations = []
-            if isinstance(situations_by_mode, dict):
-                is_situations = situations_by_mode.get("interpersonal_speaking", [])
-            elif isinstance(situations_by_mode, list):
-                is_situations = situations_by_mode
-
-            first_situation = is_situations[0] if is_situations else {}
-            situation_id = first_situation.get("id", "")
-
-            # 8. Create a published Canvas-first assignment (C2: no mapping row).
+            # 7. Create a published Canvas-first assignment (C2: no mapping row).
             assignment_id = deps.db.create_assignment(
                 org_id=org_id,
                 class_id=class_id,
@@ -199,7 +181,7 @@ def create_test_harness_blueprint(deps: RouteDeps) -> Blueprint:
                 teacher_notes="E2E test assignment",
             )
 
-            # 9. Set up compliance (student is minor, voice granted for testing)
+            # 8. Set up compliance (student is minor, voice granted for testing)
             deps.db.upsert_student_compliance_record(org_id, TEST_STUDENT_UID, {
                 "is_minor": True,
                 "voice_consent_status": "granted",
@@ -228,9 +210,9 @@ def create_test_harness_blueprint(deps: RouteDeps) -> Blueprint:
                     "enrollmentId": enrollment_id,
                     "assignmentId": assignment_id,
                     "assignmentTitle": assignment_title,
-                    "packageId": package_id,
-                    "moduleId": module_id,
-                    "situationId": situation_id,
+                    "packageId": "",
+                    "moduleId": "",
+                    "situationId": "",
                     "e2eTag": E2E_TAG,
                 },
             }), 201

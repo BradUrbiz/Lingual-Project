@@ -897,23 +897,6 @@ def serialize_assignment(assignment: dict[str, Any] | None) -> dict[str, Any] | 
     if isinstance(canvas_module_item_ref, dict) and canvas_module_item_ref:
         serialized["canvasModuleItemRef"] = canvas_module_item_ref
     return serialized
-
-
-def build_sample_package_summary(package: dict[str, Any]) -> dict[str, Any]:
-    curriculum = package.get("curriculum", {}) if isinstance(package, dict) else {}
-    source = curriculum.get("source", {}) if isinstance(curriculum, dict) else {}
-    return {
-        "id": curriculum.get("id"),
-        "title": curriculum.get("title", {}),
-        "learningLocale": curriculum.get("learningLocale"),
-        "levelBand": curriculum.get("levelBand"),
-        "version": curriculum.get("version"),
-        "sourceType": source.get("type", "native"),
-        "status": "active",
-        "ownerScope": "global",
-    }
-
-
 def resolve_assignment_bootstrap(
     deps: Any,
     *,

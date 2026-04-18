@@ -1,7 +1,6 @@
 from flask import Flask, g, session, jsonify, send_from_directory
 from flask_cors import CORS
-from functools import wraps, lru_cache
-import json
+from functools import wraps
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -31,19 +30,6 @@ FIREBASE_PROJECT_ID = os.environ.get('GOOGLE_CLOUD_PROJECT', 'lingu-480600')
 ALLOWED_LEARNING_LOCALES = {'ko-KR', 'es-ES', 'fr-FR', 'ru-RU', 'he-IL'}
 ALLOWED_MINIGAME_TYPES = {'listening_quiz', 'grammar_challenge'}
 SUPPORTED_UI_LANGUAGES = {'en', 'ko'}
-SAMPLE_CURRICULUM_CANDIDATE_PATHS = (
-    Path('Curriculum Data/curriculum/ap_french_fall2024_unit1_3.v1.json'),
-    Path('data/curriculum/ap_french_fall2024_unit1_3.v1.json'),
-)
-PRACTICEABLE_CURRICULUM_MODES = {'interpersonal_speaking', 'presentational_speaking'}
-FOUNDATION_DOMAIN_LABELS = {
-    'comprehension': 'Comprehension',
-    'comprehensibility': 'Comprehensibility',
-    'vocabulary_usage': 'Vocabulary Usage',
-    'language_control': 'Language Control',
-    'communication_strategies': 'Communication Strategies',
-    'cultural_awareness': 'Cultural Awareness',
-}
 LEARNING_LOCALE_PROMPT_CONFIG = {
     'ko-KR': {
         'language_name': 'Korean',
@@ -138,117 +124,6 @@ def get_assessment():
     return load_assessment_data("data/assessment_v1.json")
 
 
-def get_i18n_text(value, ui_language='en'):
-    """Select localized text with English fallback."""
-    if isinstance(value, dict):
-        if ui_language in value and isinstance(value[ui_language], str):
-            return value[ui_language]
-        if 'en' in value and isinstance(value['en'], str):
-            return value['en']
-        for item in value.values():
-            if isinstance(item, str):
-                return item
-    if isinstance(value, str):
-        return value
-    return ''
-
-
-@lru_cache(maxsize=1)
-def get_sample_curriculum_path():
-    for candidate in SAMPLE_CURRICULUM_CANDIDATE_PATHS:
-        if candidate.exists():
-            return candidate
-    searched = ', '.join(str(path) for path in SAMPLE_CURRICULUM_CANDIDATE_PATHS)
-    raise FileNotFoundError(f'Sample curriculum package not found. Checked: {searched}')
-
-
-@lru_cache(maxsize=1)
-def load_sample_curriculum_package():
-    with get_sample_curriculum_path().open('r', encoding='utf-8') as file:
-        return json.load(file)
-
-
-@lru_cache(maxsize=1)
-def get_sample_curriculum_indexes():
-    package = load_sample_curriculum_package()
-    units = package.get('units', [])
-    modules = package.get('modules', [])
-    objectives = package.get('objectives', [])
-
-    units_by_id = {unit.get('id'): unit for unit in units if isinstance(unit, dict) and unit.get('id')}
-    modules_by_id = {module.get('id'): module for module in modules if isinstance(module, dict) and module.get('id')}
-    objectives_by_id = {
-        objective.get('id'): objective
-        for objective in objectives
-        if isinstance(objective, dict) and objective.get('id')
-    }
-
-    module_situations = {}
-    for module in modules_by_id.values():
-        situations_by_id = {}
-        situations = module.get('situations', {}) if isinstance(module, dict) else {}
-        if isinstance(situations, dict):
-            for mode, items in situations.items():
-                if not isinstance(items, list):
-                    continue
-                for situation in items:
-                    if not isinstance(situation, dict):
-                        continue
-                    situation_id = situation.get('id')
-                    if situation_id:
-                        situations_by_id[situation_id] = {
-                            'mode': mode,
-                            'situation': situation,
-                        }
-        module_situations[module.get('id')] = situations_by_id
-
-    return {
-        'package': package,
-        'units_by_id': units_by_id,
-        'modules_by_id': modules_by_id,
-        'objectives_by_id': objectives_by_id,
-        'module_situations': module_situations,
-    }
-
-
-def get_curriculum_practice_context(module_id, situation_id):
-    indexes = get_sample_curriculum_indexes()
-    package = indexes['package']
-    modules_by_id = indexes['modules_by_id']
-    module_situations = indexes['module_situations']
-    objectives_by_id = indexes['objectives_by_id']
-    units_by_id = indexes['units_by_id']
-
-    module = modules_by_id.get(module_id)
-    if not module:
-        raise ValueError('Invalid moduleId for sample curriculum.')
-
-    situation_entry = (module_situations.get(module_id) or {}).get(situation_id)
-    if not situation_entry:
-        raise ValueError('Invalid situationId for selected module.')
-
-    mode = situation_entry.get('mode')
-    situation = situation_entry.get('situation')
-    if mode not in PRACTICEABLE_CURRICULUM_MODES:
-        raise ValueError('Only speaking situations are currently practiceable.')
-
-    declared_kind = situation.get('kind') if isinstance(situation, dict) else None
-    if declared_kind and declared_kind != mode:
-        raise ValueError('Situation kind does not match its mode bucket.')
-
-    objective_ids = situation.get('objectiveIds', []) if isinstance(situation, dict) else []
-    missing_objective_ids = [objective_id for objective_id in objective_ids if objective_id not in objectives_by_id]
-    if missing_objective_ids:
-        raise ValueError('Situation objective references are invalid.')
-
-    objectives = [objectives_by_id[objective_id] for objective_id in objective_ids if objective_id in objectives_by_id]
-    if not objectives:
-        raise ValueError('No objectives found for selected situation.')
-
-    unit = units_by_id.get(module.get('unitId'))
-    return package, unit, module, situation, mode, objectives
-
-
 @app.route('/')
 def index():
     """Serve React SPA at root"""
@@ -339,137 +214,6 @@ USER LEARNING PREFERENCES:
 - Level Objective: {level_objective if level_objective else 'Not specified'}
 """
     return context
-
-
-def get_curriculum_tutor_role(roles):
-    if not isinstance(roles, list):
-        return 'conversation partner'
-
-    for role in roles:
-        if not isinstance(role, str):
-            continue
-        normalized = role.strip().lower()
-        if normalized and normalized not in {'learner', 'presenter', 'student', 'user'}:
-            return role
-
-    if len(roles) > 1 and isinstance(roles[1], str):
-        return roles[1]
-    return 'conversation partner'
-
-
-def format_support_target_lines(module, ui_language):
-    support_targets = module.get('supportTargets', {}) if isinstance(module, dict) else {}
-    lines = []
-    for domain in FOUNDATION_DOMAIN_LABELS:
-        targets = support_targets.get(domain, []) if isinstance(support_targets, dict) else []
-        labels = []
-        if isinstance(targets, list):
-            for target in targets[:3]:
-                if not isinstance(target, dict):
-                    continue
-                label = get_i18n_text(target.get('label', {}), ui_language)
-                if label:
-                    labels.append(label)
-        if labels:
-            lines.append(f"- {FOUNDATION_DOMAIN_LABELS[domain]}: {', '.join(labels)}")
-    return lines
-
-
-def build_curriculum_system_prompt(package, unit, module, situation, mode, objectives, ui_language='en', learning_locale='ko-KR'):
-    locale_config = LEARNING_LOCALE_PROMPT_CONFIG.get(
-        learning_locale,
-        LEARNING_LOCALE_PROMPT_CONFIG['ko-KR'],
-    )
-    language_name = locale_config['language_name']
-    register_note = locale_config['register_note']
-
-    curriculum = package.get('curriculum', {}) if isinstance(package, dict) else {}
-    curriculum_title = get_i18n_text(curriculum.get('title', {}), ui_language)
-    level_band = curriculum.get('levelBand', 'B1-B2')
-
-    unit_ap = unit.get('ap', {}) if isinstance(unit, dict) else {}
-    unit_number = unit_ap.get('unitNumber')
-    unit_title = get_i18n_text(unit.get('title', {}), ui_language) if isinstance(unit, dict) else ''
-    module_title = get_i18n_text(module.get('title', {}), ui_language)
-    module_goal = get_i18n_text(module.get('moduleGoal', {}), ui_language)
-
-    seed = situation.get('seed', {}) if isinstance(situation, dict) else {}
-    roles = seed.get('roles', []) if isinstance(seed, dict) else []
-    setting = seed.get('setting', 'roleplay')
-    register = seed.get('register', 'mixed')
-    notes = seed.get('notes', '')
-    constraints = seed.get('constraints', {}) if isinstance(seed, dict) else {}
-    min_turns = constraints.get('minTurns') if isinstance(constraints, dict) else None
-    max_turns = constraints.get('maxTurns') if isinstance(constraints, dict) else None
-    time_limit_sec = constraints.get('timeLimitSec') if isinstance(constraints, dict) else None
-
-    constraint_parts = []
-    if isinstance(min_turns, int):
-        constraint_parts.append(f"min turns: {min_turns}")
-    if isinstance(max_turns, int):
-        constraint_parts.append(f"max turns: {max_turns}")
-    if isinstance(time_limit_sec, int):
-        constraint_parts.append(f"time limit: {time_limit_sec} seconds")
-    constraints_text = ', '.join(constraint_parts) if constraint_parts else 'No strict turn/time constraint.'
-
-    objective_lines = []
-    for objective in objectives[:5]:
-        can_do = get_i18n_text(objective.get('canDo', {}), ui_language)
-        if can_do:
-            objective_lines.append(f"- {can_do}")
-    if not objective_lines:
-        objective_lines.append('- Keep practice aligned with the module goal and selected speaking mode.')
-
-    support_target_lines = format_support_target_lines(module, ui_language)
-    if not support_target_lines:
-        support_target_lines = ['- Focus on fluency, clarity, vocabulary control, and culturally appropriate register.']
-
-    mode_label = {
-        'interpersonal_speaking': 'Interpersonal speaking roleplay',
-        'presentational_speaking': 'Presentational speaking practice',
-    }.get(mode, mode)
-    tutor_role = get_curriculum_tutor_role(roles)
-    ui_language_name = 'English' if ui_language == 'en' else 'Korean'
-    presentational_rule = (
-        'Ask the learner to deliver a short structured talk first, then ask targeted follow-up questions.'
-        if mode == 'presentational_speaking'
-        else 'Keep the exchange interactive with natural back-and-forth turns.'
-    )
-
-    return f"""You are Lingu, an encouraging {language_name} speaking tutor for Lingual curriculum practice.
-
-SESSION CONTEXT:
-- Target language: {language_name} ({learning_locale})
-- Curriculum: {curriculum_title}
-- Level band: {level_band}
-- Unit: {unit_number if unit_number else '?'} - {unit_title}
-- Module: {module_title}
-- Module goal: {module_goal}
-- Practice mode: {mode_label}
-- Scenario setting: {setting}
-- Roles: user is learner/presenter; you are {tutor_role}
-- Register: {register}. {register_note}
-- Constraints: {constraints_text}
-- Scenario notes: {notes if notes else 'n/a'}
-
-SITUATION OBJECTIVES (CAN-DO):
-{chr(10).join(objective_lines)}
-
-SUPPORT TARGET HIGHLIGHTS:
-{chr(10).join(support_target_lines)}
-
-TUTOR BEHAVIOR RULES:
-1. Run a roleplay where you stay in character as the non-learner role.
-2. Respond ONLY in {language_name}. Never switch to another language, even if the curriculum materials or the student's turn use another language. Do not fall back to French, Spanish, or any other language unless the target language is that language.
-3. Keep turns concise and {language_name}-first.
-4. {presentational_rule}
-5. Keep momentum with follow-up questions and clear prompts.
-6. Give gentle corrective feedback with recasts; at most 1-2 corrections per learner turn.
-7. If clarification is truly necessary, give a brief explanation in {ui_language_name}, then immediately return to {language_name}.
-8. Respect the selected register and avoid abrupt topic changes.
-"""
-
-
 def build_system_prompt(proficiency_context, learning_locale='ko-KR'):
     locale_config = LEARNING_LOCALE_PROMPT_CONFIG.get(
         learning_locale,
@@ -608,9 +352,6 @@ def register_domain_blueprints():
         login_required=login_required,
         get_user_proficiency_context=get_user_proficiency_context,
         build_system_prompt=build_system_prompt,
-        load_sample_curriculum_package=load_sample_curriculum_package,
-        get_curriculum_practice_context=get_curriculum_practice_context,
-        build_curriculum_system_prompt=build_curriculum_system_prompt,
         get_school_request_context=get_school_request_context,
         set_active_school_membership=set_active_school_membership,
         allowed_learning_locales=ALLOWED_LEARNING_LOCALES,

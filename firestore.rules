@@ -118,12 +118,6 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /curriculum_mappings/{mappingId} {
-      allow read: if resource.data.class_id is string
-        && hasTeacherAccessToClass(resource.data.class_id);
-      allow write: if false;
-    }
-
     match /assignments/{assignmentId} {
       allow read: if resource.data.class_id is string
         && (

@@ -9,7 +9,6 @@ from backend.services.assignment_resolver import (
     SUPPORTED_ASSIGNMENT_STATUSES,
     SUPPORTED_TASK_TYPES,
     TEACHER_ALLOWED_ROLES,
-    build_sample_package_summary,
     load_assignment_bundle,
     resolve_assignment_bootstrap_for_user,
     resolve_assignment_bootstrap,
@@ -66,11 +65,6 @@ def _coerce_optional_int(value):
     if isinstance(value, str) and value.strip().lstrip('-').isdigit():
         return int(value.strip())
     return None
-
-
-def _sample_package(deps: RouteDeps):
-    package = deps.load_sample_curriculum_package()
-    return package, build_sample_package_summary(package)
 
 
 def _require_teacher_context(deps: RouteDeps, class_id: str):
@@ -158,25 +152,6 @@ def _filter_sessions_by_date(
 
 def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
     bp = Blueprint('curriculum_admin_routes', __name__)
-
-    @bp.route('/api/teacher/classes/<class_id>/curriculum/packages', methods=['GET'])
-    @deps.login_required
-    def api_get_curriculum_packages(class_id):
-        try:
-            _require_teacher_context(deps, class_id)
-            _package, package_summary = _sample_package(deps)
-            return jsonify({
-                'success': True,
-                'packages': [package_summary],
-                'limitations': [
-                    'Teacher package selection is currently sample-only; organization-owned packages are not live yet.',
-                ],
-            })
-        except SchoolContextPermissionError as exc:
-            return jsonify({'success': False, 'error': str(exc)}), 403
-        except Exception as exc:
-            print(f'Curriculum package list error: {exc}')
-            return jsonify({'success': False, 'error': str(exc)}), 500
 
     @bp.route('/api/teacher/classes/<class_id>/assignments', methods=['GET'])
     @deps.login_required

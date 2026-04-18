@@ -129,12 +129,10 @@ class FakeCurriculumDb:
         self.consent_events = []
         self.user_active_memberships = {}
 
-        self.curriculum_mappings = {}
         self.assignments = {}
         self.practice_sessions = {}
         self.learning_events = {}
 
-        self._mapping_counter = 0
         self._assignment_counter = 0
         self._session_counter = 0
         self._event_counter = 0
@@ -211,30 +209,6 @@ class FakeCurriculumDb:
     def create_consent_event(self, **payload):
         self.consent_events.append(dict(payload))
         return f'event-{len(self.consent_events)}'
-
-    # ---- curriculum mappings -----------------------------------------------
-
-    def list_class_curriculum_mappings(self, class_id):
-        return [
-            dict(m) for m in self.curriculum_mappings.values()
-            if m.get('class_id') == class_id
-        ]
-
-    def create_curriculum_mapping(self, **kwargs):
-        self._mapping_counter += 1
-        mapping_id = f'mapping-{self._mapping_counter}'
-        now = datetime.now(UTC)
-        self.curriculum_mappings[mapping_id] = {
-            'id': mapping_id,
-            **kwargs,
-            'created_at': now,
-            'updated_at': now,
-        }
-        return mapping_id
-
-    def get_curriculum_mapping(self, mapping_id):
-        mapping = self.curriculum_mappings.get(mapping_id)
-        return dict(mapping) if mapping else None
 
     # ---- assignments -------------------------------------------------------
 
@@ -367,11 +341,6 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
             login_required=passthrough_login_required,
             get_user_proficiency_context=lambda: '',
             build_system_prompt=lambda _context: '',
-            load_sample_curriculum_package=lambda: SAMPLE_PACKAGE,
-            get_curriculum_practice_context=lambda **kwargs: _find_module_and_situation(
-                SAMPLE_PACKAGE, kwargs.get('module_id'), kwargs.get('situation_id'),
-            ),
-            build_curriculum_system_prompt=lambda **_kwargs: 'You are a helpful French tutor.',
             get_school_request_context=get_school_request_context,
             set_active_school_membership=set_active_school_membership,
             allowed_learning_locales={'ko-KR', 'es-ES', 'fr-FR'},
@@ -490,16 +459,10 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
     # 1. GET /api/teacher/classes/<id>/curriculum/packages
     # -----------------------------------------------------------------------
 
-    def test_get_curriculum_packages_returns_sample_package(self):
+    def test_get_curriculum_packages_route_is_removed(self):
         self._set_session_user('teacher-1', 'mem-teacher')
         response = self.client.get('/api/teacher/classes/class-1/curriculum/packages')
-        self.assertEqual(response.status_code, 200)
-        payload = response.get_json()
-        self.assertTrue(payload['success'])
-        packages = payload['packages']
-        self.assertEqual(len(packages), 1)
-        self.assertEqual(packages[0]['id'], 'ap-french-sample')
-        self.assertEqual(packages[0]['learningLocale'], 'fr-FR')
+        self.assertEqual(response.status_code, 404)
 
     # -----------------------------------------------------------------------
     # 4. GET /api/teacher/classes/<id>/assignments — list
@@ -699,15 +662,13 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
         self.assertFalse(payload['success'])
 
     # -----------------------------------------------------------------------
-    # 13. GET /api/teacher/classes/<id>/curriculum/packages — student role 403
+    # 13. GET /api/teacher/classes/<id>/curriculum/packages — route removed
     # -----------------------------------------------------------------------
 
-    def test_get_curriculum_packages_rejects_student_role(self):
+    def test_get_curriculum_packages_route_is_removed_for_student_too(self):
         self._set_session_user('student-1', 'mem-student')
         response = self.client.get('/api/teacher/classes/class-1/curriculum/packages')
-        self.assertEqual(response.status_code, 403)
-        payload = response.get_json()
-        self.assertFalse(payload['success'])
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == '__main__':

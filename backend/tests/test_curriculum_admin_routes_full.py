@@ -76,38 +76,12 @@ SAMPLE_PACKAGE = {
     ],
     "templates": {"activityTemplates": []},
 }
-
-
-def get_curriculum_practice_context(module_id=None, situation_id=None, **_kwargs):
-    """Look up module and situation from SAMPLE_PACKAGE and return the context tuple."""
-    package = SAMPLE_PACKAGE
-    for unit in package.get("units", []):
-        for module in unit.get("modules", []):
-            if module.get("id") != module_id:
-                continue
-            for situation in module.get("situations", []):
-                if situation.get("id") != situation_id:
-                    continue
-                mode = situation.get("kind", "interpersonal_speaking")
-                objective_index = {
-                    obj["id"]: obj for obj in package.get("objectives", []) if isinstance(obj, dict) and obj.get("id")
-                }
-                objectives_list = [
-                    objective_index[oid]
-                    for oid in situation.get("objectiveIds", [])
-                    if oid in objective_index
-                ]
-                return (package, unit, module, situation, mode, objectives_list)
-    raise ValueError(f"Module '{module_id}' or situation '{situation_id}' not found in sample package.")
-
-
 class FakeDb:
     def __init__(self):
         self.organizations = {}
         self.memberships = {}
         self.classes = {}
         self.enrollments = {}
-        self.curriculum_mappings = {}
         self.assignments = {}
         self.practice_sessions = {}
         self.learning_events = []
@@ -119,7 +93,6 @@ class FakeDb:
         self.org_counter = 0
         self.membership_counter = 0
         self.class_counter = 0
-        self.mapping_counter = 0
         self.assignment_counter = 0
         self.session_counter = 0
         self.event_counter = 0
@@ -179,28 +152,6 @@ class FakeDb:
     def create_consent_event(self, **payload):
         self.consent_events.append(dict(payload))
         return f'consent-event-{len(self.consent_events)}'
-
-    # ---- curriculum mappings ----
-
-    def get_curriculum_mapping(self, mapping_id):
-        return self.curriculum_mappings.get(mapping_id)
-
-    def create_curriculum_mapping(self, **kwargs):
-        self.mapping_counter += 1
-        mapping_id = f'mapping-{self.mapping_counter}'
-        now = datetime.now(UTC).isoformat()
-        self.curriculum_mappings[mapping_id] = {
-            'id': mapping_id,
-            **kwargs,
-            'created_at': now,
-            'updated_at': now,
-        }
-        return mapping_id
-
-    def list_class_curriculum_mappings(self, class_id):
-        return [
-            dict(m) for m in self.curriculum_mappings.values() if m.get('class_id') == class_id
-        ]
 
     # ---- assignments ----
 
@@ -403,9 +354,6 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             login_required=passthrough_login_required,
             get_user_proficiency_context=lambda: '',
             build_system_prompt=lambda _context: '',
-            load_sample_curriculum_package=lambda: SAMPLE_PACKAGE,
-            get_curriculum_practice_context=lambda **kwargs: get_curriculum_practice_context(**kwargs),
-            build_curriculum_system_prompt=lambda **_kwargs: 'You are a French tutor.',
             get_school_request_context=get_school_request_context,
             set_active_school_membership=set_active_school_membership,
             allowed_learning_locales={'ko-KR', 'es-ES', 'fr-FR'},
@@ -461,19 +409,13 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
     # 1. GET /api/teacher/classes/:id/curriculum/packages
     # ------------------------------------------------------------------
 
-    def test_get_curriculum_packages_returns_sample_package(self):
+    def test_get_curriculum_packages_route_is_removed(self):
         with self.app.test_client() as client:
             with client.session_transaction() as sess:
                 sess['user'] = self._teacher_session()
 
             response = client.get(f'/api/teacher/classes/{self.class_id}/curriculum/packages')
-            self.assertEqual(response.status_code, 200)
-            payload = response.get_json()
-            self.assertTrue(payload['success'])
-            packages = payload['packages']
-            self.assertEqual(len(packages), 1)
-            self.assertEqual(packages[0]['id'], 'ap-french-sample')
-            self.assertEqual(packages[0]['learningLocale'], 'fr-FR')
+            self.assertEqual(response.status_code, 404)
 
     # ------------------------------------------------------------------
     # 4. GET /api/teacher/classes/:id/assignments
@@ -783,15 +725,13 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
     # 9. Permission checks - student cannot access teacher endpoints
     # ------------------------------------------------------------------
 
-    def test_student_cannot_access_teacher_packages_endpoint(self):
+    def test_teacher_packages_route_is_removed_for_students_too(self):
         with self.app.test_client() as client:
             with client.session_transaction() as sess:
                 sess['user'] = self._student_session()
 
             response = client.get(f'/api/teacher/classes/{self.class_id}/curriculum/packages')
-            self.assertEqual(response.status_code, 403)
-            payload = response.get_json()
-            self.assertFalse(payload['success'])
+            self.assertEqual(response.status_code, 404)
 
     def test_student_cannot_create_assignment(self):
         with self.app.test_client() as client:

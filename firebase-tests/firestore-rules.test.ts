@@ -62,11 +62,6 @@ beforeEach(async () => {
       class_id: 'class1', student_uid: 'student1', status: 'active',
     });
 
-    // Curriculum mapping
-    await setDoc(doc(db, 'curriculum_mappings', 'map1'), {
-      class_id: 'class1',
-    });
-
     // Assignment
     await setDoc(doc(db, 'assignments', 'assign1'), {
       class_id: 'class1',
@@ -228,23 +223,6 @@ describe('enrollments/{enrollmentId}', () => {
   it('nobody can write', async () => {
     const db = authedDb('teacher1');
     await assertFails(setDoc(doc(db, 'enrollments', 'class1_student1'), { status: 'removed' }));
-  });
-});
-
-describe('curriculum_mappings/{mappingId}', () => {
-  it('class teacher can read', async () => {
-    const db = authedDb('teacher1');
-    await assertSucceeds(getDoc(doc(db, 'curriculum_mappings', 'map1')));
-  });
-
-  it('student cannot read', async () => {
-    const db = authedDb('student1');
-    await assertFails(getDoc(doc(db, 'curriculum_mappings', 'map1')));
-  });
-
-  it('nobody can write', async () => {
-    const db = authedDb('teacher1');
-    await assertFails(setDoc(doc(db, 'curriculum_mappings', 'map1'), { target: 'changed' }));
   });
 });
 

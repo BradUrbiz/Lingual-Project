@@ -21,8 +21,6 @@ const AssessmentPage = lazy(() => import('./pages/AssessmentPage').then((module)
 const CategoriesPage = lazy(() => import('./pages/CategoriesPage').then((module) => ({ default: module.CategoriesPage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
 const AppLearningPage = lazy(() => import('./pages/AppLearningPage').then((module) => ({ default: module.AppLearningPage })));
-const AppCurriculumPage = lazy(() => import('./pages/AppCurriculumPage').then((module) => ({ default: module.AppCurriculumPage })));
-const AppCurriculumModulePage = lazy(() => import('./pages/AppCurriculumModulePage').then((module) => ({ default: module.AppCurriculumModulePage })));
 const AppChatPage = lazy(() => import('./pages/AppChatPage').then((module) => ({ default: module.AppChatPage })));
 const AppGamesPage = lazy(() => import('./pages/AppGamesPage').then((module) => ({ default: module.AppGamesPage })));
 const PronunciationPracticePage = lazy(() => import('./pages/PronunciationPracticePage').then((module) => ({ default: module.PronunciationPracticePage })));
@@ -86,8 +84,6 @@ function AnimatedRoutes() {
         <Route path="/app" element={<AppProtectedRoute />}>
           <Route index element={<Navigate to="learn" replace />} />
           <Route path="learn" element={withRouteSuspense(<AppLearningPage />)} />
-          <Route path="curriculum" element={withRouteSuspense(<AppCurriculumPage />)} />
-          <Route path="curriculum/:moduleId" element={withRouteSuspense(<AppCurriculumModulePage />)} />
           <Route path="chat" element={withRouteSuspense(<AppChatPage />)} />
           <Route path="games" element={withRouteSuspense(<AppGamesPage />)} />
           <Route path="progress" element={<Navigate to="/app/learn" replace />} />

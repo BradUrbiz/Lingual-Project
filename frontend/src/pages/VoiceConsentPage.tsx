@@ -95,7 +95,8 @@ export function VoiceConsentPage() {
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Voice practice lets you speak with the AI tutor in real time. Your audio is sent to
-              our speech-AI provider to transcribe what you say and generate the tutor's response.
+              OpenAI to transcribe what you say and generate the tutor's response. OpenAI does not
+              use this data to train its models.
             </p>
             <p className="text-sm text-muted-foreground">
               If you don't consent, you can still complete assignments via text practice — typing

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Shield, Database, Users, Clock, Trash2, Scale } from 'lucide-react';
+import { Shield, Database, Users, Clock, Trash2, Scale, Cloud } from 'lucide-react';
 
 function Section({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
   return (
@@ -43,6 +43,45 @@ export default function CompliancePage() {
             <li>Consent status is tracked per student per organization with a full audit trail.</li>
             <li>Schools can issue secure-link guardian notices as supplementary parent communication.</li>
           </ul>
+        </Section>
+
+        <Section icon={Cloud} title="Third-party AI processing">
+          <p>
+            Voice and text conversations are processed by{' '}
+            <strong>OpenAI's GPT and Realtime APIs</strong> so the AI tutor can understand the
+            student's response and generate the next turn in the target language. What leaves
+            Lingual and what doesn't:
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              <strong>Sent to OpenAI:</strong> student audio (voice mode), typed text, prior turns
+              in the current session, and a system prompt that carries assignment context —
+              scenario, target expressions, focus grammar, and learning locale.
+            </li>
+            <li>
+              <strong>Not sent:</strong> student email, account identifiers, Firebase auth data,
+              transcripts from past sessions, or any aggregated analytics.
+            </li>
+          </ul>
+          <p>
+            OpenAI does not use data sent through its API to train its models. Under OpenAI's
+            default API terms, payloads may be retained for up to 30 days for abuse monitoring
+            and then deleted — that window is controlled by OpenAI, not Lingual. Transcripts that
+            Lingual itself retains in Firestore are separate from OpenAI's processing and follow
+            the retention defaults below.
+          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Reference:{' '}
+            <a
+              href="https://openai.com/policies/api-data-usage-policies"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline"
+            >
+              OpenAI API Data Usage Policies
+            </a>
+            .
+          </p>
         </Section>
 
         <Section icon={Users} title="Who can access what">

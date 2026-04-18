@@ -12,14 +12,8 @@ RUN npm ci
 # Copy frontend source
 COPY frontend/ ./
 
-# Cubism Live2D SDK is intentionally NOT copied into pilot/staging builds
-# (excluded via .gcloudignore to keep upload size small). vite.config.ts
-# detects the missing folder via fs.existsSync() and falls back to the
-# stub modules in src/stubs/cubism/. The Live2D avatar feature is disabled
-# at runtime via the __CUBISM_SDK_AVAILABLE__ build-time flag.
-# To build WITH the avatar: remove the CubismSdkForWeb-5-r.4/ entry from
-# .gcloudignore and re-add `COPY CubismSdkForWeb-5-r.4/Framework/dist
-# /app/CubismSdkForWeb-5-r.4/Framework/dist` above this RUN.
+# Copy Cubism SDK for Live2D avatar build (uploaded from local disk by gcloud builds submit)
+COPY CubismSdkForWeb-5-r.4/Framework/dist /app/CubismSdkForWeb-5-r.4/Framework/dist
 
 # Build the React app
 RUN npm run build

@@ -38,27 +38,3 @@ static/react/
 *.log
 tmp/
 temp/
-
-# Cubism Live2D SDK (60+ MB). The avatar feature is optional and
-# vite.config.ts falls back to src/stubs/cubism/ when the folder is
-# absent, so the pilot/staging build ships without it. If you want
-# the Live2D avatar in a build, remove this exclusion.
-CubismSdkForWeb-5-r.4/
-
-# Test harnesses and build artifacts not needed by the runtime image.
-# firebase-tests/ runs Firestore rules against the local emulator and
-# is never shipped; coverage_html/ is per-session test output; e2e/
-# holds Playwright specs that run in CI not in the container; archive/
-# is legacy code kept only for reference.
-firebase-tests/
-coverage_html/
-e2e/
-archive/
-
-# Local agent / session state (never runtime code)
-.omc/
-frontend/.omc/
-
-# Misc local dev output
-dist/
-build/

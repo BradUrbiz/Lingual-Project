@@ -30,7 +30,6 @@ const ANALYTICS: AssignmentAnalyticsData = {
     id: 'assignment-1',
     orgId: 'org-1',
     classId: 'class-1',
-    mappingId: 'mapping-1',
     title: 'Family Interview',
     description: 'Ask follow-up questions about family life.',
     status: 'published',

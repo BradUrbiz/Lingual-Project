@@ -160,11 +160,10 @@ def create_test_harness_blueprint(deps: RouteDeps) -> Blueprint:
             # 6. Generate join code
             join_code = deps.db.generate_class_join_code(class_id)
 
-            # 7. Create curriculum mapping (using sample package)
+            # 7. Capture sample-package metadata for the seed response.
             package = deps.load_sample_curriculum_package()
             package_id = (package.get("curriculum") or {}).get("id", "")
 
-            # Navigate the real package structure: top-level modules[], situations keyed by mode
             top_modules = package.get("modules", [])
             first_module = top_modules[0] if top_modules else {}
             module_id = first_module.get("id", "")
@@ -178,41 +177,26 @@ def create_test_harness_blueprint(deps: RouteDeps) -> Blueprint:
 
             first_situation = is_situations[0] if is_situations else {}
             situation_id = first_situation.get("id", "")
-            objective_ids = first_situation.get("objectiveIds", [])
 
-            mapping_id = deps.db.create_curriculum_mapping(
-                org_id=org_id,
-                class_id=class_id,
-                package_id=package_id,
-                module_id=module_id,
-                objective_ids=objective_ids,
-                situation_ids=[situation_id] if situation_id else [],
-                target_expressions=["bonjour", "comment ca va"],
-                focus_grammar=["present tense"],
-                feedback_policy={"mode": "balanced"},
-                scaffold_policy={},
-                output_policy={},
-                modality_policy={"mode": "hybrid", "text_fallback_enabled": True},
-                rubric_focus=[],
-                teacher_notes="E2E test assignment",
-                created_by_uid=TEST_TEACHER_UID,
-            )
-
-            # 8. Create published assignment
+            # 8. Create a published Canvas-first assignment (C2: no mapping row).
             assignment_id = deps.db.create_assignment(
                 org_id=org_id,
                 class_id=class_id,
-                mapping_id=mapping_id,
                 title=assignment_title,
                 description="E2E test assignment for automated testing",
                 status="published",
                 task_type="information_gap",
                 release_at=None,
                 due_at=None,
-                modality_override=None,
+                modality_override={"mode": "hybrid", "text_fallback_enabled": True},
                 max_attempts=None,
                 success_criteria=["Complete the practice task"],
                 created_by_uid=TEST_TEACHER_UID,
+                instructions="Practice ordering at a French cafe.",
+                generated_scenario="You are ordering a drink at a French cafe and greeting the barista.",
+                target_expressions=["bonjour", "comment ca va"],
+                focus_grammar=["present tense"],
+                teacher_notes="E2E test assignment",
             )
 
             # 9. Set up compliance (student is minor, voice granted for testing)
@@ -242,7 +226,6 @@ def create_test_harness_blueprint(deps: RouteDeps) -> Blueprint:
                     "className": class_name,
                     "joinCode": join_code,
                     "enrollmentId": enrollment_id,
-                    "mappingId": mapping_id,
                     "assignmentId": assignment_id,
                     "assignmentTitle": assignment_title,
                     "packageId": package_id,
@@ -332,7 +315,6 @@ def create_test_harness_blueprint(deps: RouteDeps) -> Blueprint:
 
             deleted = {
                 "assignments": 0,
-                "mappings": 0,
                 "enrollments": 0,
                 "classes": 0,
                 "memberships": 0,

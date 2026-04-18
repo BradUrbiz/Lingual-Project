@@ -13,12 +13,8 @@ from backend.services.assignment_resolver import (
     load_assignment_bundle,
     resolve_assignment_bootstrap_for_user,
     resolve_assignment_bootstrap,
-    normalize_feedback_policy,
     normalize_modality_policy,
-    normalize_scaffold_policy,
-    normalize_output_policy,
     serialize_assignment,
-    serialize_curriculum_mapping,
 )
 from backend.services.canvas.practice_generator import generate_canvas_practice
 from backend.services.disclosure_logging import log_disclosure_if_new
@@ -92,31 +88,6 @@ def _require_teacher_context(deps: RouteDeps, class_id: str):
         return context, class_record
 
     raise SchoolContextPermissionError('Teacher membership does not have access to this class.')
-
-
-def _ensure_sample_mapping_references(deps: RouteDeps, package_id: str, module_id: str, situation_ids: list[str], objective_ids: list[str]):
-    package, package_summary = _sample_package(deps)
-    if package_id != package_summary['id']:
-        raise ValueError('Only the bundled sample curriculum package is supported right now.')
-
-    if not situation_ids:
-        raise ValueError('At least one speaking situation is required.')
-
-    deps.get_curriculum_practice_context(
-        module_id=module_id,
-        situation_id=situation_ids[0],
-    )
-
-    objective_index = {
-        objective.get('id')
-        for objective in package.get('objectives', [])
-        if isinstance(objective, dict) and objective.get('id')
-    }
-    invalid_objective_ids = [objective_id for objective_id in objective_ids if objective_id not in objective_index]
-    if invalid_objective_ids:
-        raise ValueError('One or more objectiveIds are invalid for the selected curriculum package.')
-
-    return package_summary
 
 
 def _serialize_assignments_with_class_names(deps: RouteDeps, assignments: list[dict]):
@@ -207,87 +178,6 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             print(f'Curriculum package list error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
 
-    @bp.route('/api/teacher/classes/<class_id>/curriculum/mappings', methods=['GET'])
-    @deps.login_required
-    def api_list_curriculum_mappings(class_id):
-        try:
-            _require_teacher_context(deps, class_id)
-            mappings = deps.db.list_class_curriculum_mappings(class_id)
-            return jsonify({
-                'success': True,
-                'mappings': [
-                    mapping_dto
-                    for mapping in mappings
-                    if (mapping_dto := serialize_curriculum_mapping(mapping))
-                ],
-            })
-        except SchoolContextPermissionError as exc:
-            return jsonify({'success': False, 'error': str(exc)}), 403
-        except Exception as exc:
-            print(f'Curriculum mapping list error: {exc}')
-            return jsonify({'success': False, 'error': str(exc)}), 500
-
-    @bp.route('/api/teacher/classes/<class_id>/curriculum/mappings', methods=['POST'])
-    @deps.login_required
-    def api_create_curriculum_mapping(class_id):
-        try:
-            context, class_record = _require_teacher_context(deps, class_id)
-            uid = deps.get_current_user_uid()
-            data = request.get_json() or {}
-
-            package_id = _normalize_string(data.get('packageId'))
-            module_id = _normalize_string(data.get('moduleId'))
-            objective_ids = _normalize_string_list(data.get('objectiveIds'))
-            situation_ids = _normalize_string_list(data.get('situationIds'))
-            target_expressions = _normalize_string_list(data.get('targetExpressions'))
-            focus_grammar = _normalize_string_list(data.get('focusGrammar'))
-            allowed_context_tags = _normalize_string_list(data.get('allowedContextTags'))
-            rubric_focus = _normalize_string_list(data.get('rubricFocus'))
-            teacher_notes = _normalize_string(data.get('teacherNotes'))
-
-            if not package_id:
-                return jsonify({'success': False, 'error': 'packageId is required.'}), 400
-            if not module_id:
-                return jsonify({'success': False, 'error': 'moduleId is required.'}), 400
-
-            if package_id != 'canvas-generated':
-                _ensure_sample_mapping_references(deps, package_id, module_id, situation_ids, objective_ids)
-
-            mapping_id = deps.db.create_curriculum_mapping(
-                org_id=class_record.get('org_id'),
-                class_id=class_id,
-                package_id=package_id,
-                module_id=module_id,
-                objective_ids=objective_ids,
-                situation_ids=situation_ids,
-                target_expressions=target_expressions,
-                focus_grammar=focus_grammar,
-                allowed_context_tags=allowed_context_tags,
-                feedback_policy=normalize_feedback_policy(data.get('feedbackPolicy')),
-                scaffold_policy=normalize_scaffold_policy(data.get('scaffoldPolicy')),
-                output_policy=(
-                    normalize_output_policy(data.get('outputPolicy'))
-                    if data.get('outputPolicy') is not None
-                    else {}
-                ),
-                modality_policy=normalize_modality_policy(data.get('modalityPolicy')),
-                rubric_focus=rubric_focus,
-                teacher_notes=teacher_notes,
-                created_by_uid=uid or '',
-            )
-
-            return jsonify({
-                'success': True,
-                'mapping': serialize_curriculum_mapping(deps.db.get_curriculum_mapping(mapping_id)),
-            }), 201
-        except SchoolContextPermissionError as exc:
-            return jsonify({'success': False, 'error': str(exc)}), 403
-        except ValueError as exc:
-            return jsonify({'success': False, 'error': str(exc)}), 400
-        except Exception as exc:
-            print(f'Curriculum mapping creation error: {exc}')
-            return jsonify({'success': False, 'error': str(exc)}), 500
-
     @bp.route('/api/teacher/classes/<class_id>/assignments', methods=['GET'])
     @deps.login_required
     def api_list_class_assignments(class_id):
@@ -356,7 +246,6 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             uid = deps.get_current_user_uid()
             data = request.get_json() or {}
 
-            mapping_id = _normalize_string(data.get('mappingId'))
             title = _normalize_string(data.get('title'))
             description = _normalize_string(data.get('description'))
             status = _normalize_string(data.get('status')) or 'draft'
@@ -378,54 +267,31 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 return jsonify({'success': False, 'error': 'Invalid assignment status.'}), 400
             if task_type not in SUPPORTED_TASK_TYPES:
                 return jsonify({'success': False, 'error': 'Invalid task type.'}), 400
+            if not instructions:
+                return jsonify({'success': False, 'error': 'instructions is required.'}), 400
+            if not generated_scenario:
+                return jsonify({'success': False, 'error': 'generatedScenario is required.'}), 400
 
-            if mapping_id:
-                mapping = deps.db.get_curriculum_mapping(mapping_id)
-                if not mapping or mapping.get('class_id') != class_id:
-                    return jsonify({'success': False, 'error': 'Mapping not found for this class.'}), 404
-
-                assignment_id = deps.db.create_assignment(
-                    org_id=class_record.get('org_id'),
-                    class_id=class_id,
-                    mapping_id=mapping_id,
-                    title=title,
-                    description=description,
-                    status=status,
-                    release_at=release_at,
-                    due_at=due_at,
-                    modality_override=normalize_modality_policy(data.get('modalityOverride')),
-                    max_attempts=max_attempts,
-                    task_type=task_type,
-                    success_criteria=success_criteria,
-                    created_by_uid=uid or '',
-                )
-            else:
-                if not instructions:
-                    return jsonify({'success': False, 'error': 'instructions is required when mappingId is omitted.'}), 400
-                if not generated_scenario:
-                    return jsonify({'success': False, 'error': 'generatedScenario is required when mappingId is omitted.'}), 400
-
-                assignment_id = deps.db.create_assignment(
-                    org_id=class_record.get('org_id'),
-                    class_id=class_id,
-                    mapping_id=None,
-                    title=title,
-                    description=description,
-                    status=status,
-                    release_at=release_at,
-                    due_at=due_at,
-                    modality_override=normalize_modality_policy(data.get('modalityOverride')),
-                    max_attempts=max_attempts,
-                    task_type=task_type,
-                    success_criteria=success_criteria,
-                    created_by_uid=uid or '',
-                    instructions=instructions,
-                    objectives=objectives,
-                    target_expressions=target_expressions,
-                    focus_grammar=focus_grammar,
-                    generated_scenario=generated_scenario,
-                    teacher_notes=teacher_notes,
-                )
+            assignment_id = deps.db.create_assignment(
+                org_id=class_record.get('org_id'),
+                class_id=class_id,
+                title=title,
+                description=description,
+                status=status,
+                release_at=release_at,
+                due_at=due_at,
+                modality_override=normalize_modality_policy(data.get('modalityOverride')),
+                max_attempts=max_attempts,
+                task_type=task_type,
+                success_criteria=success_criteria,
+                created_by_uid=uid or '',
+                instructions=instructions,
+                objectives=objectives,
+                target_expressions=target_expressions,
+                focus_grammar=focus_grammar,
+                generated_scenario=generated_scenario,
+                teacher_notes=teacher_notes,
+            )
 
             return jsonify({
                 'success': True,
@@ -592,11 +458,10 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
     def api_get_assignment_analytics(assignment_id):
         try:
             _require_assignment_teacher_access(deps, assignment_id)
-            assignment, mapping, class_record = load_assignment_bundle(deps, assignment_id)
+            assignment, _mapping, class_record = load_assignment_bundle(deps, assignment_id)
             bootstrap = resolve_assignment_bootstrap(
                 deps,
                 assignment=assignment,
-                mapping=mapping,
                 class_record=class_record,
                 ui_language='en',
             )

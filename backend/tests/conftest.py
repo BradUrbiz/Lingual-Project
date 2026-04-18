@@ -151,7 +151,6 @@ def make_assignment(
     assignment_id: str | None = None,
     org_id: str = "org-1",
     class_id: str = "class-1",
-    mapping_id: str = "mapping-1",
     title: str = "Practice 1",
     status: str = "published",
     task_type: str = "information_gap",
@@ -161,7 +160,6 @@ def make_assignment(
         "id": assignment_id or _next_id("assign"),
         "org_id": org_id,
         "class_id": class_id,
-        "mapping_id": mapping_id,
         "title": title,
         "description": extra.pop("description", ""),
         "status": status,
@@ -172,38 +170,12 @@ def make_assignment(
         "max_attempts": None,
         "success_criteria": [],
         "created_by_uid": extra.pop("created_by_uid", ""),
-        "created_at": datetime.now(UTC),
-        "updated_at": datetime.now(UTC),
-        **extra,
-    }
-
-
-def make_mapping(
-    mapping_id: str | None = None,
-    org_id: str = "org-1",
-    class_id: str = "class-1",
-    package_id: str = "ap-french-sample",
-    module_id: str = "mod-1",
-    **extra,
-) -> dict[str, Any]:
-    return {
-        "id": mapping_id or _next_id("mapping"),
-        "org_id": org_id,
-        "class_id": class_id,
-        "package_id": package_id,
-        "module_id": module_id,
-        "objective_ids": extra.pop("objective_ids", ["obj-1"]),
-        "situation_ids": extra.pop("situation_ids", ["sit-1"]),
+        # Direct scenario fields (C2 — curriculum_mappings is gone).
+        "instructions": extra.pop("instructions", "Default test instructions."),
+        "generated_scenario": extra.pop("generated_scenario", "Default test scenario."),
         "target_expressions": extra.pop("target_expressions", []),
         "focus_grammar": extra.pop("focus_grammar", []),
-        "allowed_context_tags": extra.pop("allowed_context_tags", []),
-        "feedback_policy": extra.pop("feedback_policy", {"mode": "balanced"}),
-        "scaffold_policy": extra.pop("scaffold_policy", {}),
-        "output_policy": extra.pop("output_policy", {}),
-        "modality_policy": extra.pop("modality_policy", {"mode": "hybrid"}),
-        "rubric_focus": extra.pop("rubric_focus", []),
         "teacher_notes": extra.pop("teacher_notes", ""),
-        "created_by_uid": extra.pop("created_by_uid", ""),
         "created_at": datetime.now(UTC),
         "updated_at": datetime.now(UTC),
         **extra,
@@ -378,7 +350,6 @@ class FakeDbBase:
         self.consent_events: list[dict] = []
         self.guardian_packets: dict[str, dict] = {}
         self.assignments: dict[str, dict] = {}
-        self.mappings: dict[str, dict] = {}
         self.practice_sessions: dict[str, dict] = {}
         self.learning_events: list[dict] = []
         self.deletion_requests: dict[str, dict] = {}
@@ -541,7 +512,6 @@ class FakeDbBase:
         self,
         org_id,
         class_id,
-        mapping_id=None,
         title='',
         description='',
         status='draft',
@@ -567,7 +537,6 @@ class FakeDbBase:
             'id': aid,
             'org_id': org_id,
             'class_id': class_id,
-            'mapping_id': mapping_id,
             'title': title,
             'description': description or '',
             'status': status,
@@ -604,18 +573,6 @@ class FakeDbBase:
                 continue
             results.append(dict(a))
         return results
-
-    def get_curriculum_mapping(self, mapping_id: str):
-        m = self.mappings.get(mapping_id)
-        return dict(m) if m else None
-
-    def create_curriculum_mapping(self, **kwargs) -> str:
-        mid = self._next_id("mapping")
-        self.mappings[mid] = {"id": mid, **kwargs, "created_at": datetime.now(UTC), "updated_at": datetime.now(UTC)}
-        return mid
-
-    def list_class_curriculum_mappings(self, class_id: str):
-        return [dict(m) for m in self.mappings.values() if m.get("class_id") == class_id]
 
     # -- Canvas course content --
 

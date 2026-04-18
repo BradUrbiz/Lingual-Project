@@ -1,5 +1,31 @@
-import type { ActivityTemplateDefinition, CurriculumMode, I18nText } from './curriculum';
 import type { RetentionPolicySummary } from './school';
+
+// ---------------------------------------------------------------------------
+// Curriculum primitives (inlined from the now-deleted curriculum.ts — C2).
+// These power the assignment bootstrap/analytics DTOs and the Canvas-generated
+// activity template metadata that the resolver still emits.
+// ---------------------------------------------------------------------------
+
+export type I18nText = Record<string, string>;
+
+export type CurriculumMode =
+  | 'interpretive_listening'
+  | 'interpersonal_speaking'
+  | 'presentational_speaking';
+
+export interface ActivityTemplateDefinition {
+  id: string;
+  title: I18nText;
+  mode: CurriculumMode | string;
+  assistantRole: string;
+  interactionPattern: {
+    openingMoves: string[];
+    sustainMoves: string[];
+    closingMoves: string[];
+    completionRule: string;
+  };
+  promptCues: string[];
+}
 
 export type FeedbackMode = 'fluency_first' | 'balanced' | 'accuracy_first' | string;
 export type ModalityMode = 'text_only' | 'voice_only' | 'hybrid';
@@ -32,12 +58,21 @@ export interface ModalityPolicy {
   textFallbackEnabled: boolean;
 }
 
-export interface CurriculumMappingDto {
-  id: string;
-  orgId: string;
-  classId: string;
+/**
+ * Shape of the `mapping` slot returned by the assignment bootstrap response.
+ *
+ * C2 deleted the `curriculum_mappings` collection entirely, but the bootstrap
+ * payload keeps a mapping-shaped DTO for backwards compatibility with older
+ * frontend consumers. The scenario-bearing fields (`generatedScenario`,
+ * `targetExpressions`, `focusGrammar`, `teacherNotes`, `outputPolicy`) are
+ * populated from the assignment document by the Canvas-generated resolver.
+ */
+export interface BootstrapMappingDto {
+  id: string | null;
+  orgId: string | null;
+  classId: string | null;
   packageId: string;
-  moduleId: string;
+  moduleId: string | null;
   objectiveIds: string[];
   situationIds: string[];
   targetExpressions: string[];
@@ -71,7 +106,6 @@ export interface AssignmentDto {
   id: string;
   orgId: string;
   classId: string;
-  mappingId: string | null;
   title: string;
   description: string;
   status: AssignmentStatus | string;
@@ -83,6 +117,11 @@ export interface AssignmentDto {
   successCriteria: string[];
   createdByUid: string;
   canvasModuleItemId?: string;
+  canvasModuleItemRef?: {
+    connection_id?: string;
+    canvas_module_id?: string;
+    item_id?: string;
+  };
   instructions?: string;
   generatedScenario?: string;
   objectives?: string[];
@@ -156,7 +195,7 @@ export interface AssignmentBootstrapPedagogy {
 
 export interface AssignmentBootstrapData {
   assignment: AssignmentDto;
-  mapping: CurriculumMappingDto;
+  mapping: BootstrapMappingDto;
   class: {
     id: string;
     orgId: string;
@@ -208,13 +247,13 @@ export interface AssignmentBootstrapData {
   realtimeSessionParams: {
     uiLanguage: string;
     practice: {
-      type: 'curriculum_module';
-      curriculumId: string;
-      moduleId: string;
-      situationId: string;
+      type: 'curriculum_module' | 'canvas_generated' | string;
+      curriculumId?: string;
+      moduleId?: string;
+      situationId?: string;
       assignmentId: string;
       classId: string;
-      mappingId: string;
+      mappingId?: string | null;
       objectiveIds: string[];
       taskModel: string;
       rubricIds: string[];
@@ -296,7 +335,7 @@ export interface PracticeSessionEventPayload {
 export interface AssignmentAnalyticsData {
   assignment: AssignmentDto;
   class: AssignmentBootstrapData['class'];
-  mapping: CurriculumMappingDto;
+  mapping: BootstrapMappingDto;
   summary: {
     sessionCount: number;
     completedSessionCount: number;
@@ -391,24 +430,7 @@ export interface AssignmentAnalyticsData {
   limitations: string[];
 }
 
-export interface CreateCurriculumMappingPayload {
-  packageId: string;
-  moduleId: string;
-  objectiveIds: string[];
-  situationIds: string[];
-  targetExpressions?: string[];
-  focusGrammar?: string[];
-  allowedContextTags?: string[];
-  feedbackPolicy?: Partial<FeedbackPolicy>;
-  scaffoldPolicy?: Partial<ScaffoldPolicy>;
-  outputPolicy?: Partial<OutputPolicy>;
-  modalityPolicy?: Partial<ModalityPolicy>;
-  rubricFocus?: string[];
-  teacherNotes?: string;
-}
-
 export interface CreateAssignmentPayload {
-  mappingId?: string;
   title: string;
   description?: string;
   status?: AssignmentStatus;
@@ -418,12 +440,17 @@ export interface CreateAssignmentPayload {
   maxAttempts?: number | null;
   taskType?: AssignmentTaskType;
   successCriteria?: string[];
-  instructions?: string;
-  generatedScenario?: string;
+  instructions: string;
+  generatedScenario: string;
   objectives?: string[];
   targetExpressions?: string[];
   focusGrammar?: string[];
   teacherNotes?: string;
+  canvasModuleItemRef?: {
+    connection_id?: string;
+    canvas_module_id?: string;
+    item_id?: string;
+  };
 }
 
 export interface CreatePracticeSessionPayload {

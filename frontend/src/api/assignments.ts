@@ -5,29 +5,10 @@ import type {
   AssignmentDto,
   CreatePracticeSessionPayload,
   CreateAssignmentPayload,
-  CreateCurriculumMappingPayload,
-  CurriculumMappingDto,
   PracticeSessionDto,
   PracticeSessionEventPayload,
   StudentAssignmentSummary,
-  TeacherCurriculumPackageSummary,
 } from '@/types';
-
-interface PackageListResponse {
-  success: boolean;
-  packages: TeacherCurriculumPackageSummary[];
-  limitations?: string[];
-}
-
-interface MappingListResponse {
-  success: boolean;
-  mappings: CurriculumMappingDto[];
-}
-
-interface MappingCreateResponse {
-  success: boolean;
-  mapping: CurriculumMappingDto;
-}
 
 interface AssignmentListResponse {
   success: boolean;
@@ -69,29 +50,6 @@ interface AssignmentDraftGenerateResponse {
   };
   error?: string;
 }
-
-export const getTeacherCurriculumPackages = async (
-  classId: string
-): Promise<{ packages: TeacherCurriculumPackageSummary[]; limitations: string[] }> => {
-  const response = await api.get<PackageListResponse>(`/teacher/classes/${classId}/curriculum/packages`);
-  return {
-    packages: response.data.packages,
-    limitations: response.data.limitations ?? [],
-  };
-};
-
-export const getCurriculumMappings = async (classId: string): Promise<CurriculumMappingDto[]> => {
-  const response = await api.get<MappingListResponse>(`/teacher/classes/${classId}/curriculum/mappings`);
-  return response.data.mappings;
-};
-
-export const createCurriculumMapping = async (
-  classId: string,
-  payload: CreateCurriculumMappingPayload
-): Promise<CurriculumMappingDto> => {
-  const response = await api.post<MappingCreateResponse>(`/teacher/classes/${classId}/curriculum/mappings`, payload);
-  return response.data.mapping;
-};
 
 export const getTeacherAssignments = async (classId: string): Promise<StudentAssignmentSummary[]> => {
   const response = await api.get<AssignmentListResponse>(`/teacher/classes/${classId}/assignments`);

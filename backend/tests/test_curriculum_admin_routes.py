@@ -444,44 +444,27 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
                 'active_membership_id': membership_id,
             }
 
-    def test_teacher_can_create_mapping_and_assignment(self):
+    def test_teacher_can_create_direct_assignment(self):
         self._set_session_user('teacher-1', 'mem-teacher')
 
-        mapping_response = self.client.post('/api/teacher/classes/class-1/curriculum/mappings', json={
-            'packageId': 'sample-ap-french',
-            'moduleId': 'M1',
-            'objectiveIds': ['OBJ1'],
-            'situationIds': ['S1'],
-            'targetExpressions': ['Could I have'],
-            'focusGrammar': ['past tense'],
-            'allowedContextTags': ['weekend'],
-            'outputPolicy': {
-                'minStudentTurnWords': 12,
-                'followUpPressure': 'high',
-                'allowClarificationRequests': False,
-            },
-            'teacherNotes': 'Keep the conversation focused on past narrative.',
-        })
-        self.assertEqual(mapping_response.status_code, 201)
-        mapping_payload = mapping_response.get_json()['mapping']
-        self.assertEqual(mapping_payload['moduleId'], 'M1')
-        self.assertEqual(mapping_payload['situationIds'], ['S1'])
-        self.assertEqual(mapping_payload['outputPolicy']['minStudentTurnWords'], 12)
-        self.assertEqual(mapping_payload['outputPolicy']['followUpPressure'], 'high')
-        self.assertFalse(mapping_payload['outputPolicy']['allowClarificationRequests'])
-
         assignment_response = self.client.post('/api/teacher/classes/class-1/assignments', json={
-            'mappingId': mapping_payload['id'],
             'title': 'Weekend Storytelling',
             'description': 'Retell what happened last weekend.',
             'status': 'published',
             'taskType': 'decision_making',
+            'instructions': 'Describe your weekend in the past tense.',
+            'generatedScenario': 'You are catching up with a friend after the weekend.',
+            'targetExpressions': ['Could I have'],
+            'focusGrammar': ['past tense'],
             'successCriteria': ['Use past tense verbs three times'],
+            'teacherNotes': 'Keep the conversation focused on past narrative.',
         })
         self.assertEqual(assignment_response.status_code, 201)
         assignment_payload = assignment_response.get_json()['assignment']
         self.assertEqual(assignment_payload['status'], 'published')
-        self.assertEqual(assignment_payload['mappingId'], mapping_payload['id'])
+        self.assertNotIn('mappingId', assignment_payload)
+        self.assertEqual(assignment_payload['generatedScenario'], 'You are catching up with a friend after the weekend.')
+        self.assertEqual(assignment_payload['targetExpressions'], ['Could I have'])
 
     def test_teacher_can_create_direct_field_assignment_without_mapping(self):
         self._set_session_user('teacher-1', 'mem-teacher')
@@ -503,7 +486,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         self.assertTrue(payload['success'])
         assignment = payload['assignment']
         self.assertEqual(assignment['title'], 'Restaurant role-play')
-        self.assertIsNone(assignment['mappingId'])
+        self.assertNotIn('mappingId', assignment)
         stored = self.fake_db.get_assignment(assignment['id'])
         self.assertEqual(stored['instructions'], 'Use the target phrases naturally.')
         self.assertEqual(stored['generated_scenario'], 'You are ordering dinner at a busy restaurant.')
@@ -526,19 +509,13 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
 
     def test_student_assignment_bootstrap_returns_realtime_params(self):
         self._set_session_user('teacher-1', 'mem-teacher')
-        mapping_response = self.client.post('/api/teacher/classes/class-1/curriculum/mappings', json={
-            'packageId': 'sample-ap-french',
-            'moduleId': 'M1',
-            'objectiveIds': ['OBJ1'],
-            'situationIds': ['S1'],
-        })
-        mapping_id = mapping_response.get_json()['mapping']['id']
 
         assignment_response = self.client.post('/api/teacher/classes/class-1/assignments', json={
-            'mappingId': mapping_id,
             'title': 'Weekend Storytelling',
             'status': 'published',
             'taskType': 'decision_making',
+            'instructions': 'Describe your weekend using past tense verbs.',
+            'generatedScenario': 'You are catching up with a friend after the weekend.',
         })
         assignment_id = assignment_response.get_json()['assignment']['id']
 
@@ -553,33 +530,23 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         self.assertEqual(bootstrap_response.status_code, 200)
         bootstrap = bootstrap_response.get_json()['bootstrap']
         self.assertEqual(bootstrap['assignment']['id'], assignment_id)
-        self.assertEqual(bootstrap['mapping']['id'], mapping_id)
+        # After C2, the realtime params use the canvas_generated shape.
+        self.assertEqual(bootstrap['realtimeSessionParams']['practice']['type'], 'canvas_generated')
         self.assertEqual(bootstrap['realtimeSessionParams']['practice']['assignmentId'], assignment_id)
-        self.assertEqual(bootstrap['realtimeSessionParams']['practice']['moduleId'], 'M1')
-        self.assertEqual(bootstrap['mapping']['outputPolicy']['minStudentTurnWords'], 9)
-        self.assertEqual(bootstrap['mapping']['outputPolicy']['followUpPressure'], 'high')
-        self.assertTrue(bootstrap['mapping']['outputPolicy']['allowClarificationRequests'])
-        self.assertIn('sample curriculum package', ' '.join(bootstrap['limitations']).lower())
 
     def test_student_assignment_bootstrap_downgrades_to_text_when_voice_is_blocked_and_fallback_is_enabled(self):
         self._set_session_user('teacher-1', 'mem-teacher')
-        mapping_response = self.client.post('/api/teacher/classes/class-1/curriculum/mappings', json={
-            'packageId': 'sample-ap-french',
-            'moduleId': 'M1',
-            'objectiveIds': ['OBJ1'],
-            'situationIds': ['S1'],
-            'modalityPolicy': {
-                'mode': 'hybrid',
-                'textFallbackEnabled': True,
-            },
-        })
-        mapping_id = mapping_response.get_json()['mapping']['id']
 
         assignment_response = self.client.post('/api/teacher/classes/class-1/assignments', json={
-            'mappingId': mapping_id,
             'title': 'Voice practice with fallback',
             'status': 'published',
             'taskType': 'information_gap',
+            'instructions': 'Ask for clarification when needed.',
+            'generatedScenario': 'You are ordering dinner at a busy restaurant.',
+            'modalityOverride': {
+                'mode': 'hybrid',
+                'textFallbackEnabled': True,
+            },
         })
         assignment_id = assignment_response.get_json()['assignment']['id']
 
@@ -604,21 +571,15 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
 
     def test_practice_session_events_roll_up_into_assignment_analytics(self):
         self._set_session_user('teacher-1', 'mem-teacher')
-        mapping_response = self.client.post('/api/teacher/classes/class-1/curriculum/mappings', json={
-            'packageId': 'sample-ap-french',
-            'moduleId': 'M1',
-            'objectiveIds': ['OBJ1'],
-            'situationIds': ['S1'],
-            'targetExpressions': ["j'ai"],
-            'focusGrammar': ['past tense'],
-        })
-        mapping_id = mapping_response.get_json()['mapping']['id']
 
         assignment_response = self.client.post('/api/teacher/classes/class-1/assignments', json={
-            'mappingId': mapping_id,
             'title': 'Restaurant mission',
             'status': 'published',
             'taskType': 'information_gap',
+            'instructions': "Use past-tense verbs and 'j'ai' while ordering.",
+            'generatedScenario': 'You are ordering at a French cafe and recount your morning.',
+            'targetExpressions': ["j'ai"],
+            'focusGrammar': ['past tense'],
         })
         assignment_id = assignment_response.get_json()['assignment']['id']
 
@@ -683,22 +644,13 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         self.assertEqual(analytics['summary']['totalStudentTurns'], 2)
         self.assertEqual(analytics['summary']['totalAssistantTurns'], 1)
         self.assertEqual(analytics['summary']['targetExpressionHits']["j'ai"], 2)
-        self.assertEqual(analytics['summary']['repeatedErrorCount'], 4)
-        self.assertTrue(analytics['summary']['rubricAverageScore'] is not None)
-        self.assertEqual(analytics['pedagogy']['taskModel'], 'ap.conversation')
+        # After C2, the Canvas-generated bootstrap powers the pedagogy
+        # context directly from the assignment; curriculum-package objectives
+        # and rubrics are no longer attached.
+        self.assertEqual(analytics['pedagogy']['taskModel'], 'information_gap')
         self.assertEqual(analytics['pedagogy']['evidence']['minTurns'], 4)
-        self.assertTrue(any(item['id'] == 'weekend' for item in analytics['pedagogy']['contextTagCoverage']))
-        self.assertEqual(analytics['pedagogy']['objectives'][0]['turnCount'], 2)
-        self.assertEqual(analytics['pedagogy']['repeatedErrors'][0]['id'], 'fr.past_auxiliary_infinitive')
-        self.assertEqual(analytics['pedagogy']['repeatedErrors'][0]['studentCount'], 1)
-        self.assertEqual(analytics['pedagogy']['rubrics'][0]['threshold'], 3)
-        self.assertTrue(
-            analytics['pedagogy']['rubrics'][0]['dimensions'][0]['averageScore'] is not None
-        )
-        self.assertIn(
-            analytics['pedagogy']['rubrics'][0]['dimensions'][0]['confidence'],
-            {'low', 'medium', 'high'},
-        )
+        self.assertEqual(analytics['pedagogy']['objectives'], [])
+        self.assertEqual(analytics['pedagogy']['rubrics'], [])
 
 
 if __name__ == '__main__':

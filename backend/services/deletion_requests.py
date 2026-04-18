@@ -47,7 +47,6 @@ ORG_SCOPE_COLLECTIONS = [
     "classes",
     "enrollments",
     "memberships",
-    "curriculum_mappings",
     "assignments",
 ]
 

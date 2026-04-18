@@ -435,33 +435,11 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             'active_membership_id': self.student_membership_id,
         }
 
-    def _create_mapping_via_db(self):
-        """Directly insert a mapping into FakeDb and return its id."""
-        return self.fake_db.create_curriculum_mapping(
-            org_id=self.org_id,
-            class_id=self.class_id,
-            package_id='ap-french-sample',
-            module_id='mod-1',
-            objective_ids=['obj-1'],
-            situation_ids=['sit-1'],
-            target_expressions=[],
-            focus_grammar=[],
-            allowed_context_tags=[],
-            feedback_policy={},
-            scaffold_policy={},
-            output_policy={},
-            modality_policy={},
-            rubric_focus=[],
-            teacher_notes='',
-            created_by_uid=self.teacher_uid,
-        )
-
-    def _create_published_assignment_via_db(self, mapping_id):
-        """Insert a published assignment into FakeDb and return its id."""
+    def _create_published_assignment_via_db(self):
+        """Insert a published direct-scenario assignment into FakeDb and return its id."""
         return self.fake_db.create_assignment(
             org_id=self.org_id,
             class_id=self.class_id,
-            mapping_id=mapping_id,
             title='Family Vocab Practice',
             description='Practice describing families.',
             status='published',
@@ -472,6 +450,11 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             task_type='decision_making',
             success_criteria=[],
             created_by_uid=self.teacher_uid,
+            instructions='Talk about family members.',
+            generated_scenario='You meet a classmate and describe your family.',
+            target_expressions=['ma famille'],
+            focus_grammar=['present tense'],
+            teacher_notes='Keep the exchange friendly.',
         )
 
     # ------------------------------------------------------------------
@@ -493,96 +476,6 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             self.assertEqual(packages[0]['learningLocale'], 'fr-FR')
 
     # ------------------------------------------------------------------
-    # 2. GET /api/teacher/classes/:id/curriculum/mappings
-    # ------------------------------------------------------------------
-
-    def test_list_curriculum_mappings_empty(self):
-        with self.app.test_client() as client:
-            with client.session_transaction() as sess:
-                sess['user'] = self._teacher_session()
-
-            response = client.get(f'/api/teacher/classes/{self.class_id}/curriculum/mappings')
-            self.assertEqual(response.status_code, 200)
-            payload = response.get_json()
-            self.assertTrue(payload['success'])
-            self.assertEqual(payload['mappings'], [])
-
-    def test_list_curriculum_mappings_returns_created_mapping(self):
-        self._create_mapping_via_db()
-
-        with self.app.test_client() as client:
-            with client.session_transaction() as sess:
-                sess['user'] = self._teacher_session()
-
-            response = client.get(f'/api/teacher/classes/{self.class_id}/curriculum/mappings')
-            self.assertEqual(response.status_code, 200)
-            payload = response.get_json()
-            self.assertTrue(payload['success'])
-            self.assertEqual(len(payload['mappings']), 1)
-            self.assertEqual(payload['mappings'][0]['packageId'], 'ap-french-sample')
-
-    # ------------------------------------------------------------------
-    # 3. POST /api/teacher/classes/:id/curriculum/mappings
-    # ------------------------------------------------------------------
-
-    def test_create_curriculum_mapping_happy_path(self):
-        with self.app.test_client() as client:
-            with client.session_transaction() as sess:
-                sess['user'] = self._teacher_session()
-
-            response = client.post(
-                f'/api/teacher/classes/{self.class_id}/curriculum/mappings',
-                json={
-                    'packageId': 'ap-french-sample',
-                    'moduleId': 'mod-1',
-                    'objectiveIds': ['obj-1'],
-                    'situationIds': ['sit-1'],
-                },
-            )
-            self.assertEqual(response.status_code, 201)
-            payload = response.get_json()
-            self.assertTrue(payload['success'])
-            mapping = payload['mapping']
-            self.assertEqual(mapping['packageId'], 'ap-french-sample')
-            self.assertEqual(mapping['moduleId'], 'mod-1')
-            self.assertIn('obj-1', mapping['objectiveIds'])
-
-    def test_create_curriculum_mapping_missing_package_id(self):
-        with self.app.test_client() as client:
-            with client.session_transaction() as sess:
-                sess['user'] = self._teacher_session()
-
-            response = client.post(
-                f'/api/teacher/classes/{self.class_id}/curriculum/mappings',
-                json={
-                    'moduleId': 'mod-1',
-                    'situationIds': ['sit-1'],
-                },
-            )
-            self.assertEqual(response.status_code, 400)
-            payload = response.get_json()
-            self.assertFalse(payload['success'])
-            self.assertIn('packageId', payload['error'])
-
-    def test_create_curriculum_mapping_wrong_package(self):
-        with self.app.test_client() as client:
-            with client.session_transaction() as sess:
-                sess['user'] = self._teacher_session()
-
-            response = client.post(
-                f'/api/teacher/classes/{self.class_id}/curriculum/mappings',
-                json={
-                    'packageId': 'nonexistent-package',
-                    'moduleId': 'mod-1',
-                    'situationIds': ['sit-1'],
-                },
-            )
-            self.assertEqual(response.status_code, 400)
-            payload = response.get_json()
-            self.assertFalse(payload['success'])
-            self.assertIn('sample curriculum package', payload['error'].lower())
-
-    # ------------------------------------------------------------------
     # 4. GET /api/teacher/classes/:id/assignments
     # ------------------------------------------------------------------
 
@@ -598,8 +491,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             self.assertEqual(payload['assignments'], [])
 
     def test_list_class_assignments_returns_created_assignment(self):
-        mapping_id = self._create_mapping_via_db()
-        self._create_published_assignment_via_db(mapping_id)
+        self._create_published_assignment_via_db()
 
         with self.app.test_client() as client:
             with client.session_transaction() as sess:
@@ -617,8 +509,6 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_create_assignment_happy_path(self):
-        mapping_id = self._create_mapping_via_db()
-
         with self.app.test_client() as client:
             with client.session_transaction() as sess:
                 sess['user'] = self._teacher_session()
@@ -626,11 +516,12 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             response = client.post(
                 f'/api/teacher/classes/{self.class_id}/assignments',
                 json={
-                    'mappingId': mapping_id,
                     'title': 'Family Vocab Practice',
                     'description': 'Talk about your family.',
                     'status': 'draft',
                     'taskType': 'decision_making',
+                    'instructions': 'Introduce your family.',
+                    'generatedScenario': 'You meet a new friend and describe your family.',
                 },
             )
             self.assertEqual(response.status_code, 201)
@@ -639,11 +530,9 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             assignment = payload['assignment']
             self.assertEqual(assignment['title'], 'Family Vocab Practice')
             self.assertEqual(assignment['status'], 'draft')
-            self.assertEqual(assignment['mappingId'], mapping_id)
+            self.assertNotIn('mappingId', assignment)
 
     def test_create_assignment_missing_title(self):
-        mapping_id = self._create_mapping_via_db()
-
         with self.app.test_client() as client:
             with client.session_transaction() as sess:
                 sess['user'] = self._teacher_session()
@@ -651,8 +540,9 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             response = client.post(
                 f'/api/teacher/classes/{self.class_id}/assignments',
                 json={
-                    'mappingId': mapping_id,
                     'status': 'draft',
+                    'instructions': 'x',
+                    'generatedScenario': 'y',
                 },
             )
             self.assertEqual(response.status_code, 400)
@@ -660,7 +550,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             self.assertFalse(payload['success'])
             self.assertIn('title', payload['error'].lower())
 
-    def test_create_assignment_missing_mapping(self):
+    def test_create_assignment_missing_instructions(self):
         with self.app.test_client() as client:
             with client.session_transaction() as sess:
                 sess['user'] = self._teacher_session()
@@ -668,45 +558,17 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             response = client.post(
                 f'/api/teacher/classes/{self.class_id}/assignments',
                 json={
-                    'title': 'Assignment Without Mapping',
+                    'title': 'Assignment Without Instructions',
                     'status': 'draft',
+                    'generatedScenario': 'You are at a cafe.',
                 },
             )
             self.assertEqual(response.status_code, 400)
             payload = response.get_json()
             self.assertFalse(payload['success'])
-            self.assertIn('mappingId', payload['error'])
+            self.assertIn('instructions', payload['error'])
 
-    def test_create_assignment_mapping_from_wrong_class(self):
-        # Create a mapping for a different class
-        other_class_id = 'class-other'
-        self.fake_db.classes[other_class_id] = {
-            'id': other_class_id,
-            'org_id': self.org_id,
-            'name': 'Other Class',
-            'learning_locale': 'fr-FR',
-            'teacher_membership_ids': [self.teacher_membership_id],
-            'status': 'active',
-        }
-        mapping_id = self.fake_db.create_curriculum_mapping(
-            org_id=self.org_id,
-            class_id=other_class_id,
-            package_id='ap-french-sample',
-            module_id='mod-1',
-            objective_ids=['obj-1'],
-            situation_ids=['sit-1'],
-            target_expressions=[],
-            focus_grammar=[],
-            allowed_context_tags=[],
-            feedback_policy={},
-            scaffold_policy={},
-            output_policy={},
-            modality_policy={},
-            rubric_focus=[],
-            teacher_notes='',
-            created_by_uid=self.teacher_uid,
-        )
-
+    def test_create_assignment_missing_generated_scenario(self):
         with self.app.test_client() as client:
             with client.session_transaction() as sess:
                 sess['user'] = self._teacher_session()
@@ -714,23 +576,22 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             response = client.post(
                 f'/api/teacher/classes/{self.class_id}/assignments',
                 json={
-                    'mappingId': mapping_id,
-                    'title': 'Cross-class assignment',
+                    'title': 'Assignment Without Scenario',
                     'status': 'draft',
+                    'instructions': 'Introduce yourself.',
                 },
             )
-            self.assertEqual(response.status_code, 404)
+            self.assertEqual(response.status_code, 400)
             payload = response.get_json()
             self.assertFalse(payload['success'])
-            self.assertIn('Mapping not found', payload['error'])
+            self.assertIn('generatedScenario', payload['error'])
 
     # ------------------------------------------------------------------
     # 6. GET /api/student/assignments
     # ------------------------------------------------------------------
 
     def test_list_student_assignments(self):
-        mapping_id = self._create_mapping_via_db()
-        self._create_published_assignment_via_db(mapping_id)
+        self._create_published_assignment_via_db()
 
         with self.app.test_client() as client:
             with client.session_transaction() as sess:
@@ -746,12 +607,10 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             self.assertEqual(payload['assignments'][0]['className'], 'French 1')
 
     def test_list_student_assignments_excludes_drafts(self):
-        mapping_id = self._create_mapping_via_db()
         # Create a draft assignment (not published)
         self.fake_db.create_assignment(
             org_id=self.org_id,
             class_id=self.class_id,
-            mapping_id=mapping_id,
             title='Draft Assignment',
             description='',
             status='draft',
@@ -762,6 +621,8 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             task_type='decision_making',
             success_criteria=[],
             created_by_uid=self.teacher_uid,
+            instructions='draft instructions',
+            generated_scenario='draft scenario',
         )
 
         with self.app.test_client() as client:
@@ -779,8 +640,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_create_practice_session_happy_path(self):
-        mapping_id = self._create_mapping_via_db()
-        assignment_id = self._create_published_assignment_via_db(mapping_id)
+        assignment_id = self._create_published_assignment_via_db()
 
         with self.app.test_client() as client:
             with client.session_transaction() as sess:
@@ -803,8 +663,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_report_event_student_turn(self):
-        mapping_id = self._create_mapping_via_db()
-        assignment_id = self._create_published_assignment_via_db(mapping_id)
+        assignment_id = self._create_published_assignment_via_db()
 
         # Create a practice session directly in the db
         session_id = self.fake_db.create_practice_session({
@@ -862,8 +721,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             self.assertIsNotNone(payload['practiceSession'])
 
     def test_report_event_unsupported_type(self):
-        mapping_id = self._create_mapping_via_db()
-        assignment_id = self._create_published_assignment_via_db(mapping_id)
+        assignment_id = self._create_published_assignment_via_db()
         session_id = self.fake_db.create_practice_session({
             'org_id': self.org_id,
             'class_id': self.class_id,
@@ -892,8 +750,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             self.assertIn('Unsupported eventType', payload['error'])
 
     def test_report_event_wrong_user(self):
-        mapping_id = self._create_mapping_via_db()
-        assignment_id = self._create_published_assignment_via_db(mapping_id)
+        assignment_id = self._create_published_assignment_via_db()
         # Session owned by a different student
         session_id = self.fake_db.create_practice_session({
             'org_id': self.org_id,
@@ -936,19 +793,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             payload = response.get_json()
             self.assertFalse(payload['success'])
 
-    def test_student_cannot_access_teacher_mappings_endpoint(self):
-        with self.app.test_client() as client:
-            with client.session_transaction() as sess:
-                sess['user'] = self._student_session()
-
-            response = client.get(f'/api/teacher/classes/{self.class_id}/curriculum/mappings')
-            self.assertEqual(response.status_code, 403)
-            payload = response.get_json()
-            self.assertFalse(payload['success'])
-
     def test_student_cannot_create_assignment(self):
-        mapping_id = self._create_mapping_via_db()
-
         with self.app.test_client() as client:
             with client.session_transaction() as sess:
                 sess['user'] = self._student_session()
@@ -956,9 +801,10 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             response = client.post(
                 f'/api/teacher/classes/{self.class_id}/assignments',
                 json={
-                    'mappingId': mapping_id,
                     'title': 'Sneaky Assignment',
                     'status': 'draft',
+                    'instructions': 'unused',
+                    'generatedScenario': 'unused',
                 },
             )
             self.assertEqual(response.status_code, 403)

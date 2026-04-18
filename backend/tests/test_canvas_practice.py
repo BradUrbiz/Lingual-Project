@@ -73,5 +73,5 @@ class CanvasPracticeCreateTest(unittest.TestCase):
             "canvas_module_id": "mod-1",
             "item_id": "page-1",
         })
-        # Confirm: no curriculum_mapping row was written for this assignment.
-        self.assertIsNone(asg.get("mapping_id"))
+        # Confirm (C2): assignment has no mapping_id field at all; scenario lives on the assignment.
+        self.assertNotIn("mapping_id", asg)

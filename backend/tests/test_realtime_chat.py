@@ -446,6 +446,16 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
             }
 
     def test_realtime_session_uses_assignment_bootstrap_prompt_when_assignment_id_is_present(self):
+        # After C2, the Canvas-generated bootstrap is the only path. The
+        # assignment doc carries scenario fields directly (no mapping row).
+        self.fake_db.assignments['assignment-1'].update({
+            'instructions': 'Order a meal politely in French.',
+            'generated_scenario': 'You are ordering dinner at a Parisian bistro and need to ask one clarifying question.',
+            'target_expressions': ['Could I have'],
+            'focus_grammar': ['polite requests'],
+            'teacher_notes': 'Keep the student in the restaurant ordering lane.',
+        })
+
         with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-openai-key'}, clear=False):
             with patch('backend.routes.chat.requests.post') as mocked_post:
                 mocked_post.return_value = FakeRealtimeSessionResponse()
@@ -468,18 +478,12 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         request_payload = mocked_post.call_args.kwargs['json']
         instructions = request_payload['instructions']
 
-        self.assertIn('Prompt for M1::S1', instructions)
         self.assertIn('Assignment title: Restaurant Ordering Practice', instructions)
         self.assertIn('Task type: information_gap', instructions)
-        self.assertIn('Task model: ap.conversation', instructions)
+        # Canvas-generated scenario content flows into the prompt.
+        self.assertIn('Parisian bistro', instructions)
         self.assertIn('Could I have', instructions)
         self.assertIn('polite requests', instructions)
-        self.assertIn('COMMUNICATIVE FUNCTIONS TO WATCH', instructions)
-        self.assertIn('RUBRICS IN PLAY', instructions)
-        self.assertIn('Feedback mode: accuracy_first', instructions)
-        self.assertIn('Resolved structured activity template: Restaurant Roleplay.', instructions)
-        self.assertIn('Template assistant role: Play the server and reveal menu details only when the learner asks.', instructions)
-        self.assertIn('Teacher notes: Keep the student in the restaurant ordering lane.', instructions)
 
     def test_realtime_session_blocks_voice_when_consent_is_missing(self):
         self.fake_db.student_compliance_records['org-1_student-1'].update({

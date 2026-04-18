@@ -301,13 +301,12 @@ export type {
   AssignmentDto,
   AssignmentStatus,
   AssignmentTaskType,
+  BootstrapMappingDto,
   ClassAnalyticsAssignmentCard,
   ClassAnalyticsData,
   ClassAnalyticsStudentCard,
   CreateAssignmentPayload,
-  CreateCurriculumMappingPayload,
   CreatePracticeSessionPayload,
-  CurriculumMappingDto,
   FeedbackPolicy,
   ModalityMode,
   ModalityPolicy,
@@ -327,20 +326,8 @@ export type {
 export type {
   I18nText,
   CurriculumMode,
-  SupportDomain,
-  SourceRef,
-  Unit,
-  SituationSeedConstraints,
-  SituationSeed,
-  Situation,
-  SupportTarget,
-  ModuleSupportTargets,
-  Capstone,
-  Module,
-  Objective,
   ActivityTemplateDefinition,
-  CurriculumPackageV1,
-} from './curriculum';
+} from './assignment';
 
 export type {
   CanvasConnectResult,

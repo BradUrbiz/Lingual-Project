@@ -9,7 +9,6 @@ class CreateAssignmentDirectFieldsTest(unittest.TestCase):
         assignment_id = self.db.create_assignment(
             org_id="org-1",
             class_id="class-1",
-            mapping_id=None,
             title="Sample",
             description="",
             status="draft",
@@ -35,7 +34,7 @@ class CreateAssignmentDirectFieldsTest(unittest.TestCase):
 
     def test_create_assignment_default_fields_empty(self):
         assignment_id = self.db.create_assignment(
-            org_id="org-1", class_id="class-1", mapping_id=None,
+            org_id="org-1", class_id="class-1",
             title="Minimal", description="", status="draft",
             task_type="decision_making", success_criteria=[], created_by_uid="uid-1",
         )

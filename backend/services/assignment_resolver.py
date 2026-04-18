@@ -786,64 +786,6 @@ def build_task_template_prompt(
     return "TASK TEMPLATE DIRECTIVE:\n" + "\n".join(f"- {line}" for line in _tt_unique_preserving_order(lines))
 
 
-# --- Activity template resolution (inlined from pedagogy/curriculum_templates.py) ---
-
-def _serialize_activity_template(template: dict[str, Any] | None) -> dict[str, Any]:
-    template = template if isinstance(template, dict) else {}
-    interaction = template.get("interactionPattern", {}) if isinstance(template.get("interactionPattern"), dict) else {}
-
-    def _norm_i18n(value: Any) -> dict[str, str]:
-        if not isinstance(value, dict):
-            return {}
-        return {
-            str(locale).strip(): text.strip()
-            for locale, text in value.items()
-            if isinstance(locale, str) and locale.strip() and isinstance(text, str) and text.strip()
-        }
-
-    return {
-        "id": _tt_normalize_string(template.get("id")),
-        "title": _norm_i18n(template.get("title")),
-        "mode": _tt_normalize_string(template.get("mode")),
-        "assistantRole": _tt_normalize_string(template.get("assistantRole")),
-        "interactionPattern": {
-            "openingMoves": _tt_normalize_string_list(interaction.get("openingMoves")),
-            "sustainMoves": _tt_normalize_string_list(interaction.get("sustainMoves")),
-            "closingMoves": _tt_normalize_string_list(interaction.get("closingMoves")),
-            "completionRule": _tt_normalize_string(interaction.get("completionRule")),
-        },
-        "promptCues": _tt_normalize_string_list(template.get("promptCues")),
-    }
-
-
-def resolve_activity_templates(
-    package: dict[str, Any] | None,
-    *,
-    template_refs: list[str] | None,
-) -> list[dict[str, Any]]:
-    refs = _tt_normalize_string_list(template_refs)
-    if not refs:
-        return []
-
-    package = package if isinstance(package, dict) else {}
-    templates_obj = package.get("templates", {}) if isinstance(package.get("templates"), dict) else {}
-    template_index: dict[str, dict[str, Any]] = {}
-    for template in templates_obj.get("activityTemplates", []) or []:
-        if not isinstance(template, dict):
-            continue
-        serialized = _serialize_activity_template(template)
-        tid = serialized.get("id")
-        if tid:
-            template_index[tid] = serialized
-
-    resolved: list[dict[str, Any]] = []
-    for template_ref in refs:
-        template = template_index.get(template_ref)
-        if template:
-            resolved.append(template)
-    return resolved
-
-
 def _normalize_string(value: Any) -> str:
     if not isinstance(value, str):
         return ""
@@ -911,53 +853,13 @@ def serialize_modality_policy(policy: Any) -> dict[str, Any]:
     }
 
 
-def serialize_curriculum_mapping(mapping: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not isinstance(mapping, dict):
-        return None
-    raw_output_policy = mapping.get("output_policy")
-    serialized = {
-        "id": mapping.get("id"),
-        "orgId": mapping.get("org_id"),
-        "classId": mapping.get("class_id"),
-        "packageId": mapping.get("package_id"),
-        "moduleId": mapping.get("module_id"),
-        "objectiveIds": _normalize_string_list(mapping.get("objective_ids")),
-        "situationIds": _normalize_string_list(mapping.get("situation_ids")),
-        "targetExpressions": _normalize_string_list(mapping.get("target_expressions")),
-        "focusGrammar": _normalize_string_list(mapping.get("focus_grammar")),
-        "allowedContextTags": _normalize_string_list(mapping.get("allowed_context_tags")),
-        "feedbackPolicy": serialize_feedback_policy(mapping.get("feedback_policy")),
-        "scaffoldPolicy": serialize_scaffold_policy(mapping.get("scaffold_policy")),
-        "modalityPolicy": serialize_modality_policy(mapping.get("modality_policy")),
-        "rubricFocus": _normalize_string_list(mapping.get("rubric_focus")),
-        "teacherNotes": mapping.get("teacher_notes", ""),
-        "createdByUid": mapping.get("created_by_uid", ""),
-        "createdAt": _timestamp_to_iso(mapping.get("created_at")),
-        "updatedAt": _timestamp_to_iso(mapping.get("updated_at")),
-    }
-    if mapping.get("generated_scenario"):
-        serialized["generatedScenario"] = mapping["generated_scenario"]
-    if mapping.get("canvas_content_id"):
-        serialized["canvasContentId"] = mapping["canvas_content_id"]
-    if mapping.get("source_canvas_item_title"):
-        serialized["sourceCanvasItemTitle"] = mapping["source_canvas_item_title"]
-    if isinstance(raw_output_policy, dict) and raw_output_policy:
-        serialized["outputPolicy"] = serialize_output_policy(
-            raw_output_policy,
-            task_type="",
-            feedback_mode=normalize_feedback_policy(mapping.get("feedback_policy")).get("mode", "balanced"),
-        )
-    return serialized
-
-
 def serialize_assignment(assignment: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(assignment, dict):
         return None
-    return {
+    serialized: dict[str, Any] = {
         "id": assignment.get("id"),
         "orgId": assignment.get("org_id"),
         "classId": assignment.get("class_id"),
-        "mappingId": assignment.get("mapping_id"),
         "title": assignment.get("title", ""),
         "description": assignment.get("description", ""),
         "status": assignment.get("status", "draft"),
@@ -972,6 +874,29 @@ def serialize_assignment(assignment: dict[str, Any] | None) -> dict[str, Any] | 
         "updatedAt": _timestamp_to_iso(assignment.get("updated_at")),
         "canvasModuleItemId": assignment.get("canvas_module_item_id", ""),
     }
+    # New direct-scenario fields — preferred over curriculum_mappings path (C2).
+    instructions = assignment.get("instructions")
+    if isinstance(instructions, str) and instructions:
+        serialized["instructions"] = instructions
+    generated_scenario = assignment.get("generated_scenario")
+    if isinstance(generated_scenario, str) and generated_scenario:
+        serialized["generatedScenario"] = generated_scenario
+    objectives = assignment.get("objectives")
+    if isinstance(objectives, list) and objectives:
+        serialized["objectives"] = _normalize_string_list(objectives)
+    target_expressions = assignment.get("target_expressions")
+    if isinstance(target_expressions, list) and target_expressions:
+        serialized["targetExpressions"] = _normalize_string_list(target_expressions)
+    focus_grammar = assignment.get("focus_grammar")
+    if isinstance(focus_grammar, list) and focus_grammar:
+        serialized["focusGrammar"] = _normalize_string_list(focus_grammar)
+    teacher_notes = assignment.get("teacher_notes")
+    if isinstance(teacher_notes, str) and teacher_notes:
+        serialized["teacherNotes"] = teacher_notes
+    canvas_module_item_ref = assignment.get("canvas_module_item_ref")
+    if isinstance(canvas_module_item_ref, dict) and canvas_module_item_ref:
+        serialized["canvasModuleItemRef"] = canvas_module_item_ref
+    return serialized
 
 
 def build_sample_package_summary(package: dict[str, Any]) -> dict[str, Any]:
@@ -989,385 +914,46 @@ def build_sample_package_summary(package: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _package_objective_index(package: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {
-        objective.get("id"): objective
-        for objective in package.get("objectives", [])
-        if isinstance(objective, dict) and objective.get("id")
-    }
-
-
-def _package_rubric_index(package: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {
-        rubric.get("id"): rubric
-        for rubric in package.get("rubrics", [])
-        if isinstance(rubric, dict) and rubric.get("id")
-    }
-
-
-def _unique_ordered_strings(values: list[Any]) -> list[str]:
-    normalized = []
-    seen = set()
-    for value in values:
-        cleaned = _normalize_string(value)
-        if not cleaned or cleaned in seen:
-            continue
-        normalized.append(cleaned)
-        seen.add(cleaned)
-    return normalized
-
-
-def _serialize_bootstrap_objective(objective: dict[str, Any]) -> dict[str, Any]:
-    mastery = objective.get("mastery", {}) if isinstance(objective, dict) else {}
-    evidence_model = objective.get("evidenceModel", {}) if isinstance(objective, dict) else {}
-    return {
-        "id": objective.get("id"),
-        "mode": objective.get("mode"),
-        "canDo": objective.get("canDo", {}),
-        "contextTags": _normalize_string_list(objective.get("contextTags")),
-        "communicativeFunctions": _normalize_string_list(objective.get("communicativeFunctions")),
-        "discourseMoves": _normalize_string_list(objective.get("discourseMoves")),
-        "foundationDomains": _normalize_string_list(objective.get("foundationDomains")),
-        "register": objective.get("register"),
-        "mastery": {
-            "rubricId": _normalize_string(mastery.get("rubricId")),
-            "threshold": mastery.get("threshold"),
-        },
-        "evidenceModel": {
-            "taskModel": _normalize_string(evidence_model.get("taskModel")),
-            "timeLimitSec": evidence_model.get("timeLimitSec"),
-            "minTurns": evidence_model.get("minTurns"),
-            "inputProfile": evidence_model.get("inputProfile", {}),
-        },
-        "templateRefs": _normalize_string_list(objective.get("templateRefs")),
-    }
-
-
-def _serialize_bootstrap_rubric(rubric: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": rubric.get("id"),
-        "title": rubric.get("title", {}),
-        "scale": rubric.get("scale", {}),
-        "dimensions": [
-            {
-                "id": dimension.get("id"),
-                "title": dimension.get("title", {}),
-                "description": dimension.get("description", {}),
-            }
-            for dimension in rubric.get("dimensions", [])
-            if isinstance(dimension, dict) and dimension.get("id")
-        ],
-        "notes": rubric.get("notes", ""),
-    }
-
-
-def _build_bootstrap_pedagogy_context(
-    package: dict[str, Any],
-    module: dict[str, Any],
-    situation: dict[str, Any],
-    objectives: list[dict[str, Any]],
-    rubrics: list[dict[str, Any]],
-) -> dict[str, Any]:
-    module_capstone = module.get("capstone", {}) if isinstance(module, dict) else {}
-    situation_seed = situation.get("seed", {}) if isinstance(situation, dict) else {}
-    situation_constraints = situation_seed.get("constraints", {}) if isinstance(situation_seed, dict) else {}
-
-    task_model_candidates = [
-        module_capstone.get("taskModel"),
-        *[
-            (objective.get("evidenceModel") or {}).get("taskModel")
-            for objective in objectives
-            if isinstance(objective, dict)
-        ],
-    ]
-    time_limit_candidates = [
-        situation_constraints.get("timeLimitSec"),
-        *[
-            (objective.get("evidenceModel") or {}).get("timeLimitSec")
-            for objective in objectives
-            if isinstance(objective, dict)
-        ],
-    ]
-    min_turn_candidates = [
-        situation_constraints.get("minTurns"),
-        *[
-            (objective.get("evidenceModel") or {}).get("minTurns")
-            for objective in objectives
-            if isinstance(objective, dict)
-        ],
-    ]
-
-    resolved_template_refs = _unique_ordered_strings(
-        [
-            template_id
-            for objective in objectives
-            if isinstance(objective, dict)
-            for template_id in (objective.get("templateRefs") or [])
-        ]
-    )
-
-    return {
-        "taskModel": next((value for value in task_model_candidates if _normalize_string(value)), ""),
-        "evidence": {
-            "timeLimitSec": next((value for value in time_limit_candidates if isinstance(value, int)), None),
-            "minTurns": next((value for value in min_turn_candidates if isinstance(value, int)), None),
-            "maxTurns": situation_constraints.get("maxTurns")
-            if isinstance(situation_constraints.get("maxTurns"), int)
-            else None,
-            "maxReplays": situation_constraints.get("maxReplays")
-            if isinstance(situation_constraints.get("maxReplays"), int)
-            else None,
-        },
-        "contextTags": _unique_ordered_strings(
-            [
-                *(situation_seed.get("contextTags") or []),
-                *[
-                    tag
-                    for objective in objectives
-                    if isinstance(objective, dict)
-                    for tag in (objective.get("contextTags") or [])
-                ],
-            ]
-        ),
-        "communicativeFunctions": _unique_ordered_strings(
-            [
-                function_id
-                for objective in objectives
-                if isinstance(objective, dict)
-                for function_id in (objective.get("communicativeFunctions") or [])
-            ]
-        ),
-        "discourseMoves": _unique_ordered_strings(
-            [
-                move_id
-                for objective in objectives
-                if isinstance(objective, dict)
-                for move_id in (objective.get("discourseMoves") or [])
-            ]
-        ),
-        "foundationDomains": _unique_ordered_strings(
-            [
-                domain_id
-                for objective in objectives
-                if isinstance(objective, dict)
-                for domain_id in (objective.get("foundationDomains") or [])
-            ]
-        ),
-        "templateRefs": resolved_template_refs,
-        "activityTemplates": resolve_activity_templates(package, template_refs=resolved_template_refs),
-        "objectiveIds": _unique_ordered_strings(
-            [objective.get("id") for objective in objectives if isinstance(objective, dict)]
-        ),
-        "rubricIds": _unique_ordered_strings(
-            [
-                (objective.get("mastery") or {}).get("rubricId")
-                for objective in objectives
-                if isinstance(objective, dict)
-            ]
-        ),
-        "rubricDimensionIds": _unique_ordered_strings(
-            [
-                dimension.get("id")
-                for rubric in rubrics
-                if isinstance(rubric, dict)
-                for dimension in (rubric.get("dimensions") or [])
-                if isinstance(dimension, dict)
-            ]
-        ),
-    }
-
-
 def resolve_assignment_bootstrap(
     deps: Any,
     *,
     assignment: dict[str, Any],
-    mapping: dict[str, Any] | None,
+    mapping: dict[str, Any] | None = None,
     class_record: dict[str, Any],
     ui_language: str = "en",
 ) -> dict[str, Any]:
+    """Build the bootstrap payload for an assignment.
+
+    After C2 (Canvas content migration), all assignments store scenario fields
+    directly on the assignment document. Curriculum mappings are gone, so the
+    ``mapping`` kwarg is kept only for backwards compatibility with the
+    pre-C2 call sites and is always ignored. Every assignment now flows
+    through the Canvas-generated resolver.
+    """
     assignment_dto = serialize_assignment(assignment)
     if not assignment_dto:
         raise ValueError("Assignment bootstrap requires a valid assignment record.")
 
-    # Canvas-first path: new assignments have generated_scenario directly on the
-    # assignment doc and no mapping row at all (Task A2 / Task A3).
-    if assignment.get("generated_scenario") and not assignment.get("mapping_id"):
-        mapping_dto = _empty_canvas_mapping_dto()
-        return _resolve_canvas_generated_bootstrap(
-            deps,
-            mapping=None,
-            mapping_dto=mapping_dto,
-            assignment=assignment,
-            assignment_dto=assignment_dto,
-            class_record=class_record,
-            ui_language=ui_language,
-        )
-
-    mapping_dto = serialize_curriculum_mapping(mapping)
-    if not mapping_dto:
-        raise ValueError("Assignment bootstrap requires a mapping record (or generated_scenario on the assignment).")
-
-    # Legacy canvas-generated assignments bypass the curriculum package lookup
-    if mapping_dto["packageId"] == "canvas-generated":
-        return _resolve_canvas_generated_bootstrap(
-            deps,
-            mapping=mapping,
-            mapping_dto=mapping_dto,
-            assignment=assignment,
-            assignment_dto=assignment_dto,
-            class_record=class_record,
-            ui_language=ui_language,
-        )
-
-    package = deps.load_sample_curriculum_package()
-    package_summary = build_sample_package_summary(package)
-    if mapping_dto["packageId"] != package_summary["id"]:
-        raise ValueError("Only the sample curriculum package is supported for bootstrap right now.")
-
-    selected_situation_id = (mapping_dto.get("situationIds") or [None])[0]
-    if not selected_situation_id:
-        raise ValueError("Assignment mapping must define at least one speaking situation.")
-
-    package, unit, module, situation, mode, situation_objectives = deps.get_curriculum_practice_context(
-        module_id=mapping_dto["moduleId"],
-        situation_id=selected_situation_id,
-    )
-    objective_index = _package_objective_index(package)
-    rubric_index = _package_rubric_index(package)
-    mapped_objective_ids = mapping_dto.get("objectiveIds") or []
-    resolved_objectives = [
-        objective_index[objective_id]
-        for objective_id in mapped_objective_ids
-        if objective_id in objective_index
-    ] or situation_objectives
-    resolved_rubrics = [
-        rubric_index[rubric_id]
-        for rubric_id in _unique_ordered_strings(
-            [
-                (objective.get("mastery") or {}).get("rubricId")
-                for objective in resolved_objectives
-                if isinstance(objective, dict)
-            ]
-        )
-        if rubric_id in rubric_index
-    ]
-    pedagogy_context = _build_bootstrap_pedagogy_context(
-        package=package,
-        module=module,
-        situation=situation,
-        objectives=resolved_objectives,
-        rubrics=resolved_rubrics,
-    )
-    mapping_dto["outputPolicy"] = serialize_output_policy(
-        mapping.get("output_policy"),
-        task_type=assignment_dto.get("taskType", ""),
-        evidence=pedagogy_context.get("evidence"),
-        feedback_mode=(mapping_dto.get("feedbackPolicy") or {}).get("mode", "balanced"),
-    )
-
-    system_prompt_preview = deps.build_curriculum_system_prompt(
-        package=package,
-        unit=unit,
-        module=module,
-        situation=situation,
-        mode=mode,
-        objectives=resolved_objectives,
+    mapping_dto = _empty_canvas_mapping_dto()
+    return _resolve_canvas_generated_bootstrap(
+        deps,
+        mapping_dto=mapping_dto,
+        assignment=assignment,
+        assignment_dto=assignment_dto,
+        class_record=class_record,
         ui_language=ui_language,
-        learning_locale=class_record.get("learning_locale", "ko-KR"),
     )
-
-    launch_modality = normalize_modality_policy(
-        assignment_dto.get("modalityOverride") or mapping_dto.get("modalityPolicy") or {}
-    )
-
-    return {
-        "assignment": assignment_dto,
-        "mapping": mapping_dto,
-        "class": {
-            "id": class_record.get("id"),
-            "orgId": class_record.get("org_id"),
-            "name": class_record.get("name", ""),
-            "term": class_record.get("term", ""),
-            "subject": class_record.get("subject", ""),
-            "learningLocale": class_record.get("learning_locale", "ko-KR"),
-            "gradeBand": class_record.get("grade_band", ""),
-            "status": class_record.get("status", "active"),
-        },
-        "curriculum": {
-            "package": package_summary,
-            "unit": {
-                "id": unit.get("id"),
-                "title": unit.get("title", {}),
-                "unitNumber": (unit.get("ap") or {}).get("unitNumber"),
-            },
-            "module": {
-                "id": module.get("id"),
-                "title": module.get("title", {}),
-                "goal": module.get("moduleGoal", {}),
-                "capstone": {
-                    "mode": (module.get("capstone") or {}).get("mode"),
-                    "taskModel": (module.get("capstone") or {}).get("taskModel"),
-                    "situationId": (module.get("capstone") or {}).get("situationId"),
-                } if isinstance(module.get("capstone"), dict) else None,
-            },
-            "situation": {
-                "id": situation.get("id"),
-                "kind": situation.get("kind"),
-                "seed": situation.get("seed", {}),
-                "objectiveIds": _normalize_string_list(situation.get("objectiveIds")),
-            },
-            "objectives": [
-                _serialize_bootstrap_objective(objective)
-                for objective in resolved_objectives
-                if isinstance(objective, dict)
-            ],
-            "rubrics": [
-                _serialize_bootstrap_rubric(rubric)
-                for rubric in resolved_rubrics
-                if isinstance(rubric, dict)
-            ],
-            "pedagogy": pedagogy_context,
-        },
-        "launch": {
-            "configuredMode": launch_modality.get("mode", "hybrid"),
-            "modality": serialize_modality_policy(launch_modality),
-            "voiceAllowed": launch_modality.get("mode") in {"voice_only", "hybrid"},
-            "textAllowed": launch_modality.get("mode") in {"text_only", "hybrid"},
-            "fallbackApplied": False,
-            "blockedReasons": [],
-            "retentionPolicy": None,
-            "maxAttempts": assignment_dto.get("maxAttempts"),
-            "taskType": assignment_dto.get("taskType"),
-        },
-        "realtimeSessionParams": {
-            "uiLanguage": ui_language,
-            "practice": {
-                "type": "curriculum_module",
-                "curriculumId": package_summary["id"],
-                "moduleId": mapping_dto["moduleId"],
-                "situationId": selected_situation_id,
-                "assignmentId": assignment_dto["id"],
-                "classId": assignment_dto["classId"],
-                "mappingId": mapping_dto["id"],
-                "objectiveIds": pedagogy_context["objectiveIds"],
-                "taskModel": pedagogy_context["taskModel"],
-                "rubricIds": pedagogy_context["rubricIds"],
-            },
-        },
-        "systemPromptPreview": system_prompt_preview,
-        "limitations": [
-            "Bootstrap currently supports only the bundled sample curriculum package.",
-            "Teacher mapping controls are returned in bootstrap data and only partially injected into live prompt assembly.",
-        ],
-    }
 
 
 def _empty_canvas_mapping_dto() -> dict[str, Any]:
-    """Return a safe empty mapping_dto for Canvas-first assignments (no mapping row).
+    """Return a default mapping-shaped DTO for the bootstrap response.
 
-    If you add a key to ``serialize_curriculum_mapping`` (in this module), mirror
-    it here — otherwise the Canvas-first path will silently drop that field from
-    the bootstrap DTO while the legacy mapping path carries it through.
+    After C2, no ``curriculum_mappings`` row is ever loaded. The bootstrap
+    payload still exposes a ``mapping`` key for backwards compatibility with
+    existing frontend consumers; the Canvas-generated resolver populates the
+    scenario-bearing fields (``generatedScenario``, ``targetExpressions``,
+    ``focusGrammar``, ``teacherNotes``, ``outputPolicy``) from the assignment
+    document directly.
     """
     return {
         "id": None,
@@ -1394,48 +980,34 @@ def _empty_canvas_mapping_dto() -> dict[str, Any]:
 def _resolve_canvas_generated_bootstrap(
     deps: Any,
     *,
-    mapping: dict[str, Any] | None,
     mapping_dto: dict[str, Any],
     assignment: dict[str, Any],
     assignment_dto: dict[str, Any],
     class_record: dict[str, Any],
     ui_language: str = "en",
 ) -> dict[str, Any]:
-    """Build a bootstrap payload for canvas-generated assignments.
+    """Build a bootstrap payload from scenario fields on the assignment document.
 
-    Prefers direct fields on the assignment document (new Canvas-first path from
-    Task A2). Falls back to the mapping for legacy rows where fields were stored
-    on the curriculum_mappings document. When mapping is None (no mapping row),
-    all mapping reads use safe defaults.
+    After C2, all scenario content lives on the assignment itself; there is
+    no ``curriculum_mappings`` lookup. The assignment provides the scenario,
+    target expressions, focus grammar, teacher notes, and Canvas source
+    metadata that power the system prompt and realtime session parameters.
     """
-    # Prefer direct fields on the assignment; fall back to the legacy mapping
-    # for pre-migration rows. Commit C removes the mapping fallback entirely.
-    scenario = (
-        assignment.get("generated_scenario")
-        or (mapping.get("generated_scenario") if mapping else "")
-        or ""
-    )
-    target_expressions = _normalize_string_list(
-        assignment.get("target_expressions")
-        or (mapping.get("target_expressions") if mapping else [])
-    )
-    focus_grammar = _normalize_string_list(
-        assignment.get("focus_grammar")
-        or (mapping.get("focus_grammar") if mapping else [])
-    )
-    teacher_notes = (
-        assignment.get("teacher_notes")
-        or (mapping.get("teacher_notes") if mapping else "")
-        or ""
-    )
+    del deps  # resolver no longer needs deps for this path
+
+    scenario = assignment.get("generated_scenario") or ""
+    target_expressions = _normalize_string_list(assignment.get("target_expressions"))
+    focus_grammar = _normalize_string_list(assignment.get("focus_grammar"))
+    teacher_notes = assignment.get("teacher_notes") or ""
     success_criteria = _normalize_string_list(assignment.get("success_criteria"))
     task_type = assignment_dto.get("taskType", "information_gap")
 
-    # Build a system prompt from the scenario and mapping fields
+    # Build a system prompt from the assignment's scenario fields.
     locale_label = class_record.get("learning_locale", "ko-KR")
     class_name = class_record.get("name", "")
     subject = class_record.get("subject", "")
-    source_title = mapping.get("source_canvas_item_title", "") if mapping else ""
+    canvas_ref = assignment.get("canvas_module_item_ref") if isinstance(assignment.get("canvas_module_item_ref"), dict) else {}
+    source_title = canvas_ref.get("item_title") or ""
 
     prompt_parts = [
         f"You are an AI language tutor helping a student practice spoken {locale_label} in a {subject} class ({class_name}).",
@@ -1470,7 +1042,7 @@ def _resolve_canvas_generated_bootstrap(
     )
 
     mapping_dto["outputPolicy"] = serialize_output_policy(
-        mapping.get("output_policy") if mapping else None,
+        None,
         task_type=task_type,
         evidence=pedagogy_context.get("evidence"),
         feedback_mode=(mapping_dto.get("feedbackPolicy") or {}).get("mode", "balanced"),
@@ -1541,6 +1113,12 @@ def _resolve_canvas_generated_bootstrap(
 
 
 def load_assignment_bundle(deps: Any, assignment_id: str) -> tuple[dict[str, Any], dict[str, Any] | None, dict[str, Any]]:
+    """Load an assignment and its class record.
+
+    After C2, curriculum_mappings are gone. The middle slot of the returned
+    tuple is always ``None`` and is preserved only to keep the existing
+    call-site signature stable.
+    """
     assignment = deps.db.get_assignment(assignment_id)
     if not assignment:
         raise ValueError("Assignment not found.")
@@ -1549,16 +1127,7 @@ def load_assignment_bundle(deps: Any, assignment_id: str) -> tuple[dict[str, Any
     if not class_record:
         raise ValueError("Class not found for assignment.")
 
-    mapping_id = assignment.get("mapping_id")
-    if mapping_id:
-        mapping = deps.db.get_curriculum_mapping(mapping_id)
-        if not mapping:
-            raise ValueError("Assignment mapping not found.")
-    else:
-        # Canvas-first assignments (A2 path) have no mapping row.
-        mapping = None
-
-    return assignment, mapping, class_record
+    return assignment, None, class_record
 
 
 def is_teacher_preview_allowed(
@@ -1617,10 +1186,10 @@ def resolve_assignment_bootstrap_for_user(
     if not allowed:
         raise PermissionError("Assignment is not available for the current user.")
 
+    del mapping  # C2: mappings are gone; load_assignment_bundle returns None here.
     bootstrap = resolve_assignment_bootstrap(
         deps,
         assignment=assignment,
-        mapping=mapping,
         class_record=class_record,
         ui_language=ui_language,
     )

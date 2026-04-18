@@ -167,7 +167,6 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
             assignment_id = deps.db.create_assignment(
                 org_id=org_id,
                 class_id=class_id,
-                mapping_id=None,
                 title=title,
                 description=data.get('description', ''),
                 status=status,

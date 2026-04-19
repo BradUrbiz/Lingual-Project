@@ -411,8 +411,8 @@ export function AppLearningPage() {
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ServiceNavigationCard
-            title={t('app.dashboard.card.chat.title') || 'AI Chat'}
-            description={t('app.dashboard.card.chat.description') || 'Practice conversation with your AI tutor'}
+            title={t('app.dashboard.card.chat.title') || 'Chat with Lingu'}
+            description={t('app.dashboard.card.chat.description') || 'Practice conversation through free talking'}
             icon={<MessageSquare size={22} strokeWidth={2.5} />}
             href="/app/chat"
             color="primary"

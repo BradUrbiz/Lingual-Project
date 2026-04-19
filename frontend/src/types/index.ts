@@ -5,6 +5,7 @@ export interface User {
   uid: string;
   email: string;
   name: string;
+  lingualAdmin?: boolean;
   memberships?: MembershipSummary[];
   activeMembershipId?: string | null;
   activeOrganizationId?: string | null;

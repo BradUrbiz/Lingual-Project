@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider } from './contexts/AuthContext';
 import { MembershipProvider } from './contexts/MembershipContext';
-import { useMembership } from './contexts/MembershipContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { LearningLocaleProvider } from './contexts/LearningLocaleContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
@@ -12,6 +11,7 @@ import { TeacherRoute } from './components/layout/TeacherRoute';
 import { LingualAdminRoute } from './components/layout/LingualAdminRoute';
 import { LoadingSpinner } from './components/common';
 import { useAuth } from './hooks/useAuth';
+import { getPrivilegedHomeRoute, LEARNER_HOME_ROUTE } from './lib/homeRoutes';
 
 const LandingPage = lazy(() => import('./pages/LandingPage').then((module) => ({ default: module.LandingPage })));
 const AuthPage = lazy(() => import('./pages/AuthPage').then((module) => ({ default: module.AuthPage })));
@@ -60,16 +60,7 @@ function withRouteSuspense(element: ReactNode) {
 
 function AppIndexRedirect() {
   const { user } = useAuth();
-  const { hasAnyRole } = useMembership();
-  const lingualAdmin = (user as { lingualAdmin?: boolean } | null)?.lingualAdmin === true;
-
-  if (lingualAdmin) {
-    return <Navigate to="/app/admin/school-requests" replace />;
-  }
-  if (hasAnyRole(['teacher', 'school_admin'])) {
-    return <Navigate to="/app/teacher" replace />;
-  }
-  return <Navigate to="/app/learn" replace />;
+  return <Navigate to={getPrivilegedHomeRoute(user) ?? LEARNER_HOME_ROUTE} replace />;
 }
 
 function AnimatedRoutes() {

@@ -5,7 +5,20 @@ import { LandingPage } from '@/pages/LandingPage';
 let navigateMock = vi.fn();
 const getUserProfileMock = vi.fn();
 const authState: {
-  user: { uid: string; email: string; name: string } | null;
+  user:
+    | {
+        uid: string;
+        email: string;
+        name: string;
+        activeRoles?: Array<'teacher' | 'student' | 'school_admin'>;
+        memberships?: Array<{
+          id: string;
+          orgId: string;
+          orgName: string;
+          roles: Array<'teacher' | 'student' | 'school_admin'>;
+        }>;
+      }
+    | null;
   loading: boolean;
 } = {
   user: null,
@@ -80,6 +93,60 @@ describe('LandingPage', () => {
 
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith('/app/learn');
+    });
+  });
+
+  it('routes teacher users to /app/teacher from the login action', () => {
+    authState.user = {
+      uid: 'teacher-1',
+      email: 'teacher@example.com',
+      name: 'Teacher User',
+      memberships: [
+        {
+          id: 'mem-teacher-1',
+          orgId: 'org-1',
+          orgName: 'Lingual Academy',
+          roles: ['teacher'],
+        },
+      ],
+    };
+
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'landing.nav.login' }));
+
+    expect(navigateMock).toHaveBeenCalledWith('/app/teacher');
+  });
+
+  it('routes teacher users to /app/teacher from get started', async () => {
+    authState.user = {
+      uid: 'teacher-1',
+      email: 'teacher@example.com',
+      name: 'Teacher User',
+      memberships: [
+        {
+          id: 'mem-teacher-1',
+          orgId: 'org-1',
+          orgName: 'Lingual Academy',
+          roles: ['teacher'],
+        },
+      ],
+    };
+
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try Demo' }));
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith('/app/teacher');
     });
   });
 

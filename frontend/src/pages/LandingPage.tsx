@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getUserProfile } from '@/api/user';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { staggerContainer, staggerItem, cardVariants } from '@/lib/animations';
+import { getPrivilegedHomeRoute, LEARNER_HOME_ROUTE, LEARNER_SETUP_ROUTE } from '@/lib/homeRoutes';
 
 const HERO_IMAGE = '/imgs/landing/hero.jpg';
 const AVATAR_IMAGES = [
@@ -39,7 +40,7 @@ export function LandingPage() {
       navigate('/auth');
       return;
     }
-    navigate('/app/learn');
+    navigate(getPrivilegedHomeRoute(user) ?? LEARNER_HOME_ROUTE);
   };
 
   const handleGetStarted = async () => {
@@ -48,24 +49,30 @@ export function LandingPage() {
       return;
     }
 
+    const privilegedHomeRoute = getPrivilegedHomeRoute(user);
+    if (privilegedHomeRoute) {
+      navigate(privilegedHomeRoute);
+      return;
+    }
+
     setCheckingProfile(true);
     try {
       const profile = await getUserProfile();
       if (profile.profileCompleted) {
         if (profile.assessed) {
-          navigate('/app/learn');
+          navigate(LEARNER_HOME_ROUTE);
         } else if (profile.assessmentPreference === 'skip') {
-          navigate('/app/learn');
+          navigate(LEARNER_HOME_ROUTE);
         } else if (profile.assessmentPreference === 'take') {
           navigate('/assessment');
         } else {
           navigate('/onboarding');
         }
       } else {
-        navigate('/general');
+        navigate(LEARNER_SETUP_ROUTE);
       }
     } catch {
-      navigate('/general');
+      navigate(LEARNER_SETUP_ROUTE);
     } finally {
       setCheckingProfile(false);
     }

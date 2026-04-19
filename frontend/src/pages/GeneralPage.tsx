@@ -14,6 +14,8 @@ import {
 import { AnimatedPage } from '@/components/layout/AnimatedPage';
 import { updateProfile, getUserProfile } from '../api/user';
 import type { Gender, Rigor, ProfileFormData } from '../types';
+import { useAuth } from '@/hooks/useAuth';
+import { getPrivilegedHomeRoute, LEARNER_HOME_ROUTE } from '@/lib/homeRoutes';
 
 const GENDER_OPTIONS: { id: Gender; labelKey: string }[] = [
   { id: 'male', labelKey: 'general.male' },
@@ -53,6 +55,7 @@ export function GeneralPage() {
   const [searchParams] = useSearchParams();
   const isEditMode = searchParams.get('edit') === 'true';
   const { t } = useLanguage();
+  const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [currentStep, setCurrentStep] = useState(1);
@@ -72,14 +75,20 @@ export function GeneralPage() {
 
   const checkExistingProfile = useCallback(async () => {
     try {
+      const privilegedHomeRoute = getPrivilegedHomeRoute(user);
+      if (privilegedHomeRoute && !isEditMode) {
+        navigate(privilegedHomeRoute, { replace: true });
+        return;
+      }
+
       const profile = await getUserProfile();
 
       // If profile is complete and NOT in edit mode, redirect to appropriate page
       if (profile.profileCompleted && !isEditMode) {
         if (profile.assessed) {
-          navigate('/app/learn', { replace: true });
+          navigate(LEARNER_HOME_ROUTE, { replace: true });
         } else if (profile.assessmentPreference === 'skip') {
-          navigate('/app/learn', { replace: true });
+          navigate(LEARNER_HOME_ROUTE, { replace: true });
         } else if (profile.assessmentPreference === 'take') {
           navigate('/assessment', { replace: true });
         } else {
@@ -105,7 +114,7 @@ export function GeneralPage() {
     } finally {
       setLoading(false);
     }
-  }, [isEditMode, navigate]);
+  }, [isEditMode, navigate, user]);
 
   useEffect(() => {
     checkExistingProfile();

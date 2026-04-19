@@ -7,6 +7,8 @@ import { Card, Button, Alert, AlertDescription } from '@/components/ui';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useLearningLocale } from '@/contexts/LearningLocaleContext';
 import { getUserProfile, saveInitialOnboarding } from '@/api/user';
+import { useAuth } from '@/hooks/useAuth';
+import { getPrivilegedHomeRoute, LEARNER_HOME_ROUTE, LEARNER_SETUP_ROUTE } from '@/lib/homeRoutes';
 import { LEARNING_LOCALES } from '@/lib/learningLocales';
 import type { AssessmentPreference, LearningLocale } from '@/types';
 
@@ -14,6 +16,7 @@ export function InitialOnboardingPage() {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { setLearningLocale } = useLearningLocale();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,16 +28,22 @@ export function InitialOnboardingPage() {
 
     const loadProfile = async () => {
       try {
+        const privilegedHomeRoute = getPrivilegedHomeRoute(user);
+        if (privilegedHomeRoute) {
+          navigate(privilegedHomeRoute, { replace: true });
+          return;
+        }
+
         const profile = await getUserProfile();
         if (!isActive) return;
 
         if (!profile.profileCompleted) {
-          navigate('/general', { replace: true });
+          navigate(LEARNER_SETUP_ROUTE, { replace: true });
           return;
         }
 
         if (profile.assessed) {
-          navigate('/app/learn', { replace: true });
+          navigate(LEARNER_HOME_ROUTE, { replace: true });
           return;
         }
 
@@ -43,7 +52,7 @@ export function InitialOnboardingPage() {
         }
       } catch {
         if (isActive) {
-          navigate('/general', { replace: true });
+          navigate(LEARNER_SETUP_ROUTE, { replace: true });
         }
       } finally {
         if (isActive) setLoading(false);
@@ -55,7 +64,7 @@ export function InitialOnboardingPage() {
     return () => {
       isActive = false;
     };
-  }, [navigate]);
+  }, [navigate, user]);
 
   const handleContinue = async () => {
     if (!assessmentPreference) {
@@ -73,7 +82,7 @@ export function InitialOnboardingPage() {
       if (assessmentPreference === 'take') {
         navigate('/assessment');
       } else {
-        navigate('/app/learn');
+        navigate(LEARNER_HOME_ROUTE);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save onboarding preferences.');

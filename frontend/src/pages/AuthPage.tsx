@@ -7,6 +7,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { Button, Input, Card, Alert, AlertDescription } from '@/components/ui';
 import { AnimatedPage } from '@/components/layout/AnimatedPage';
 import { staggerContainer, staggerItem } from '@/lib/animations';
+import { getPrivilegedHomeRoute, LEARNER_SETUP_ROUTE } from '@/lib/homeRoutes';
 
 export function AuthPage() {
   const navigate = useNavigate();
@@ -32,15 +33,7 @@ export function AuthPage() {
         navigate(intendedFrom, { replace: true });
         return;
       }
-      const userWithFlags = user as { activeRoles?: string[]; lingualAdmin?: boolean };
-      const roles = userWithFlags.activeRoles || [];
-      if (userWithFlags.lingualAdmin) {
-        navigate('/app/admin/school-requests', { replace: true });
-      } else if (roles.includes('school_admin') || roles.includes('teacher')) {
-        navigate('/app/teacher', { replace: true });
-      } else {
-        navigate('/general', { replace: true });
-      }
+      navigate(getPrivilegedHomeRoute(user) ?? LEARNER_SETUP_ROUTE, { replace: true });
     }
   }, [user, loading, navigate, intendedFrom]);
 

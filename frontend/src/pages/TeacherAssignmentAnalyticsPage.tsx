@@ -134,8 +134,28 @@ export function TeacherAssignmentAnalyticsPage() {
         </Alert>
       ))}
 
+      {analytics.assignment.taskType === 'custom_prompt' && (
+        <Card className="border-3 border-foreground p-6 shadow-stamp">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-secondary text-secondary-foreground">
+              <AlertTriangle size={22} strokeWidth={2.5} />
+            </div>
+            <div>
+              <h2 className="text-xl font-display font-bold text-foreground">Scaffold-free assignment</h2>
+              <p className="text-sm text-muted-foreground">
+                This assignment uses a teacher-authored raw system prompt with no target expressions,
+                focus grammar, or rubric scaffolding. Expression coverage, grammar hits, and
+                rubric-dimension metrics are <strong>N/A</strong> by design.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
+          {analytics.assignment.taskType !== 'custom_prompt' && (
+          <>
           <Card className="border-3 border-foreground p-6 shadow-stamp">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
@@ -268,9 +288,12 @@ export function TeacherAssignmentAnalyticsPage() {
               ))}
             </div>
           </Card>
+          </>
+          )}
         </div>
 
         <div className="space-y-6">
+          {analytics.assignment.taskType !== 'custom_prompt' && (
           <Card className="border-3 border-foreground p-6 shadow-stamp">
             <h2 className="text-xl font-display font-bold text-foreground">Rubric view</h2>
             <div className="mt-5 space-y-4">
@@ -349,6 +372,7 @@ export function TeacherAssignmentAnalyticsPage() {
               )}
             </div>
           </Card>
+          )}
 
           <Card className="border-3 border-foreground p-6 shadow-stamp">
             <h2 className="text-xl font-display font-bold text-foreground">Recent attempts</h2>

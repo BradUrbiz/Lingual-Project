@@ -23,7 +23,7 @@ import type {
 
 type CanvasPracticePhase = 'idle' | 'generating' | 'reviewing' | 'saving' | 'error';
 type BuilderMode = 'quick' | 'advanced';
-type AdvancedEntryMode = 'canvas' | 'source' | 'manual';
+type AdvancedEntryMode = 'canvas' | 'source' | 'manual' | 'custom_prompt';
 
 function formatStatusVariant(status: string): 'success' | 'secondary' | 'outline' {
   if (status === 'published') return 'success';
@@ -247,7 +247,7 @@ export function TeacherAssignmentBuilderPage() {
 
   const handleSelectAdvancedEntryMode = (mode: AdvancedEntryMode) => {
     setAdvancedEntryMode(mode);
-    if (mode === 'manual') {
+    if (mode === 'manual' || mode === 'custom_prompt') {
       enterManualAuthoringMode();
       return;
     }
@@ -267,8 +267,17 @@ export function TeacherAssignmentBuilderPage() {
 
   const handlePublishAssignment = async () => {
     if (!classId) return;
-    if (!canvasTitle.trim() || !canvasScenario.trim()) {
-      setCanvasError('Title and scenario are required before publishing.');
+    if (!canvasTitle.trim()) {
+      setCanvasError('Title is required before publishing.');
+      return;
+    }
+    if (advancedEntryMode === 'custom_prompt') {
+      if (!draftInstructions.trim()) {
+        setCanvasError('A custom system prompt is required before publishing.');
+        return;
+      }
+    } else if (!canvasScenario.trim()) {
+      setCanvasError('Scenario is required before publishing.');
       return;
     }
 
@@ -310,19 +319,21 @@ export function TeacherAssignmentBuilderPage() {
           return;
         }
 
+        const isCustomPrompt = advancedEntryMode === 'custom_prompt';
         await createAssignment(classId, {
           title: canvasTitle.trim(),
           description: canvasDescription.trim(),
           status: canvasStatus,
-          successCriteria: canvasSuccessCriteria,
+          ...(isCustomPrompt ? { taskType: 'custom_prompt' as const } : {}),
+          successCriteria: isCustomPrompt ? [] : canvasSuccessCriteria,
           instructions: draftInstructions.trim(),
-          generatedScenario: canvasScenario.trim(),
-          objectives: canvasObjectives,
-          targetExpressions: canvasTargetExpressions,
-          targetVocabulary: canvasTargetVocabulary,
-          focusGrammar: canvasFocusGrammar,
-          teacherNotes: canvasTeacherNotes.trim(),
-          targetLanguageIntensity: canvasTargetLanguageIntensity,
+          generatedScenario: isCustomPrompt ? '' : canvasScenario.trim(),
+          objectives: isCustomPrompt ? [] : canvasObjectives,
+          targetExpressions: isCustomPrompt ? [] : canvasTargetExpressions,
+          targetVocabulary: isCustomPrompt ? [] : canvasTargetVocabulary,
+          focusGrammar: isCustomPrompt ? [] : canvasFocusGrammar,
+          teacherNotes: isCustomPrompt ? '' : canvasTeacherNotes.trim(),
+          targetLanguageIntensity: isCustomPrompt ? undefined : canvasTargetLanguageIntensity,
         });
       }
       await loadClassData(classId);
@@ -439,7 +450,7 @@ export function TeacherAssignmentBuilderPage() {
             <p className="text-sm text-muted-foreground">
               {builderMode === 'quick'
                 ? 'Pick a Canvas page or assignment and let Lingual design a speaking practice tailored to it.'
-                : 'Use Advanced mode to build from Canvas, a pasted source packet, or a manual assignment draft.'}
+                : 'Use Advanced mode to build from Canvas, a pasted source packet, a manual scaffold draft, or a scaffold-free custom system prompt.'}
             </p>
           </div>
         </div>
@@ -465,7 +476,7 @@ export function TeacherAssignmentBuilderPage() {
           {builderMode === 'advanced' && (
             <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
               <p className="text-sm font-semibold text-foreground">Advanced entry mode</p>
-              <div role="radiogroup" aria-label="Advanced entry mode" className="grid gap-3 md:grid-cols-3">
+              <div role="radiogroup" aria-label="Advanced entry mode" className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {[
                   {
                     value: 'canvas' as const,
@@ -481,6 +492,11 @@ export function TeacherAssignmentBuilderPage() {
                     value: 'manual' as const,
                     label: 'Manual authoring',
                     description: 'Write the assignment directly on the scaffold.',
+                  },
+                  {
+                    value: 'custom_prompt' as const,
+                    label: 'Scaffold-free prompt',
+                    description: 'Write the full system prompt. No scenario or grammar scaffolding; analytics show N/A.',
                   },
                 ].map((option) => (
                   <button
@@ -675,7 +691,28 @@ export function TeacherAssignmentBuilderPage() {
                     placeholder="Brief description shown on the student dashboard"
                   />
 
-                  {builderMode === 'advanced' && (
+                  {builderMode === 'advanced' && advancedEntryMode === 'custom_prompt' && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <label htmlFor="custom-system-prompt" className="text-base font-semibold text-foreground">
+                          System prompt
+                        </label>
+                        <Badge variant="outline" size="sm">Raw · no scaffold</Badge>
+                      </div>
+                      <textarea
+                        id="custom-system-prompt"
+                        value={draftInstructions}
+                        onChange={(event) => setDraftInstructions(event.target.value)}
+                        rows={16}
+                        placeholder="Write the complete system prompt the AI tutor will follow. No scenario, target expressions, grammar, or language-mix scaffolding will be added."
+                        className="w-full rounded-xl border-3 border-border bg-card px-4 py-3 text-base text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Analytics that depend on target expressions, grammar, or rubric dimensions will show N/A for this assignment.
+                      </p>
+                    </div>
+                  )}
+                  {builderMode === 'advanced' && advancedEntryMode !== 'custom_prompt' && (
                     <Textarea
                       label="Instructions"
                       value={draftInstructions}
@@ -684,113 +721,120 @@ export function TeacherAssignmentBuilderPage() {
                     />
                   )}
 
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <label htmlFor="canvas-scenario" className="text-base font-semibold text-foreground">
-                        Conversation scenario
-                      </label>
-                      {advancedEntryMode !== 'manual' && (
-                        <Badge variant="accent" size="sm">AI-generated</Badge>
-                      )}
-                    </div>
-                    <textarea
-                      id="canvas-scenario"
-                      value={canvasScenario}
-                      onChange={(event) => setCanvasScenario(event.target.value)}
-                      rows={5}
-                      placeholder="Describe the speaking scenario the tutor will run."
-                      className="w-full rounded-xl border-3 border-border bg-card px-4 py-3 text-base text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
-                  </div>
+                  {advancedEntryMode !== 'custom_prompt' && (
+                    <>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <label htmlFor="canvas-scenario" className="text-base font-semibold text-foreground">
+                            Conversation scenario
+                          </label>
+                          {advancedEntryMode !== 'manual' && (
+                            <Badge variant="accent" size="sm">AI-generated</Badge>
+                          )}
+                        </div>
+                        <textarea
+                          id="canvas-scenario"
+                          value={canvasScenario}
+                          onChange={(event) => setCanvasScenario(event.target.value)}
+                          rows={5}
+                          placeholder="Describe the speaking scenario the tutor will run."
+                          className="w-full rounded-xl border-3 border-border bg-card px-4 py-3 text-base text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-base font-semibold text-foreground">Target expressions</p>
-                      {advancedEntryMode !== 'manual' && (
-                        <Badge variant="accent" size="sm">AI-generated</Badge>
-                      )}
-                    </div>
-                    <TagListEditor
-                      items={canvasTargetExpressions}
-                      onChange={setCanvasTargetExpressions}
-                      placeholder="Add a target expression…"
-                      ariaLabel="Target expressions"
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-base font-semibold text-foreground">Target expressions</p>
+                          {advancedEntryMode !== 'manual' && (
+                            <Badge variant="accent" size="sm">AI-generated</Badge>
+                          )}
+                        </div>
+                        <TagListEditor
+                          items={canvasTargetExpressions}
+                          onChange={setCanvasTargetExpressions}
+                          placeholder="Add a target expression…"
+                          ariaLabel="Target expressions"
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-base font-semibold text-foreground">Target vocabulary</p>
-                      {advancedEntryMode !== 'manual' && (
-                        <Badge variant="accent" size="sm">AI-generated</Badge>
-                      )}
-                    </div>
-                    <TagListEditor
-                      items={canvasTargetVocabulary}
-                      onChange={setCanvasTargetVocabulary}
-                      placeholder="Add a target vocabulary word…"
-                      ariaLabel="Target vocabulary"
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-base font-semibold text-foreground">Target vocabulary</p>
+                          {advancedEntryMode !== 'manual' && (
+                            <Badge variant="accent" size="sm">AI-generated</Badge>
+                          )}
+                        </div>
+                        <TagListEditor
+                          items={canvasTargetVocabulary}
+                          onChange={setCanvasTargetVocabulary}
+                          placeholder="Add a target vocabulary word…"
+                          ariaLabel="Target vocabulary"
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-base font-semibold text-foreground">Focus grammar</p>
-                      {advancedEntryMode !== 'manual' && (
-                        <Badge variant="accent" size="sm">AI-generated</Badge>
-                      )}
-                    </div>
-                    <TagListEditor
-                      items={canvasFocusGrammar}
-                      onChange={setCanvasFocusGrammar}
-                      placeholder="Add a grammar point…"
-                      ariaLabel="Focus grammar"
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-base font-semibold text-foreground">Focus grammar</p>
+                          {advancedEntryMode !== 'manual' && (
+                            <Badge variant="accent" size="sm">AI-generated</Badge>
+                          )}
+                        </div>
+                        <TagListEditor
+                          items={canvasFocusGrammar}
+                          onChange={setCanvasFocusGrammar}
+                          placeholder="Add a grammar point…"
+                          ariaLabel="Focus grammar"
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-base font-semibold text-foreground">Success criteria</p>
-                      {advancedEntryMode !== 'manual' && (
-                        <Badge variant="accent" size="sm">AI-generated</Badge>
-                      )}
-                    </div>
-                    <TagListEditor
-                      items={canvasSuccessCriteria}
-                      onChange={setCanvasSuccessCriteria}
-                      placeholder="Add a success criterion…"
-                      ariaLabel="Success criteria"
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-base font-semibold text-foreground">Success criteria</p>
+                          {advancedEntryMode !== 'manual' && (
+                            <Badge variant="accent" size="sm">AI-generated</Badge>
+                          )}
+                        </div>
+                        <TagListEditor
+                          items={canvasSuccessCriteria}
+                          onChange={setCanvasSuccessCriteria}
+                          placeholder="Add a success criterion…"
+                          ariaLabel="Success criteria"
+                        />
+                      </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-base font-semibold text-foreground">Objectives</p>
-                      {advancedEntryMode !== 'manual' && canvasObjectivesFromAI && (
-                        <Badge variant="accent" size="sm">AI-generated</Badge>
-                      )}
-                    </div>
-                    <TagListEditor
-                      items={canvasObjectives}
-                      onChange={setCanvasObjectives}
-                      placeholder="Add an objective…"
-                      ariaLabel="Objectives"
-                    />
-                  </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-base font-semibold text-foreground">Objectives</p>
+                          {advancedEntryMode !== 'manual' && canvasObjectivesFromAI && (
+                            <Badge variant="accent" size="sm">AI-generated</Badge>
+                          )}
+                        </div>
+                        <TagListEditor
+                          items={canvasObjectives}
+                          onChange={setCanvasObjectives}
+                          placeholder="Add an objective…"
+                          ariaLabel="Objectives"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="space-y-4">
-                  <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                    <Textarea
-                      label="Teacher notes"
-                      value={canvasTeacherNotes}
-                      onChange={(event) => setCanvasTeacherNotes(event.target.value)}
-                      placeholder="Notes about pedagogical intent (optional)"
-                      rows={8}
-                      className="min-h-[220px]"
-                    />
-                  </div>
+                  {advancedEntryMode !== 'custom_prompt' && (
+                    <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+                      <Textarea
+                        label="Teacher notes"
+                        value={canvasTeacherNotes}
+                        onChange={(event) => setCanvasTeacherNotes(event.target.value)}
+                        placeholder="Notes about pedagogical intent (optional)"
+                        rows={8}
+                        className="min-h-[220px]"
+                      />
+                    </div>
+                  )}
 
+                  {advancedEntryMode !== 'custom_prompt' && (
                   <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
                     <div className="space-y-1">
                       <p id="canvas-language-mix-label" className="text-base font-semibold text-foreground">
@@ -845,6 +889,7 @@ export function TeacherAssignmentBuilderPage() {
                       })}
                     </div>
                   </div>
+                  )}
 
                   <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
                     <p id="canvas-status-label" className="text-base font-semibold text-foreground">Status</p>
@@ -885,12 +930,18 @@ export function TeacherAssignmentBuilderPage() {
                       className="w-full"
                       onClick={handlePublishAssignment}
                       loading={canvasPhase === 'saving'}
-                      disabled={canvasPhase === 'saving' || !canvasTitle.trim() || !canvasScenario.trim()}
+                      disabled={
+                        canvasPhase === 'saving' ||
+                        !canvasTitle.trim() ||
+                        (advancedEntryMode === 'custom_prompt'
+                          ? !draftInstructions.trim()
+                          : !canvasScenario.trim())
+                      }
                     >
                       <Sparkles size={16} className="mr-2" />
                       {canvasStatus === 'published' ? 'Publish assignment' : 'Save as draft'}
                     </Button>
-                    {advancedEntryMode !== 'manual' && (
+                    {advancedEntryMode !== 'manual' && advancedEntryMode !== 'custom_prompt' && (
                       <Button
                         variant="outline"
                         className="w-full"
@@ -906,7 +957,7 @@ export function TeacherAssignmentBuilderPage() {
                       onClick={handleCanvasPickDifferent}
                       disabled={canvasPhase === 'saving'}
                     >
-                      {builderMode === 'advanced' && advancedEntryMode === 'manual'
+                      {builderMode === 'advanced' && (advancedEntryMode === 'manual' || advancedEntryMode === 'custom_prompt')
                         ? 'Start over'
                         : 'Pick a different item'}
                     </Button>

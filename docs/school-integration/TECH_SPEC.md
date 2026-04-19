@@ -235,7 +235,7 @@ Fields:
 - `due_at`
 - `modality_override`
 - `max_attempts`
-- `task_type`
+- `task_type` (enum: `information_gap`, `opinion_gap`, `decision_making`, `custom_prompt`; default `decision_making`). When `custom_prompt`, the assignment is scaffold-free: `instructions` is used verbatim as the system prompt and scenario/target/grammar scaffolding is skipped. Analytics that depend on target expressions, focus grammar, or rubric dimensions are intentionally N/A for these assignments.
 - `success_criteria`
 - `created_by_uid`
 - `instructions`

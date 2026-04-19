@@ -454,6 +454,66 @@ class TestCanvasGeneratedBootstrapFromAssignment(unittest.TestCase):
             bootstrap["realtimeSessionParams"]["practice"]["type"], "canvas_generated"
         )
 
+    def test_custom_prompt_task_type_uses_raw_instructions_as_system_prompt(self):
+        """Scaffold-free assignments: teacher's instructions are the whole system prompt."""
+        self.db.classes["c1"] = {
+            "id": "c1",
+            "org_id": "o1",
+            "name": "Spanish",
+            "learning_locale": "es-ES",
+            "subject": "Spanish",
+            "teacher_membership_ids": ["m1"],
+            "status": "active",
+        }
+        self.db.enrollments["c1_u1"] = {
+            "id": "c1_u1",
+            "class_id": "c1",
+            "student_uid": "u1",
+            "status": "active",
+            "join_source": "join_code",
+        }
+        asg_id = "asg-custom-1"
+        raw_prompt = (
+            "You are my practice partner. Ask me about my weekend plans, "
+            "and push back if my answers are shallow. Keep it short."
+        )
+        # Even if scaffold fields are somehow populated on the assignment
+        # document, custom_prompt mode must ignore them.
+        self.db.assignments[asg_id] = {
+            "id": asg_id,
+            "org_id": "o1",
+            "class_id": "c1",
+            "title": "Free talk",
+            "description": "",
+            "status": "published",
+            "task_type": "custom_prompt",
+            "success_criteria": ["should not appear"],
+            "created_by_uid": "uid-t",
+            "instructions": raw_prompt,
+            "generated_scenario": "should not appear",
+            "objectives": ["should not appear"],
+            "target_expressions": ["should not appear"],
+            "target_vocabulary": ["should not appear"],
+            "focus_grammar": ["should not appear"],
+            "teacher_notes": "should not appear",
+        }
+
+        bootstrap = resolve_assignment_bootstrap_for_user(
+            deps=self.deps,
+            uid="u1",
+            context=self.context,
+            assignment_id=asg_id,
+            ui_language="en",
+        )
+
+        self.assertEqual(bootstrap.get("systemPromptPreview", ""), raw_prompt)
+        self.assertNotIn("should not appear", bootstrap.get("systemPromptPreview", ""))
+        self.assertNotIn("## Scenario", bootstrap.get("systemPromptPreview", ""))
+        self.assertNotIn("## Language Mix", bootstrap.get("systemPromptPreview", ""))
+        self.assertEqual(bootstrap["mapping"]["targetExpressions"], [])
+        self.assertEqual(bootstrap["mapping"]["focusGrammar"], [])
+        self.assertEqual(bootstrap["mapping"]["teacherNotes"], "")
+
     def _seed_language_mix_assignment(self, intensity_value):
         self.db.classes["c1"] = {
             "id": "c1", "org_id": "o1", "name": "Spanish",

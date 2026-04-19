@@ -242,6 +242,10 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             focus_grammar = _normalize_string_list(data.get('focusGrammar'))
             teacher_notes = _normalize_string(data.get('teacherNotes'))
             target_language_intensity = _normalize_string(data.get('targetLanguageIntensity')) or 'mostly_target'
+            task_type = _normalize_string(data.get('taskType')) or 'decision_making'
+
+            if task_type not in {'information_gap', 'opinion_gap', 'decision_making', 'custom_prompt'}:
+                return jsonify({'success': False, 'error': 'Invalid taskType.'}), 400
 
             if not title:
                 return jsonify({'success': False, 'error': 'title is required.'}), 400
@@ -249,7 +253,10 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 return jsonify({'success': False, 'error': 'Invalid assignment status.'}), 400
             if not instructions:
                 return jsonify({'success': False, 'error': 'instructions is required.'}), 400
-            if not generated_scenario:
+            # Scaffold-free assignments use the teacher's instructions as the
+            # full system prompt; scenario/target/grammar scaffolds are skipped
+            # by design, so we don't require a generated scenario for them.
+            if task_type != 'custom_prompt' and not generated_scenario:
                 return jsonify({'success': False, 'error': 'generatedScenario is required.'}), 400
 
             assignment_id = deps.db.create_assignment(
@@ -262,6 +269,7 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 due_at=due_at,
                 modality_override=normalize_modality_policy(data.get('modalityOverride')),
                 max_attempts=max_attempts,
+                task_type=task_type,
                 success_criteria=success_criteria,
                 created_by_uid=uid or '',
                 instructions=instructions,

@@ -30,7 +30,11 @@ export interface ActivityTemplateDefinition {
 export type FeedbackMode = 'fluency_first' | 'balanced' | 'accuracy_first' | string;
 export type ModalityMode = 'text_only' | 'voice_only' | 'hybrid';
 export type AssignmentStatus = 'draft' | 'published' | 'archived';
-export type AssignmentTaskType = 'information_gap' | 'opinion_gap' | 'decision_making';
+export type AssignmentTaskType =
+  | 'information_gap'
+  | 'opinion_gap'
+  | 'decision_making'
+  | 'custom_prompt';
 export type TargetLanguageIntensity = 'target_only' | 'mostly_target' | 'bilingual_scaffold';
 
 export interface FeedbackPolicy {
@@ -466,6 +470,7 @@ export interface CreateAssignmentPayload {
   modalityOverride?: Partial<ModalityPolicy>;
   maxAttempts?: number | null;
   successCriteria?: string[];
+  taskType?: AssignmentTaskType;
   instructions: string;
   generatedScenario: string;
   objectives?: string[];

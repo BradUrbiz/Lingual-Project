@@ -1037,6 +1037,20 @@ def _resolve_canvas_generated_bootstrap(
     teacher_notes = assignment.get("teacher_notes") or ""
     success_criteria = _normalize_string_list(assignment.get("success_criteria"))
     task_model = "assignment_conversation"
+    assignment_task_type = assignment.get("task_type") or ""
+    is_custom_prompt_mode = assignment_task_type == "custom_prompt"
+
+    if is_custom_prompt_mode:
+        # Scaffold-free assignment: the teacher's instructions are the
+        # complete system prompt. Zero out scaffold inputs so pedagogy and
+        # mapping DTOs downstream reflect the intentional absence of
+        # scenario, targets, grammar, and language-mix scaffolding.
+        objectives = []
+        target_expressions = []
+        target_vocabulary = []
+        focus_grammar = []
+        teacher_notes = ""
+        success_criteria = []
 
     # Build a system prompt from the assignment's scenario fields.
     locale_label = class_record.get("learning_locale", "ko-KR")
@@ -1095,7 +1109,10 @@ def _resolve_canvas_generated_bootstrap(
         "\nGuide the conversation naturally. Provide gentle corrections and scaffolding when needed."
     )
 
-    system_prompt_preview = "\n".join(prompt_parts)
+    if is_custom_prompt_mode:
+        system_prompt_preview = assignment.get("instructions") or ""
+    else:
+        system_prompt_preview = "\n".join(prompt_parts)
 
     # Pedagogy context (minimal defaults)
     pedagogy_context = {

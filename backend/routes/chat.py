@@ -66,7 +66,7 @@ AVATAR_REACTION_INTENTS = [
     'tap_chest_reassure',
 ]
 
-REALTIME_MODEL = 'gpt-realtime-mini'
+REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15'
 
 
 def build_avatar_directive_tool() -> dict[str, Any]:

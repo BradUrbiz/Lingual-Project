@@ -114,7 +114,7 @@ const ASSISTANT_AUDIO_DONE_EVENTS = new Set([
 ]);
 
 const DIRECTIVE_TOOL_NAME = 'emit_avatar_directive';
-const REALTIME_MODEL = 'gpt-realtime-mini';
+const REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15';
 
 function createEmptyAvatarDebugStats(): AvatarDebugStats {
   return {

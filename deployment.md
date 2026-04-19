@@ -24,7 +24,7 @@ Set these in Google Cloud Console > Cloud Run > lingual-app > Edit & Deploy > Va
 
 | Variable | Description |
 | -------- | ----------- |
-| `OPENAI_API_KEY` | OpenAI API key for GPT Realtime API (gpt-realtime-mini) |
+| `OPENAI_API_KEY` | OpenAI API key for GPT Realtime API (gpt-realtime-mini-2025-12-15) |
 | `AZURE_SPEECH_KEY` | Azure Speech subscription key for pronunciation practice |
 | `AZURE_SPEECH_REGION` | Azure Speech service region (e.g. `eastus`) |
 | `GOOGLE_CLOUD_PROJECT` | Firebase/GCP project ID |

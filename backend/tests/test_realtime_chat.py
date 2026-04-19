@@ -856,7 +856,7 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
             response = self.client.post('/api/realtime/connect', json={
                 'offerSdp': 'v=0\r\no=- 0 0 IN IP4 127.0.0.1',
                 'clientSecret': 'secret_123',
-                'model': 'gpt-realtime-mini',
+                'model': 'gpt-realtime-mini-2025-12-15',
             })
 
         self.assertEqual(response.status_code, 200)
@@ -865,7 +865,7 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         self.assertEqual(payload['answerSdp'], 'mock-answer-sdp')
         self.assertEqual(
             mocked_post.call_args.kwargs['params'],
-            {'model': 'gpt-realtime-mini'},
+            {'model': 'gpt-realtime-mini-2025-12-15'},
         )
         self.assertEqual(
             mocked_post.call_args.kwargs['headers']['Content-Type'],

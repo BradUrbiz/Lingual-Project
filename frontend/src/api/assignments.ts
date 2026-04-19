@@ -3,6 +3,7 @@ import type {
   AssignmentAnalyticsData,
   AssignmentBootstrapData,
   AssignmentDto,
+  AssignmentWorkspaceData,
   CreatePracticeSessionPayload,
   CreateAssignmentPayload,
   PracticeSessionDto,
@@ -25,6 +26,11 @@ interface AssignmentBootstrapResponse {
   bootstrap: AssignmentBootstrapData;
 }
 
+interface AssignmentWorkspaceResponse {
+  success: boolean;
+  workspace: AssignmentWorkspaceData;
+}
+
 interface PracticeSessionResponse {
   success: boolean;
   practiceSession: PracticeSessionDto;
@@ -40,9 +46,9 @@ interface AssignmentDraftGenerateResponse {
   suggestions: {
     scenario: string;
     targetExpressions: string[];
+    targetVocabulary: string[];
     focusGrammar: string[];
     successCriteria: string[];
-    taskType: string;
     suggestedTitle: string;
     suggestedDescription: string;
     teacherNotes: string;
@@ -88,6 +94,13 @@ export const bootstrapStudentAssignment = async (
     uiLanguage,
   });
   return response.data.bootstrap;
+};
+
+export const getStudentAssignmentWorkspace = async (
+  assignmentId: string,
+): Promise<AssignmentWorkspaceData> => {
+  const response = await api.get<AssignmentWorkspaceResponse>(`/student/assignments/${assignmentId}/workspace`);
+  return response.data.workspace;
 };
 
 export const createAssignmentPracticeSession = async (

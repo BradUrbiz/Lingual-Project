@@ -445,7 +445,7 @@ Then the prompt includes:
   And per-template assistant role, opening moves, sustain moves, closing moves, and completion rule
   And communicative function directives with behavioral hints
   And discourse move directives with behavioral hints
-  And evidence targets (min turns, max turns, time limit)
+  And evidence targets (min turns, max turns)
 ```
 
 ### Scenario: Output pressure calibrates minimum student output

@@ -149,6 +149,7 @@ class PedagogyPromptSectionsTestCase(unittest.TestCase):
         self.assertIn('Bias the exchange toward rubric evidence for Task completion.', task_prompt)
         self.assertIn('Create visible evidence for these mapped curriculum outcomes', task_prompt)
         self.assertIn('Do not close the task until the learner has materially demonstrated', task_prompt)
+        self.assertNotIn('finish within about', task_prompt)
         self.assertIn('OUTPUT PRESSURE', output_prompt)
         self.assertIn('roughly 9+ words', output_prompt)
         self.assertIn('target turn volume of about 4 turns', output_prompt)
@@ -160,13 +161,13 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
             'systemPromptPreview': 'Base assignment prompt',
             'assignment': {
                 'title': 'Restaurant Ordering Practice',
-                'taskType': 'information_gap',
                 'maxAttempts': 3,
                 'successCriteria': ['Use one polite request', 'Ask one follow-up question'],
                 'description': 'Order a meal and ask about one menu item.',
             },
             'mapping': {
                 'targetExpressions': ['Could I have', 'I would like'],
+                'targetVocabulary': ['appetizer', 'receipt'],
                 'focusGrammar': ['polite requests'],
                 'allowedContextTags': ['restaurant'],
                 'rubricFocus': ['task_completion'],
@@ -251,11 +252,14 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
 
         self.assertIn('Base assignment prompt', prompt)
         self.assertIn('ASSIGNMENT ENVELOPE', prompt)
+        self.assertNotIn('Task type:', prompt)
         self.assertIn('FEEDBACK MODE DIRECTIVE', prompt)
         self.assertIn('CORRECTION LADDER', prompt)
         self.assertIn('SCAFFOLD LADDER', prompt)
         self.assertIn('TASK TEMPLATE DIRECTIVE', prompt)
         self.assertIn('OUTPUT PRESSURE', prompt)
+        self.assertIn('TARGET VOCABULARY TO ELICIT', prompt)
+        self.assertIn('appetizer', prompt)
         self.assertIn('Output min student turn words: 8', prompt)
         self.assertIn('repeats 2 time(s)', prompt)
         self.assertIn('Resolved scenario anchor: setting=Restaurant; roles=learner, server; register=mixed.', prompt)
@@ -263,6 +267,8 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
         self.assertIn('Bias the exchange toward rubric evidence for Task completion.', prompt)
         self.assertIn('Resolved curriculum template references: tpl.restaurant_roleplay.v1.', prompt)
         self.assertIn('Resolved structured activity template: Restaurant Roleplay.', prompt)
+        self.assertNotIn('Evidence time limit sec:', prompt)
+        self.assertNotIn('finish within about', prompt)
 
 
 if __name__ == '__main__':

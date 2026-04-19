@@ -153,7 +153,13 @@ def get_user_proficiency_context():
     level_objective = profile_context.get('level_objective', '')
 
     if not results:
-        return "The user has not completed their assessment yet. Assume beginner level."
+        return (
+            "The user has not completed their assessment yet. "
+            "Assume ACTFL Intermediate Mid/High: comfortable with everyday "
+            "topics, can sustain a conversation in the target language, and "
+            "benefits from concise corrective feedback rather than heavy "
+            "English scaffolding."
+        )
 
     global_stage = results.get('global_stage', 0)
     framework = results.get('framework', 'ACTFL')

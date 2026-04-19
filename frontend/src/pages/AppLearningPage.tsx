@@ -359,9 +359,6 @@ export function AppLearningPage() {
                   <Badge variant={assignment.status === 'published' ? 'success' : 'outline'} size="sm">
                     {assignment.status}
                   </Badge>
-                  <Badge variant="secondary" size="sm">
-                    {assignment.taskType.replace('_', ' ')}
-                  </Badge>
                 </div>
                 <h3 className="mt-4 text-xl font-display font-bold text-foreground">{assignment.title}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">

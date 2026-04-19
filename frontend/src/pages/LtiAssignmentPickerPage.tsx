@@ -136,7 +136,7 @@ export function LtiAssignmentPickerPage() {
                         {assignment.title}
                       </div>
                       <div className="mt-0.5 text-xs text-muted-foreground">
-                        {assignment.taskType || 'Practice'} &middot; {assignment.status}
+                        {assignment.status}
                       </div>
                     </div>
                   </label>

@@ -16,20 +16,14 @@ import { getTeacherClasses } from '@/api/teacher';
 import { Alert, AlertDescription, Badge, Button, Card, Input, Textarea } from '@/components/ui';
 import type { CanvasCourseContentItem } from '@/types/canvas';
 import type {
-  AssignmentTaskType,
   StudentAssignmentSummary,
+  TargetLanguageIntensity,
   TeacherClassSummary,
 } from '@/types';
 
 type CanvasPracticePhase = 'idle' | 'generating' | 'reviewing' | 'saving' | 'error';
 type BuilderMode = 'quick' | 'advanced';
 type AdvancedEntryMode = 'canvas' | 'source' | 'manual';
-
-const CANVAS_TASK_TYPE_OPTIONS: Array<{ value: AssignmentTaskType; label: string; description: string }> = [
-  { value: 'information_gap', label: 'Information gap', description: 'Students exchange missing information' },
-  { value: 'opinion_gap', label: 'Opinion gap', description: 'Students share and compare opinions' },
-  { value: 'decision_making', label: 'Decision making', description: 'Students discuss and reach a decision' },
-];
 
 function formatStatusVariant(status: string): 'success' | 'secondary' | 'outline' {
   if (status === 'published') return 'success';
@@ -59,8 +53,8 @@ export function TeacherAssignmentBuilderPage() {
   const [canvasTitle, setCanvasTitle] = useState('');
   const [canvasDescription, setCanvasDescription] = useState('');
   const [canvasScenario, setCanvasScenario] = useState('');
-  const [canvasTaskType, setCanvasTaskType] = useState<AssignmentTaskType>('decision_making');
   const [canvasTargetExpressions, setCanvasTargetExpressions] = useState<string[]>([]);
+  const [canvasTargetVocabulary, setCanvasTargetVocabulary] = useState<string[]>([]);
   const [canvasFocusGrammar, setCanvasFocusGrammar] = useState<string[]>([]);
   const [canvasSuccessCriteria, setCanvasSuccessCriteria] = useState<string[]>([]);
   const [canvasObjectives, setCanvasObjectives] = useState<string[]>([]);
@@ -70,6 +64,8 @@ export function TeacherAssignmentBuilderPage() {
   // authored items.
   const [canvasObjectivesFromAI, setCanvasObjectivesFromAI] = useState(false);
   const [canvasTeacherNotes, setCanvasTeacherNotes] = useState('');
+  const [canvasTargetLanguageIntensity, setCanvasTargetLanguageIntensity] =
+    useState<TargetLanguageIntensity>('mostly_target');
   // Default to 'draft' so a misclick on Publish doesn't ship an un-reviewed
   // assignment live to students. Teachers must explicitly choose Published.
   const [canvasStatus, setCanvasStatus] = useState<'draft' | 'published'>('draft');
@@ -134,13 +130,14 @@ export function TeacherAssignmentBuilderPage() {
     setCanvasTitle('');
     setCanvasDescription('');
     setCanvasScenario('');
-    setCanvasTaskType('decision_making');
     setCanvasTargetExpressions([]);
+    setCanvasTargetVocabulary([]);
     setCanvasFocusGrammar([]);
     setCanvasSuccessCriteria([]);
     setCanvasObjectives([]);
     setCanvasObjectivesFromAI(false);
     setCanvasTeacherNotes('');
+    setCanvasTargetLanguageIntensity('mostly_target');
     setCanvasStatus('draft');
   };
 
@@ -154,13 +151,8 @@ export function TeacherAssignmentBuilderPage() {
     if (nextInstructions !== undefined) {
       setDraftInstructions(nextInstructions);
     }
-    const suggestedTaskType = suggestions.taskType as AssignmentTaskType;
-    setCanvasTaskType(
-      CANVAS_TASK_TYPE_OPTIONS.some((opt) => opt.value === suggestedTaskType)
-        ? suggestedTaskType
-        : 'decision_making'
-    );
     setCanvasTargetExpressions(suggestions.targetExpressions || []);
+    setCanvasTargetVocabulary(suggestions.targetVocabulary || []);
     setCanvasFocusGrammar(suggestions.focusGrammar || []);
     setCanvasSuccessCriteria(suggestions.successCriteria || []);
     // Pre-fill objectives when the backend provides them. If it doesn't,
@@ -242,12 +234,13 @@ export function TeacherAssignmentBuilderPage() {
     setCanvasDescription('');
     setDraftInstructions('');
     setCanvasScenario('');
-    setCanvasTaskType('decision_making');
     setCanvasTargetExpressions([]);
+    setCanvasTargetVocabulary([]);
     setCanvasFocusGrammar([]);
     setCanvasSuccessCriteria([]);
     setCanvasObjectives([]);
     setCanvasTeacherNotes('');
+    setCanvasTargetLanguageIntensity('mostly_target');
     setCanvasStatus('draft');
     setCanvasPhase('reviewing');
   };
@@ -299,11 +292,12 @@ export function TeacherAssignmentBuilderPage() {
           description: canvasDescription.trim(),
           scenario: canvasScenario.trim(),
           targetExpressions: canvasTargetExpressions,
+          targetVocabulary: canvasTargetVocabulary,
           focusGrammar: canvasFocusGrammar,
           successCriteria: canvasSuccessCriteria,
           objectives: canvasObjectives,
-          taskType: canvasTaskType,
           teacherNotes: canvasTeacherNotes.trim(),
+          targetLanguageIntensity: canvasTargetLanguageIntensity,
           status: canvasStatus,
         });
         if (!result.success) {
@@ -320,14 +314,15 @@ export function TeacherAssignmentBuilderPage() {
           title: canvasTitle.trim(),
           description: canvasDescription.trim(),
           status: canvasStatus,
-          taskType: canvasTaskType,
           successCriteria: canvasSuccessCriteria,
           instructions: draftInstructions.trim(),
           generatedScenario: canvasScenario.trim(),
           objectives: canvasObjectives,
           targetExpressions: canvasTargetExpressions,
+          targetVocabulary: canvasTargetVocabulary,
           focusGrammar: canvasFocusGrammar,
           teacherNotes: canvasTeacherNotes.trim(),
+          targetLanguageIntensity: canvasTargetLanguageIntensity,
         });
       }
       await loadClassData(classId);
@@ -475,17 +470,17 @@ export function TeacherAssignmentBuilderPage() {
                   {
                     value: 'canvas' as const,
                     label: 'Canvas item',
-                    description: 'Generate from synced Canvas content.',
+                    description: 'Create from synced Canvas content.',
                   },
                   {
                     value: 'source' as const,
-                    label: 'AI-assisted source',
+                    label: 'Custom Instruction',
                     description: 'Paste vocabulary, rubric notes, or lesson context.',
                   },
                   {
                     value: 'manual' as const,
                     label: 'Manual authoring',
-                    description: 'Write the assignment directly from scratch.',
+                    description: 'Write the assignment directly on the scaffold.',
                   },
                 ].map((option) => (
                   <button
@@ -725,6 +720,21 @@ export function TeacherAssignmentBuilderPage() {
 
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
+                      <p className="text-base font-semibold text-foreground">Target vocabulary</p>
+                      {advancedEntryMode !== 'manual' && (
+                        <Badge variant="accent" size="sm">AI-generated</Badge>
+                      )}
+                    </div>
+                    <TagListEditor
+                      items={canvasTargetVocabulary}
+                      onChange={setCanvasTargetVocabulary}
+                      placeholder="Add a target vocabulary word…"
+                      ariaLabel="Target vocabulary"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
                       <p className="text-base font-semibold text-foreground">Focus grammar</p>
                       {advancedEntryMode !== 'manual' && (
                         <Badge variant="accent" size="sm">AI-generated</Badge>
@@ -771,39 +781,69 @@ export function TeacherAssignmentBuilderPage() {
 
                 <div className="space-y-4">
                   <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                    <p className="text-base font-semibold text-foreground">Task type</p>
-                    {CANVAS_TASK_TYPE_OPTIONS.map((option) => (
-                      <label
-                        key={option.value}
-                        className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 transition-colors ${
-                          canvasTaskType === option.value
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border bg-card hover:border-primary/50'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="canvas-task-type"
-                          value={option.value}
-                          checked={canvasTaskType === option.value}
-                          onChange={() => setCanvasTaskType(option.value)}
-                          className="mt-1"
-                        />
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">{option.label}</p>
-                          <p className="text-xs text-muted-foreground">{option.description}</p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-
-                  <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
                     <Textarea
                       label="Teacher notes"
                       value={canvasTeacherNotes}
                       onChange={(event) => setCanvasTeacherNotes(event.target.value)}
                       placeholder="Notes about pedagogical intent (optional)"
+                      rows={8}
+                      className="min-h-[220px]"
                     />
+                  </div>
+
+                  <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+                    <div className="space-y-1">
+                      <p id="canvas-language-mix-label" className="text-base font-semibold text-foreground">
+                        AI tutor language mix
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        How much should the tutor stay in the target language vs. scaffold in English?
+                      </p>
+                    </div>
+                    <div
+                      className="flex flex-col gap-2"
+                      role="radiogroup"
+                      aria-labelledby="canvas-language-mix-label"
+                    >
+                      {(
+                        [
+                          {
+                            value: 'target_only',
+                            label: 'Target language only',
+                            hint: 'Best for advanced classes — AI replies stay in the target language.',
+                          },
+                          {
+                            value: 'mostly_target',
+                            label: 'Mostly target language',
+                            hint: 'Default. Brief English when the learner stalls, then back to the target language.',
+                          },
+                          {
+                            value: 'bilingual_scaffold',
+                            label: 'Bilingual scaffolding',
+                            hint: 'Best for novice classes — AI glosses new words in English in parentheses.',
+                          },
+                        ] as Array<{ value: TargetLanguageIntensity; label: string; hint: string }>
+                      ).map((option) => {
+                        const selected = canvasTargetLanguageIntensity === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            className={`rounded-xl border-2 px-3 py-2 text-left text-sm transition-colors ${
+                              selected
+                                ? 'border-primary bg-primary/10 text-primary'
+                                : 'border-border bg-card text-muted-foreground hover:border-primary/50'
+                            }`}
+                            onClick={() => setCanvasTargetLanguageIntensity(option.value)}
+                          >
+                            <div className="font-semibold">{option.label}</div>
+                            <div className="text-xs opacity-80">{option.hint}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">

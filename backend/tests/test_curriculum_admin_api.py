@@ -491,7 +491,6 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
             json={
                 'title': 'New Assignment',
                 'status': 'draft',
-                'taskType': 'decision_making',
                 'instructions': 'Introduce yourself to a classmate.',
                 'generatedScenario': 'You meet a new student at a welcome event.',
             },

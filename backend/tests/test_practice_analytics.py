@@ -350,6 +350,21 @@ class TestApplyStudentTurnEvent(unittest.TestCase):
         self.assertEqual(summary["target_expression_hits"].get("I think"), 2)
         self.assertEqual(summary["target_expression_total_hits"], 2)
 
+    def test_counts_target_vocabulary_hits(self):
+        session = _make_session(
+            mapping_snapshot={"targetVocabulary": ["menu", "receipt"]},
+        )
+        updates = apply_learning_event_to_session(
+            session,
+            event_type="student.turn",
+            turn_index=0,
+            payload={"content": "I read the menu and asked for the receipt."},
+        )
+        summary = updates["session_summary"]
+        self.assertEqual(summary["target_vocabulary_hits"].get("menu"), 1)
+        self.assertEqual(summary["target_vocabulary_hits"].get("receipt"), 1)
+        self.assertEqual(summary["target_vocabulary_total_hits"], 2)
+
     def test_tracks_voice_cost(self):
         session = _make_session(voice_enabled=True)
         updates = apply_learning_event_to_session(

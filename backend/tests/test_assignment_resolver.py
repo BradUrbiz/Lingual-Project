@@ -8,6 +8,7 @@ from backend.services.assignment_resolver import (
     serialize_assignment,
     resolve_assignment_bootstrap,
     resolve_assignment_bootstrap_for_user,
+    build_assignment_system_prompt,
 )
 from backend.services.membership_context import SchoolRequestContext
 
@@ -187,7 +188,7 @@ class TestSerializeAssignment(unittest.TestCase):
         }
         result = serialize_assignment(assignment)
         self.assertEqual(result["id"], "a-1")
-        self.assertEqual(result["taskType"], "information_gap")
+        self.assertNotIn("taskType", result)
         self.assertEqual(result["successCriteria"], ["Complete the task"])
 
     def test_returns_none_for_none(self):
@@ -204,6 +205,7 @@ class TestSerializeAssignment(unittest.TestCase):
             "generated_scenario": "You are at a busy bistro.",
             "objectives": ["request food", "clarify choices"],
             "target_expressions": ["Je voudrais", "L'addition"],
+            "target_vocabulary": ["réservation", "addition"],
             "focus_grammar": ["polite conditional"],
             "teacher_notes": "Keep it polite.",
             "canvas_module_item_ref": {
@@ -217,6 +219,7 @@ class TestSerializeAssignment(unittest.TestCase):
         self.assertEqual(result["generatedScenario"], "You are at a busy bistro.")
         self.assertEqual(result["objectives"], ["request food", "clarify choices"])
         self.assertEqual(result["targetExpressions"], ["Je voudrais", "L'addition"])
+        self.assertEqual(result["targetVocabulary"], ["réservation", "addition"])
         self.assertEqual(result["focusGrammar"], ["polite conditional"])
         self.assertEqual(result["teacherNotes"], "Keep it polite.")
         self.assertEqual(result["canvasModuleItemRef"]["item_id"], "it1")
@@ -251,9 +254,15 @@ class TestResolveAssignmentBootstrap(unittest.TestCase):
             "status": "published",
             "task_type": "information_gap",
             "generated_scenario": "You meet a new classmate. Tell them about your family.",
+            "objectives": ["Describe family relationships", "Ask one follow-up question"],
             "target_expressions": ["Mi familia", "Tengo hermanos"],
+            "target_vocabulary": ["madre", "hermano"],
             "focus_grammar": ["possessive adjectives"],
             "teacher_notes": "Keep the exchange informal.",
+            "canvas_module_item_ref": {
+                "item_title": "Family introductions page",
+                "canvas_module_name": "Unit 2: Family",
+            },
         }
         class_record = {
             "id": "c-1",
@@ -290,18 +299,68 @@ class TestResolveAssignmentBootstrap(unittest.TestCase):
             ["Mi familia", "Tengo hermanos"],
         )
         self.assertEqual(
+            bootstrap["mapping"]["targetVocabulary"],
+            ["madre", "hermano"],
+        )
+        self.assertEqual(
             bootstrap["mapping"]["focusGrammar"], ["possessive adjectives"],
         )
+        self.assertEqual(
+            [objective["canDo"]["en"] for objective in bootstrap["curriculum"]["objectives"]],
+            ["Describe family relationships", "Ask one follow-up question"],
+        )
+        self.assertEqual(bootstrap["mapping"]["objectiveIds"], ["canvas-objective-1", "canvas-objective-2"])
         # System prompt includes the scenario + target expressions + grammar.
         prompt = bootstrap["systemPromptPreview"]
+        full_prompt = build_assignment_system_prompt(bootstrap)
         self.assertIn("Mi familia", prompt)
+        self.assertIn("madre", prompt)
         self.assertIn("You meet a new classmate", prompt)
+        self.assertIn("Family introductions page", prompt)
+        self.assertIn("Unit 2: Family", prompt)
         self.assertIn("possessive adjectives", prompt)
         self.assertIn("es-ES", prompt)
+        self.assertIn("Describe family relationships", full_prompt)
+        self.assertIn("TARGET VOCABULARY TO ELICIT", full_prompt)
         # Realtime params use the canvas_generated shape.
         self.assertEqual(
             bootstrap["realtimeSessionParams"]["practice"]["type"],
             "canvas_generated",
+        )
+
+    def test_canvas_first_bootstrap_uses_hidden_100_minute_internal_time_cap(self):
+        deps = _make_deps()
+        assignment = {
+            "id": "a-2",
+            "org_id": "org-1",
+            "class_id": "c-1",
+            "title": "Untimed conversation",
+            "status": "published",
+            "generated_scenario": "Talk naturally about weekend plans.",
+            "objectives": ["Discuss weekend plans naturally."],
+        }
+        class_record = {
+            "id": "c-1",
+            "org_id": "org-1",
+            "name": "French",
+            "learning_locale": "fr-FR",
+            "subject": "French",
+            "status": "active",
+        }
+
+        bootstrap = resolve_assignment_bootstrap(
+            deps,
+            assignment=assignment,
+            class_record=class_record,
+        )
+
+        self.assertEqual(
+            bootstrap["curriculum"]["pedagogy"]["evidence"]["timeLimitSec"],
+            6000,
+        )
+        self.assertEqual(
+            bootstrap["curriculum"]["objectives"][0]["evidenceModel"]["timeLimitSec"],
+            6000,
         )
 
 
@@ -352,13 +411,17 @@ class TestCanvasGeneratedBootstrapFromAssignment(unittest.TestCase):
             "created_by_uid": "uid-t",
             "instructions": "Talk about your family.",
             "generated_scenario": "You meet a new classmate. Tell them about your family.",
+            "objectives": ["Describe family relationships"],
             "target_expressions": ["Mi familia", "Tengo hermanos"],
+            "target_vocabulary": ["madre", "hermano"],
             "focus_grammar": ["possessive adjectives"],
             "teacher_notes": "Keep the exchange informal and supportive.",
             "canvas_module_item_ref": {
                 "connection_id": "cn1",
                 "canvas_module_id": "mo1",
                 "item_id": "it1",
+                "item_title": "Family introductions page",
+                "canvas_module_name": "Unit 2: Family",
             },
         }
 
@@ -374,18 +437,78 @@ class TestCanvasGeneratedBootstrapFromAssignment(unittest.TestCase):
         self.assertEqual(bootstrap["class"]["learningLocale"], "es-ES")
         # System prompt contains scenario + target expressions + grammar
         self.assertIn("Mi familia", bootstrap.get("systemPromptPreview", ""))
+        self.assertIn("madre", bootstrap.get("systemPromptPreview", ""))
         self.assertIn("You meet a new classmate", bootstrap.get("systemPromptPreview", ""))
+        self.assertIn("Family introductions page", bootstrap.get("systemPromptPreview", ""))
         self.assertIn("possessive adjectives", bootstrap.get("systemPromptPreview", ""))
         self.assertIn("es-ES", bootstrap.get("systemPromptPreview", ""))
         # Mapping key is present and exposes scenario fields for legacy reads.
         self.assertIn("mapping", bootstrap)
         self.assertEqual(bootstrap["mapping"]["generatedScenario"], "You meet a new classmate. Tell them about your family.")
         self.assertEqual(bootstrap["mapping"]["targetExpressions"], ["Mi familia", "Tengo hermanos"])
+        self.assertEqual(bootstrap["mapping"]["targetVocabulary"], ["madre", "hermano"])
         self.assertEqual(bootstrap["mapping"]["focusGrammar"], ["possessive adjectives"])
         self.assertEqual(bootstrap["mapping"]["teacherNotes"], "Keep the exchange informal and supportive.")
+        self.assertEqual(bootstrap["curriculum"]["objectives"][0]["canDo"]["en"], "Describe family relationships")
         self.assertEqual(
             bootstrap["realtimeSessionParams"]["practice"]["type"], "canvas_generated"
         )
+
+    def _seed_language_mix_assignment(self, intensity_value):
+        self.db.classes["c1"] = {
+            "id": "c1", "org_id": "o1", "name": "Spanish",
+            "learning_locale": "es-ES", "subject": "Spanish",
+            "teacher_membership_ids": ["m1"], "status": "active",
+        }
+        self.db.enrollments["c1_u1"] = {
+            "id": "c1_u1", "class_id": "c1", "student_uid": "u1",
+            "status": "active", "join_source": "join_code",
+        }
+        self.db.assignments["asg-mix"] = {
+            "id": "asg-mix", "org_id": "o1", "class_id": "c1",
+            "title": "Mix test", "status": "published",
+            "task_type": "decision_making", "success_criteria": [],
+            "created_by_uid": "uid-t",
+            "instructions": "Talk.", "generated_scenario": "Order coffee.",
+            "objectives": ["Order food"], "target_expressions": [],
+            "target_vocabulary": [], "focus_grammar": [],
+            "teacher_notes": "",
+            "target_language_intensity": intensity_value,
+        }
+
+    def test_language_mix_target_only_emits_strict_directive(self):
+        self._seed_language_mix_assignment("target_only")
+        bootstrap = resolve_assignment_bootstrap_for_user(
+            deps=self.deps, uid="u1", context=self.context,
+            assignment_id="asg-mix", ui_language="en",
+        )
+        prompt = bootstrap["systemPromptPreview"]
+        self.assertIn("## Language Mix", prompt)
+        self.assertIn("Respond ONLY in Spanish", prompt)
+        self.assertNotIn("Bilingual scaffolding is on", prompt)
+
+    def test_language_mix_mostly_target_is_default(self):
+        # Omit target_language_intensity entirely — should default to mostly_target.
+        self._seed_language_mix_assignment("")
+        del self.db.assignments["asg-mix"]["target_language_intensity"]
+        bootstrap = resolve_assignment_bootstrap_for_user(
+            deps=self.deps, uid="u1", context=self.context,
+            assignment_id="asg-mix", ui_language="en",
+        )
+        prompt = bootstrap["systemPromptPreview"]
+        self.assertIn("Speak primarily in Spanish", prompt)
+        self.assertIn("Brief English scaffolding", prompt)
+        self.assertNotIn("Respond ONLY in Spanish", prompt)
+
+    def test_language_mix_bilingual_scaffold_emits_glossing_directive(self):
+        self._seed_language_mix_assignment("bilingual_scaffold")
+        bootstrap = resolve_assignment_bootstrap_for_user(
+            deps=self.deps, uid="u1", context=self.context,
+            assignment_id="asg-mix", ui_language="en",
+        )
+        prompt = bootstrap["systemPromptPreview"]
+        self.assertIn("Bilingual scaffolding is on", prompt)
+        self.assertIn("English gloss in parentheses", prompt)
 
 
 if __name__ == "__main__":

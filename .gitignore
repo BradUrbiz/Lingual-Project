@@ -19,3 +19,17 @@ e2e/snapshots/
 .omc/
 frontend/.omc/
 .gstack/
+.venv312/
+.claude/
+
+# Playwright accessibility snapshot dumps from local QA sessions
+/after-*.yml
+/auth-*.yml
+/code-*.yml
+/invite-*.yml
+/join-*.yml
+/launch-*.yml
+/practice-*.yml
+/student-*.yml
+/teacher-*.yml
+/verify-*.yml

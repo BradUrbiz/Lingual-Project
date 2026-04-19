@@ -57,7 +57,6 @@ export function AppSettingsPage() {
       } catch (err) {
         // Silent: students not in a school org get 400 here. Fine to skip.
         if (active) setCompliance(null);
-        // eslint-disable-next-line no-console
         console.debug('compliance fetch skipped:', err);
       }
     })();

@@ -188,6 +188,8 @@ Schema:
     - started_at: timestamp
     - ended_at: timestamp | None
     - prompt_version: str
+    - system_prompt_preview: str
+    - class_snapshot: dict
     - transcript_ref: dict
     - cost_summary: dict
     - session_summary: dict
@@ -1228,9 +1230,11 @@ def create_assignment(
     canvas_module_item_ref=None,
     objectives=None,
     target_expressions=None,
+    target_vocabulary=None,
     focus_grammar=None,
     generated_scenario='',
     teacher_notes='',
+    target_language_intensity='mostly_target',
 ):
     """Create an assignment document.
 
@@ -1259,9 +1263,15 @@ def create_assignment(
         'canvas_module_item_ref': canvas_module_item_ref,
         'objectives': list(objectives or []),
         'target_expressions': list(target_expressions or []),
+        'target_vocabulary': list(target_vocabulary or []),
         'focus_grammar': list(focus_grammar or []),
         'generated_scenario': generated_scenario or '',
         'teacher_notes': teacher_notes or '',
+        'target_language_intensity': (
+            target_language_intensity
+            if target_language_intensity in ('target_only', 'mostly_target', 'bilingual_scaffold')
+            else 'mostly_target'
+        ),
         'created_at': firestore.SERVER_TIMESTAMP,
         'updated_at': firestore.SERVER_TIMESTAMP,
     }
@@ -1368,6 +1378,22 @@ def update_practice_session(session_id, updates):
 def list_assignment_practice_sessions(assignment_id):
     """List practice sessions for an assignment."""
     docs = get_practice_sessions_collection().where('assignment_id', '==', assignment_id).stream()
+    sessions = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        sessions.append(data)
+    return sessions
+
+
+def list_student_assignment_practice_sessions(assignment_id, student_uid):
+    """List practice sessions for one student on one assignment."""
+    docs = (
+        get_practice_sessions_collection()
+        .where('assignment_id', '==', assignment_id)
+        .where('student_uid', '==', student_uid)
+        .stream()
+    )
     sessions = []
     for doc in docs:
         data = doc.to_dict() or {}

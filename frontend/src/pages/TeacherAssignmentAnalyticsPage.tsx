@@ -3,15 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
-  BarChart3,
   BookOpen,
-  CheckCircle2,
-  ClipboardList,
   Loader2,
-  MessageSquareText,
-  Scale,
   Target,
-  Users,
 } from 'lucide-react';
 import { getAssignmentAnalytics } from '@/api/assignments';
 import { Alert, AlertDescription, Badge, Button, Card } from '@/components/ui';
@@ -95,47 +89,6 @@ export function TeacherAssignmentAnalyticsPage() {
     );
   }
 
-  const stats = [
-    {
-      label: 'Sessions',
-      value: analytics.summary.sessionCount,
-      icon: BarChart3,
-      accent: 'bg-primary/10 text-primary',
-    },
-    {
-      label: 'Students',
-      value: analytics.summary.uniqueStudentCount,
-      icon: Users,
-      accent: 'bg-success/15 text-success',
-    },
-    {
-      label: 'Speaking minutes',
-      value: Math.round(analytics.summary.estimatedSpeakingTimeSeconds / 60),
-      icon: MessageSquareText,
-      accent: 'bg-accent/20 text-accent-foreground',
-    },
-    {
-      label: 'Self-corrections',
-      value: analytics.summary.selfCorrectionCount,
-      icon: CheckCircle2,
-      accent: 'bg-secondary text-foreground',
-    },
-    {
-      label: 'Repeated errors',
-      value: analytics.summary.repeatedErrorCount,
-      icon: AlertTriangle,
-      accent: 'bg-destructive/10 text-destructive',
-    },
-    {
-      label: 'Rubric avg',
-      value: typeof analytics.summary.rubricAverageScore === 'number'
-        ? analytics.summary.rubricAverageScore.toFixed(2)
-        : 'n/a',
-      icon: Scale,
-      accent: 'bg-primary/5 text-foreground',
-    },
-  ];
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -152,9 +105,6 @@ export function TeacherAssignmentAnalyticsPage() {
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Badge variant={formatStatusVariant(analytics.assignment.status)} size="sm">
               {analytics.assignment.status}
-            </Badge>
-            <Badge variant="secondary" size="sm">
-              {analytics.assignment.taskType.replaceAll('_', ' ')}
             </Badge>
             <Badge variant="outline" size="sm">
               {analytics.pedagogy.taskModel || 'task model n/a'}
@@ -184,20 +134,6 @@ export function TeacherAssignmentAnalyticsPage() {
         </Alert>
       ))}
 
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-6">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="border-3 border-foreground p-5 shadow-stamp">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-foreground ${stat.accent}`}>
-                <stat.icon size={22} strokeWidth={2.5} />
-              </div>
-            </div>
-            <p className="text-3xl font-display font-bold text-foreground">{stat.value}</p>
-            <p className="mt-1 text-sm font-medium text-muted-foreground">{stat.label}</p>
-          </Card>
-        ))}
-      </div>
-
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
           <Card className="border-3 border-foreground p-6 shadow-stamp">
@@ -218,12 +154,6 @@ export function TeacherAssignmentAnalyticsPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Min turns</p>
                 <p className="mt-2 text-lg font-bold text-foreground">
                   {analytics.pedagogy.evidence.minTurns ?? 'n/a'}
-                </p>
-              </div>
-              <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Time limit</p>
-                <p className="mt-2 text-lg font-bold text-foreground">
-                  {analytics.pedagogy.evidence.timeLimitSec ?? 'n/a'}
                 </p>
               </div>
               <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
@@ -250,6 +180,37 @@ export function TeacherAssignmentAnalyticsPage() {
                   analytics.pedagogy.targetExpressions.map((item) => (
                     <Badge key={item.id} variant="outline" size="sm">
                       {item.id}: {item.count}
+                    </Badge>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <h3 className="text-base font-semibold text-foreground">Repeated errors</h3>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {analytics.pedagogy.repeatedErrors.length === 0 ? (
+                  <span className="text-sm text-muted-foreground">No repeated error patterns detected yet.</span>
+                ) : (
+                  analytics.pedagogy.repeatedErrors.map((item) => (
+                    <Badge key={item.id} variant="outline" size="sm">
+                      {item.label}: {item.count}
+                      {typeof item.studentCount === 'number' && item.studentCount > 0 ? ` · students ${item.studentCount}` : ''}
+                    </Badge>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <h3 className="text-base font-semibold text-foreground">Rubric dimension snapshot</h3>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {analytics.pedagogy.rubricDimensionScores.length === 0 ? (
+                  <span className="text-sm text-muted-foreground">No rubric-dimension evidence scored yet.</span>
+                ) : (
+                  analytics.pedagogy.rubricDimensionScores.map((item) => (
+                    <Badge key={item.id} variant="secondary" size="sm">
+                      {item.id}: {item.score.toFixed(2)}
                     </Badge>
                   ))
                 )}
@@ -310,124 +271,6 @@ export function TeacherAssignmentAnalyticsPage() {
         </div>
 
         <div className="space-y-6">
-          <Card className="border-3 border-foreground p-6 shadow-stamp">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-accent text-accent-foreground">
-                <ClipboardList size={22} strokeWidth={2.5} />
-              </div>
-              <div>
-                <h2 className="text-xl font-display font-bold text-foreground">Signal coverage</h2>
-                <p className="text-sm text-muted-foreground">
-                  Curriculum-aware signals detected from live turns and feedback-linked corrections.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 space-y-5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  Context tags
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {analytics.pedagogy.contextTagCoverage.length === 0 ? (
-                    <span className="text-sm text-muted-foreground">No context-tag signals detected yet.</span>
-                  ) : (
-                    analytics.pedagogy.contextTagCoverage.map((item) => (
-                      <Badge key={item.id} variant="outline" size="sm">
-                        {item.id}: {item.count}
-                      </Badge>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  Communicative functions
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {analytics.pedagogy.communicativeFunctionSignals.length === 0 ? (
-                    <span className="text-sm text-muted-foreground">No detected function signals yet.</span>
-                  ) : (
-                    analytics.pedagogy.communicativeFunctionSignals.map((item) => (
-                      <Badge key={item.id} variant="outline" size="sm">
-                        {item.id}: {item.count}
-                      </Badge>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  Discourse moves
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {analytics.pedagogy.discourseMoveSignals.length === 0 ? (
-                    <span className="text-sm text-muted-foreground">No detected discourse-move signals yet.</span>
-                  ) : (
-                    analytics.pedagogy.discourseMoveSignals.map((item) => (
-                      <Badge key={item.id} variant="secondary" size="sm">
-                        {item.id}: {item.count}
-                      </Badge>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  Foundation domains
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {analytics.pedagogy.foundationDomainCoverage.length === 0 ? (
-                    <span className="text-sm text-muted-foreground">No domain coverage yet.</span>
-                  ) : (
-                    analytics.pedagogy.foundationDomainCoverage.map((item) => (
-                      <Badge key={item.id} variant="outline" size="sm">
-                        {item.id}: {item.count}
-                      </Badge>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  Repeated errors
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {analytics.pedagogy.repeatedErrors.length === 0 ? (
-                    <span className="text-sm text-muted-foreground">No repeated error patterns detected yet.</span>
-                  ) : (
-                    analytics.pedagogy.repeatedErrors.map((item) => (
-                      <Badge key={item.id} variant="outline" size="sm">
-                        {item.label}: {item.count}{typeof item.studentCount === 'number' && item.studentCount > 0 ? ` · students ${item.studentCount}` : ''}
-                      </Badge>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  Rubric dimension scores
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {analytics.pedagogy.rubricDimensionScores.length === 0 ? (
-                    <span className="text-sm text-muted-foreground">No rubric-dimension evidence scored yet.</span>
-                  ) : (
-                    analytics.pedagogy.rubricDimensionScores.map((item) => (
-                      <Badge key={item.id} variant="secondary" size="sm">
-                        {item.id}: {item.score.toFixed(2)}
-                      </Badge>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </Card>
-
           <Card className="border-3 border-foreground p-6 shadow-stamp">
             <h2 className="text-xl font-display font-bold text-foreground">Rubric view</h2>
             <div className="mt-5 space-y-4">
@@ -508,11 +351,14 @@ export function TeacherAssignmentAnalyticsPage() {
           </Card>
 
           <Card className="border-3 border-foreground p-6 shadow-stamp">
-            <h2 className="text-xl font-display font-bold text-foreground">Recent sessions</h2>
+            <h2 className="text-xl font-display font-bold text-foreground">Recent attempts</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Most recent practice attempts recorded for this assignment.
+            </p>
             <div className="mt-5 space-y-3">
               {analytics.recentSessions.length === 0 ? (
                 <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
-                  No practice sessions have been recorded for this assignment yet.
+                  No practice attempts have been recorded for this assignment yet.
                 </div>
               ) : (
                 analytics.recentSessions.map((session) => (

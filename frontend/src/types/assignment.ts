@@ -31,6 +31,7 @@ export type FeedbackMode = 'fluency_first' | 'balanced' | 'accuracy_first' | str
 export type ModalityMode = 'text_only' | 'voice_only' | 'hybrid';
 export type AssignmentStatus = 'draft' | 'published' | 'archived';
 export type AssignmentTaskType = 'information_gap' | 'opinion_gap' | 'decision_making';
+export type TargetLanguageIntensity = 'target_only' | 'mostly_target' | 'bilingual_scaffold';
 
 export interface FeedbackPolicy {
   mode: FeedbackMode;
@@ -64,8 +65,9 @@ export interface ModalityPolicy {
  * C2 deleted the `curriculum_mappings` collection entirely, but the bootstrap
  * payload keeps a mapping-shaped DTO for backwards compatibility with older
  * frontend consumers. The scenario-bearing fields (`generatedScenario`,
- * `targetExpressions`, `focusGrammar`, `teacherNotes`, `outputPolicy`) are
- * populated from the assignment document by the Canvas-generated resolver.
+ * `targetExpressions`, `targetVocabulary`, `focusGrammar`, `teacherNotes`,
+ * `outputPolicy`) are populated from the assignment document by the
+ * Canvas-generated resolver.
  */
 export interface BootstrapMappingDto {
   id: string | null;
@@ -76,6 +78,7 @@ export interface BootstrapMappingDto {
   objectiveIds: string[];
   situationIds: string[];
   targetExpressions: string[];
+  targetVocabulary: string[];
   focusGrammar: string[];
   allowedContextTags: string[];
   feedbackPolicy: FeedbackPolicy;
@@ -113,7 +116,7 @@ export interface AssignmentDto {
   dueAt?: string | null;
   modalityOverride: ModalityPolicy;
   maxAttempts?: number | null;
-  taskType: AssignmentTaskType | string;
+  taskType?: AssignmentTaskType | string;
   successCriteria: string[];
   createdByUid: string;
   canvasModuleItemId?: string;
@@ -126,8 +129,10 @@ export interface AssignmentDto {
   generatedScenario?: string;
   objectives?: string[];
   targetExpressions?: string[];
+  targetVocabulary?: string[];
   focusGrammar?: string[];
   teacherNotes?: string;
+  targetLanguageIntensity?: TargetLanguageIntensity;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
@@ -242,7 +247,7 @@ export interface AssignmentBootstrapData {
     blockedReasons?: string[];
     retentionPolicy?: RetentionPolicySummary | null;
     maxAttempts?: number | null;
-    taskType: AssignmentTaskType | string;
+    taskType?: AssignmentTaskType | string;
   };
   realtimeSessionParams: {
     uiLanguage: string;
@@ -273,6 +278,8 @@ export interface PracticeSessionSummary {
   estimatedSpeakingTimeSeconds: number;
   targetExpressionHits: Record<string, number>;
   targetExpressionTotalHits: number;
+  targetVocabularyHits?: Record<string, number>;
+  targetVocabularyTotalHits?: number;
   selfCorrectionCount: number;
   taskCompletionCount: number;
   feedbackCounts: {
@@ -332,6 +339,23 @@ export interface PracticeSessionEventPayload {
   payload?: Record<string, unknown>;
 }
 
+export interface AssignmentWorkspaceThread {
+  chatId: string;
+  title: string;
+  updatedAt?: string | null;
+  messageCount: number;
+  hasActiveAttempt: boolean;
+  latestPracticeSession: PracticeSessionDto | null;
+  attempts: PracticeSessionDto[];
+}
+
+export interface AssignmentWorkspaceData {
+  bootstrap: AssignmentBootstrapData;
+  selectedChatId?: string | null;
+  latestActivePracticeSessionId?: string | null;
+  threads: AssignmentWorkspaceThread[];
+}
+
 export interface AssignmentAnalyticsData {
   assignment: AssignmentDto;
   class: AssignmentBootstrapData['class'];
@@ -348,6 +372,8 @@ export interface AssignmentAnalyticsData {
     estimatedSpeakingTimeSeconds: number;
     targetExpressionHits: Record<string, number>;
     targetExpressionTotalHits: number;
+    targetVocabularyHits?: Record<string, number>;
+    targetVocabularyTotalHits?: number;
     selfCorrectionCount: number;
     taskCompletionCount: number;
     repeatedErrorCount: number;
@@ -368,6 +394,7 @@ export interface AssignmentAnalyticsData {
       maxReplays?: number | null;
     };
     targetExpressions: Array<{ id: string; count: number }>;
+    targetVocabulary?: Array<{ id: string; count: number }>;
     contextTagCoverage: Array<{ id: string; count: number }>;
     communicativeFunctionSignals: Array<{ id: string; count: number }>;
     discourseMoveSignals: Array<{ id: string; count: number }>;
@@ -438,14 +465,15 @@ export interface CreateAssignmentPayload {
   dueAt?: string;
   modalityOverride?: Partial<ModalityPolicy>;
   maxAttempts?: number | null;
-  taskType?: AssignmentTaskType;
   successCriteria?: string[];
   instructions: string;
   generatedScenario: string;
   objectives?: string[];
   targetExpressions?: string[];
+  targetVocabulary?: string[];
   focusGrammar?: string[];
   teacherNotes?: string;
+  targetLanguageIntensity?: TargetLanguageIntensity;
   canvasModuleItemRef?: {
     connection_id?: string;
     canvas_module_id?: string;

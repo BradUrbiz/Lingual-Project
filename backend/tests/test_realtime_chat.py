@@ -208,6 +208,127 @@ class FakeRealtimeRouteDb:
                 'retention_policy_id': 'standard_school',
             }
         }
+        self.practice_sessions = {
+            'practice-1': {
+                'id': 'practice-1',
+                'org_id': 'org-1',
+                'class_id': 'class-1',
+                'assignment_id': 'assignment-1',
+                'student_uid': 'student-1',
+                'mapping_snapshot': {
+                    'id': None,
+                    'targetExpressions': ['Could I have'],
+                    'targetVocabulary': [],
+                    'focusGrammar': ['polite requests'],
+                    'teacherNotes': 'Keep the student in the restaurant ordering lane.',
+                    'feedbackPolicy': {
+                        'mode': 'balanced',
+                        'targetOnlyStrict': False,
+                        'recastDefault': True,
+                        'elicitationRepeatThreshold': 3,
+                        'endReviewEnabled': True,
+                    },
+                    'scaffoldPolicy': {
+                        'silenceToleranceMs': 3000,
+                        'hintLadder': ['wait', 'context_hint', 'choice_prompt', 'model_and_retry'],
+                        'maxModelingSteps': 1,
+                    },
+                    'outputPolicy': {
+                        'min_student_turn_words': 8,
+                        'follow_up_pressure': 'balanced',
+                        'allow_clarification_requests': True,
+                    },
+                },
+                'assignment_snapshot': {
+                    'id': 'assignment-1',
+                    'classId': 'class-1',
+                    'title': 'Restaurant Ordering Practice',
+                    'description': 'Order a meal and ask one follow-up question.',
+                    'maxAttempts': 3,
+                    'successCriteria': ['Use at least one polite request', 'Ask for clarification once'],
+                },
+                'curriculum_snapshot': {
+                    'package': {
+                        'id': 'canvas-generated',
+                        'title': {'en': 'Canvas-Generated Practice'},
+                        'learningLocale': 'fr-FR',
+                        'levelBand': 'adaptive',
+                    },
+                    'unit': None,
+                    'module': None,
+                    'situation': {
+                        'id': 'canvas-generated',
+                        'kind': 'interpersonal_speaking',
+                        'seed': {'setting': 'Parisian bistro roleplay', 'register': 'informal'},
+                        'objectiveIds': ['canvas-objective-1'],
+                    },
+                    'objectives': [
+                        {
+                            'id': 'canvas-objective-1',
+                            'mode': 'interpersonal_speaking',
+                            'canDo': {'en': 'I can order politely in a restaurant conversation.'},
+                        }
+                    ],
+                    'rubrics': [],
+                    'pedagogy': {
+                        'taskModel': 'assignment_conversation',
+                        'evidence': {'minTurns': 4, 'maxTurns': 12, 'timeLimitSec': 300},
+                        'objectiveIds': ['canvas-objective-1'],
+                        'rubricIds': [],
+                        'activityTemplates': [],
+                        'templateRefs': [],
+                    },
+                },
+                'pedagogy_snapshot': {
+                    'taskModel': 'assignment_conversation',
+                    'evidence': {'minTurns': 4, 'maxTurns': 12, 'timeLimitSec': 300},
+                    'objectiveIds': ['canvas-objective-1'],
+                    'rubricIds': [],
+                    'activityTemplates': [],
+                    'templateRefs': [],
+                },
+                'modality': 'hybrid',
+                'voice_enabled': True,
+                'text_enabled': True,
+                'status': 'active',
+                'prompt_version': 'assignment_bootstrap.v1',
+                'transcript_ref': {'chat_id': 'chat-1'},
+                'teacher_preview': False,
+                'ui_language': 'en',
+                'system_prompt_preview': '\n'.join([
+                    'You are an AI language tutor helping a student practice spoken fr-FR in a French class (French 2 - Period 3).',
+                    '',
+                    '## Scenario',
+                    'You are ordering dinner at a Parisian bistro and need to ask one clarifying question.',
+                    '',
+                    '## Objectives',
+                    '- I can order politely in a restaurant conversation.',
+                    '',
+                    '## Target Expressions',
+                    'The student should practice using: Could I have',
+                    '',
+                    '## Focus Grammar',
+                    'Pay attention to: polite requests',
+                    '',
+                    '## Language Mix',
+                    'Speak primarily in French. Brief English scaffolding (a single word or short clause) '
+                    "is fine when the learner clearly stalls, asks for a translation, or otherwise can't move forward — "
+                    'then return to French immediately. Never switch to a different target language.',
+                    '',
+                    'Guide the conversation naturally. Provide gentle corrections and scaffolding when needed.',
+                ]),
+                'class_snapshot': {
+                    'id': 'class-1',
+                    'orgId': 'org-1',
+                    'name': 'French 2 - Period 3',
+                    'term': 'Spring 2026',
+                    'subject': 'French',
+                    'learningLocale': 'fr-FR',
+                    'gradeBand': '10-11',
+                    'status': 'active',
+                },
+            }
+        }
         self.consent_events = []
 
     def resolve_user_school_context(self, uid, preferred_active_membership_id=None):
@@ -264,6 +385,10 @@ class FakeRealtimeRouteDb:
         return {
             'learning_locale': 'fr-FR',
         }
+
+    def get_practice_session(self, session_id):
+        session_record = self.practice_sessions.get(session_id)
+        return dict(session_record) if session_record else None
 
 
 class FakeRealtimeSessionResponse:
@@ -322,7 +447,7 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
         self.assertNotIn('tools', payload)
 
     def test_realtime_session_request_includes_avatar_tools_when_enabled(self):
-        with patch.dict('os.environ', {'ENABLE_REALTIME_AVATAR_DIRECTIVES': 'true'}, clear=False):
+        with patch.dict('os.environ', {'ENABLE_PILOT_AVATAR': 'true', 'ENABLE_REALTIME_AVATAR_DIRECTIVES': 'true'}, clear=False):
             payload = build_realtime_session_request('Base instructions')
 
         self.assertEqual(payload['tool_choice'], 'auto')
@@ -331,17 +456,25 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
         self.assertIn('Preferred mappings', payload['instructions'])
         self.assertIn('Tap reaction mappings', payload['instructions'])
 
+    def test_realtime_session_request_skips_avatar_tools_when_pilot_avatar_is_disabled(self):
+        with patch.dict('os.environ', {'ENABLE_REALTIME_AVATAR_DIRECTIVES': 'true'}, clear=False):
+            payload = build_realtime_session_request('Base instructions')
+
+        self.assertNotIn('tool_choice', payload)
+        self.assertNotIn('tools', payload)
+
     def test_realtime_session_request_includes_avatar_tools_when_explicitly_enabled(self):
-        payload = build_realtime_session_request(
-            'Base instructions',
-            enable_avatar_directives=True,
-        )
+        with patch.dict('os.environ', {'ENABLE_PILOT_AVATAR': 'true'}, clear=False):
+            payload = build_realtime_session_request(
+                'Base instructions',
+                enable_avatar_directives=True,
+            )
 
         self.assertEqual(payload['tool_choice'], 'auto')
         self.assertEqual(payload['tools'][0]['name'], 'emit_avatar_directive')
 
     def test_realtime_avatar_directives_requested_only_allows_payload_opt_in_in_development(self):
-        with patch.dict('os.environ', {'FLASK_ENV': 'development'}, clear=False):
+        with patch.dict('os.environ', {'ENABLE_PILOT_AVATAR': 'true', 'FLASK_ENV': 'development'}, clear=False):
             self.assertTrue(realtime_avatar_directives_requested({'avatarDirectives': True}))
 
         with patch.dict('os.environ', {'FLASK_ENV': 'production'}, clear=False):
@@ -349,6 +482,9 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
 
         with patch.dict('os.environ', {'FLASK_ENV': 'development'}, clear=False):
             self.assertFalse(realtime_avatar_directives_requested({'avatarDirectives': False}))
+
+        with patch.dict('os.environ', {'FLASK_ENV': 'development'}, clear=False):
+            self.assertFalse(realtime_avatar_directives_requested({'avatarDirectives': True}))
 
 
 class RealtimeChatRoutesTestCase(unittest.TestCase):
@@ -434,7 +570,7 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         instructions = request_payload['instructions']
 
         self.assertIn('Assignment title: Restaurant Ordering Practice', instructions)
-        self.assertIn('Task type: information_gap', instructions)
+        self.assertNotIn('Task type:', instructions)
         # Canvas-generated scenario content flows into the prompt.
         self.assertIn('Parisian bistro', instructions)
         self.assertIn('Could I have', instructions)
@@ -490,10 +626,64 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         mocked_post.assert_not_called()
         self.assertEqual(self.fake_db.consent_events[-1]['event_type'], 'voice.blocked.realtime_session')
 
+    def test_realtime_session_uses_practice_session_snapshot_fast_path(self):
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-openai-key'}, clear=False):
+            with patch('backend.routes.chat.requests.post') as mocked_post:
+                mocked_post.return_value = FakeRealtimeSessionResponse()
+                with patch('backend.routes.chat.resolve_assignment_bootstrap_for_user') as mocked_bootstrap:
+                    mocked_bootstrap.side_effect = AssertionError('full bootstrap should not run for the fast path')
+
+                    response = self.client.post('/api/realtime/session', json={
+                        'uiLanguage': 'en',
+                        'practice': {
+                            'type': 'canvas_generated',
+                            'assignmentId': 'assignment-1',
+                            'practiceSessionId': 'practice-1',
+                        },
+                    })
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload['success'])
+
+        request_payload = mocked_post.call_args.kwargs['json']
+        instructions = request_payload['instructions']
+
+        self.assertIn('Assignment title: Restaurant Ordering Practice', instructions)
+        self.assertIn('Parisian bistro', instructions)
+        self.assertIn('Could I have', instructions)
+
+    def test_realtime_session_fast_path_still_blocks_when_voice_permission_is_revoked(self):
+        self.fake_db.student_compliance_records['org-1_student-1'].update({
+            'guardian_consent_status': 'revoked',
+            'voice_consent_status': 'revoked',
+            'voice_allowed': False,
+        })
+
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-openai-key'}, clear=False):
+            with patch('backend.routes.chat.requests.post') as mocked_post:
+                with patch('backend.routes.chat.resolve_assignment_bootstrap_for_user') as mocked_bootstrap:
+                    mocked_bootstrap.side_effect = AssertionError('full bootstrap should not run for the fast path')
+
+                    response = self.client.post('/api/realtime/session', json={
+                        'uiLanguage': 'en',
+                        'practice': {
+                            'type': 'canvas_generated',
+                            'assignmentId': 'assignment-1',
+                            'practiceSessionId': 'practice-1',
+                        },
+                    })
+
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertFalse(payload['success'])
+        self.assertIn('blockedReasons', payload)
+        mocked_post.assert_not_called()
+
     def test_realtime_session_allows_avatar_directive_opt_in_in_development(self):
         with patch.dict(
             'os.environ',
-            {'OPENAI_API_KEY': 'test-openai-key', 'FLASK_ENV': 'development'},
+            {'OPENAI_API_KEY': 'test-openai-key', 'ENABLE_PILOT_AVATAR': 'true', 'FLASK_ENV': 'development'},
             clear=False,
         ):
             with patch('backend.routes.chat.requests.post') as mocked_post:

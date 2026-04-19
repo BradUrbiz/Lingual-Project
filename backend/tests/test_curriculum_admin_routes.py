@@ -370,6 +370,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         self.fake_openai_client = _FakeOpenAIClient({
             'scenario': 'Students discuss a teacher-provided source packet and decide how to use the key vocabulary in context.',
             'target_expressions': ['Quisiera practicar...', 'Segun la rubrica...'],
+            'target_vocabulary': ['reservar', 'camarero'],
             'focus_grammar': ['polite requests'],
             'success_criteria': ['Use the source vocabulary naturally'],
             'task_type': 'decision_making',
@@ -429,7 +430,6 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             'title': 'Weekend Storytelling',
             'description': 'Retell what happened last weekend.',
             'status': 'published',
-            'taskType': 'decision_making',
             'instructions': 'Describe your weekend in the past tense.',
             'generatedScenario': 'You are catching up with a friend after the weekend.',
             'targetExpressions': ['Could I have'],
@@ -452,8 +452,8 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             'description': 'Practice polite ordering.',
             'instructions': 'Use the target phrases naturally.',
             'generatedScenario': 'You are ordering dinner at a busy restaurant.',
-            'taskType': 'information_gap',
             'targetExpressions': ['Quisiera...', 'La cuenta, por favor'],
+            'targetVocabulary': ['reservar', 'camarero'],
             'focusGrammar': ['conditional politeness'],
             'successCriteria': ['Order two items and ask one follow-up question'],
             'teacherNotes': 'Push for full-sentence responses.',
@@ -469,6 +469,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         self.assertEqual(stored['instructions'], 'Use the target phrases naturally.')
         self.assertEqual(stored['generated_scenario'], 'You are ordering dinner at a busy restaurant.')
         self.assertEqual(stored['target_expressions'], ['Quisiera...', 'La cuenta, por favor'])
+        self.assertEqual(stored['target_vocabulary'], ['reservar', 'camarero'])
         self.assertEqual(stored['focus_grammar'], ['conditional politeness'])
         self.assertEqual(stored['teacher_notes'], 'Push for full-sentence responses.')
 
@@ -483,7 +484,8 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         self.assertTrue(payload['success'])
         self.assertEqual(payload['suggestions']['suggestedTitle'], 'Source-based speaking task')
         self.assertIn('scenario', payload['suggestions'])
-        self.assertEqual(payload['suggestions']['taskType'], 'decision_making')
+        self.assertEqual(payload['suggestions']['targetVocabulary'], ['reservar', 'camarero'])
+        self.assertNotIn('taskType', payload['suggestions'])
 
     def test_student_assignment_bootstrap_returns_realtime_params(self):
         self._set_session_user('teacher-1', 'mem-teacher')
@@ -491,7 +493,6 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         assignment_response = self.client.post('/api/teacher/classes/class-1/assignments', json={
             'title': 'Weekend Storytelling',
             'status': 'published',
-            'taskType': 'decision_making',
             'instructions': 'Describe your weekend using past tense verbs.',
             'generatedScenario': 'You are catching up with a friend after the weekend.',
         })
@@ -518,7 +519,6 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         assignment_response = self.client.post('/api/teacher/classes/class-1/assignments', json={
             'title': 'Voice practice with fallback',
             'status': 'published',
-            'taskType': 'information_gap',
             'instructions': 'Ask for clarification when needed.',
             'generatedScenario': 'You are ordering dinner at a busy restaurant.',
             'modalityOverride': {
@@ -553,7 +553,6 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         assignment_response = self.client.post('/api/teacher/classes/class-1/assignments', json={
             'title': 'Restaurant mission',
             'status': 'published',
-            'taskType': 'information_gap',
             'instructions': "Use past-tense verbs and 'j'ai' while ordering.",
             'generatedScenario': 'You are ordering at a French cafe and recount your morning.',
             'targetExpressions': ["j'ai"],
@@ -625,7 +624,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         # After C2, the Canvas-generated bootstrap powers the pedagogy
         # context directly from the assignment; curriculum-package objectives
         # and rubrics are no longer attached.
-        self.assertEqual(analytics['pedagogy']['taskModel'], 'information_gap')
+        self.assertEqual(analytics['pedagogy']['taskModel'], 'assignment_conversation')
         self.assertEqual(analytics['pedagogy']['evidence']['minTurns'], 4)
         self.assertEqual(analytics['pedagogy']['objectives'], [])
         self.assertEqual(analytics['pedagogy']['rubrics'], [])

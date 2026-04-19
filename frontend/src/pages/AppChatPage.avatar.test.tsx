@@ -12,6 +12,7 @@ const deleteChatSessionMock = vi.fn();
 const getUserProfileMock = vi.fn();
 const getAssessmentResultsMock = vi.fn();
 let voiceOnMessage: ((role: 'user' | 'assistant', content: string) => void) | undefined;
+let latestRealtimeOptions: { sessionParams?: { avatarDirectives?: boolean } } | undefined;
 
 const legacyRealtimeState = {
   isConnected: true,
@@ -108,6 +109,7 @@ vi.mock('motion/react', () => ({
 vi.mock('@/hooks/useRealtimeChat', () => ({
   useRealtimeChat: (options?: { onMessage?: (role: 'user' | 'assistant', content: string) => void }) => {
     voiceOnMessage = options?.onMessage;
+    latestRealtimeOptions = options;
     return legacyRealtimeState;
   },
 }));
@@ -307,6 +309,7 @@ describe('AppChatPage live2d avatar wiring', () => {
     getUserProfileMock.mockReset();
     getAssessmentResultsMock.mockReset();
     voiceOnMessage = undefined;
+    latestRealtimeOptions = undefined;
 
     getChatSessionsMock.mockResolvedValue([
       {
@@ -353,50 +356,22 @@ describe('AppChatPage live2d avatar wiring', () => {
     window.localStorage.setItem('lingual:chat:avatarEnabled', 'true');
   });
 
-  it('passes live2d avatar state, reaction, and audio level into the new avatar panel', async () => {
-    const view = render(<AppChatPage />);
+  it('forces avatar off for the pilot even when local storage says it was enabled', async () => {
+    render(<AppChatPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('live2d-avatar')).toBeInTheDocument();
+      expect(screen.getByText('Realtime practice')).toBeInTheDocument();
     });
 
-    legacyRealtimeState.isSpeaking = true;
-    avatarPerformanceState.dialogueState = 'speaking';
-    avatarPerformanceState.affect = 'curious';
-    avatarPerformanceState.debug = {
-      audioLevel: 0.42,
-      rmsLevel: 0.11,
-      transcript: 'Can you try that again?',
-      hasRemoteAudio: true,
-      speakingEventState: 'speaking',
-      mouthTarget: 0.33,
-      detectedExpressionKeys: [],
-      directiveSource: 'fallback',
-      lastExplicitDirective: null,
-    };
-
-    view.rerender(<AppChatPage />);
-
-    const panel = screen.getByTestId('live2d-avatar');
-    expect(panel).toHaveAttribute('data-status-label', 'AI speaking');
-    expect(panel).toHaveAttribute('data-audio-level', '0.42');
-
-    const state = JSON.parse(panel.getAttribute('data-avatar-state') || '{}');
-    const reaction = JSON.parse(panel.getAttribute('data-avatar-reaction') || 'null');
-    const diagnostics = JSON.parse(panel.getAttribute('data-avatar-diagnostics') || '{}');
-    expect(state.motionGroup).toBe('question');
-    expect(state.subtitleText).toBe('Can you try that again?');
-    expect(reaction).toBeNull();
-    expect(panel).toHaveAttribute('data-has-avatar-hit', 'true');
-    expect(diagnostics.audioLevel).toBe(0.42);
-    expect(diagnostics.mouthTarget).toBe(0.33);
+    expect(screen.queryByTestId('live2d-avatar')).not.toBeInTheDocument();
+    expect(latestRealtimeOptions?.sessionParams?.avatarDirectives).toBe(false);
   });
 
   it('still saves finalized realtime voice messages with sequential sortOrder metadata', async () => {
     render(<AppChatPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('live2d-avatar')).toBeInTheDocument();
+      expect(screen.getByText('Realtime practice')).toBeInTheDocument();
     });
 
     await act(async () => {

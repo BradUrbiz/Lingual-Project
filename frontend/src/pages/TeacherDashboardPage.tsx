@@ -11,6 +11,7 @@ import {
   GraduationCap,
   Loader2,
   Plus,
+  RefreshCw,
   School,
   ShieldCheck,
   Trash2,
@@ -440,9 +441,6 @@ export function TeacherDashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={() => navigate('/school/setup')}>
-            Workspace settings
-          </Button>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus size={16} className="mr-2" />
             Create class
@@ -597,80 +595,129 @@ export function TeacherDashboardPage() {
             </div>
           ) : (
             <div className="mt-6 grid gap-4">
-              {filteredClasses.map((classSummary) => (
-                <div key={classSummary.id} className="rounded-2xl border-2 border-border bg-secondary/50 p-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <h3 className="text-lg font-display font-bold text-foreground">{classSummary.name}</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {classSummary.subject || 'Subject TBD'}
-                        {classSummary.term ? ` · ${classSummary.term}` : ''}
-                        {classSummary.gradeBand ? ` · Grades ${classSummary.gradeBand}` : ''}
-                      </p>
+              {filteredClasses.map((classSummary) => {
+                const goToClass = () =>
+                  navigate(`/app/teacher/classes/${classSummary.id}/analytics`);
+                return (
+                  <div
+                    key={classSummary.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={goToClass}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        goToClass();
+                      }
+                    }}
+                    aria-label={`Open ${classSummary.name} analytics`}
+                    className="cursor-pointer rounded-2xl border-2 border-border bg-secondary/50 p-5 transition-colors hover:border-primary hover:bg-secondary focus:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <h3 className="text-lg font-display font-bold text-foreground">{classSummary.name}</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {classSummary.subject || 'Subject TBD'}
+                          {classSummary.term ? ` · ${classSummary.term}` : ''}
+                          {classSummary.gradeBand ? ` · Grades ${classSummary.gradeBand}` : ''}
+                        </p>
+                      </div>
+                      <div className="grid gap-3 sm:w-[420px] sm:grid-cols-3">
+                        <div className="rounded-xl border border-border bg-card px-3 py-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            Students
+                          </p>
+                          <p className="mt-1 text-lg font-bold text-foreground">{classSummary.studentCount}</p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-card px-3 py-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            Language
+                          </p>
+                          <p className="mt-1 text-lg font-bold text-foreground">{classSummary.learningLocale}</p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-card px-3 py-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            Assignments
+                          </p>
+                          <p className="mt-1 text-lg font-bold text-foreground">{classSummary.assignmentCount ?? 0}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="grid gap-3 sm:w-[420px] sm:grid-cols-3">
-                      <div className="rounded-xl border border-border bg-card px-3 py-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                          Students
-                        </p>
-                        <p className="mt-1 text-lg font-bold text-foreground">{classSummary.studentCount}</p>
-                      </div>
-                      <div className="rounded-xl border border-border bg-card px-3 py-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                          Language
-                        </p>
-                        <p className="mt-1 text-lg font-bold text-foreground">{classSummary.learningLocale}</p>
-                      </div>
-                      <div className="rounded-xl border border-border bg-card px-3 py-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                          Assignments
-                        </p>
-                        <p className="mt-1 text-lg font-bold text-foreground">{classSummary.assignmentCount ?? 0}</p>
-                      </div>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openJoinCodeDialog(classSummary.id);
+                        }}
+                      >
+                        <UserPlus size={14} className="mr-1.5" />
+                        Invite students
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openRosterDialog(classSummary.id);
+                        }}
+                      >
+                        <Users size={14} className="mr-1.5" />
+                        Roster
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/app/teacher/classes/${classSummary.id}/assignments`);
+                        }}
+                      >
+                        Build assignments
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={classSummary.canvasLinked ? 'group' : undefined}
+                        aria-label={
+                          classSummary.canvasLinked
+                            ? 'Canvas linked — click to manage or resync'
+                            : 'Connect Canvas'
+                        }
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/app/teacher/classes/${classSummary.id}/canvas/connect`);
+                        }}
+                      >
+                        {classSummary.canvasLinked ? (
+                          <>
+                            <CheckCircle2
+                              size={14}
+                              className="mr-1.5 group-hover:hidden group-focus-visible:hidden"
+                            />
+                            <RefreshCw
+                              size={14}
+                              className="mr-1.5 hidden group-hover:inline group-focus-visible:inline"
+                            />
+                            <span className="group-hover:hidden group-focus-visible:hidden">
+                              Canvas Linked
+                            </span>
+                            <span className="hidden group-hover:inline group-focus-visible:inline">
+                              Resync Canvas
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <LinkIcon size={14} className="mr-1.5" />
+                            Canvas
+                          </>
+                        )}
+                      </Button>
                     </div>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openJoinCodeDialog(classSummary.id)}
-                    >
-                      <UserPlus size={14} className="mr-1.5" />
-                      Invite students
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openRosterDialog(classSummary.id)}
-                    >
-                      <Users size={14} className="mr-1.5" />
-                      Roster
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/app/teacher/classes/${classSummary.id}/analytics`)}
-                    >
-                      Class analytics
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/app/teacher/classes/${classSummary.id}/assignments`)}
-                    >
-                      Build assignments
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/app/teacher/classes/${classSummary.id}/canvas/connect`)}
-                    >
-                      <LinkIcon size={14} className="mr-1.5" />
-                      Canvas
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>

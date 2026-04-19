@@ -16,6 +16,7 @@ SUPPORTED_EVENT_TYPES = {
     'feedback.elicitation',
     'feedback.review_item',
     'metric.target_expression_hit',
+    'metric.target_vocabulary_hit',
     'metric.self_correction',
     'metric.communicative_function_signal',
     'metric.discourse_move_signal',
@@ -1155,6 +1156,8 @@ def default_session_summary() -> dict[str, Any]:
         'estimated_speaking_time_seconds': 0,
         'target_expression_hits': {},
         'target_expression_total_hits': 0,
+        'target_vocabulary_hits': {},
+        'target_vocabulary_total_hits': 0,
         'self_correction_count': 0,
         'task_completion_count': 0,
         'feedback_counts': {
@@ -1225,6 +1228,11 @@ def normalize_session_summary(summary: Any) -> dict[str, Any]:
             'target_expression_total_hits',
             summary.get('targetExpressionTotalHits'),
         )
+        target_vocabulary_hits = summary.get('target_vocabulary_hits', summary.get('targetVocabularyHits'))
+        target_vocabulary_total_hits = summary.get(
+            'target_vocabulary_total_hits',
+            summary.get('targetVocabularyTotalHits'),
+        )
         self_correction_count = summary.get('self_correction_count', summary.get('selfCorrectionCount'))
         task_completion_count = summary.get('task_completion_count', summary.get('taskCompletionCount'))
         feedback_counts = summary.get('feedback_counts', summary.get('feedbackCounts'))
@@ -1275,6 +1283,9 @@ def normalize_session_summary(summary: Any) -> dict[str, Any]:
         normalized['target_expression_hits'] = _normalize_count_map(target_expression_hits)
         if isinstance(target_expression_total_hits, int):
             normalized['target_expression_total_hits'] = max(0, target_expression_total_hits)
+        normalized['target_vocabulary_hits'] = _normalize_count_map(target_vocabulary_hits)
+        if isinstance(target_vocabulary_total_hits, int):
+            normalized['target_vocabulary_total_hits'] = max(0, target_vocabulary_total_hits)
         if isinstance(self_correction_count, int):
             normalized['self_correction_count'] = max(0, self_correction_count)
         if isinstance(task_completion_count, int):
@@ -1328,6 +1339,8 @@ def normalize_session_summary(summary: Any) -> dict[str, Any]:
 
     if normalized['target_expression_total_hits'] <= 0:
         normalized['target_expression_total_hits'] = sum(normalized['target_expression_hits'].values())
+    if normalized['target_vocabulary_total_hits'] <= 0:
+        normalized['target_vocabulary_total_hits'] = sum(normalized['target_vocabulary_hits'].values())
 
     return normalized
 
@@ -1352,6 +1365,8 @@ def serialize_session_summary(summary: Any) -> dict[str, Any]:
         'estimatedSpeakingTimeSeconds': normalized['estimated_speaking_time_seconds'],
         'targetExpressionHits': normalized['target_expression_hits'],
         'targetExpressionTotalHits': normalized['target_expression_total_hits'],
+        'targetVocabularyHits': normalized['target_vocabulary_hits'],
+        'targetVocabularyTotalHits': normalized['target_vocabulary_total_hits'],
         'selfCorrectionCount': normalized['self_correction_count'],
         'taskCompletionCount': normalized['task_completion_count'],
         'feedbackCounts': {
@@ -1408,6 +1423,7 @@ def _event_pedagogy_payload(session_record: dict[str, Any]) -> dict[str, Any]:
         'foundationDomains': _normalize_string_list(pedagogy.get('foundationDomains')),
         'templateRefs': _normalize_string_list(pedagogy.get('templateRefs')),
         'targetExpressions': _normalize_string_list(mapping_snapshot.get('targetExpressions')),
+        'targetVocabulary': _normalize_string_list(mapping_snapshot.get('targetVocabulary')),
         'evidence': pedagogy.get('evidence', {}) if isinstance(pedagogy.get('evidence'), dict) else {},
     }
 
@@ -1441,6 +1457,8 @@ def build_practice_session_payload(
         'started_at': now,
         'ended_at': None,
         'prompt_version': DEFAULT_PROMPT_VERSION,
+        'system_prompt_preview': bootstrap.get('systemPromptPreview', ''),
+        'class_snapshot': classroom,
         'transcript_ref': {'chat_id': chat_id} if chat_id else {},
         'cost_summary': default_cost_summary(),
         'session_summary': default_session_summary(),
@@ -1538,6 +1556,12 @@ def apply_learning_event_to_session(
         for expression, count in expression_hits.items():
             summary['target_expression_hits'][expression] = summary['target_expression_hits'].get(expression, 0) + count
             summary['target_expression_total_hits'] += count
+
+        target_vocabulary = (session_record.get('mapping_snapshot') or {}).get('targetVocabulary', [])
+        vocabulary_hits = _count_target_expression_hits(content, target_vocabulary if isinstance(target_vocabulary, list) else [])
+        for word, count in vocabulary_hits.items():
+            summary['target_vocabulary_hits'][word] = summary['target_vocabulary_hits'].get(word, 0) + count
+            summary['target_vocabulary_total_hits'] += count
 
         for objective_id in _normalize_string_list(pedagogy.get('objectiveIds')):
             summary['objective_turn_counts'][objective_id] = summary['objective_turn_counts'].get(objective_id, 0) + 1
@@ -1715,6 +1739,12 @@ def apply_learning_event_to_session(
         if expression:
             summary['target_expression_hits'][expression] = summary['target_expression_hits'].get(expression, 0) + count
             summary['target_expression_total_hits'] += count
+    elif event_type == 'metric.target_vocabulary_hit':
+        word = _normalize_string(payload.get('word'))
+        count = _coerce_int(payload.get('count')) or 1
+        if word:
+            summary['target_vocabulary_hits'][word] = summary['target_vocabulary_hits'].get(word, 0) + count
+            summary['target_vocabulary_total_hits'] += count
     elif event_type == 'metric.self_correction':
         summary['self_correction_count'] += _coerce_int(payload.get('count')) or 1
     elif event_type == 'metric.communicative_function_signal':
@@ -1800,6 +1830,17 @@ def build_derived_learning_events(
                     event_type='metric.target_expression_hit',
                     turn_index=turn_index,
                     payload={'expression': expression, 'count': count},
+                )
+            )
+
+        target_vocabulary = (session_record.get('mapping_snapshot') or {}).get('targetVocabulary', [])
+        for word, count in _count_target_expression_hits(content, target_vocabulary if isinstance(target_vocabulary, list) else []).items():
+            derived_events.append(
+                build_learning_event_payload(
+                    session_record,
+                    event_type='metric.target_vocabulary_hit',
+                    turn_index=turn_index,
+                    payload={'word': word, 'count': count},
                 )
             )
 
@@ -2149,6 +2190,7 @@ def build_assignment_analytics_payload(
     total_self_corrections = 0
     total_task_completions = 0
     target_expression_hits: dict[str, int] = {}
+    target_vocabulary_hits: dict[str, int] = {}
     objective_turn_counts: dict[str, int] = {}
     foundation_domain_turn_counts: dict[str, int] = {}
     rubric_turn_counts: dict[str, int] = {}
@@ -2181,6 +2223,8 @@ def build_assignment_analytics_payload(
 
         for expression, count in summary['target_expression_hits'].items():
             target_expression_hits[expression] = target_expression_hits.get(expression, 0) + count
+        for word, count in summary['target_vocabulary_hits'].items():
+            target_vocabulary_hits[word] = target_vocabulary_hits.get(word, 0) + count
         for objective_id, count in summary['objective_turn_counts'].items():
             objective_turn_counts[objective_id] = objective_turn_counts.get(objective_id, 0) + count
         for domain_id, count in summary['foundation_domain_turn_counts'].items():
@@ -2397,7 +2441,7 @@ def build_assignment_analytics_payload(
         'class': classroom,
         'mapping': mapping,
         'summary': {
-            'sessionCount': len(sessions),
+            'sessionCount': _count_distinct_conversations(sessions),
             'completedSessionCount': completed_session_count,
             'activeSessionCount': active_session_count,
             'uniqueStudentCount': len(unique_student_ids),
@@ -2408,6 +2452,8 @@ def build_assignment_analytics_payload(
             'estimatedSpeakingTimeSeconds': estimated_speaking_time_seconds,
             'targetExpressionHits': target_expression_hits,
             'targetExpressionTotalHits': sum(target_expression_hits.values()),
+            'targetVocabularyHits': target_vocabulary_hits,
+            'targetVocabularyTotalHits': sum(target_vocabulary_hits.values()),
             'selfCorrectionCount': total_self_corrections,
             'taskCompletionCount': total_task_completions,
             'repeatedErrorCount': sum(repeated_error_counts.values()),
@@ -2419,6 +2465,7 @@ def build_assignment_analytics_payload(
             'taskModel': _normalize_string(pedagogy.get('taskModel')),
             'evidence': pedagogy.get('evidence', {}) if isinstance(pedagogy.get('evidence'), dict) else {},
             'targetExpressions': _sort_count_map(target_expression_hits),
+            'targetVocabulary': _sort_count_map(target_vocabulary_hits),
             'contextTagCoverage': _sort_count_map(context_tag_counts),
             'communicativeFunctionSignals': _sort_count_map(communicative_function_signals),
             'discourseMoveSignals': _sort_count_map(discourse_move_signals),
@@ -2444,6 +2491,21 @@ def build_assignment_analytics_payload(
 # ---------------------------------------------------------------------------
 # Class-level analytics
 # ---------------------------------------------------------------------------
+
+
+def _count_distinct_conversations(sessions: list[dict[str, Any]]) -> int:
+    """Count distinct conversations across practice sessions.
+
+    A "conversation" is a unique chat_id. Sessions without a chat_id are
+    not counted — only chat-anchored sessions represent real conversations.
+    """
+    chat_ids: set[str] = set()
+    for session in sessions:
+        ref = session.get('transcript_ref')
+        chat_id = ref.get('chat_id') if isinstance(ref, dict) else None
+        if isinstance(chat_id, str) and chat_id:
+            chat_ids.add(chat_id)
+    return len(chat_ids)
 
 
 def _aggregate_session_stats(sessions: list[dict[str, Any]]) -> dict[str, Any]:
@@ -2485,7 +2547,7 @@ def _aggregate_session_stats(sessions: list[dict[str, Any]]) -> dict[str, Any]:
             repeated_error_counts[error_id] = max(repeated_error_counts.get(error_id, 0), count)
 
     return {
-        'sessionCount': len(sessions),
+        'sessionCount': _count_distinct_conversations(sessions),
         'completedSessionCount': completed,
         'activeSessionCount': active,
         'uniqueStudentCount': len(unique_students),

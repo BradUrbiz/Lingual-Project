@@ -47,7 +47,7 @@ interface UseRealtimeChatReturn {
   avatarDirectiveSource: 'directive' | 'fallback';
   avatarDiagnostics: AvatarDiagnostics;
   error: string | null;
-  connect: () => Promise<void>;
+  connect: (sessionParamsOverride?: RealtimeSessionParams) => Promise<void>;
   disconnect: () => void;
   startListening: () => void;
   stopListening: () => void;
@@ -917,13 +917,13 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     ]
   );
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (sessionParamsOverride?: RealtimeSessionParams) => {
     cleanupConnection();
 
     try {
       setError(null);
 
-      const tokenResponse = await api.post('/realtime/session', sessionParams ?? {});
+      const tokenResponse = await api.post('/realtime/session', sessionParamsOverride ?? sessionParams ?? {});
       const { client_secret } = tokenResponse.data;
 
       if (!client_secret) {

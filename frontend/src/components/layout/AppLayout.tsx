@@ -59,8 +59,8 @@ export function AppLayout() {
     ? `${t('app.layout.role.learner')} · ${profile.gradeLevel}`
     : t('app.layout.role.learner');
   const localeOption = LEARNING_LOCALES.find((locale) => locale.value === learningLocale);
-  const homeDestination = canAccessTeacherView && isTeacherView ? '/app/teacher' : '/app/learn';
-  const homeLabel = canAccessTeacherView && isTeacherView
+  const homeDestination = canAccessTeacherView ? '/app/teacher' : '/app/learn';
+  const homeLabel = canAccessTeacherView
     ? 'Go to teacher dashboard'
     : 'Go to learning dashboard';
   const mobilePrimaryNav = [

@@ -218,7 +218,9 @@ const ANALYTICS: AssignmentAnalyticsData = {
       },
     },
   ],
-  limitations: ['Signal coverage is heuristic first-pass data.'],
+  limitations: [
+    'Communicative-function, discourse-move, repeated-error, and feedback signals are still heuristic detections, although they now use locale-aware pattern libraries.',
+  ],
 };
 
 describe('TeacherAssignmentAnalyticsPage', () => {
@@ -237,21 +239,28 @@ describe('TeacherAssignmentAnalyticsPage', () => {
 
     expect(await screen.findByText('Family Interview')).toBeInTheDocument();
     expect(screen.getByText('Objective alignment')).toBeInTheDocument();
-    expect(screen.getByText('Signal coverage')).toBeInTheDocument();
     expect(screen.getByText('Speaking Rubric')).toBeInTheDocument();
-    expect(screen.getByText('ask_follow_up: 4')).toBeInTheDocument();
+    expect(screen.getByText('ask_follow_up')).toBeInTheDocument();
     expect(
       screen.getByText('Passé composé auxiliary followed by infinitive: 2 · students 1')
     ).toBeInTheDocument();
+    expect(screen.getByText('Recent attempts')).toBeInTheDocument();
     expect(screen.getByText('clarity: 3.25')).toBeInTheDocument();
-    expect(screen.getByText('Rubric avg')).toBeInTheDocument();
-    expect(screen.getByText('family_structures: 12')).toBeInTheDocument();
     expect(screen.getByText(/Estimated rubric score 3\.25/i)).toBeInTheDocument();
     expect(screen.getAllByText('meeting threshold').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Threshold 3').length).toBeGreaterThan(0);
     expect(screen.getAllByText('medium confidence').length).toBeGreaterThan(0);
     expect(screen.getByText(/Evidence: ask_follow_up x4/i)).toBeInTheDocument();
     expect(screen.getByText(/Concerns: fr\.past_auxiliary_infinitive x2/i)).toBeInTheDocument();
-    expect(screen.getByText('Signal coverage is heuristic first-pass data.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Communicative-function, discourse-move, repeated-error, and feedback signals are still heuristic detections, although they now use locale-aware pattern libraries.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Signal coverage')).not.toBeInTheDocument();
+    expect(screen.queryByText('Time limit')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sessions')).not.toBeInTheDocument();
+    expect(screen.queryByText('Speaking minutes')).not.toBeInTheDocument();
+    expect(screen.queryByText('family_structures: 12')).not.toBeInTheDocument();
   });
 });

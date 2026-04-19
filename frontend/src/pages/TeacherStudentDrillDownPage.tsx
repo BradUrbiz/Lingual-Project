@@ -18,6 +18,7 @@ import {
   updateStudentCompliance,
 } from '@/api/teacher';
 import { Alert, AlertDescription, Badge, Button, Card } from '@/components/ui';
+import { formatSpeakingMinutes } from '@/lib/utils';
 import type {
   ConsentStatus,
   StudentComplianceRecord,
@@ -143,7 +144,7 @@ export function TeacherStudentDrillDownPage() {
   const stats = [
     { label: 'Sessions', value: analytics.summary.sessionCount, icon: BarChart3, accent: 'bg-primary/10 text-primary' },
     { label: 'Student turns', value: analytics.summary.totalStudentTurns, icon: Users, accent: 'bg-success/15 text-success' },
-    { label: 'Speaking minutes', value: Math.round(analytics.summary.estimatedSpeakingTimeSeconds / 60), icon: MessageSquareText, accent: 'bg-accent/20 text-accent-foreground' },
+    { label: 'Speaking minutes', value: formatSpeakingMinutes(analytics.summary.estimatedSpeakingTimeSeconds), icon: MessageSquareText, accent: 'bg-accent/20 text-accent-foreground' },
     { label: 'Words / turn', value: analytics.summary.averageStudentWordsPerTurn > 0 ? analytics.summary.averageStudentWordsPerTurn.toFixed(1) : '0', icon: Target, accent: 'bg-secondary text-foreground' },
     { label: 'Self-corrections', value: analytics.summary.selfCorrectionCount, icon: CheckCircle2, accent: 'bg-primary/5 text-foreground' },
     { label: 'Repeated errors', value: analytics.summary.repeatedErrorCount, icon: AlertTriangle, accent: 'bg-destructive/10 text-destructive' },
@@ -229,7 +230,7 @@ export function TeacherStudentDrillDownPage() {
                     </div>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                       <span>{assignment.sessionCount} sessions</span>
-                      <span>{Math.round(assignment.estimatedSpeakingTimeSeconds / 60)} min</span>
+                      <span>{formatSpeakingMinutes(assignment.estimatedSpeakingTimeSeconds)} min</span>
                       <span>{assignment.totalStudentTurns} turns</span>
                       <span>{assignment.selfCorrectionCount} self-corrections</span>
                     </div>

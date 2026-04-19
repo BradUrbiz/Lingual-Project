@@ -1,11 +1,12 @@
 import api from './index';
+import type { TargetLanguageIntensity } from '@/types/assignment';
 
 export interface CanvasPracticeSuggestions {
   scenario: string;
   targetExpressions: string[];
+  targetVocabulary: string[];
   focusGrammar: string[];
   successCriteria: string[];
-  taskType: string;
   suggestedTitle: string;
   suggestedDescription: string;
   teacherNotes: string;
@@ -36,11 +37,12 @@ export interface CreateCanvasPracticePayload {
   description: string;
   scenario: string;
   targetExpressions: string[];
+  targetVocabulary: string[];
   focusGrammar: string[];
   successCriteria: string[];
   objectives: string[];
-  taskType: string;
   teacherNotes: string;
+  targetLanguageIntensity: TargetLanguageIntensity;
   status: 'draft' | 'published';
 }
 

@@ -40,6 +40,17 @@ def _count_assignments_for_class(deps: RouteDeps, class_id: str) -> int:
     return len(deps.db.list_class_assignments(class_id))
 
 
+def _class_canvas_linked(deps: RouteDeps, class_id: str) -> bool:
+    getter = getattr(deps.db, "get_canvas_connection_by_class", None)
+    if not callable(getter):
+        return False
+    try:
+        connection = getter(class_id)
+    except Exception:
+        return False
+    return isinstance(connection, dict)
+
+
 def build_class_summary(deps: RouteDeps, class_record: dict | None) -> dict | None:
     if not isinstance(class_record, dict):
         return None
@@ -60,6 +71,7 @@ def build_class_summary(deps: RouteDeps, class_record: dict | None) -> dict | No
         "status": class_record.get("status", "active"),
         "studentCount": _count_students_for_class(deps, class_id),
         "assignmentCount": _count_assignments_for_class(deps, class_id),
+        "canvasLinked": _class_canvas_linked(deps, class_id),
         "createdAt": _timestamp_to_iso(class_record.get("created_at")),
         "updatedAt": _timestamp_to_iso(class_record.get("updated_at")),
     }

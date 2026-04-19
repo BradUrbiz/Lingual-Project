@@ -7,10 +7,13 @@ from openai import APIStatusError, RateLimitError
 
 from backend.route_deps import RouteDeps
 from backend.services.assignment_resolver import (
+    build_assignment_prompt_bootstrap_from_practice_session,
     build_assignment_system_prompt,
+    load_assignment_bundle,
     resolve_assignment_bootstrap_for_user,
+    user_can_access_assignment,
 )
-from backend.services.compliance import create_consent_event
+from backend.services.compliance import create_consent_event, resolve_assignment_launch
 
 
 AVATAR_EMOTION_KEYS = [
@@ -173,7 +176,18 @@ def build_avatar_context_payload(area: str, mode: str, practice: Any = None) -> 
     }
 
 
+def pilot_avatar_enabled() -> bool:
+    return os.environ.get('ENABLE_PILOT_AVATAR', '').strip().lower() in {
+        '1',
+        'true',
+        'yes',
+        'on',
+    }
+
+
 def realtime_avatar_directives_enabled() -> bool:
+    if not pilot_avatar_enabled():
+        return False
     return os.environ.get('ENABLE_REALTIME_AVATAR_DIRECTIVES', '').strip().lower() in {
         '1',
         'true',
@@ -183,6 +197,9 @@ def realtime_avatar_directives_enabled() -> bool:
 
 
 def realtime_avatar_directives_requested(payload: dict[str, Any] | None = None) -> bool:
+    if not pilot_avatar_enabled():
+        return False
+
     if realtime_avatar_directives_enabled():
         return True
 
@@ -217,7 +234,9 @@ def build_realtime_session_request(
         },
     }
 
-    if enable_avatar_directives is None:
+    if not pilot_avatar_enabled():
+        enable_avatar_directives = False
+    elif enable_avatar_directives is None:
         enable_avatar_directives = realtime_avatar_directives_enabled()
 
     if enable_avatar_directives:
@@ -243,6 +262,15 @@ def _extract_assignment_id(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _extract_practice_session_id(payload: dict[str, Any]) -> str | None:
+    practice = payload.get('practice')
+    if isinstance(practice, dict):
+        practice_session_id = practice.get('practiceSessionId')
+        if isinstance(practice_session_id, str) and practice_session_id.strip():
+            return practice_session_id.strip()
+    return None
+
+
 def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
     bp = Blueprint('chat_routes', __name__)
 
@@ -264,18 +292,59 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
             assignment_id = _extract_assignment_id(payload)
             if assignment_id:
                 context = deps.get_school_request_context()
-                bootstrap = resolve_assignment_bootstrap_for_user(
-                    deps,
-                    uid=uid,
-                    context=context,
-                    assignment_id=assignment_id,
-                    ui_language=ui_language,
-                )
+                practice_session_id = _extract_practice_session_id(payload)
+                bootstrap = None
+                class_record = None
+
+                if practice_session_id:
+                    practice_session = deps.db.get_practice_session(practice_session_id)
+                    if not practice_session:
+                        return jsonify({'success': False, 'error': 'Practice session not found.'}), 404
+                    if practice_session.get('student_uid') != uid or practice_session.get('assignment_id') != assignment_id:
+                        return jsonify({'success': False, 'error': 'Practice session is not available for this user.'}), 403
+                    if practice_session.get('status') != 'active':
+                        return jsonify({'success': False, 'error': 'Practice session is no longer active.'}), 409
+
+                    assignment, _mapping, class_record = load_assignment_bundle(deps, assignment_id)
+                    allowed, teacher_preview = user_can_access_assignment(
+                        deps,
+                        uid=uid,
+                        context=context,
+                        assignment=assignment,
+                        class_record=class_record,
+                    )
+                    if not allowed:
+                        raise PermissionError('Assignment is not available for the current user.')
+
+                    launch_policy, _compliance_record = resolve_assignment_launch(
+                        deps,
+                        org_id=class_record.get('org_id', ''),
+                        student_uid=uid,
+                        modality_policy=assignment.get('modality_override'),
+                        teacher_preview=teacher_preview,
+                    )
+                    bootstrap = build_assignment_prompt_bootstrap_from_practice_session(
+                        practice_session,
+                        class_record=class_record,
+                        launch_policy=launch_policy,
+                        teacher_preview=teacher_preview,
+                    )
+
+                if bootstrap is None:
+                    bootstrap = resolve_assignment_bootstrap_for_user(
+                        deps,
+                        uid=uid,
+                        context=context,
+                        assignment_id=assignment_id,
+                        ui_language=ui_language,
+                    )
+                    class_record = None
+
                 if not (bootstrap.get('launch') or {}).get('voiceAllowed'):
                     blocked_reasons = (bootstrap.get('launch') or {}).get('blockedReasons') or []
                     create_consent_event(
                         deps,
-                        org_id=(bootstrap.get('class') or {}).get('orgId', ''),
+                        org_id=(class_record or {}).get('org_id') or (bootstrap.get('class') or {}).get('orgId', ''),
                         student_uid=uid or '',
                         event_type='voice.blocked.realtime_session',
                         actor_type='student',

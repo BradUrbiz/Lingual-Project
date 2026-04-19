@@ -3,6 +3,7 @@ import { AssignmentLaunchPage } from '@/pages/AssignmentLaunchPage';
 import type { AssignmentBootstrapData, PracticeSessionDto } from '@/types';
 
 const navigateMock = vi.fn();
+const assignmentPracticeWorkspaceMock = vi.fn();
 const bootstrapStudentAssignmentMock = vi.fn();
 const createAssignmentPracticeSessionMock = vi.fn();
 const reportPracticeSessionEventMock = vi.fn();
@@ -12,8 +13,6 @@ const sendChatMessageMock = vi.fn();
 const connectMock = vi.fn();
 const disconnectMock = vi.fn();
 const clearMessagesMock = vi.fn();
-let capturedSessionParams: unknown;
-let capturedOnMessage: ((role: 'user' | 'assistant', content: string) => void) | undefined;
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -23,6 +22,17 @@ vi.mock('react-router-dom', async () => {
     useParams: () => ({ assignmentId: 'assignment-1' }),
   };
 });
+
+vi.mock('@/components/assignments/AssignmentPracticeWorkspace', () => ({
+  AssignmentPracticeWorkspace: (props: { open: boolean; bootstrap: AssignmentBootstrapData | null }) => {
+    assignmentPracticeWorkspaceMock(props);
+    return props.open ? (
+      <div data-testid="assignment-practice-workspace">
+        Workspace for {props.bootstrap?.assignment.title ?? 'Unknown assignment'}
+      </div>
+    ) : null;
+  },
+}));
 
 vi.mock('@/api/assignments', () => ({
   bootstrapStudentAssignment: (...args: unknown[]) => bootstrapStudentAssignmentMock(...args),
@@ -37,9 +47,7 @@ vi.mock('@/api/chat', () => ({
 }));
 
 vi.mock('@/hooks/useRealtimeChat', () => ({
-  useRealtimeChat: (options: { onMessage?: (role: 'user' | 'assistant', content: string) => void; sessionParams?: unknown }) => {
-    capturedSessionParams = options?.sessionParams;
-    capturedOnMessage = options?.onMessage;
+  useRealtimeChat: () => {
     return {
       isConnected: false,
       isListening: false,
@@ -222,6 +230,7 @@ const PRACTICE_SESSION: PracticeSessionDto = {
 
 describe('AssignmentLaunchPage', () => {
   beforeEach(() => {
+    assignmentPracticeWorkspaceMock.mockReset();
     navigateMock.mockReset();
     bootstrapStudentAssignmentMock.mockReset();
     createAssignmentPracticeSessionMock.mockReset();
@@ -232,8 +241,6 @@ describe('AssignmentLaunchPage', () => {
     connectMock.mockReset();
     disconnectMock.mockReset();
     clearMessagesMock.mockReset();
-    capturedSessionParams = undefined;
-    capturedOnMessage = undefined;
 
     bootstrapStudentAssignmentMock.mockResolvedValue(BOOTSTRAP);
     createChatSessionMock.mockResolvedValue({
@@ -269,71 +276,35 @@ describe('AssignmentLaunchPage', () => {
     connectMock.mockResolvedValue(undefined);
   });
 
-  it('loads bootstrap data, creates a practice session, and reports realtime turn events', async () => {
+  it('opens the assignment practice workspace dialog from the launcher CTA', async () => {
     render(<AssignmentLaunchPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Restaurant Ordering Practice')).toBeInTheDocument();
     });
 
-    expect(capturedSessionParams).toEqual(BOOTSTRAP.realtimeSessionParams);
     expect(screen.getByText('Teacher-designed practice overlay')).toBeInTheDocument();
     expect(screen.getByText('Keep the learner in the restaurant lane.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Start assignment practice' }));
 
     await waitFor(() => {
-      expect(createChatSessionMock).toHaveBeenCalledWith('ASM Restaurant Ordering Practice');
+      expect(screen.getByTestId('assignment-practice-workspace')).toBeInTheDocument();
     });
 
-    await waitFor(() => {
-      expect(createAssignmentPracticeSessionMock).toHaveBeenCalledWith('assignment-1', {
-        uiLanguage: 'en',
-        chatId: 'chat-123',
-      });
-    });
-
-    await waitFor(() => {
-      expect(capturedSessionParams).toEqual({
-        ...BOOTSTRAP.realtimeSessionParams,
-        practice: {
-          ...BOOTSTRAP.realtimeSessionParams.practice,
-          practiceSessionId: 'practice-1',
-        },
-      });
-    });
-
-    await waitFor(() => {
-      expect(connectMock).toHaveBeenCalled();
-    });
-
-    capturedOnMessage?.('user', 'Could I have the soup, please?');
-
-    await waitFor(() => {
-      expect(saveMessageToChatMock).toHaveBeenCalledWith(
-        'chat-123',
-        'user',
-        'Could I have the soup, please?',
-        expect.objectContaining({ sortOrder: 0 })
-      );
-    });
-
-    await waitFor(() => {
-      expect(reportPracticeSessionEventMock).toHaveBeenCalledWith(
-        'practice-1',
-        expect.objectContaining({
-          eventType: 'student.turn',
-          turnIndex: 0,
-          payload: expect.objectContaining({
-            chatId: 'chat-123',
-            content: 'Could I have the soup, please?',
-          }),
-        })
-      );
-    });
+    expect(createChatSessionMock).not.toHaveBeenCalled();
+    expect(createAssignmentPracticeSessionMock).not.toHaveBeenCalled();
+    expect(assignmentPracticeWorkspaceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        open: true,
+        bootstrap: expect.objectContaining({
+          assignment: expect.objectContaining({ title: 'Restaurant Ordering Practice' }),
+        }),
+      })
+    );
   });
 
-  it('supports assignment-scoped text launch when voice is downgraded to text fallback', async () => {
+  it('opens the workspace dialog for text-only fallback launches', async () => {
     bootstrapStudentAssignmentMock.mockResolvedValue({
       ...BOOTSTRAP,
       launch: {
@@ -365,25 +336,8 @@ describe('AssignmentLaunchPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start text practice' }));
 
     await waitFor(() => {
-      expect(createAssignmentPracticeSessionMock).toHaveBeenCalled();
+      expect(screen.getByTestId('assignment-practice-workspace')).toBeInTheDocument();
     });
-
-    const input = screen.getByPlaceholderText('Type your assignment response...');
-    fireEvent.change(input, { target: { value: 'Bonjour' } });
-    fireEvent.keyDown(input, { key: 'Enter', shiftKey: false, preventDefault: vi.fn() });
-
-    await waitFor(() => {
-      expect(sendChatMessageMock).toHaveBeenCalledWith(
-        'chat-123',
-        'Bonjour',
-        expect.objectContaining({
-          assignmentId: 'assignment-1',
-          practiceSessionId: 'practice-1',
-          uiLanguage: 'en',
-        })
-      );
-    });
-
-    expect(screen.getByText('Bonjour, je voudrais un the.')).toBeInTheDocument();
+    expect(createAssignmentPracticeSessionMock).not.toHaveBeenCalled();
   });
 });

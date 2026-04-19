@@ -45,11 +45,13 @@ const CHAT_AVATAR_ENABLED_KEY = 'lingual:chat:avatarEnabled';
 const TEXT_AVATAR_SPEAK_MIN_MS = 1200;
 const TEXT_AVATAR_SPEAK_MAX_MS = 4200;
 declare const __CUBISM_SDK_AVAILABLE__: boolean;
+const PILOT_AVATAR_ENABLED = (import.meta.env.VITE_ENABLE_PILOT_AVATAR ?? 'false') === 'true';
 const LIVE2D_CHAT_ENABLED =
   import.meta.env.VITE_ENABLE_LIVE2D_CHAT !== undefined
     ? import.meta.env.VITE_ENABLE_LIVE2D_CHAT !== 'false'
     : import.meta.env.MODE === 'test' || __CUBISM_SDK_AVAILABLE__;
 const REALTIME_AVATAR_DIRECTIVES_ENABLED = (import.meta.env.VITE_ENABLE_REALTIME_AVATAR_DIRECTIVES ?? 'false') === 'true';
+const CHAT_AVATAR_AVAILABLE = PILOT_AVATAR_ENABLED && LIVE2D_CHAT_ENABLED;
 
 const Live2DAvatarPanel = lazy(() => import('@/components/avatar/Live2DAvatarPanel'));
 
@@ -115,6 +117,7 @@ export function AppChatPage() {
   const [textAssistantSpeechStartedAt, setTextAssistantSpeechStartedAt] = useState<number | null>(null);
   const [textAssistantSpeechEndedAt, setTextAssistantSpeechEndedAt] = useState<number | null>(null);
   const [isAvatarEnabled, setIsAvatarEnabled] = useState(() => {
+    if (!CHAT_AVATAR_AVAILABLE) return false;
     try {
       const stored = window.localStorage.getItem(CHAT_AVATAR_ENABLED_KEY);
       if (stored === null) return false;
@@ -224,9 +227,9 @@ export function AppChatPage() {
   const realtimeSessionParams = useMemo(
     () => ({
       uiLanguage: lang,
-      avatarDirectives: LIVE2D_CHAT_ENABLED && REALTIME_AVATAR_DIRECTIVES_ENABLED,
+      avatarDirectives: CHAT_AVATAR_AVAILABLE && isAvatarEnabled && REALTIME_AVATAR_DIRECTIVES_ENABLED,
     }),
-    [lang]
+    [isAvatarEnabled, lang]
   );
   const legacyRealtimeSession = useRealtimeChat({
     onMessage: handleRealtimeMessage,
@@ -322,12 +325,13 @@ export function AppChatPage() {
     if (!isConnected) return t('app.learn.status.tapToConnect');
     if (
       LIVE2D_CHAT_ENABLED &&
+      CHAT_AVATAR_AVAILABLE &&
       mode === 'realtime' &&
       (live2dPerformance.dialogueState === 'thinking' || live2dPerformance.dialogueState === 'pre_speaking')
     ) {
       return t('app.learn.status.aiResponding');
     }
-    if (isSpeaking || (LIVE2D_CHAT_ENABLED && mode === 'realtime' && live2dPerformance.dialogueState === 'speaking')) {
+    if (isSpeaking || (CHAT_AVATAR_AVAILABLE && mode === 'realtime' && live2dPerformance.dialogueState === 'speaking')) {
       return t('app.learn.status.aiSpeaking');
     }
     if (isListening) return t('app.learn.status.listening');
@@ -681,6 +685,14 @@ export function AppChatPage() {
     : 'bg-slate-100 text-slate-600';
 
   useEffect(() => {
+    if (!CHAT_AVATAR_AVAILABLE) {
+      setIsAvatarEnabled(false);
+      return;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!CHAT_AVATAR_AVAILABLE) return;
     try {
       window.localStorage.setItem(CHAT_AVATAR_ENABLED_KEY, String(isAvatarEnabled));
     } catch {
@@ -778,7 +790,7 @@ export function AppChatPage() {
       {/* Main Content: Avatar (5) + Chat (3) */}
       <div className="flex h-full min-h-0 min-w-0 flex-1 gap-3">
         {/* Virtual Avatar Panel — only available when Live2D SDK is present */}
-        {LIVE2D_CHAT_ENABLED && isAvatarEnabled && isDesktop && (
+        {CHAT_AVATAR_AVAILABLE && isAvatarEnabled && isDesktop && (
           <div className="hidden h-full min-h-0 flex-[5] overflow-hidden rounded-2xl border-3 border-foreground bg-card shadow-stamp lg:flex lg:flex-col">
             <Suspense
               fallback={
@@ -812,7 +824,7 @@ export function AppChatPage() {
         {/* Chat Panel */}
         <div className={clsx(
           'relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border-3 border-foreground bg-card shadow-stamp',
-          LIVE2D_CHAT_ENABLED && isAvatarEnabled ? 'flex-[3]' : 'flex-1'
+          CHAT_AVATAR_AVAILABLE && isAvatarEnabled ? 'flex-[3]' : 'flex-1'
         )}>
           <div className="z-10 flex items-center justify-between border-b-3 border-foreground bg-card p-4">
             <div className="min-w-0 flex-1">
@@ -886,7 +898,7 @@ export function AppChatPage() {
               >
                 <Menu size={14} strokeWidth={2.5} />
               </button>
-              {LIVE2D_CHAT_ENABLED && (
+              {CHAT_AVATAR_AVAILABLE && (
                 <button
                   type="button"
                   onClick={() => setIsAvatarEnabled((prev) => !prev)}

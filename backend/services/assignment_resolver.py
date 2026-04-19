@@ -13,6 +13,7 @@ SUPPORTED_MODALITY_MODES = {"text_only", "voice_only", "hybrid"}
 SUPPORTED_FEEDBACK_MODES = {"fluency_first", "balanced", "accuracy_first"}
 SUPPORTED_OUTPUT_PRESSURES = {"light", "balanced", "high"}
 TEACHER_ALLOWED_ROLES = {"teacher", "school_admin"}
+HIDDEN_ASSIGNMENT_TIME_LIMIT_SEC = 6000
 
 
 # ---------------------------------------------------------------------------
@@ -458,10 +459,28 @@ _TASK_TEMPLATE_RULES = {
     },
 }
 
+_DEFAULT_TASK_TEMPLATE_RULE = {
+    "headline": (
+        "Treat the exchange as an assignment-guided conversation where the learner must stay inside the scenario, "
+        "respond naturally, and build toward the assignment goals."
+    ),
+    "phases": [
+        "Open by establishing the scenario, roles, or immediate communicative need from the assignment.",
+        "Sustain the exchange with natural follow-ups that keep the learner using the target language and assignment materials.",
+        "Close only after the learner has clearly demonstrated the assignment success criteria or completed the assigned communicative task.",
+    ],
+    "completion": (
+        "Do not treat the task as complete until the learner has produced enough assignment-aligned language to show meaningful progress."
+    ),
+}
+
 _TASK_MODEL_HINTS = {
     "ap.conversation": (
         "Use an interpersonal conversation shape: stay spontaneous, react to the learner's last turn, "
         "and avoid turning the task into a scripted drill or quiz."
+    ),
+    "assignment_conversation": (
+        "Keep the interaction natural, scenario-bound, and clearly anchored to the teacher-authored assignment guidance."
     ),
 }
 
@@ -655,7 +674,7 @@ def build_task_template_prompt(
     evidence = pedagogy.get("evidence", {}) if isinstance(pedagogy.get("evidence"), dict) else {}
     situation_seed = _resolve_situation_seed(curriculum)
 
-    template_rule = _TASK_TEMPLATE_RULES.get(task_type, _TASK_TEMPLATE_RULES["decision_making"])
+    template_rule = _TASK_TEMPLATE_RULES.get(task_type, _DEFAULT_TASK_TEMPLATE_RULE)
     lines = [
         template_rule["headline"],
         *[
@@ -754,14 +773,11 @@ def build_task_template_prompt(
     evidence_targets: list[str] = []
     min_turns = evidence.get("minTurns")
     max_turns = evidence.get("maxTurns")
-    time_limit_sec = evidence.get("timeLimitSec")
     max_replays = evidence.get("maxReplays")
     if isinstance(min_turns, int) and min_turns > 0:
         evidence_targets.append(f"about {min_turns} learner turns")
     if isinstance(max_turns, int) and max_turns > 0:
         evidence_targets.append(f"no more than about {max_turns} total turns")
-    if isinstance(time_limit_sec, int) and time_limit_sec > 0:
-        evidence_targets.append(f"finish within about {time_limit_sec} seconds")
     if evidence_targets:
         lines.append(
             "Plan the interaction to support "
@@ -867,7 +883,6 @@ def serialize_assignment(assignment: dict[str, Any] | None) -> dict[str, Any] | 
         "dueAt": assignment.get("due_at") or None,
         "modalityOverride": serialize_modality_policy(assignment.get("modality_override")),
         "maxAttempts": assignment.get("max_attempts"),
-        "taskType": assignment.get("task_type", "decision_making"),
         "successCriteria": _normalize_string_list(assignment.get("success_criteria")),
         "createdByUid": assignment.get("created_by_uid", ""),
         "createdAt": _timestamp_to_iso(assignment.get("created_at")),
@@ -887,12 +902,21 @@ def serialize_assignment(assignment: dict[str, Any] | None) -> dict[str, Any] | 
     target_expressions = assignment.get("target_expressions")
     if isinstance(target_expressions, list) and target_expressions:
         serialized["targetExpressions"] = _normalize_string_list(target_expressions)
+    target_vocabulary = assignment.get("target_vocabulary")
+    if isinstance(target_vocabulary, list) and target_vocabulary:
+        serialized["targetVocabulary"] = _normalize_string_list(target_vocabulary)
     focus_grammar = assignment.get("focus_grammar")
     if isinstance(focus_grammar, list) and focus_grammar:
         serialized["focusGrammar"] = _normalize_string_list(focus_grammar)
     teacher_notes = assignment.get("teacher_notes")
     if isinstance(teacher_notes, str) and teacher_notes:
         serialized["teacherNotes"] = teacher_notes
+    intensity = assignment.get("target_language_intensity")
+    serialized["targetLanguageIntensity"] = (
+        intensity
+        if intensity in ("target_only", "mostly_target", "bilingual_scaffold")
+        else "mostly_target"
+    )
     canvas_module_item_ref = assignment.get("canvas_module_item_ref")
     if isinstance(canvas_module_item_ref, dict) and canvas_module_item_ref:
         serialized["canvasModuleItemRef"] = canvas_module_item_ref
@@ -947,6 +971,7 @@ def _empty_canvas_mapping_dto() -> dict[str, Any]:
         "objectiveIds": [],
         "situationIds": [],
         "targetExpressions": [],
+        "targetVocabulary": [],
         "focusGrammar": [],
         "allowedContextTags": [],
         "feedbackPolicy": serialize_feedback_policy(None),
@@ -958,6 +983,32 @@ def _empty_canvas_mapping_dto() -> dict[str, Any]:
         "createdAt": None,
         "updatedAt": None,
     }
+
+
+def _build_canvas_objective_dtos(objectives: list[str]) -> list[dict[str, Any]]:
+    """Adapt teacher-authored objective strings into bootstrap objective DTOs."""
+    objective_dtos: list[dict[str, Any]] = []
+    for index, objective in enumerate(objectives, start=1):
+        objective_id = f"canvas-objective-{index}"
+        objective_dtos.append({
+            "id": objective_id,
+            "mode": "interpersonal_speaking",
+            "canDo": {"en": objective},
+            "contextTags": [],
+            "communicativeFunctions": [],
+            "discourseMoves": [],
+            "foundationDomains": [],
+            "register": None,
+            "mastery": {"rubricId": None, "threshold": None},
+            "evidenceModel": {
+                "taskModel": "assignment_conversation",
+                "timeLimitSec": HIDDEN_ASSIGNMENT_TIME_LIMIT_SEC,
+                "minTurns": 4,
+                "inputProfile": {},
+            },
+            "templateRefs": [],
+        })
+    return objective_dtos
 
 
 def _resolve_canvas_generated_bootstrap(
@@ -979,11 +1030,13 @@ def _resolve_canvas_generated_bootstrap(
     del deps  # resolver no longer needs deps for this path
 
     scenario = assignment.get("generated_scenario") or ""
+    objectives = _normalize_string_list(assignment.get("objectives"))
     target_expressions = _normalize_string_list(assignment.get("target_expressions"))
+    target_vocabulary = _normalize_string_list(assignment.get("target_vocabulary"))
     focus_grammar = _normalize_string_list(assignment.get("focus_grammar"))
     teacher_notes = assignment.get("teacher_notes") or ""
     success_criteria = _normalize_string_list(assignment.get("success_criteria"))
-    task_type = assignment_dto.get("taskType", "information_gap")
+    task_model = "assignment_conversation"
 
     # Build a system prompt from the assignment's scenario fields.
     locale_label = class_record.get("learning_locale", "ko-KR")
@@ -991,6 +1044,9 @@ def _resolve_canvas_generated_bootstrap(
     subject = class_record.get("subject", "")
     canvas_ref = assignment.get("canvas_module_item_ref") if isinstance(assignment.get("canvas_module_item_ref"), dict) else {}
     source_title = canvas_ref.get("item_title") or ""
+    source_module_name = canvas_ref.get("canvas_module_name") or ""
+    objective_dtos = _build_canvas_objective_dtos(objectives)
+    objective_ids = [objective["id"] for objective in objective_dtos]
 
     prompt_parts = [
         f"You are an AI language tutor helping a student practice spoken {locale_label} in a {subject} class ({class_name}).",
@@ -999,22 +1055,57 @@ def _resolve_canvas_generated_bootstrap(
     ]
     if source_title:
         prompt_parts.append(f"\nThis practice is based on the course material: \"{source_title}\".")
+    if source_module_name:
+        prompt_parts.append(f"\nCanvas module: \"{source_module_name}\".")
+    if objectives:
+        prompt_parts.append(f"\n## Objectives\n" + "\n".join(f"- {objective}" for objective in objectives))
     if target_expressions:
         prompt_parts.append(f"\n## Target Expressions\nThe student should practice using: {', '.join(target_expressions)}")
+    if target_vocabulary:
+        prompt_parts.append(f"\n## Target Vocabulary\nThe student should work in these words naturally: {', '.join(target_vocabulary)}")
     if focus_grammar:
         prompt_parts.append(f"\n## Focus Grammar\nPay attention to: {', '.join(focus_grammar)}")
     if success_criteria:
         prompt_parts.append(f"\n## Success Criteria\n" + "\n".join(f"- {c}" for c in success_criteria))
-    prompt_parts.append(f"\n## Task Type: {task_type.replace('_', ' ').title()}")
-    prompt_parts.append("\nGuide the conversation naturally. Encourage the student to speak in the target language. Provide gentle corrections and scaffolding when needed.")
+
+    intensity = assignment.get("target_language_intensity") or "mostly_target"
+    if intensity not in ("target_only", "mostly_target", "bilingual_scaffold"):
+        intensity = "mostly_target"
+    language_name = subject or locale_label
+    if intensity == "target_only":
+        language_policy = (
+            f"Respond ONLY in {language_name}. Stay in {language_name} for every turn. "
+            f"Use English only if the learner explicitly asks for a translation, "
+            f"then return to {language_name} immediately."
+        )
+    elif intensity == "bilingual_scaffold":
+        language_policy = (
+            f"Bilingual scaffolding is on. Lead each turn with {language_name}, then add a brief English "
+            f"gloss in parentheses for new vocabulary, idioms, or grammar so the learner can keep up. "
+            f"Accept English replies and gently prompt the learner to retry the same idea in {language_name}."
+        )
+    else:
+        language_policy = (
+            f"Speak primarily in {language_name}. Brief English scaffolding (a single word or short clause) "
+            f"is fine when the learner clearly stalls, asks for a translation, or otherwise can't move forward — "
+            f"then return to {language_name} immediately. Never switch to a different target language."
+        )
+    prompt_parts.append(f"\n## Language Mix\n{language_policy}")
+    prompt_parts.append(
+        "\nGuide the conversation naturally. Provide gentle corrections and scaffolding when needed."
+    )
 
     system_prompt_preview = "\n".join(prompt_parts)
 
     # Pedagogy context (minimal defaults)
     pedagogy_context = {
-        "taskModel": task_type,
-        "evidence": {"minTurns": 4, "maxTurns": 12, "timeLimitSec": 300},
-        "objectiveIds": [],
+        "taskModel": task_model,
+        "evidence": {
+            "minTurns": 4,
+            "maxTurns": 12,
+            "timeLimitSec": HIDDEN_ASSIGNMENT_TIME_LIMIT_SEC,
+        },
+        "objectiveIds": objective_ids,
         "rubricIds": [],
         "activityTemplates": [],
         "templateRefs": [],
@@ -1026,12 +1117,14 @@ def _resolve_canvas_generated_bootstrap(
 
     mapping_dto["outputPolicy"] = serialize_output_policy(
         None,
-        task_type=task_type,
+        task_type="",
         evidence=pedagogy_context.get("evidence"),
         feedback_mode=(mapping_dto.get("feedbackPolicy") or {}).get("mode", "balanced"),
     )
+    mapping_dto["objectiveIds"] = objective_ids
     mapping_dto["generatedScenario"] = scenario
     mapping_dto["targetExpressions"] = target_expressions
+    mapping_dto["targetVocabulary"] = target_vocabulary
     mapping_dto["focusGrammar"] = focus_grammar
     mapping_dto["teacherNotes"] = teacher_notes
 
@@ -1060,10 +1153,10 @@ def _resolve_canvas_generated_bootstrap(
             "situation": {
                 "id": "canvas-generated",
                 "kind": "interpersonal_speaking",
-                "seed": {"setting": {"en": scenario[:200]}, "register": "informal"},
-                "objectiveIds": [],
+                "seed": {"setting": scenario[:200], "register": "informal"},
+                "objectiveIds": objective_ids,
             },
-            "objectives": [],
+            "objectives": objective_dtos,
             "rubrics": [],
             "pedagogy": pedagogy_context,
         },
@@ -1076,7 +1169,6 @@ def _resolve_canvas_generated_bootstrap(
             "blockedReasons": [],
             "retentionPolicy": None,
             "maxAttempts": assignment_dto.get("maxAttempts"),
-            "taskType": task_type,
         },
         "realtimeSessionParams": {
             "uiLanguage": ui_language,
@@ -1085,8 +1177,8 @@ def _resolve_canvas_generated_bootstrap(
                 "assignmentId": assignment_dto["id"],
                 "classId": assignment_dto["classId"],
                 "mappingId": mapping_dto["id"],
-                "taskModel": task_type,
-                "objectiveIds": [],
+                "taskModel": task_model,
+                "objectiveIds": objective_ids,
                 "rubricIds": [],
             },
         },
@@ -1195,6 +1287,55 @@ def resolve_assignment_bootstrap_for_user(
     return bootstrap
 
 
+def build_assignment_prompt_bootstrap_from_practice_session(
+    session_record: dict[str, Any] | None,
+    *,
+    class_record: dict[str, Any],
+    launch_policy: dict[str, Any],
+    teacher_preview: bool = False,
+) -> dict[str, Any] | None:
+    if not isinstance(session_record, dict):
+        return None
+
+    system_prompt_preview = _normalize_string(session_record.get("system_prompt_preview"))
+    assignment_snapshot = session_record.get("assignment_snapshot")
+    mapping_snapshot = session_record.get("mapping_snapshot")
+    curriculum_snapshot = session_record.get("curriculum_snapshot")
+    class_snapshot = session_record.get("class_snapshot")
+
+    if not (
+        system_prompt_preview
+        and isinstance(assignment_snapshot, dict)
+        and isinstance(mapping_snapshot, dict)
+        and isinstance(curriculum_snapshot, dict)
+        and isinstance(class_snapshot, dict)
+    ):
+        return None
+
+    merged_class_snapshot = {
+        **class_snapshot,
+        "id": class_record.get("id", class_snapshot.get("id")),
+        "orgId": class_record.get("org_id", class_snapshot.get("orgId")),
+        "name": class_record.get("name", class_snapshot.get("name", "")),
+        "term": class_record.get("term", class_snapshot.get("term", "")),
+        "subject": class_record.get("subject", class_snapshot.get("subject", "")),
+        "learningLocale": class_record.get("learning_locale", class_snapshot.get("learningLocale", "")),
+        "gradeBand": class_record.get("grade_band", class_snapshot.get("gradeBand", "")),
+        "status": class_record.get("status", class_snapshot.get("status", "active")),
+    }
+
+    return {
+        "assignment": assignment_snapshot,
+        "mapping": mapping_snapshot,
+        "class": merged_class_snapshot,
+        "curriculum": curriculum_snapshot,
+        "launch": launch_policy,
+        "teacherPreview": teacher_preview,
+        "systemPromptPreview": system_prompt_preview,
+        "limitations": [],
+    }
+
+
 def build_assignment_system_prompt(bootstrap: dict[str, Any]) -> str:
     base_prompt = bootstrap.get("systemPromptPreview", "").strip()
     assignment = bootstrap.get("assignment", {}) if isinstance(bootstrap, dict) else {}
@@ -1220,6 +1361,12 @@ def build_assignment_system_prompt(bootstrap: dict[str, Any]) -> str:
         for expression in mapping.get("targetExpressions", [])
         if isinstance(expression, str) and expression.strip()
     ] or ["- No explicit target expressions were configured."]
+
+    target_vocabulary_lines = [
+        f"- {word}"
+        for word in mapping.get("targetVocabulary", [])
+        if isinstance(word, str) and word.strip()
+    ] or ["- No explicit target vocabulary was configured."]
 
     focus_grammar_lines = [
         f"- {grammar_point}"
@@ -1252,12 +1399,11 @@ def build_assignment_system_prompt(bootstrap: dict[str, Any]) -> str:
     scaffold_policy = mapping.get("scaffoldPolicy", {})
     output_policy = normalize_output_policy(
         mapping.get("outputPolicy"),
-        task_type=assignment.get("taskType", ""),
+        task_type="",
         evidence=pedagogy.get("evidence"),
         feedback_mode=feedback_policy.get("mode", "balanced"),
     )
     modality_policy = launch.get("modality", {})
-    task_type = assignment.get("taskType", "")
     retention_policy = launch.get("retentionPolicy") if isinstance(launch.get("retentionPolicy"), dict) else {}
     blocked_reasons = launch.get("blockedReasons") if isinstance(launch.get("blockedReasons"), list) else []
 
@@ -1265,7 +1411,6 @@ def build_assignment_system_prompt(bootstrap: dict[str, Any]) -> str:
 ASSIGNMENT ENVELOPE:
 - Assignment title: {assignment.get('title', '')}
 - Class: {classroom.get('name', '')}
-- Task type: {assignment.get('taskType', '')}
 - Max attempts: {assignment.get('maxAttempts') if assignment.get('maxAttempts') is not None else 'unlimited'}
 - Configured modality mode: {launch.get('configuredMode') or modality_policy.get('mode', 'hybrid')}
 - Voice allowed: {launch.get('voiceAllowed')}
@@ -1275,7 +1420,6 @@ ASSIGNMENT ENVELOPE:
 - Task model: {pedagogy.get('taskModel') or 'n/a'}
 - Evidence target min turns: {(pedagogy.get('evidence') or {}).get('minTurns') or 'n/a'}
 - Evidence target max turns: {(pedagogy.get('evidence') or {}).get('maxTurns') or 'n/a'}
-- Evidence time limit sec: {(pedagogy.get('evidence') or {}).get('timeLimitSec') or 'n/a'}
 - Retention policy: {retention_policy.get('id', 'n/a')}
 - Raw audio storage allowed: {retention_policy.get('rawAudioStorageAllowed', 'n/a')}
 - Launch blockers: {', '.join(str(reason) for reason in blocked_reasons) or 'none'}
@@ -1285,6 +1429,9 @@ ASSIGNMENT OBJECTIVES:
 
 TARGET EXPRESSIONS TO ELICIT:
 {chr(10).join(target_expression_lines)}
+
+TARGET VOCABULARY TO ELICIT:
+{chr(10).join(target_vocabulary_lines)}
 
 FOCUS GRAMMAR:
 {chr(10).join(focus_grammar_lines)}
@@ -1319,7 +1466,7 @@ TEACHER POLICY:
 - Teacher notes: {mapping.get('teacherNotes', '') or 'n/a'}
 
 PRIORITY RULES:
-1. Stay inside the assignment's task type and mapped curriculum scope.
+1. Stay inside the assignment scenario, objectives, and teacher guidance.
 2. Prefer eliciting the configured target expressions before introducing new language.
 3. Keep corrective feedback aligned to the configured feedback policy.
 4. Use the scaffold ladder instead of giving the answer immediately when the learner hesitates.
@@ -1331,7 +1478,7 @@ PRIORITY RULES:
         build_correction_ladder_prompt(feedback_policy),
         build_scaffold_ladder_prompt(scaffold_policy),
         build_task_template_prompt(
-            task_type=task_type,
+            task_type="",
             assignment=assignment,
             curriculum=curriculum,
             pedagogy=pedagogy,
@@ -1340,7 +1487,7 @@ PRIORITY RULES:
         build_output_pressure_prompt(
             serialize_output_policy(
                 output_policy,
-                task_type=task_type,
+                task_type="",
                 evidence=pedagogy.get("evidence"),
                 feedback_mode=feedback_policy.get("mode", "balanced"),
             ),

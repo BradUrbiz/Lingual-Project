@@ -298,6 +298,8 @@ export type {
 export type {
   AssignmentAnalyticsData,
   AssignmentBootstrapData,
+  AssignmentWorkspaceData,
+  AssignmentWorkspaceThread,
   AssignmentDto,
   AssignmentStatus,
   AssignmentTaskType,
@@ -320,6 +322,7 @@ export type {
   StudentDrillDownAssignmentCard,
   StudentDrillDownData,
   StudentDrillDownRepeatedError,
+  TargetLanguageIntensity,
   TeacherCurriculumPackageSummary,
 } from './assignment';
 

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider } from './contexts/AuthContext';
 import { MembershipProvider } from './contexts/MembershipContext';
+import { useMembership } from './contexts/MembershipContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { LearningLocaleProvider } from './contexts/LearningLocaleContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
@@ -10,6 +11,7 @@ import { AppProtectedRoute } from './components/layout/AppProtectedRoute';
 import { TeacherRoute } from './components/layout/TeacherRoute';
 import { LingualAdminRoute } from './components/layout/LingualAdminRoute';
 import { LoadingSpinner } from './components/common';
+import { useAuth } from './hooks/useAuth';
 
 const LandingPage = lazy(() => import('./pages/LandingPage').then((module) => ({ default: module.LandingPage })));
 const AuthPage = lazy(() => import('./pages/AuthPage').then((module) => ({ default: module.AuthPage })));
@@ -56,6 +58,20 @@ function withRouteSuspense(element: ReactNode) {
   return <Suspense fallback={<RouteLoadingScreen />}>{element}</Suspense>;
 }
 
+function AppIndexRedirect() {
+  const { user } = useAuth();
+  const { hasAnyRole } = useMembership();
+  const lingualAdmin = (user as { lingualAdmin?: boolean } | null)?.lingualAdmin === true;
+
+  if (lingualAdmin) {
+    return <Navigate to="/app/admin/school-requests" replace />;
+  }
+  if (hasAnyRole(['teacher', 'school_admin'])) {
+    return <Navigate to="/app/teacher" replace />;
+  }
+  return <Navigate to="/app/learn" replace />;
+}
+
 function AnimatedRoutes() {
   const location = useLocation();
 
@@ -83,7 +99,7 @@ function AnimatedRoutes() {
 
         {/* App Shell Routes */}
         <Route path="/app" element={<AppProtectedRoute />}>
-          <Route index element={<Navigate to="learn" replace />} />
+          <Route index element={<AppIndexRedirect />} />
           <Route path="learn" element={withRouteSuspense(<AppLearningPage />)} />
           <Route path="chat" element={withRouteSuspense(<AppChatPage />)} />
           <Route path="games" element={withRouteSuspense(<AppGamesPage />)} />

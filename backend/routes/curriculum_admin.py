@@ -7,7 +7,6 @@ from flask import Blueprint, jsonify, request
 from backend.route_deps import RouteDeps
 from backend.services.assignment_resolver import (
     SUPPORTED_ASSIGNMENT_STATUSES,
-    SUPPORTED_TASK_TYPES,
     TEACHER_ALLOWED_ROLES,
     load_assignment_bundle,
     resolve_assignment_bootstrap_for_user,
@@ -15,6 +14,7 @@ from backend.services.assignment_resolver import (
     normalize_modality_policy,
     serialize_assignment,
 )
+from backend.services.assignment_workspace import build_student_assignment_workspace
 from backend.services.canvas.practice_generator import generate_canvas_practice
 from backend.services.compliance import (
     create_consent_event,
@@ -205,9 +205,9 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 'suggestions': {
                     'scenario': suggestions.get('scenario', ''),
                     'targetExpressions': suggestions.get('target_expressions', []),
+                    'targetVocabulary': suggestions.get('target_vocabulary', []),
                     'focusGrammar': suggestions.get('focus_grammar', []),
                     'successCriteria': suggestions.get('success_criteria', []),
-                    'taskType': suggestions.get('task_type', 'information_gap'),
                     'suggestedTitle': suggestions.get('suggested_title', ''),
                     'suggestedDescription': suggestions.get('suggested_description', ''),
                     'teacherNotes': suggestions.get('teacher_notes', ''),
@@ -232,22 +232,21 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             status = _normalize_string(data.get('status')) or 'draft'
             release_at = _normalize_string(data.get('releaseAt'))
             due_at = _normalize_string(data.get('dueAt'))
-            task_type = _normalize_string(data.get('taskType')) or 'decision_making'
             success_criteria = _normalize_string_list(data.get('successCriteria'))
             max_attempts = _coerce_optional_int(data.get('maxAttempts'))
             instructions = _normalize_string(data.get('instructions'))
             generated_scenario = _normalize_string(data.get('generatedScenario'))
             objectives = _normalize_string_list(data.get('objectives'))
             target_expressions = _normalize_string_list(data.get('targetExpressions'))
+            target_vocabulary = _normalize_string_list(data.get('targetVocabulary'))
             focus_grammar = _normalize_string_list(data.get('focusGrammar'))
             teacher_notes = _normalize_string(data.get('teacherNotes'))
+            target_language_intensity = _normalize_string(data.get('targetLanguageIntensity')) or 'mostly_target'
 
             if not title:
                 return jsonify({'success': False, 'error': 'title is required.'}), 400
             if status not in SUPPORTED_ASSIGNMENT_STATUSES:
                 return jsonify({'success': False, 'error': 'Invalid assignment status.'}), 400
-            if task_type not in SUPPORTED_TASK_TYPES:
-                return jsonify({'success': False, 'error': 'Invalid task type.'}), 400
             if not instructions:
                 return jsonify({'success': False, 'error': 'instructions is required.'}), 400
             if not generated_scenario:
@@ -263,15 +262,16 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 due_at=due_at,
                 modality_override=normalize_modality_policy(data.get('modalityOverride')),
                 max_attempts=max_attempts,
-                task_type=task_type,
                 success_criteria=success_criteria,
                 created_by_uid=uid or '',
                 instructions=instructions,
                 objectives=objectives,
                 target_expressions=target_expressions,
+                target_vocabulary=target_vocabulary,
                 focus_grammar=focus_grammar,
                 generated_scenario=generated_scenario,
                 teacher_notes=teacher_notes,
+                target_language_intensity=target_language_intensity,
             )
 
             return jsonify({
@@ -379,6 +379,44 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({'success': False, 'error': str(exc)}), 403
         except Exception as exc:
             print(f'Assignment bootstrap error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/student/assignments/<assignment_id>/workspace', methods=['GET'])
+    @deps.login_required
+    def api_get_student_assignment_workspace(assignment_id):
+        try:
+            uid = deps.get_current_user_uid()
+            context = deps.get_school_request_context()
+            bootstrap = resolve_assignment_bootstrap_for_user(
+                deps,
+                uid=uid,
+                context=context,
+                assignment_id=assignment_id,
+                ui_language='en',
+            )
+            if hasattr(deps.db, 'list_student_assignment_practice_sessions'):
+                session_records = deps.db.list_student_assignment_practice_sessions(assignment_id, uid)
+            else:
+                session_records = [
+                    session
+                    for session in deps.db.list_assignment_practice_sessions(assignment_id)
+                    if session.get('student_uid') == uid
+                ]
+            workspace = build_student_assignment_workspace(
+                bootstrap,
+                session_records,
+                db=deps.db,
+                uid=uid or '',
+            )
+            return jsonify({'success': True, 'workspace': workspace})
+        except ValueError as exc:
+            error = str(exc)
+            status_code = 404 if 'not found' in error.lower() else 400
+            return jsonify({'success': False, 'error': error}), status_code
+        except PermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except Exception as exc:
+            print(f'Assignment workspace error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
 
     @bp.route('/api/student/assignments/<assignment_id>/practice-sessions', methods=['POST'])
@@ -526,7 +564,7 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
         try:
             _context, class_record = _require_teacher_context(deps, class_id)
             assignments = deps.db.list_class_assignments(class_id)
-            enrollments = deps.db.list_class_enrollments(class_id, status=None)
+            enrollments = deps.db.list_class_enrollments(class_id)
             all_sessions = deps.db.list_class_practice_sessions(class_id)
 
             # Optional date range filtering on sessions

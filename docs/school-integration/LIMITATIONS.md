@@ -1,7 +1,7 @@
 # School Integration Limitations
 
 Status: Active
-Last updated: 2026-04-18
+Last updated: 2026-04-19
 Owner: Engineering
 
 ## Purpose
@@ -103,3 +103,13 @@ Resolution: Phase 2+3 Canvas migration removed `curriculum_mappings`, deleted th
 17. Teacher invitations are auto-approved during the pilot — the `school_admin` review step is bypassed.
 Impact: any teacher who enters a valid `teacher_invite_code` in `POST /api/schools/join-as-teacher` is immediately granted a `teacher` membership without `school_admin` approval. The `teacher_invitations` document is still created for audit trail (marked `status: "approved"` with `reviewed_by_uid: "system:pilot_auto_approve"`), and the `/api/schools/teacher-invitations/<id>/approve` admin endpoint still exists but now returns `409 "Invitation is already approved."` when called against an auto-approved invite. This was introduced to unblock the SSFS Pilot launch where no `school_admin` was available at the time teachers joined.
 Planned follow-up: (a) restore the manual-approval flow by reverting the `api_join_as_teacher` change in `backend/routes/schools.py` once the pilot is over, or (b) gate the auto-approval behind a per-org `auto_approve_teacher_joins` boolean on the organization document for long-term use in trust-first deployments (e.g., self-serve school signups where the same person is both admin and teacher).
+
+### AI tutor proficiency signal
+
+18. Lingual has no per-class or per-student proficiency band; the only ACTFL-aware signals at session time are a per-assignment teacher knob and a static fallback for unassessed free-practice users.
+Impact: the `assignments` collection now carries `target_language_intensity` (`target_only` / `mostly_target` / `bilingual_scaffold`, default `mostly_target`), set by the teacher in the assignment builder, which the resolver renders as a `## Language Mix` section in the system prompt. This is the only assignment-level proficiency signal — there is no `actfl_band` or `proficiency_level` on the `classes` collection, no per-student proficiency override on enrollments, and no inference from Canvas course metadata. Free-practice (`build_system_prompt`) users without a completed assessment now default to ACTFL Intermediate Mid/High (instead of "beginner") so unassessed returning learners and AP-track students don't get over-scaffolded English; assessed users still drive their own ladder via `get_user_proficiency_context`.
+Planned follow-up: add a `proficiency_band` field to the `classes` collection so teachers can set a class-wide default once at class creation, then have the assignment builder default `target_language_intensity` from that class field rather than always landing on `mostly_target`.
+
+19. Live2D avatar is intentionally disabled for the pilot runtime.
+Impact: student-facing pilot conversation surfaces now force avatar off even if a user previously enabled it in local storage, and realtime avatar directives are hard-disabled unless the explicit pilot avatar flag is turned back on. The avatar code, routes, and assets remain in the repo for post-pilot reactivation, but they are dormant in the pilot runtime.
+Planned follow-up: re-enable behind explicit frontend/backend pilot flags only if pilot evidence shows the avatar materially improves engagement or outcomes.

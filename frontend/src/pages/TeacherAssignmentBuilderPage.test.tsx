@@ -142,6 +142,7 @@ describe('TeacherAssignmentBuilderPage', () => {
       suggestions: {
         scenario: 'You are at a Parisian bistro ordering dinner with a friend.',
         targetExpressions: ["Je voudrais…", "L'addition, s'il vous plaît"],
+        targetVocabulary: ['entrée', 'serveur'],
         focusGrammar: ['conditional polite requests'],
         successCriteria: ['Order at least two items', 'Ask one follow-up question'],
         taskType: 'decision_making',
@@ -176,6 +177,8 @@ describe('TeacherAssignmentBuilderPage', () => {
     // Review form renders with the suggested title pre-filled.
     const titleInput = await screen.findByDisplayValue('Dinner at the bistro');
     fireEvent.change(titleInput, { target: { value: 'Dinner at the bistro (edited)' } });
+    expect(screen.queryByText('Task type')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Teacher notes')).toHaveAttribute('rows', '8');
 
     // Status defaults to Draft. Explicitly flip to Published before publishing.
     fireEvent.click(screen.getByRole('radio', { name: 'Published' }));
@@ -187,8 +190,8 @@ describe('TeacherAssignmentBuilderPage', () => {
       expect(createCanvasPracticeMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(createCanvasPracticeMock).toHaveBeenCalledWith(
-      'class-1',
+    const quickAssignPayload = createCanvasPracticeMock.mock.calls[0][1];
+    expect(quickAssignPayload).toEqual(
       expect.objectContaining({
         canvasContentId: 'canvas-content-2',
         canvasModuleItemId: 'item-2',
@@ -196,10 +199,16 @@ describe('TeacherAssignmentBuilderPage', () => {
         description: 'Order a two-course dinner and negotiate with the server.',
         scenario: 'You are at a Parisian bistro ordering dinner with a friend.',
         targetExpressions: ["Je voudrais…", "L'addition, s'il vous plaît"],
+        targetVocabulary: ['entrée', 'serveur'],
         focusGrammar: ['conditional polite requests'],
         successCriteria: ['Order at least two items', 'Ask one follow-up question'],
-        taskType: 'decision_making',
         status: 'published',
+      })
+    );
+    expect(quickAssignPayload).not.toHaveProperty('taskType');
+    expect(quickAssignPayload).toEqual(
+      expect.objectContaining({
+        targetVocabulary: ['entrée', 'serveur'],
       })
     );
 
@@ -242,6 +251,7 @@ describe('TeacherAssignmentBuilderPage', () => {
       suggestions: {
         scenario: 'You are at a Parisian bistro ordering dinner with a friend.',
         targetExpressions: ['Je voudrais…'],
+        targetVocabulary: [],
         focusGrammar: ['conditional polite requests'],
         successCriteria: ['Order at least two items'],
         taskType: 'decision_making',
@@ -277,6 +287,9 @@ describe('TeacherAssignmentBuilderPage', () => {
     const objectivesInput = await screen.findByLabelText('New Objectives');
     fireEvent.change(objectivesInput, { target: { value: 'Order a full meal in French' } });
     fireEvent.keyDown(objectivesInput, { key: 'Enter' });
+    const vocabularyInput = await screen.findByLabelText('New Target vocabulary');
+    fireEvent.change(vocabularyInput, { target: { value: 'la carte' } });
+    fireEvent.keyDown(vocabularyInput, { key: 'Enter' });
 
     // Publish as draft (default).
     fireEvent.click(screen.getByRole('button', { name: /Save as draft/i }));
@@ -289,6 +302,7 @@ describe('TeacherAssignmentBuilderPage', () => {
       'class-1',
       expect.objectContaining({
         objectives: ['Order a full meal in French'],
+        targetVocabulary: ['la carte'],
         status: 'draft',
       }),
     );
@@ -301,6 +315,7 @@ describe('TeacherAssignmentBuilderPage', () => {
       suggestions: {
         scenario: 'Students use the pasted vocabulary packet to prepare for a restaurant role-play.',
         targetExpressions: ['Quisiera...', 'La cuenta, por favor'],
+        targetVocabulary: ['reservar', 'camarero'],
         focusGrammar: ['conditional politeness'],
         successCriteria: ['Use at least two source expressions'],
         taskType: 'information_gap',
@@ -329,7 +344,7 @@ describe('TeacherAssignmentBuilderPage', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'AI-assisted source' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Custom Instruction' }));
     fireEvent.change(screen.getByLabelText('Source packet'), {
       target: { value: 'Key vocabulary: reservar, camarero, cuenta. Rubric note: ask for clarification politely.' },
     });
@@ -356,14 +371,15 @@ describe('TeacherAssignmentBuilderPage', () => {
         description: 'Use the pasted source packet to guide a speaking exchange.',
         instructions: 'Key vocabulary: reservar, camarero, cuenta. Rubric note: ask for clarification politely.',
         generatedScenario: 'Students use the pasted vocabulary packet to prepare for a restaurant role-play.',
-        taskType: 'information_gap',
         targetExpressions: ['Quisiera...', 'La cuenta, por favor'],
+        targetVocabulary: ['reservar', 'camarero'],
         focusGrammar: ['conditional politeness'],
         successCriteria: ['Use at least two source expressions'],
         teacherNotes: 'Push learners to cite the pasted vocabulary naturally.',
         status: 'draft',
       }),
     );
+    expect(createAssignmentMock.mock.calls[0][1]).not.toHaveProperty('taskType');
   });
 
   it('Advanced manual mode creates an assignment without Canvas selection', async () => {
@@ -398,7 +414,8 @@ describe('TeacherAssignmentBuilderPage', () => {
     fireEvent.change(screen.getByLabelText('Conversation scenario'), {
       target: { value: 'You and a classmate are deciding what to order for lunch.' },
     });
-    fireEvent.click(screen.getByRole('radio', { name: /Opinion gap/i }));
+    expect(screen.queryByText('Task type')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Teacher notes')).toHaveAttribute('rows', '8');
     fireEvent.click(screen.getByRole('button', { name: /Save as draft/i }));
 
     await waitFor(() => {
@@ -411,10 +428,10 @@ describe('TeacherAssignmentBuilderPage', () => {
         title: 'Manual speaking task',
         instructions: 'Discuss your food preferences using full sentences.',
         generatedScenario: 'You and a classmate are deciding what to order for lunch.',
-        taskType: 'opinion_gap',
         status: 'draft',
       }),
     );
+    expect(createAssignmentMock.mock.calls[0][1]).not.toHaveProperty('taskType');
     expect(generateCanvasPracticeMock).not.toHaveBeenCalled();
     expect(generateAssignmentDraftMock).not.toHaveBeenCalled();
     expect(createCanvasPracticeMock).not.toHaveBeenCalled();

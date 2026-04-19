@@ -86,6 +86,7 @@ class FakeDb:
         self.practice_sessions = {}
         self.learning_events = []
         self.users = {}
+        self.user_chats = {}
         self.student_compliance_records = {}
         self.consent_events = []
         self.user_active_memberships = {}
@@ -136,6 +137,23 @@ class FakeDb:
 
     def get_user(self, uid):
         return self.users.get(uid)
+
+    def create_chat_session(self, uid, title='New Chat', chat_id=None, messages=None, updated_at=None):
+        chats = self.user_chats.setdefault(uid, {})
+        chat_id = chat_id or f'chat-{len(chats) + 1}'
+        timestamp = updated_at or datetime.now(UTC).isoformat()
+        chats[chat_id] = {
+            'id': chat_id,
+            'title': title,
+            'created_at': timestamp,
+            'updated_at': timestamp,
+            'messages': list(messages or []),
+        }
+        return chat_id
+
+    def get_chat_session(self, uid, chat_id):
+        chat = (self.user_chats.get(uid) or {}).get(chat_id)
+        return dict(chat) if chat else None
 
     def get_organization(self, org_id):
         return self.organizations.get(org_id)
@@ -219,6 +237,13 @@ class FakeDb:
     def list_assignment_practice_sessions(self, assignment_id):
         return [
             dict(s) for s in self.practice_sessions.values() if s.get('assignment_id') == assignment_id
+        ]
+
+    def list_student_assignment_practice_sessions(self, assignment_id, student_uid):
+        return [
+            dict(s)
+            for s in self.practice_sessions.values()
+            if s.get('assignment_id') == assignment_id and s.get('student_uid') == student_uid
         ]
 
     def list_assignment_learning_events(self, assignment_id):
@@ -405,6 +430,15 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             teacher_notes='Keep the exchange friendly.',
         )
 
+    def _seed_chat(self, chat_id, title, *, updated_at=None, messages=None):
+        return self.fake_db.create_chat_session(
+            self.student_uid,
+            title=title,
+            chat_id=chat_id,
+            updated_at=updated_at,
+            messages=messages,
+        )
+
     # ------------------------------------------------------------------
     # 1. GET /api/teacher/classes/:id/curriculum/packages
     # ------------------------------------------------------------------
@@ -461,7 +495,6 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
                     'title': 'Family Vocab Practice',
                     'description': 'Talk about your family.',
                     'status': 'draft',
-                    'taskType': 'decision_making',
                     'instructions': 'Introduce your family.',
                     'generatedScenario': 'You meet a new friend and describe your family.',
                 },
@@ -722,7 +755,217 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
             self.assertIn('not available', payload['error'].lower())
 
     # ------------------------------------------------------------------
-    # 9. Permission checks - student cannot access teacher endpoints
+    # 9. GET /api/student/assignments/:id/workspace
+    # ------------------------------------------------------------------
+
+    def test_get_student_assignment_workspace_filters_to_current_student_and_assignment(self):
+        assignment_id = self._create_published_assignment_via_db()
+        other_assignment_id = self.fake_db.create_assignment(
+            org_id=self.org_id,
+            class_id=self.class_id,
+            title='Other Assignment',
+            description='',
+            status='published',
+            release_at='',
+            due_at='',
+            modality_override={},
+            max_attempts=None,
+            task_type='decision_making',
+            success_criteria=[],
+            created_by_uid=self.teacher_uid,
+            instructions='Other instructions.',
+            generated_scenario='Other scenario.',
+        )
+        self._seed_chat(
+            'chat-1',
+            'Assignment thread',
+            updated_at='2026-04-19T10:00:00+00:00',
+            messages=[
+                {'role': 'user', 'content': 'Bonjour', 'timestamp': '2026-04-19T10:00:00+00:00'},
+            ],
+        )
+        self._seed_chat(
+            'chat-2',
+            'Historical thread',
+            updated_at='2026-04-18T10:00:00+00:00',
+            messages=[
+                {'role': 'user', 'content': 'Salut', 'timestamp': '2026-04-18T10:00:00+00:00'},
+            ],
+        )
+        self.fake_db.create_practice_session({
+            'org_id': self.org_id,
+            'class_id': self.class_id,
+            'assignment_id': assignment_id,
+            'student_uid': self.student_uid,
+            'status': 'active',
+            'transcript_ref': {'chat_id': 'chat-1'},
+            'started_at': '2026-04-19T10:00:00+00:00',
+            'created_at': '2026-04-19T10:00:00+00:00',
+        })
+        self.fake_db.create_practice_session({
+            'org_id': self.org_id,
+            'class_id': self.class_id,
+            'assignment_id': assignment_id,
+            'student_uid': self.student_uid,
+            'status': 'completed',
+            'transcript_ref': {'chat_id': 'chat-2'},
+            'started_at': '2026-04-18T10:00:00+00:00',
+            'created_at': '2026-04-18T10:00:00+00:00',
+        })
+        self.fake_db.create_practice_session({
+            'org_id': self.org_id,
+            'class_id': self.class_id,
+            'assignment_id': other_assignment_id,
+            'student_uid': self.student_uid,
+            'status': 'completed',
+            'transcript_ref': {'chat_id': 'chat-other-assignment'},
+            'started_at': '2026-04-17T10:00:00+00:00',
+            'created_at': '2026-04-17T10:00:00+00:00',
+        })
+        self.fake_db.create_practice_session({
+            'org_id': self.org_id,
+            'class_id': self.class_id,
+            'assignment_id': assignment_id,
+            'student_uid': 'student-2',
+            'status': 'completed',
+            'transcript_ref': {'chat_id': 'chat-other-student'},
+            'started_at': '2026-04-16T10:00:00+00:00',
+            'created_at': '2026-04-16T10:00:00+00:00',
+        })
+
+        with self.app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess['user'] = self._student_session()
+
+            response = client.get(f'/api/student/assignments/{assignment_id}/workspace')
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertTrue(payload['success'])
+            workspace = payload['workspace']
+            self.assertEqual(workspace['selectedChatId'], 'chat-1')
+            self.assertEqual(len(workspace['threads']), 2)
+            self.assertEqual({thread['chatId'] for thread in workspace['threads']}, {'chat-1', 'chat-2'})
+
+    def test_get_student_assignment_workspace_returns_grouped_threads_and_active_selection(self):
+        assignment_id = self._create_published_assignment_via_db()
+        self._seed_chat(
+            'chat-1',
+            'Current active thread',
+            updated_at='2026-04-19T10:00:00+00:00',
+            messages=[
+                {'role': 'user', 'content': 'Bonjour', 'timestamp': '2026-04-19T10:00:00+00:00'},
+                {'role': 'assistant', 'content': 'Salut', 'timestamp': '2026-04-19T10:01:00+00:00'},
+            ],
+        )
+        self._seed_chat(
+            'chat-2',
+            'Past attempt thread',
+            updated_at='2026-04-18T09:00:00+00:00',
+            messages=[
+                {'role': 'user', 'content': 'Je m appelle Lea', 'timestamp': '2026-04-18T09:00:00+00:00'},
+            ],
+        )
+        active_session_id = self.fake_db.create_practice_session({
+            'org_id': self.org_id,
+            'class_id': self.class_id,
+            'assignment_id': assignment_id,
+            'student_uid': self.student_uid,
+            'status': 'active',
+            'modality': 'hybrid',
+            'voice_enabled': True,
+            'text_enabled': True,
+            'transcript_ref': {'chat_id': 'chat-1'},
+            'started_at': '2026-04-19T10:00:00+00:00',
+            'created_at': '2026-04-19T10:00:00+00:00',
+            'updated_at': '2026-04-19T10:05:00+00:00',
+        })
+        self.fake_db.create_practice_session({
+            'org_id': self.org_id,
+            'class_id': self.class_id,
+            'assignment_id': assignment_id,
+            'student_uid': self.student_uid,
+            'status': 'completed',
+            'modality': 'hybrid',
+            'voice_enabled': True,
+            'text_enabled': True,
+            'transcript_ref': {'chat_id': 'chat-2'},
+            'started_at': '2026-04-18T09:00:00+00:00',
+            'created_at': '2026-04-18T09:00:00+00:00',
+            'updated_at': '2026-04-18T09:05:00+00:00',
+        })
+
+        with self.app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess['user'] = self._student_session()
+
+            response = client.get(f'/api/student/assignments/{assignment_id}/workspace')
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertTrue(payload['success'])
+            workspace = payload['workspace']
+            self.assertIn('bootstrap', workspace)
+            self.assertEqual(workspace['selectedChatId'], 'chat-1')
+            self.assertEqual(workspace['latestActivePracticeSessionId'], active_session_id)
+            self.assertEqual(len(workspace['threads']), 2)
+
+            active_thread = next(thread for thread in workspace['threads'] if thread['chatId'] == 'chat-1')
+            historical_thread = next(thread for thread in workspace['threads'] if thread['chatId'] == 'chat-2')
+
+            self.assertEqual(active_thread['title'], 'Current active thread')
+            self.assertEqual(active_thread['messageCount'], 2)
+            self.assertTrue(active_thread['hasActiveAttempt'])
+            self.assertEqual(len(active_thread['attempts']), 1)
+            self.assertEqual(active_thread['latestPracticeSession']['id'], active_session_id)
+
+            self.assertEqual(historical_thread['title'], 'Past attempt thread')
+            self.assertEqual(historical_thread['messageCount'], 1)
+            self.assertFalse(historical_thread['hasActiveAttempt'])
+            self.assertEqual(len(historical_thread['attempts']), 1)
+
+    def test_create_practice_session_allows_new_attempt_on_existing_chat_id(self):
+        assignment_id = self._create_published_assignment_via_db()
+        self._seed_chat(
+            'chat-123',
+            'Existing assignment thread',
+            updated_at='2026-04-18T10:00:00+00:00',
+            messages=[
+                {'role': 'user', 'content': 'Bonjour', 'timestamp': '2026-04-18T10:00:00+00:00'},
+            ],
+        )
+        original_session_id = self.fake_db.create_practice_session({
+            'org_id': self.org_id,
+            'class_id': self.class_id,
+            'assignment_id': assignment_id,
+            'student_uid': self.student_uid,
+            'status': 'completed',
+            'modality': 'hybrid',
+            'voice_enabled': True,
+            'text_enabled': True,
+            'transcript_ref': {'chat_id': 'chat-123'},
+            'started_at': '2026-04-18T10:00:00+00:00',
+            'created_at': '2026-04-18T10:00:00+00:00',
+            'updated_at': '2026-04-18T10:05:00+00:00',
+        })
+        original_session = self.fake_db.get_practice_session(original_session_id)
+
+        with self.app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess['user'] = self._student_session()
+
+            response = client.post(
+                f'/api/student/assignments/{assignment_id}/practice-sessions',
+                json={'uiLanguage': 'en', 'chatId': 'chat-123'},
+            )
+            self.assertEqual(response.status_code, 201)
+            payload = response.get_json()
+            self.assertTrue(payload['success'])
+            practice_session = payload['practiceSession']
+            self.assertNotEqual(practice_session['id'], original_session_id)
+            self.assertEqual(practice_session['chatId'], 'chat-123')
+            self.assertEqual(self.fake_db.get_practice_session(original_session_id), original_session)
+
+    # ------------------------------------------------------------------
+    # 10. Permission checks - student cannot access teacher endpoints
     # ------------------------------------------------------------------
 
     def test_teacher_packages_route_is_removed_for_students_too(self):

@@ -174,6 +174,7 @@ def make_assignment(
         "instructions": extra.pop("instructions", "Default test instructions."),
         "generated_scenario": extra.pop("generated_scenario", "Default test scenario."),
         "target_expressions": extra.pop("target_expressions", []),
+        "target_vocabulary": extra.pop("target_vocabulary", []),
         "focus_grammar": extra.pop("focus_grammar", []),
         "teacher_notes": extra.pop("teacher_notes", ""),
         "created_at": datetime.now(UTC),
@@ -528,9 +529,11 @@ class FakeDbBase:
         canvas_module_item_ref=None,
         objectives=None,
         target_expressions=None,
+        target_vocabulary=None,
         focus_grammar=None,
         generated_scenario='',
         teacher_notes='',
+        target_language_intensity='mostly_target',
     ) -> str:
         aid = assignment_id or self._next_id("assign")
         self.assignments[aid] = {
@@ -552,9 +555,15 @@ class FakeDbBase:
             'canvas_module_item_ref': canvas_module_item_ref,
             'objectives': list(objectives or []),
             'target_expressions': list(target_expressions or []),
+            'target_vocabulary': list(target_vocabulary or []),
             'focus_grammar': list(focus_grammar or []),
             'generated_scenario': generated_scenario or '',
             'teacher_notes': teacher_notes or '',
+            'target_language_intensity': (
+                target_language_intensity
+                if target_language_intensity in ('target_only', 'mostly_target', 'bilingual_scaffold')
+                else 'mostly_target'
+            ),
             'created_at': datetime.now(UTC),
             'updated_at': datetime.now(UTC),
         }

@@ -108,6 +108,7 @@ Teacher-managed beta content should resolve to one assignment record that carrie
 - `target_expressions`
 - `focus_grammar`
 - `teacher_notes`
+- `target_language_intensity` (`target_only` | `mostly_target` | `bilingual_scaffold`, default `mostly_target`) — controls how much the AI tutor stays in the target language vs. scaffolds in English. Surfaces in the assembled prompt as a `## Language Mix` section.
 - optional `canvas_module_item_ref`
 
 This keeps prompt assembly assignment-centric and avoids a second overlay collection just to resolve practice context.
@@ -243,6 +244,7 @@ Fields:
 - `target_expressions`
 - `focus_grammar`
 - `teacher_notes`
+- `target_language_intensity` (enum: `target_only`, `mostly_target`, `bilingual_scaffold`; default `mostly_target`)
 - `canvas_module_item_ref`
 - `created_at`
 - `updated_at`

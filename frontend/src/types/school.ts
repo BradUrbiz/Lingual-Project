@@ -35,6 +35,7 @@ export interface TeacherClassSummary {
   status: string;
   studentCount: number;
   assignmentCount?: number;
+  canvasLinked?: boolean;
   createdAt?: string | null;
   updatedAt?: string | null;
 }

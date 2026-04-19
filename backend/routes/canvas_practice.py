@@ -20,8 +20,6 @@ from backend.services.membership_context import SchoolContextPermissionError
 
 TEACHER_ALLOWED_ROLES = {'teacher', 'school_admin'}
 
-VALID_TASK_TYPES = {'information_gap', 'opinion_gap', 'decision_making'}
-
 
 def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
     bp = Blueprint('canvas_practice', __name__)
@@ -109,9 +107,9 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
                 'suggestions': {
                     'scenario': suggestions.get('scenario', ''),
                     'targetExpressions': suggestions.get('target_expressions', []),
+                    'targetVocabulary': suggestions.get('target_vocabulary', []),
                     'focusGrammar': suggestions.get('focus_grammar', []),
                     'successCriteria': suggestions.get('success_criteria', []),
-                    'taskType': suggestions.get('task_type', 'information_gap'),
                     'suggestedTitle': suggestions.get('suggested_title', ''),
                     'suggestedDescription': suggestions.get('suggested_description', ''),
                     'teacherNotes': suggestions.get('teacher_notes', ''),
@@ -138,13 +136,10 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
         canvas_module_item_id = data.get('canvasModuleItemId', '').strip()
         title = data.get('title', '').strip()
         scenario = data.get('scenario', '').strip()
-        task_type = data.get('taskType', 'information_gap')
         instructions = (data.get('instructions') or data.get('description') or '').strip()
 
         if not canvas_content_id or not title or not scenario:
             return jsonify({'success': False, 'error': 'canvasContentId, title, and scenario are required'}), 400
-        if task_type not in VALID_TASK_TYPES:
-            return jsonify({'success': False, 'error': f'Invalid taskType. Must be one of: {", ".join(VALID_TASK_TYPES)}'}), 400
 
         content_item = deps.db.get_canvas_course_content(canvas_content_id)
         if not content_item:
@@ -157,6 +152,8 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
             'connection_id': content_item.get('connection_id', ''),
             'canvas_module_id': content_item.get('canvas_module_id', ''),
             'item_id': canvas_module_item_id or content_item.get('item_id', ''),
+            'item_title': content_item.get('item_title', ''),
+            'canvas_module_name': content_item.get('canvas_module_name', ''),
         }
 
         try:
@@ -170,7 +167,6 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
                 title=title,
                 description=data.get('description', ''),
                 status=status,
-                task_type=task_type,
                 success_criteria=data.get('successCriteria', []),
                 created_by_uid=teacher_uid,
                 canvas_module_item_id=canvas_module_item_id or '',
@@ -178,9 +174,11 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
                 canvas_module_item_ref=canvas_ref,
                 objectives=data.get('objectives', []),
                 target_expressions=data.get('targetExpressions', []),
+                target_vocabulary=data.get('targetVocabulary', []),
                 focus_grammar=data.get('focusGrammar', []),
                 generated_scenario=scenario,
                 teacher_notes=data.get('teacherNotes', ''),
+                target_language_intensity=data.get('targetLanguageIntensity', 'mostly_target') or 'mostly_target',
             )
 
             if canvas_module_item_id:

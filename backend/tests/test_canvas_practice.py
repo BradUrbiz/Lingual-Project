@@ -5,9 +5,16 @@ from backend.tests.conftest import FakeDbBase
 from backend.routes.canvas_practice import create_canvas_practice_blueprint
 
 
+class FakeCanvasPracticeDb(FakeDbBase):
+    """Local test DB to keep this route test resilient to shared fake-DB drift."""
+
+    def create_assignment(self, **kwargs):
+        return super().create_assignment(**kwargs)
+
+
 class CanvasPracticeCreateTest(unittest.TestCase):
     def setUp(self):
-        self.db = FakeDbBase()
+        self.db = FakeCanvasPracticeDb()
         # Seed class + canvas content item
         self.db.classes["class-1"] = {
             "id": "class-1", "org_id": "org-1", "name": "Spanish",
@@ -47,8 +54,8 @@ class CanvasPracticeCreateTest(unittest.TestCase):
                 "title": "Family introductions",
                 "description": "Practice introducing your family.",
                 "scenario": "You meet a new classmate. Tell them about your family.",
-                "taskType": "information_gap",
                 "targetExpressions": ["Mi familia es...", "Mi hermano se llama..."],
+                "targetVocabulary": ["madre", "hermano"],
                 "focusGrammar": ["possessive adjectives"],
                 "successCriteria": ["Name at least 3 family members"],
                 "teacherNotes": "Great for Week 1",
@@ -64,6 +71,7 @@ class CanvasPracticeCreateTest(unittest.TestCase):
         # Fallback logic: instructions is populated from description when not explicitly set.
         self.assertEqual(asg["instructions"], "Practice introducing your family.")
         self.assertEqual(asg["target_expressions"], ["Mi familia es...", "Mi hermano se llama..."])
+        self.assertEqual(asg["target_vocabulary"], ["madre", "hermano"])
         self.assertEqual(asg["focus_grammar"], ["possessive adjectives"])
         self.assertEqual(asg["success_criteria"], ["Name at least 3 family members"])
         self.assertTrue(asg["generated_scenario"].startswith("You meet"))
@@ -72,6 +80,8 @@ class CanvasPracticeCreateTest(unittest.TestCase):
             "connection_id": "conn-1",
             "canvas_module_id": "mod-1",
             "item_id": "page-1",
+            "item_title": "La familia",
+            "canvas_module_name": "Unit 1",
         })
         # Confirm (C2): assignment has no mapping_id field at all; scenario lives on the assignment.
         self.assertNotIn("mapping_id", asg)

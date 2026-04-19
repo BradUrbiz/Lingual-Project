@@ -127,12 +127,6 @@ export default function CompliancePage() {
 
       <div className="mt-12 border-t pt-6 text-sm text-gray-500 dark:text-gray-400">
         <p>
-          Questions? Contact us at{' '}
-          <a href="mailto:support@lingual.app" className="text-blue-600 hover:underline">
-            support@lingual.app
-          </a>
-        </p>
-        <p className="mt-1">
           <Link to="/" className="text-blue-600 hover:underline">&larr; Back to Lingual</Link>
         </p>
       </div>

@@ -1403,6 +1403,14 @@ def build_assignment_prompt_bootstrap_from_practice_session(
 def build_assignment_system_prompt(bootstrap: dict[str, Any]) -> str:
     base_prompt = bootstrap.get("systemPromptPreview", "").strip()
     assignment = bootstrap.get("assignment", {}) if isinstance(bootstrap, dict) else {}
+    # Scaffold-free (custom_prompt) assignments contract to send ONLY the
+    # teacher's raw instructions plus the language-mix policy. The bootstrap
+    # already composed that as systemPromptPreview; appending the pedagogy
+    # overlay / assignment envelope here would leak scenario, target
+    # expressions, rubric policy, and placeholder objectives back into the
+    # prompt and defeat the contract. Early-return before overlay assembly.
+    if isinstance(assignment, dict) and assignment.get("taskType") == "custom_prompt":
+        return base_prompt
     mapping = bootstrap.get("mapping", {}) if isinstance(bootstrap, dict) else {}
     classroom = bootstrap.get("class", {}) if isinstance(bootstrap, dict) else {}
     curriculum = bootstrap.get("curriculum", {}) if isinstance(bootstrap, dict) else {}

@@ -520,6 +520,59 @@ class TestCanvasGeneratedBootstrapFromAssignment(unittest.TestCase):
         self.assertEqual(bootstrap["mapping"]["focusGrammar"], [])
         self.assertEqual(bootstrap["mapping"]["teacherNotes"], "")
 
+        # The preview is what the realtime-session chat routes actually send
+        # to the model via build_assignment_system_prompt. Assert it returns
+        # exactly the preview for scaffold-free assignments — no pedagogy
+        # overlay, envelope, objectives, or priority rules.
+        runtime_prompt = build_assignment_system_prompt(bootstrap)
+        self.assertEqual(runtime_prompt, prompt)
+        self.assertNotIn("ASSIGNMENT ENVELOPE", runtime_prompt)
+        self.assertNotIn("ASSIGNMENT OBJECTIVES", runtime_prompt)
+        self.assertNotIn("TARGET EXPRESSIONS TO ELICIT", runtime_prompt)
+        self.assertNotIn("FOCUS GRAMMAR", runtime_prompt)
+        self.assertNotIn("TEACHER POLICY", runtime_prompt)
+        self.assertNotIn("PRIORITY RULES", runtime_prompt)
+        self.assertNotIn("No explicit target expressions were configured", runtime_prompt)
+        self.assertNotIn("Stay aligned to the mapped learning objectives", runtime_prompt)
+
+    def test_non_custom_prompt_assignments_still_get_pedagogy_overlay(self):
+        """Regression guard: the scaffold-free early-return must not affect
+        other task types — Canvas/source/manual assignments still need the
+        envelope + objectives + targets + teacher-policy overlay at runtime."""
+        self.db.classes["c1"] = {
+            "id": "c1", "org_id": "o1", "name": "Spanish",
+            "learning_locale": "es-ES", "subject": "Spanish",
+            "teacher_membership_ids": ["m1"], "status": "active",
+        }
+        self.db.enrollments["c1_u1"] = {
+            "id": "c1_u1", "class_id": "c1", "student_uid": "u1",
+            "status": "active", "join_source": "join_code",
+        }
+        self.db.assignments["asg-normal"] = {
+            "id": "asg-normal", "org_id": "o1", "class_id": "c1",
+            "title": "Normal assignment", "status": "published",
+            "task_type": "decision_making", "success_criteria": [],
+            "created_by_uid": "uid-t",
+            "instructions": "Order coffee.",
+            "generated_scenario": "At a cafe in Madrid.",
+            "objectives": ["Order politely"],
+            "target_expressions": ["por favor"],
+            "target_vocabulary": [],
+            "focus_grammar": ["present tense"],
+            "teacher_notes": "",
+        }
+
+        bootstrap = resolve_assignment_bootstrap_for_user(
+            deps=self.deps, uid="u1", context=self.context,
+            assignment_id="asg-normal", ui_language="en",
+        )
+        runtime_prompt = build_assignment_system_prompt(bootstrap)
+        self.assertIn("ASSIGNMENT ENVELOPE", runtime_prompt)
+        self.assertIn("ASSIGNMENT OBJECTIVES", runtime_prompt)
+        self.assertIn("TARGET EXPRESSIONS TO ELICIT", runtime_prompt)
+        self.assertIn("FOCUS GRAMMAR", runtime_prompt)
+        self.assertIn("PRIORITY RULES", runtime_prompt)
+
     def _seed_language_mix_assignment(self, intensity_value):
         self.db.classes["c1"] = {
             "id": "c1", "org_id": "o1", "name": "Spanish",

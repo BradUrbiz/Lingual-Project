@@ -376,30 +376,6 @@ export function AppLearningPage() {
         )}
       </section>
 
-      {canvasContent.length > 0 && (
-        <section className={`${surfaceClass} p-6`}>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-lg font-display font-bold text-foreground">Course modules</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Canvas course content from your enrolled classes.
-              </p>
-            </div>
-          </div>
-          <div className="mt-5">
-            <CanvasModuleView
-              items={canvasContent}
-              linkedAssignments={Object.fromEntries(
-                canvasContent
-                  .filter((c) => c.lingualAssignmentId)
-                  .map((c) => [c.canvasItemId, c.lingualAssignmentId!]),
-              )}
-              onLaunchAssignment={(assignmentId) => navigate(`/app/assignments/${assignmentId}`)}
-            />
-          </div>
-        </section>
-      )}
-
       <section className={`${surfaceClass} p-6`}>
         <div className="mb-5">
           <h2 className="text-lg font-display font-bold text-foreground">
@@ -426,6 +402,30 @@ export function AppLearningPage() {
           />
         </div>
       </section>
+
+      {canvasContent.length > 0 && (
+        <section className={`${surfaceClass} p-6`}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-display font-bold text-foreground">Course modules</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Canvas course content from your enrolled classes.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5">
+            <CanvasModuleView
+              items={canvasContent}
+              linkedAssignments={Object.fromEntries(
+                canvasContent
+                  .filter((c) => c.lingualAssignmentId)
+                  .map((c) => [c.canvasItemId, c.lingualAssignmentId!]),
+              )}
+              onLaunchAssignment={(assignmentId) => navigate(`/app/assignments/${assignmentId}`)}
+            />
+          </div>
+        </section>
+      )}
 
       <Dialog open={Boolean(selectedClass)} onOpenChange={(open) => {
         if (!open && !isLeavingClass) {

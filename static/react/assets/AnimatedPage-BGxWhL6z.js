@@ -1,1 +1,0 @@
-import{j as a}from"./react-vendor-CdX2q18x.js";import{N as m}from"./index-Co_1Vx1l.js";import{m as n}from"./motion-vendor-Cqm-AEkn.js";function s({children:i,className:t=""}){return a.jsx(n.div,{variants:m,initial:"initial",animate:"animate",exit:"exit",className:t,children:i})}export{s as A};

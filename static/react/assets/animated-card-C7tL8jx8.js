@@ -1,1 +1,0 @@
-import{j as t}from"./react-vendor-CdX2q18x.js";import{m as n,c as o}from"./index-Co_1Vx1l.js";import{m}from"./motion-vendor-Cqm-AEkn.js";function c({className:a,children:r,...i}){return t.jsx(m.div,{variants:o,initial:"initial",animate:"animate",className:n("rounded-2xl bg-card text-card-foreground shadow-xl",a),...i,children:r})}export{c as A};

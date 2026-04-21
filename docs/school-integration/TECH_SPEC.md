@@ -216,11 +216,43 @@ Fields:
 - `student_uid`
 - `student_membership_id`
 - `status`
-- `join_source` (`manual`, `invite`, `google_classroom`, `canvas`)
+- `join_source` (`manual`, `invite`, `join_code`, `lti`, `google_classroom`, `canvas_legacy`)
 - `student_number` (optional)
 - `guardian_contact_required`
 - `created_at`
 - `updated_at`
+
+**Invariant (2026-04-21):** Canvas PAT sync never writes to `enrollments/`.
+Enrollments are created only by explicit student action (join code) or
+consent-by-click (LTI deep-link launch). The `canvas_legacy` value is
+reserved for records grandfathered during the 2026-04-21 migration off the
+old email-match auto-enroll path; no new code writes it.
+
+### `canvas_roster_entries/{class_id}__{canvas_user_id}`
+
+Canvas-truth view of the class roster — a read-only mirror of who Canvas
+says is enrolled in the course. Written only by Canvas PAT sync. Used to
+render the "On Canvas roster" badge on the teacher-side roster view and
+the "not yet joined" gap list. Does **not** grant class access in Lingual
+— only an `enrollments/` row does.
+
+Fields:
+
+- `class_id`
+- `connection_id`
+- `canvas_user_id`
+- `canvas_email`
+- `canvas_name`
+- `synced_at`
+- `created_at`
+
+Purpose:
+
+Decouple the Canvas roster signal (who Canvas thinks is in the course)
+from Lingual enrollment (who has affirmatively joined and granted
+whatever consent the org policy requires). A student is "Canvas-rostered"
+when a row exists here, and "Lingual-enrolled" when a row exists in
+`enrollments/`; the two are independent.
 
 ### `assignments/{assignmentId}`
 
@@ -1010,4 +1042,4 @@ Official references used to shape the architecture:
 - Should analytics rollups run in Flask, Cloud Functions, or scheduled GCP jobs for beta?
 - Should curriculum package payloads live fully in Firestore, Cloud Storage, or a mixed model?
 - Do we store any raw audio by default for general speaking assignments, or only for pronunciation-enabled assignments?
-- ~~Which LMS gets the first real integration path: Google Classroom or Canvas?~~ **Resolved: Canvas LMS first. Implemented with PAT-based auth, per-class connections stored in `canvas_connections` (encrypted PAT via AES-256-GCM), roster sync with email-first matching, `pending_sync` enrollment status, and `canvas_course_content` for student module view. See `backend/services/canvas/` and `backend/routes/integrations.py`.**
+- ~~Which LMS gets the first real integration path: Google Classroom or Canvas?~~ **Resolved: Canvas LMS first. Implemented with PAT-based auth, per-class connections stored in `canvas_connections` (encrypted PAT via AES-256-GCM), roster visibility via `canvas_roster_entries/` (Canvas-truth view only; does not create enrollments — see the 2026-04-21 roster-decouple invariant in §4.1), and `canvas_course_content` for student module view. See `backend/services/canvas/` and `backend/routes/integrations.py`. Enrollments are created only by join code (student action) or LTI launch (consent-by-click), never by PAT sync.**

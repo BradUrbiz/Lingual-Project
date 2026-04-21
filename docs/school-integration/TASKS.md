@@ -60,15 +60,26 @@ Owner: Engineering + Product
 - [x] Implement LMS connection record model (`canvas_connections`, `canvas_course_content` collections).
 - [x] Implement Canvas API client with pagination and typed errors (`backend/services/canvas/client.py`).
 - [x] Implement PAT encryption with AES-256-GCM (`backend/services/canvas/encryption.py`).
-- [x] Implement roster sync service with email match and pending_sync flow (`backend/services/canvas/sync.py`).
+- [x] Implement roster sync service with email match and pending_sync flow (`backend/services/canvas/sync.py`). *Superseded 2026-04-21: see roster-decouple entry below.*
 - [x] Implement Canvas integration routes: validate, connect, sync, status, disconnect, link/unlink (`backend/routes/integrations.py`).
-- [x] Activate pending Canvas enrollments on student login (`backend/routes/auth.py`).
+- [x] Activate pending Canvas enrollments on student login (`backend/routes/auth.py`). *Removed 2026-04-21: see roster-decouple entry below.*
 - [x] Add Firestore rules for Canvas collections (deny-all for connections, enrolled-student read for content).
 - [x] Build teacher Canvas connect flow (two-step: validate PAT + select course) (`CanvasConnectPage.tsx`).
 - [x] Build Canvas sync status component for class analytics page (`CanvasSyncStatus.tsx`).
 - [x] Build Canvas assignment link picker (`CanvasLinkPicker.tsx`).
 - [x] Build student Canvas module view component (`CanvasModuleView.tsx`).
 - [x] Add Canvas link button to teacher dashboard class cards.
+- [x] Decouple Canvas roster from Lingual enrollments (2026-04-21).
+  See `docs/superpowers/specs/2026-04-21-canvas-roster-decouple-from-enrollment-design.md`
+  and `docs/superpowers/plans/2026-04-21-canvas-roster-decouple-from-enrollment.md`.
+  Ships: new `canvas_roster_entries/` collection, "On Canvas roster" badge
+  and "not yet joined" gap view on the teacher roster, `GET /api/teacher/classes/<class_id>/canvas-roster-gap`
+  endpoint, one-time migration script at `scripts/migrate_canvas_roster_decouple.py`,
+  removal of `pending_sync`-on-login activation in `auth.py`, and removal
+  of email-match auto-enroll from `reconcile_enrollments`. Canvas PAT sync
+  no longer writes to `enrollments/`; enrollments come only from join
+  code or LTI deep-link launch. Deferred: manual "link to Canvas roster
+  entry" UI for the email-mismatch case (see `LIMITATIONS.md` item 20).
 - [ ] Add manual CSV fallback if LMS setup is delayed.
 
 ## Phase 3: Canvas content and assignment authoring

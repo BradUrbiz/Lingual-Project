@@ -78,6 +78,17 @@ Planned follow-up: deployment verification during hardening.
 Impact: PAT-based auth (one connection per class), manual re-sync only (no webhooks), email-first identity matching with pending_sync for unmatched students. Canvas connections store encrypted PATs server-side (AES-256-GCM). Students see synced course content via `canvas_course_content` collection on AppLearningPage with "Start Practice" for linked items. Teachers can link/unlink assignments to Canvas items in the assignment builder. Firebase emulator rule tests require Java runtime which may not be available in all environments.
 Planned follow-up: OAuth2 flow for Canvas auth, automatic webhook-based sync, SIS ID fallback matching, and sync cooldown enforcement.
 
+**2026-04-21 update:** passive email-match auto-enroll is removed. Canvas
+PAT sync now writes only to `canvas_roster_entries/`; enrollments come
+exclusively from join code or LTI. Existing Canvas-sourced active
+enrollments were grandfathered with `join_source='canvas_legacy'`. The
+`pending_sync`-on-login activation in `auth.py` has been deleted along
+with the two database helpers that served it. A new teacher endpoint
+`GET /api/teacher/classes/<class_id>/canvas-roster-gap` returns Canvas-
+rostered students who have not yet joined via code. See
+`docs/superpowers/specs/2026-04-21-canvas-roster-decouple-from-enrollment-design.md`
+and `docs/superpowers/plans/2026-04-21-canvas-roster-decouple-from-enrollment.md`.
+
 11. Disclosure logging covers two endpoints (teacher student analytics drill-down, admin compliance roster) but not all sensitive read paths.
 Impact: the admin roster view logs a single org-scoped event (`student_uid=''`) rather than per-student events to avoid N+1 writes. Other endpoints that surface student data (e.g., class analytics, student drill-down compliance tab, guardian packet views) do not yet emit disclosure events.
 Planned follow-up: extend disclosure logging to remaining sensitive endpoints as the audit requirements are clarified with counsel.
@@ -117,3 +128,19 @@ Planned follow-up: add a `proficiency_band` field to the `classes` collection so
 19. Live2D avatar is intentionally disabled for the pilot runtime.
 Impact: student-facing pilot conversation surfaces now force avatar off even if a user previously enabled it in local storage, and realtime avatar directives are hard-disabled unless the explicit pilot avatar flag is turned back on. The avatar code, routes, and assets remain in the repo for post-pilot reactivation, but they are dormant in the pilot runtime.
 Planned follow-up: re-enable behind explicit frontend/backend pilot flags only if pilot evidence shows the avatar materially improves engagement or outcomes.
+
+### Canvas roster confirmation signal
+
+20. Canvas roster confirmation signal uses email equality only.
+Impact: the teacher-side "On Canvas roster" badge matches by exact
+lowercased email equality between the Lingual account email and the
+`canvas_roster_entries.canvas_email` value. Students whose Lingual
+account email differs from their Canvas roster email (different
+provider, personal vs. school) will not get a matched badge even when
+they are on the Canvas roster by name. Teachers can visually confirm
+via the student's display name. The "not yet joined" gap view on the
+teacher roster is similarly email-keyed, so such students will also
+not fall out of the gap list automatically once they join.
+Planned follow-up: add a teacher-side manual "link to Canvas roster
+entry" action, and/or a second-tier match via `canvas_user_id` derived
+from LTI session history.

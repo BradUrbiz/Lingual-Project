@@ -722,22 +722,49 @@ Then the system calls the Canvas API to verify the PAT
 Given a validated Canvas connection with 5 available courses
 When the teacher selects a course and clicks "Connect Course"
 Then the system creates a canvas_connections record with the encrypted PAT (AES-256-GCM)
-  And runs an initial roster sync:
-    | Match | Result |
-    | Canvas student email matches Lingual user | Active enrollment with join_source "canvas_sync" |
-    | Canvas student email has no Lingual match | pending_sync enrollment (auto-activates on student login) |
+  And runs an initial roster sync that writes one canvas_roster_entries row per Canvas roster student (keyed by class_id + canvas_user_id)
+  And creates zero enrollments (enrollments come only from join code or LTI launch)
   And runs a content sync: all Canvas module items are stored as canvas_course_content records
   And navigates the teacher to the class analytics page
 ```
 
-### Scenario: Canvas roster sync activates on student login
+### Scenario: Canvas PAT sync does not enroll students
 
 ```gherkin
-Given a canvas_connections record with pending_sync enrollments for unmatched students
-When a student logs in whose email matches a pending_sync enrollment
-Then the auth flow detects the pending Canvas enrollment
-  And activates it (status changes from pending_sync to active)
-  And the student sees assignments for the Canvas-synced class
+Given a class connected to Canvas with 5 students on the Canvas roster
+When the teacher triggers Canvas sync
+Then 5 canvas_roster_entries rows are created for that class
+  And 0 enrollments are created
+```
+
+### Scenario: Student joining a Canvas-rostered class via code sees a matched badge
+
+```gherkin
+Given a class with a Canvas roster that includes alice@school.edu
+  And alice has a Lingual account using alice@school.edu
+When alice enters the class join code
+Then an active enrollment is created for alice with join_source='join_code'
+  And the teacher's roster view shows alice with an "On Canvas roster" badge
+```
+
+### Scenario: Teacher sees unjoined Canvas roster students in the gap section
+
+```gherkin
+Given a class with a 3-student Canvas roster
+  And only 1 of those students has entered the join code
+When the teacher opens the class roster dialog
+Then the gap section lists the 2 students who haven't joined
+  And the summary line reads "1 of 3 Canvas students joined"
+```
+
+### Scenario: Login does not auto-enroll a Canvas-rostered student
+
+```gherkin
+Given a student's email is on a Canvas roster for class-1 (canvas_roster_entries row exists)
+  And no enrollment exists for that student in class-1
+When the student logs into Lingual
+Then no enrollment is created
+  And the student does not see class-1 in their class list
 ```
 
 ### Scenario: Teacher manually re-syncs Canvas
@@ -746,7 +773,7 @@ Then the auth flow detects the pending Canvas enrollment
 Given a class with an active Canvas connection
 When the teacher clicks "Re-sync" on the Canvas sync status component
 Then the system decrypts the stored PAT
-  And runs roster sync (new students matched, unmatched get pending_sync)
+  And upserts canvas_roster_entries rows for the current Canvas roster (no enrollments are created or modified)
   And runs content sync (new module items upserted, existing items updated)
   And the sync status component updates with the latest sync timestamp
 ```
@@ -779,7 +806,8 @@ Given a class with an active Canvas connection
 When the teacher clicks "Disconnect"
 Then the system deletes the canvas_connections record
   And the sync status component shows "Not connected" with a "Connect Canvas" button
-  And existing enrollments created via Canvas sync remain active
+  And existing student enrollments (join_source='join_code', 'lti', or grandfathered 'canvas_legacy') remain active
+  And the "On Canvas roster" badge falls back based on whatever canvas_roster_entries rows exist at read time
 ```
 
 ---
@@ -928,3 +956,5 @@ The following constraints are shipped behavior documented in LIMITATIONS.md. The
 | 10 | Disclosure logging covers 2 endpoints | Only teacher student drill-down and admin roster emit disclosure events |
 | 11 | TeacherRoute does not distinguish teacher from school_admin | Admin page scenarios are accessible to teachers at the route level; server-side enforcement is the real gate |
 | 12 | Student weekly stats are mocked | AppLearningPage scenario stats (streak, XP, etc.) are hardcoded constants |
+| 13 | Canvas PAT sync does not create enrollments (2026-04-21) | Enrollments require join code or LTI launch; Canvas roster presence only populates `canvas_roster_entries/` and drives the teacher-side badge + gap view. No `pending_sync`-on-login activation. |
+| 14 | Canvas roster confirmation is email-keyed only | "On Canvas roster" badge / "not yet joined" gap matching relies on exact lowercased email equality between the Lingual account and `canvas_roster_entries.canvas_email`; students with mismatched emails will not be auto-recognized. |

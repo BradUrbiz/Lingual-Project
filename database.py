@@ -101,7 +101,11 @@ Schema:
     - student_uid: str
     - student_membership_id: str (optional)
     - status: str ('active' | 'inactive' | 'pending_sync')
-    - join_source: str ('manual' | 'join_code' | 'canvas')
+    - join_source: str ('manual' | 'join_code' | 'canvas_legacy' | 'lti')
+      (note: 'canvas' was historically used by Canvas PAT sync and may still
+      appear in older rows. Current Canvas PAT sync no longer writes
+      enrollments — see canvas_roster_entries/. 'canvas_legacy' marks
+      rows grandfathered by the 2026-04-21 migration.)
     - student_number: str (optional)
     - guardian_contact_required: bool
     - canvas_user_id: str (optional, Canvas integration)
@@ -2333,34 +2337,6 @@ def count_canvas_roster_entries(class_id):
         return int(agg[0][0].value)
     except (AttributeError, NotImplementedError):
         return len(list_canvas_roster_entries(class_id))
-
-
-def list_pending_canvas_enrollments_by_email(email):
-    """Find pending_sync enrollments by canvas_email (for login-time activation)."""
-    if not email:
-        return []
-    docs = (
-        get_enrollments_collection()
-        .where('canvas_email', '==', email)
-        .where('status', '==', 'pending_sync')
-        .stream()
-    )
-    results = []
-    for doc in docs:
-        data = doc.to_dict() or {}
-        data['id'] = doc.id
-        results.append(data)
-    return results
-
-
-def activate_pending_canvas_enrollment(enrollment_id, student_uid, student_membership_id):
-    """Convert a pending_sync enrollment to active with a real student uid."""
-    get_enrollment_ref(enrollment_id).update({
-        'student_uid': student_uid,
-        'student_membership_id': student_membership_id,
-        'status': 'active',
-        'updated_at': firestore.SERVER_TIMESTAMP,
-    })
 
 
 def link_assignment_to_canvas_item(assignment_id, canvas_content_id, canvas_module_item_id):

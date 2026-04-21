@@ -279,7 +279,8 @@ class TestEnrollmentIndexes(FirestoreIndexTestBase):
 
     def test_query_enrollments_by_canvas_email_status(self):
         """Compound query: canvas_email + status
-        (used by list_pending_canvas_enrollments_by_email)."""
+        (supports historical lookup of Canvas-synced enrollments, including
+        'canvas_legacy' rows grandfathered by the 2026-04-21 migration)."""
         self._seed_enrollments()
 
         results = list(

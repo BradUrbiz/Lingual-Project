@@ -255,8 +255,26 @@ export interface ClassRosterStudent {
   joinSource?: string;
   enrolledAt?: string | null;
   status: string;
-  canvasEmail?: string;
-  canvasName?: string;
+  // Set true/false only when the class has a Canvas connection.
+  // Undefined when no Canvas connection exists for the class.
+  isOnCanvasRoster?: boolean;
+}
+
+export interface CanvasRosterGapEntry {
+  canvas_name: string;
+  canvas_email: string;
+  synced_at?: string | null;
+}
+
+export interface CanvasRosterGapSummary {
+  canvas_total: number;
+  joined: number;
+  not_joined: number;
+}
+
+export interface CanvasRosterGapResponse {
+  gap: CanvasRosterGapEntry[];
+  summary: CanvasRosterGapSummary | null;
 }
 
 // --- Org-wide compliance (school-wide admin tooling) ---

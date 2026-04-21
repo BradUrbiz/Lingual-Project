@@ -7,6 +7,9 @@ import type {
   ClassAnalyticsData,
   ClassJoinCodeData,
   ClassRosterStudent,
+  CanvasRosterGapEntry,
+  CanvasRosterGapResponse,
+  CanvasRosterGapSummary,
   CreateTeacherClassPayload,
   GuardianConsentIssueResult,
   GuardianConsentPacket,
@@ -276,6 +279,23 @@ export const getClassRoster = async (classId: string): Promise<ClassRosterStuden
 
 export const removeStudentFromClass = async (classId: string, studentUid: string): Promise<void> => {
   await api.delete(`/teacher/classes/${classId}/students/${studentUid}`);
+};
+
+// ── Canvas roster gap (advisory; does not drive enrollment) ───────────
+
+interface CanvasRosterGapApiResponse {
+  success: boolean;
+  gap: CanvasRosterGapEntry[];
+  summary: CanvasRosterGapSummary | null;
+}
+
+export const getClassCanvasRosterGap = async (
+  classId: string,
+): Promise<CanvasRosterGapResponse> => {
+  const response = await api.get<CanvasRosterGapApiResponse>(
+    `/teacher/classes/${classId}/canvas-roster-gap`,
+  );
+  return { gap: response.data.gap, summary: response.data.summary };
 };
 
 // ── Guardian consent ──────────────────────────────────────────────────

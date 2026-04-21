@@ -130,21 +130,6 @@ class FakeCanvasDb:
             if e.get('class_id') == class_id and (not status or e.get('status') == status)
         ]
 
-    def list_pending_canvas_enrollments_by_email(self, email):
-        if not email:
-            return []
-        return [
-            dict(e) for e in self.enrollments.values()
-            if e.get('canvas_email') == email and e.get('status') == 'pending_sync'
-        ]
-
-    def activate_pending_canvas_enrollment(self, enrollment_id, student_uid, student_membership_id):
-        enrollment = self.enrollments.get(enrollment_id)
-        if enrollment:
-            enrollment['student_uid'] = student_uid
-            enrollment['student_membership_id'] = student_membership_id
-            enrollment['status'] = 'active'
-
     # ── Canvas-extended classes ──────────────────────────────────────────
 
     def create_class(
@@ -328,52 +313,6 @@ class CanvasEnrollmentTests(unittest.TestCase):
         active = self.db.list_class_enrollments('class-1', status='active')
         self.assertEqual(len(active), 1)
         self.assertEqual(active[0]['student_uid'], 'student-1')
-
-    def test_list_pending_canvas_enrollments_by_email(self):
-        self.db.create_enrollment(
-            class_id='class-1', student_uid='pending:cv1',
-            status='pending_sync', join_source='canvas',
-            canvas_user_id='cv1', canvas_email='student@example.com',
-            enrollment_id='class-1__cv1',
-        )
-        self.db.create_enrollment(
-            class_id='class-2', student_uid='pending:cv2',
-            status='pending_sync', join_source='canvas',
-            canvas_user_id='cv2', canvas_email='student@example.com',
-            enrollment_id='class-2__cv2',
-        )
-        # Different email
-        self.db.create_enrollment(
-            class_id='class-1', student_uid='pending:cv3',
-            status='pending_sync', join_source='canvas',
-            canvas_user_id='cv3', canvas_email='other@example.com',
-            enrollment_id='class-1__cv3',
-        )
-        matches = self.db.list_pending_canvas_enrollments_by_email('student@example.com')
-        self.assertEqual(len(matches), 2)
-        emails = {m['canvas_email'] for m in matches}
-        self.assertEqual(emails, {'student@example.com'})
-
-    def test_list_pending_canvas_enrollments_empty_email_returns_empty(self):
-        self.assertEqual(self.db.list_pending_canvas_enrollments_by_email(''), [])
-        self.assertEqual(self.db.list_pending_canvas_enrollments_by_email(None), [])
-
-    def test_activate_pending_canvas_enrollment(self):
-        eid = self.db.create_enrollment(
-            class_id='class-1', student_uid='pending:cv1',
-            status='pending_sync', join_source='canvas',
-            canvas_user_id='cv1', canvas_email='student@example.com',
-            enrollment_id='class-1__cv1',
-        )
-        self.db.activate_pending_canvas_enrollment(eid, 'real-uid-1', 'mem-1')
-        activated = self.db.enrollments[eid]
-        self.assertEqual(activated['status'], 'active')
-        self.assertEqual(activated['student_uid'], 'real-uid-1')
-        self.assertEqual(activated['student_membership_id'], 'mem-1')
-        # Canvas fields preserved
-        self.assertEqual(activated['canvas_user_id'], 'cv1')
-        self.assertEqual(activated['canvas_email'], 'student@example.com')
-
 
 class CanvasClassExtensionTests(unittest.TestCase):
 

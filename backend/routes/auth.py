@@ -42,33 +42,6 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
 
             deps.db.get_or_create_user(uid, email, name)
 
-            # Activate any pending Canvas enrollments matching this user's email.
-            if email and hasattr(deps.db, 'list_pending_canvas_enrollments_by_email'):
-                pending = deps.db.list_pending_canvas_enrollments_by_email(email)
-                for enrollment in pending:
-                    enrollment_id = enrollment.get('id', '')
-                    class_record = deps.db.get_class(enrollment.get('class_id', ''))
-                    if not class_record:
-                        continue
-                    org_id = class_record.get('org_id', '')
-                    membership_id = f'{org_id}_{uid}'
-                    if not deps.db.get_membership(membership_id):
-                        deps.db.create_membership(
-                            org_id=org_id,
-                            uid=uid,
-                            roles=['student'],
-                            primary_class_ids=[enrollment.get('class_id', '')],
-                            membership_id=membership_id,
-                        )
-                    else:
-                        if hasattr(deps.db, 'add_primary_class_to_membership'):
-                            deps.db.add_primary_class_to_membership(
-                                membership_id, enrollment.get('class_id', ''),
-                            )
-                    deps.db.activate_pending_canvas_enrollment(
-                        enrollment_id, uid, membership_id,
-                    )
-
             preferred_active_membership_id = (session.get('user') or {}).get('active_membership_id')
             school_context = deps.db.resolve_user_school_context(
                 uid,

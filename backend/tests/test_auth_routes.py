@@ -29,8 +29,6 @@ class FakeAuthDb(FakeDbBase):
 
     def __init__(self):
         super().__init__()
-        self.pending_canvas_enrollments: list[dict] = []
-        self.activated_enrollments: list[dict] = []
         self.profile_updates: list[tuple] = []
         self.assessment_resets: list[str] = []
 
@@ -60,18 +58,6 @@ class FakeAuthDb(FakeDbBase):
                 "completed": False,
             }
             user["results"] = None
-
-    # -- Canvas enrollment support --
-
-    def list_pending_canvas_enrollments_by_email(self, email):
-        return [e for e in self.pending_canvas_enrollments if e.get("canvas_email") == email]
-
-    def activate_pending_canvas_enrollment(self, enrollment_id, student_uid, student_membership_id):
-        self.activated_enrollments.append({
-            "enrollment_id": enrollment_id,
-            "student_uid": student_uid,
-            "student_membership_id": student_membership_id,
-        })
 
 
 # ---------------------------------------------------------------------------
@@ -236,41 +222,6 @@ class TestVerifyAuth(unittest.TestCase):
         data = resp.get_json()
         self.assertFalse(data["success"])
         self.assertIn("Token expired", data["error"])
-
-
-class TestVerifyCanvasEnrollment(unittest.TestCase):
-    """6. Verify activates pending Canvas enrollments."""
-
-    def test_activates_pending_canvas_enrollment(self):
-        db = FakeAuthDb()
-        db.classes["class-1"] = {"id": "class-1", "org_id": "org-1"}
-        db.pending_canvas_enrollments = [
-            {
-                "id": "class-1__canvas-user-1",
-                "class_id": "class-1",
-                "canvas_email": "test@example.com",
-                "canvas_user_id": "canvas-user-1",
-                "status": "pending_sync",
-            },
-        ]
-
-        app, db, _ = _build_app(db=db)
-        client = app.test_client()
-
-        resp = _login_session(client)
-        self.assertEqual(resp.status_code, 200)
-
-        # Enrollment activated
-        self.assertEqual(len(db.activated_enrollments), 1)
-        activated = db.activated_enrollments[0]
-        self.assertEqual(activated["enrollment_id"], "class-1__canvas-user-1")
-        self.assertEqual(activated["student_uid"], "test-uid")
-        self.assertEqual(activated["student_membership_id"], "org-1_test-uid")
-
-        # Student membership created
-        mem = db.memberships.get("org-1_test-uid")
-        self.assertIsNotNone(mem)
-        self.assertEqual(mem["roles"], ["student"])
 
 
 class TestUserProfile(unittest.TestCase):

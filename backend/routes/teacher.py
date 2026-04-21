@@ -760,41 +760,40 @@ def create_teacher_blueprint(deps: RouteDeps) -> Blueprint:
     def api_get_class_roster(class_id):
         try:
             _context, _class_record = _require_teacher_class_context(deps, class_id)
-            # Fetch active enrollments (joined students) and pending_sync enrollments (Canvas-imported, awaiting signup).
             active_enrollments = deps.db.list_class_enrollments(class_id)
-            pending_enrollments = deps.db.list_class_enrollments(class_id, status="pending_sync") if hasattr(deps.db, "list_class_enrollments") else []
+
+            # Is this class Canvas-connected? If not, skip the badge lookup.
+            has_canvas_connection = (
+                deps.db.get_canvas_connection_by_class(class_id) is not None
+                if hasattr(deps.db, "get_canvas_connection_by_class")
+                else False
+            )
+
             students = []
             for enrollment in active_enrollments:
                 student_uid = _normalize_string(enrollment.get("student_uid"))
                 if not student_uid:
+                    # Defensive: a row without student_uid is stale
+                    # (e.g. an un-migrated pending_sync). Do not surface it.
                     continue
                 user = deps.db.get_user(student_uid) if hasattr(deps.db, "get_user") else None
-                students.append({
+                row = {
                     "uid": student_uid,
                     "displayName": _get_user_display_name(user, fallback=student_uid),
                     "studentNumber": _normalize_string(enrollment.get("student_number")),
                     "joinSource": _normalize_string(enrollment.get("join_source")),
                     "enrolledAt": _timestamp_to_iso(enrollment.get("created_at")),
                     "status": _normalize_string(enrollment.get("status")) or "active",
-                    "canvasEmail": _normalize_string(enrollment.get("canvas_email")),
-                    "canvasName": _normalize_string(enrollment.get("canvas_name")),
-                })
-            for enrollment in pending_enrollments:
-                # Pending Canvas students don't have a student_uid yet — show by Canvas identity.
-                canvas_email = _normalize_string(enrollment.get("canvas_email"))
-                canvas_name = _normalize_string(enrollment.get("canvas_name"))
-                canvas_user_id = _normalize_string(enrollment.get("canvas_user_id"))
-                display_name = canvas_name or canvas_email or f"Canvas user {canvas_user_id}"
-                students.append({
-                    "uid": "",  # No Lingual UID until they sign up
-                    "displayName": display_name,
-                    "studentNumber": _normalize_string(enrollment.get("student_number")),
-                    "joinSource": _normalize_string(enrollment.get("join_source")),
-                    "enrolledAt": _timestamp_to_iso(enrollment.get("created_at")),
-                    "status": "pending_sync",
-                    "canvasEmail": canvas_email,
-                    "canvasName": canvas_name,
-                })
+                }
+                if has_canvas_connection and hasattr(deps.db, "get_canvas_roster_entry_by_email"):
+                    email = (user or {}).get("email", "") if user else ""
+                    entry = (
+                        deps.db.get_canvas_roster_entry_by_email(class_id, email)
+                        if email else None
+                    )
+                    row["isOnCanvasRoster"] = bool(entry)
+                students.append(row)
+
             students.sort(key=lambda item: item.get("displayName", "").lower())
             return jsonify({"success": True, "roster": students})
         except SchoolContextPermissionError as exc:

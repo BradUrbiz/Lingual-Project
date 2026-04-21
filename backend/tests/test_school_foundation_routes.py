@@ -47,6 +47,8 @@ class FakeSchoolDb:
         self.consent_events = []
         self.user_active_memberships = {}
         self.updated_profiles = []
+        self.canvas_connections = {}
+        self.roster_entries = {}
         self.org_counter = 0
         self.membership_counter = 0
         self.class_counter = 0
@@ -294,6 +296,24 @@ class FakeSchoolDb:
             if membership_id in class_record.get('teacher_membership_ids', [])
             and (not status or class_record.get('status') == status)
         ]
+
+    def get_canvas_connection_by_class(self, class_id):
+        for connection in self.canvas_connections.values():
+            if connection.get('class_id') == class_id:
+                return dict(connection)
+        return None
+
+    def get_canvas_roster_entry_by_email(self, class_id, email):
+        if not email:
+            return None
+        normalized = email.strip().lower()
+        for entry in self.roster_entries.values():
+            if entry.get('class_id') != class_id:
+                continue
+            entry_email = (entry.get('canvas_email') or '').strip().lower()
+            if entry_email == normalized:
+                return dict(entry)
+        return None
 
 
 class SchoolFoundationRoutesTestCase(unittest.TestCase):
@@ -832,6 +852,99 @@ class SchoolFoundationRoutesTestCase(unittest.TestCase):
         # Roster should be empty after removal (soft delete)
         refreshed = self.client.get(f'/api/teacher/classes/{class_id}/roster')
         self.assertEqual(len(refreshed.get_json()['roster']), 0)
+
+    def test_roster_marks_students_on_canvas_roster(self):
+        """Student enrolled via join code whose email matches a canvas_roster_entry
+        should get isOnCanvasRoster=True."""
+        class_id, _org_id = self._bootstrap_school()
+        self.fake_db.canvas_connections['conn-1'] = {
+            'id': 'conn-1',
+            'class_id': class_id,
+        }
+        self.fake_db.roster_entries[f'{class_id}__cv50'] = {
+            'class_id': class_id,
+            'canvas_user_id': 'cv50',
+            'canvas_email': 'student1@example.com',
+            'canvas_name': 'Student One',
+        }
+        self.fake_db.enrollments[f'{class_id}_student-1'] = {
+            'id': f'{class_id}_student-1',
+            'class_id': class_id,
+            'student_uid': 'student-1',
+            'status': 'active',
+            'join_source': 'join_code',
+        }
+
+        response = self.client.get(f'/api/teacher/classes/{class_id}/roster')
+        self.assertEqual(response.status_code, 200)
+        roster = response.get_json()['roster']
+        self.assertEqual(len(roster), 1)
+        self.assertEqual(roster[0]['uid'], 'student-1')
+        self.assertTrue(roster[0]['isOnCanvasRoster'])
+
+    def test_roster_marks_students_not_on_canvas_roster(self):
+        """Student enrolled via join code whose email is NOT on canvas roster
+        (but class has a canvas connection) gets isOnCanvasRoster=False."""
+        class_id, _org_id = self._bootstrap_school()
+        self.fake_db.canvas_connections['conn-1'] = {
+            'id': 'conn-1',
+            'class_id': class_id,
+        }
+        # NO roster entry for student-2.
+        self.fake_db.enrollments[f'{class_id}_student-2'] = {
+            'id': f'{class_id}_student-2',
+            'class_id': class_id,
+            'student_uid': 'student-2',
+            'status': 'active',
+            'join_source': 'join_code',
+        }
+
+        response = self.client.get(f'/api/teacher/classes/{class_id}/roster')
+        self.assertEqual(response.status_code, 200)
+        roster = response.get_json()['roster']
+        self.assertEqual(len(roster), 1)
+        self.assertFalse(roster[0]['isOnCanvasRoster'])
+
+    def test_roster_omits_field_when_no_canvas_connection(self):
+        """When class has no canvas connection, isOnCanvasRoster must not
+        appear in the response at all."""
+        class_id, _org_id = self._bootstrap_school()
+        # No canvas_connections entry for this class.
+        self.fake_db.enrollments[f'{class_id}_student-1'] = {
+            'id': f'{class_id}_student-1',
+            'class_id': class_id,
+            'student_uid': 'student-1',
+            'status': 'active',
+            'join_source': 'join_code',
+        }
+
+        response = self.client.get(f'/api/teacher/classes/{class_id}/roster')
+        self.assertEqual(response.status_code, 200)
+        roster = response.get_json()['roster']
+        self.assertEqual(len(roster), 1)
+        self.assertNotIn('isOnCanvasRoster', roster[0])
+
+    def test_roster_does_not_include_pending_sync_rows(self):
+        """Even if a stale pending_sync enrollment still exists in the DB,
+        the roster endpoint must not surface it. Migration deletes these,
+        but defensive filtering belongs in the endpoint."""
+        class_id, _org_id = self._bootstrap_school()
+        self.fake_db.enrollments[f'{class_id}__cv99'] = {
+            'id': f'{class_id}__cv99',
+            'class_id': class_id,
+            'student_uid': '',
+            'status': 'pending_sync',
+            'join_source': 'canvas',
+            'canvas_email': 'ghost@school.edu',
+            'canvas_name': 'Ghost',
+        }
+        response = self.client.get(f'/api/teacher/classes/{class_id}/roster')
+        self.assertEqual(response.status_code, 200)
+        roster = response.get_json()['roster']
+        # No row with status 'pending_sync' in the payload.
+        self.assertEqual(
+            [s for s in roster if s.get('status') == 'pending_sync'], []
+        )
 
 
 if __name__ == '__main__':

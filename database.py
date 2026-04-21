@@ -2252,7 +2252,7 @@ def get_canvas_roster_entries_collection():
     return get_db().collection('canvas_roster_entries')
 
 
-def _canvas_roster_entry_ref(class_id, canvas_user_id):
+def get_canvas_roster_entry_ref(class_id, canvas_user_id):
     return get_canvas_roster_entries_collection().document(
         f'{class_id}__{canvas_user_id}'
     )
@@ -2265,7 +2265,7 @@ def upsert_canvas_roster_entry(*, class_id, connection_id, canvas_user_id,
     Key: {class_id}__{canvas_user_id}. Preserves created_at on re-upsert,
     refreshes synced_at / canvas_email / canvas_name / connection_id.
     """
-    ref = _canvas_roster_entry_ref(class_id, canvas_user_id)
+    ref = get_canvas_roster_entry_ref(class_id, canvas_user_id)
     existing = ref.get()
     payload = {
         'class_id': class_id,
@@ -2283,7 +2283,7 @@ def upsert_canvas_roster_entry(*, class_id, connection_id, canvas_user_id,
 
 
 def delete_canvas_roster_entry(class_id, canvas_user_id):
-    _canvas_roster_entry_ref(class_id, canvas_user_id).delete()
+    get_canvas_roster_entry_ref(class_id, canvas_user_id).delete()
 
 
 def list_canvas_roster_entries(class_id):
@@ -2320,7 +2320,9 @@ def get_canvas_roster_entry_by_email(class_id, email):
 
 def count_canvas_roster_entries(class_id):
     """Count of roster entries for a class. Falls back to len(list) if
-    the aggregation API is unavailable in tests."""
+    the aggregation API is unavailable in the current firestore client
+    (e.g. older library versions or test fakes that don't implement it).
+    """
     try:
         agg = (
             get_canvas_roster_entries_collection()
@@ -2329,7 +2331,7 @@ def count_canvas_roster_entries(class_id):
             .get()
         )
         return int(agg[0][0].value)
-    except Exception:
+    except (AttributeError, NotImplementedError):
         return len(list_canvas_roster_entries(class_id))
 
 

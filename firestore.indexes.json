@@ -264,6 +264,20 @@
         }
       ]
     }
+    ,{
+      "collectionGroup": "canvas_roster_entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "class_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "canvas_email",
+          "order": "ASCENDING"
+        }
+      ]
+    }
   ],
   "fieldOverrides": []
 }

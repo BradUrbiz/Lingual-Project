@@ -2241,6 +2241,98 @@ def list_canvas_course_content_for_class(class_id):
     return items
 
 
+# ── canvas_roster_entries collection ──────────────────────────────────
+#
+# canvas_roster_entries is the Canvas-truth view of who's on the class
+# roster, kept separate from enrollments/. Sync writes here; enrollment
+# creation never writes here. A roster entry is informational only —
+# enrollment only happens via join code or LTI launch.
+
+def get_canvas_roster_entries_collection():
+    return get_db().collection('canvas_roster_entries')
+
+
+def _canvas_roster_entry_ref(class_id, canvas_user_id):
+    return get_canvas_roster_entries_collection().document(
+        f'{class_id}__{canvas_user_id}'
+    )
+
+
+def upsert_canvas_roster_entry(*, class_id, connection_id, canvas_user_id,
+                               canvas_email, canvas_name):
+    """Idempotent upsert of a single Canvas roster entry.
+
+    Key: {class_id}__{canvas_user_id}. Preserves created_at on re-upsert,
+    refreshes synced_at / canvas_email / canvas_name / connection_id.
+    """
+    ref = _canvas_roster_entry_ref(class_id, canvas_user_id)
+    existing = ref.get()
+    payload = {
+        'class_id': class_id,
+        'connection_id': connection_id,
+        'canvas_user_id': str(canvas_user_id),
+        'canvas_email': (canvas_email or '').lower().strip(),
+        'canvas_name': canvas_name or '',
+        'synced_at': firestore.SERVER_TIMESTAMP,
+    }
+    if existing.exists:
+        ref.update(payload)
+    else:
+        payload['created_at'] = firestore.SERVER_TIMESTAMP
+        ref.set(payload)
+
+
+def delete_canvas_roster_entry(class_id, canvas_user_id):
+    _canvas_roster_entry_ref(class_id, canvas_user_id).delete()
+
+
+def list_canvas_roster_entries(class_id):
+    docs = (
+        get_canvas_roster_entries_collection()
+        .where('class_id', '==', class_id)
+        .stream()
+    )
+    results = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        results.append(data)
+    return results
+
+
+def get_canvas_roster_entry_by_email(class_id, email):
+    """Single-entry lookup used by the 'on Canvas roster' badge."""
+    if not email:
+        return None
+    docs = (
+        get_canvas_roster_entries_collection()
+        .where('class_id', '==', class_id)
+        .where('canvas_email', '==', email.lower().strip())
+        .limit(1)
+        .stream()
+    )
+    for doc in docs:
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        return data
+    return None
+
+
+def count_canvas_roster_entries(class_id):
+    """Count of roster entries for a class. Falls back to len(list) if
+    the aggregation API is unavailable in tests."""
+    try:
+        agg = (
+            get_canvas_roster_entries_collection()
+            .where('class_id', '==', class_id)
+            .count()
+            .get()
+        )
+        return int(agg[0][0].value)
+    except Exception:
+        return len(list_canvas_roster_entries(class_id))
+
+
 def list_pending_canvas_enrollments_by_email(email):
     """Find pending_sync enrollments by canvas_email (for login-time activation)."""
     if not email:

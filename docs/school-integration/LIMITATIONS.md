@@ -29,7 +29,7 @@ Impact: fast for pilot setup, but not yet suitable for real multi-teacher org ad
 Planned follow-up: org settings, invite flows, and role management.
 
 2. Student invite/join flow supports class join codes and Canvas LMS roster sync, but advanced roster workflows are not yet complete.
-Impact: teachers can generate/regenerate/deactivate join codes, students can join via `/app/join`, and teachers can view the roster and remove students. Canvas LMS roster sync is now available — matched students get active enrollments, unmatched students get `pending_sync` enrollments that auto-activate on login. However, CSV import, bulk invite, and email-based invitations are not yet implemented.
+Impact: teachers can generate/regenerate/deactivate join codes, students can join via `/app/join`, and teachers can view the roster and remove students. Canvas LMS roster sync populates a separate `canvas_roster_entries/` collection (not enrollments); students must enter the class code to actually enroll. Teachers see an "on Canvas roster" badge next to enrolled students plus a "not yet joined" gap view. However, CSV import, bulk invite, and email-based invitations are not yet implemented.
 Planned follow-up: CSV roster import, email-based invitations, and Google Classroom integration.
 
 3. Teacher analytics are available at class, assignment, and student level with basic filtering, but are still heuristic-based.
@@ -75,7 +75,7 @@ Planned follow-up: deployment verification during hardening.
 ### Canvas LMS integration
 
 12. Canvas LMS integration is implemented for beta scope with the following constraints:
-Impact: PAT-based auth (one connection per class), manual re-sync only (no webhooks), email-first identity matching with pending_sync for unmatched students. Canvas connections store encrypted PATs server-side (AES-256-GCM). Students see synced course content via `canvas_course_content` collection on AppLearningPage with "Start Practice" for linked items. Teachers can link/unlink assignments to Canvas items in the assignment builder. Firebase emulator rule tests require Java runtime which may not be available in all environments.
+Impact: PAT-based auth (one connection per class), manual re-sync only (no webhooks), roster sync writes to `canvas_roster_entries/` only — never to `enrollments/` (see 2026-04-21 update below). Canvas connections store encrypted PATs server-side (AES-256-GCM). Students see synced course content via `canvas_course_content` collection on AppLearningPage with "Start Practice" for linked items. Teachers can link/unlink assignments to Canvas items in the assignment builder. Firebase emulator rule tests require Java runtime which may not be available in all environments.
 Planned follow-up: OAuth2 flow for Canvas auth, automatic webhook-based sync, SIS ID fallback matching, and sync cooldown enforcement.
 
 **2026-04-21 update:** passive email-match auto-enroll is removed. Canvas

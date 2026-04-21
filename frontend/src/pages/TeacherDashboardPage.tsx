@@ -41,6 +41,7 @@ import {
   deactivateClassJoinCode,
   getClassRoster,
   removeStudentFromClass,
+  getClassCanvasRosterGap,
 } from '@/api/teacher';
 import {
   generateTeacherInviteCode,
@@ -62,6 +63,8 @@ import type {
   CreateTeacherClassPayload,
   TeacherDashboardData,
   TeacherInvitation,
+  CanvasRosterGapEntry,
+  CanvasRosterGapSummary,
 } from '@/types';
 
 const DEFAULT_CLASS_FORM: CreateTeacherClassPayload = {
@@ -96,6 +99,11 @@ export function TeacherDashboardPage() {
   const [roster, setRoster] = useState<ClassRosterStudent[]>([]);
   const [rosterLoading, setRosterLoading] = useState(false);
   const [removingUid, setRemovingUid] = useState<string | null>(null);
+
+  // Canvas roster gap state
+  const [canvasRosterGap, setCanvasRosterGap] = useState<CanvasRosterGapEntry[]>([]);
+  const [canvasRosterSummary, setCanvasRosterSummary] =
+    useState<CanvasRosterGapSummary | null>(null);
 
   // Team section state (school_admin only)
   const [teacherInviteCode, setTeacherInviteCode] = useState<TeacherInviteCodeData | null>(null);
@@ -215,10 +223,17 @@ export function TeacherDashboardPage() {
   const openRosterDialog = async (classId: string) => {
     setRosterClassId(classId);
     setRoster([]);
+    setCanvasRosterGap([]);
+    setCanvasRosterSummary(null);
     setRosterLoading(true);
     try {
-      const students = await getClassRoster(classId);
+      const [students, gapResponse] = await Promise.all([
+        getClassRoster(classId),
+        getClassCanvasRosterGap(classId),
+      ]);
       setRoster(students);
+      setCanvasRosterGap(gapResponse.gap);
+      setCanvasRosterSummary(gapResponse.summary);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load roster.');
     } finally {
@@ -1198,30 +1213,43 @@ export function TeacherDashboardPage() {
             ) : (
               <div className="space-y-2">
                 {roster.map((student, idx) => {
-                  const isPending = student.status === 'pending_sync';
-                  const key = student.uid || student.canvasEmail || `pending-${idx}`;
-                  const subtitle = isPending
-                    ? `Awaiting Lingual signup${student.canvasEmail ? ` · ${student.canvasEmail}` : ''}`
-                    : `${student.joinSource === 'join_code' ? 'Joined via code' : student.joinSource || 'Enrolled'}${
-                        student.enrolledAt ? ` · ${new Date(student.enrolledAt).toLocaleDateString()}` : ''
-                      }`;
+                  const key = student.uid || `row-${idx}`;
+                  const joinedLabel =
+                    student.joinSource === 'join_code'
+                      ? 'Joined via code'
+                      : student.joinSource === 'lti'
+                      ? 'Joined via Canvas LTI'
+                      : student.joinSource === 'canvas_legacy'
+                      ? 'Legacy Canvas enrollment'
+                      : student.joinSource || 'Enrolled';
+                  const enrolledSuffix = student.enrolledAt
+                    ? ` · ${new Date(student.enrolledAt).toLocaleDateString()}`
+                    : '';
+                  const subtitle = `${joinedLabel}${enrolledSuffix}`;
                   return (
                     <div
                       key={key}
                       className="flex items-center justify-between rounded-xl border border-border bg-secondary/40 px-4 py-3"
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-foreground truncate">{student.displayName}</p>
-                          {isPending && (
-                            <span className="rounded-full border border-amber-500/40 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
-                              Canvas pending
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-foreground truncate">
+                            {student.displayName}
+                          </p>
+                          {student.isOnCanvasRoster === true && (
+                            <span className="rounded-full border border-emerald-500/40 bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+                              On Canvas roster
+                            </span>
+                          )}
+                          {student.isOnCanvasRoster === false && (
+                            <span className="rounded-full border border-muted bg-muted/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Not on Canvas roster
                             </span>
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground">{subtitle}</p>
                       </div>
-                      {!isPending && student.uid && (
+                      {student.uid && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1239,6 +1267,43 @@ export function TeacherDashboardPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+            {canvasRosterSummary && (
+              <div className="mt-6 space-y-2 border-t border-border pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Canvas roster — not yet joined
+                  </h3>
+                  <span className="text-xs text-muted-foreground">
+                    {canvasRosterSummary.joined} of {canvasRosterSummary.canvas_total}{' '}
+                    Canvas students joined
+                  </span>
+                </div>
+                {canvasRosterGap.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    All Canvas-rostered students have joined via class code.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      Share the class code with these students to enroll them.
+                    </p>
+                    <ul className="space-y-1">
+                      {canvasRosterGap.map((entry) => (
+                        <li
+                          key={entry.canvas_email}
+                          className="flex items-center justify-between rounded-lg border border-dashed border-border px-3 py-2 text-sm"
+                        >
+                          <span className="truncate">{entry.canvas_name || entry.canvas_email}</span>
+                          <span className="text-xs text-muted-foreground truncate">
+                            {entry.canvas_email}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
               </div>
             )}
           </div>

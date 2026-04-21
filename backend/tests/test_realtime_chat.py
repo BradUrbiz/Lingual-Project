@@ -706,10 +706,11 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
     def test_text_chat_uses_chat_language_mix_for_free_practice(self):
         self.fake_db.chats['student-1']['chat-existing']['language_mix_level'] = 'english_first'
 
-        response = self.client.post('/api/chats/chat-existing/messages', json={
-            'message': 'Can you help me practice?',
-            'uiLanguage': 'en',
-        })
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-openai-key'}, clear=False):
+            response = self.client.post('/api/chats/chat-existing/messages', json={
+                'message': 'Can you help me practice?',
+                'uiLanguage': 'en',
+            })
 
         self.assertEqual(response.status_code, 500)
         self.assertEqual(self.build_system_prompt_calls[-1]['language_mix_level'], 'english_first')

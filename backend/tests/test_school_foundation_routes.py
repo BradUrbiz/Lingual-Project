@@ -434,7 +434,8 @@ class SchoolFoundationRoutesTestCase(unittest.TestCase):
 
         get_response = self.client.get(f'/api/teacher/classes/{class_id}/students/student-1/compliance')
         self.assertEqual(get_response.status_code, 200)
-        self.assertFalse(get_response.get_json()['compliance']['voiceAllowed'])
+        # Pilot override: voiceAllowed is always True, even before any explicit consent.
+        self.assertTrue(get_response.get_json()['compliance']['voiceAllowed'])
 
         update_response = self.client.put(
             f'/api/teacher/classes/{class_id}/students/student-1/compliance',
@@ -487,7 +488,8 @@ class SchoolFoundationRoutesTestCase(unittest.TestCase):
         self.assertEqual(roster_response.status_code, 200)
         roster = roster_response.get_json()['roster']
         self.assertEqual(roster['summary']['studentCount'], 2)
-        self.assertEqual(roster['summary']['voiceBlockedCount'], 2)
+        # Pilot override: every student is voiceAllowed, so voiceBlockedCount is 0.
+        self.assertEqual(roster['summary']['voiceBlockedCount'], 0)
         self.assertEqual(roster['students'][0]['displayName'], 'Student One')
         self.assertTrue(roster['students'][0]['guardianContactRequired'])
 

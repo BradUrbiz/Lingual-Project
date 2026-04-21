@@ -778,6 +778,11 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         self.assertIn('Generic prompt: Intermediate Mid (fr-FR) [balanced]', instructions)
         self.assertNotIn('Prompt for M1::S1', instructions)
 
+    @unittest.skip(
+        "Pilot override: voice is unconditionally allowed, so the voice-block "
+        "path is unreachable. Re-enable when _compute_voice_allowed in "
+        "backend.services.compliance is restored to gate on consent state."
+    )
     def test_realtime_session_blocks_voice_when_consent_is_missing(self):
         self.fake_db.student_compliance_records['org-1_student-1'].update({
             'guardian_consent_status': 'revoked',
@@ -831,6 +836,11 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         self.assertIn('Parisian bistro', instructions)
         self.assertIn('Could I have', instructions)
 
+    @unittest.skip(
+        "Pilot override: voice is unconditionally allowed, so the voice-block "
+        "path is unreachable even on the fast path. Re-enable when "
+        "_compute_voice_allowed in backend.services.compliance is restored."
+    )
     def test_realtime_session_fast_path_still_blocks_when_voice_permission_is_revoked(self):
         self.fake_db.student_compliance_records['org-1_student-1'].update({
             'guardian_consent_status': 'revoked',

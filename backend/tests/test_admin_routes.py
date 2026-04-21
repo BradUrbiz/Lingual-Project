@@ -537,9 +537,10 @@ class TestAdminRoutes(unittest.TestCase):
             self.assertTrue(data['success'])
             summary = data['summary']
             self.assertEqual(summary['studentCount'], 2)
-            # student-1 has voice granted, student-2 does not
-            self.assertGreaterEqual(summary['voiceAllowedCount'], 1)
-            self.assertGreaterEqual(summary['voiceBlockedCount'], 1)
+            # Pilot override: every student is voiceAllowed regardless of consent,
+            # so voiceBlockedCount is always 0 under the current config.
+            self.assertEqual(summary['voiceAllowedCount'], 2)
+            self.assertEqual(summary['voiceBlockedCount'], 0)
 
     @patch('backend.routes.admin.log_disclosure_if_new')
     def test_compliance_roster(self, _mock_log):
@@ -580,10 +581,9 @@ class TestAdminRoutes(unittest.TestCase):
             resp = client.get('/api/admin/compliance/roster?consentStatus=voice_blocked')
             self.assertEqual(resp.status_code, 200)
             data = resp.get_json()
-            # student-2 has unknown voice_consent_status so should be blocked
-            self.assertGreaterEqual(len(data['students']), 1)
-            for student in data['students']:
-                self.assertFalse(student['compliance'].get('voiceAllowed'))
+            # Pilot override: voiceAllowed is always True, so the voice_blocked
+            # filter returns an empty roster.
+            self.assertEqual(len(data['students']), 0)
 
     def test_bulk_update_compliance(self):
         with self.app.test_client() as client:

@@ -28,11 +28,9 @@ export interface CanvasConnectResult {
 }
 
 export interface CanvasSyncRosterResult {
-  matched: number;
-  unmatched: number;
-  deactivated: number;
-  created: number;
-  unchanged: number;
+  entries_upserted: number;
+  entries_removed: number;
+  total_canvas_students: number;
 }
 
 export interface CanvasConnectionStatus {

@@ -40,7 +40,7 @@ describe('CanvasSyncStatus', () => {
     await waitFor(() => {
       expect(screen.getByText(/Korean 101/)).toBeInTheDocument();
       expect(screen.getByText('Synced')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Re-sync/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Refresh Canvas roster/i })).toBeInTheDocument();
     });
   });
 
@@ -56,21 +56,35 @@ describe('CanvasSyncStatus', () => {
     });
   });
 
-  it('triggers sync on button click', async () => {
+  it('triggers sync and renders roster result copy', async () => {
     getCanvasStatusMock.mockResolvedValue({
       connected: true,
       canvasCourseName: 'Korean 101',
       syncStatus: 'completed',
     });
-    syncCanvasMock.mockResolvedValue({ success: true, roster: {}, contentCount: 5 });
+    syncCanvasMock.mockResolvedValue({
+      success: true,
+      roster: { entries_upserted: 12, entries_removed: 2, total_canvas_students: 12 },
+      contentCount: 5,
+    });
 
     render(<CanvasSyncStatus classId="class-1" />);
-    await waitFor(() => expect(screen.getByRole('button', { name: /Re-sync/i })).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: /Re-sync/i }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Refresh Canvas roster/i })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Refresh Canvas roster/i }));
 
     await waitFor(() => {
       expect(syncCanvasMock).toHaveBeenCalledWith('class-1');
     });
+    await waitFor(() => {
+      expect(screen.getByTestId('canvas-roster-result')).toHaveTextContent(
+        '12 Canvas students captured, 2 dropped from roster.',
+      );
+    });
+    expect(
+      screen.getByText(/share your class code to enroll students/i),
+    ).toBeInTheDocument();
   });
 
   it('navigates to connect page when Connect Canvas clicked', async () => {

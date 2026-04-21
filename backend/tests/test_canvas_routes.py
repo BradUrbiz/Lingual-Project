@@ -354,7 +354,9 @@ class SyncEndpointTest(unittest.TestCase):
     def test_sync_triggers_roster_and_content(self, mock_content, mock_roster, MockClient, mock_decrypt):
         from backend.services.canvas.sync import SyncResult
         mock_decrypt.return_value = 'decrypted-pat'
-        mock_roster.return_value = SyncResult(matched=5, unmatched=2, created=7)
+        mock_roster.return_value = SyncResult(
+            entries_upserted=7, entries_removed=2, total_canvas_students=7,
+        )
         mock_content.return_value = 10
 
         db = FakeCanvasRouteDb()
@@ -376,7 +378,9 @@ class SyncEndpointTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertTrue(data['success'])
-        self.assertEqual(data['roster']['matched'], 5)
+        self.assertEqual(data['roster']['entries_upserted'], 7)
+        self.assertEqual(data['roster']['entries_removed'], 2)
+        self.assertEqual(data['roster']['total_canvas_students'], 7)
         mock_roster.assert_called_once()
         mock_content.assert_called_once()
 

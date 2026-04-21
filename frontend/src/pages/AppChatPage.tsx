@@ -10,6 +10,7 @@ import {
   ChevronRight,
   BookOpen,
   MonitorPlay,
+  CircleUserRound,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx } from 'clsx';
@@ -46,7 +47,6 @@ import type {
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/hooks/useAuth';
 
-const FALLBACK_AVATAR = '/imgs/landing/student.jpg';
 const AI_AVATAR = '/imgs/avatars/ai.svg';
 const CHAT_AVATAR_ENABLED_KEY = 'lingual:chat:avatarEnabled';
 const TEXT_AVATAR_SPEAK_MIN_MS = 1200;
@@ -98,7 +98,7 @@ function getClientNow(): number {
 export function AppChatPage() {
   const { lang, t } = useLanguage();
   const { avatarUrl } = useAuth();
-  const userAvatar = avatarUrl || FALLBACK_AVATAR;
+  const userAvatar = avatarUrl || null;
   const [searchParams] = useSearchParams();
   const requestedChatId = searchParams.get('chatId');
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -1021,11 +1021,20 @@ export function AppChatPage() {
                       animate={{ opacity: 1, y: 0 }}
                       className={clsx('flex gap-3', isUser ? 'flex-row-reverse' : 'flex-row')}
                     >
-                      <img
-                        src={isUser ? userAvatar : AI_AVATAR}
-                        alt={isUser ? 'You' : 'Lingual AI'}
-                        className="w-10 h-10 shrink-0 rounded-xl bg-card border-2 border-foreground object-cover object-center"
-                      />
+                      {isUser && !userAvatar ? (
+                        <div
+                          aria-label="You"
+                          className="w-10 h-10 shrink-0 rounded-xl bg-secondary border-2 border-foreground flex items-center justify-center text-muted-foreground"
+                        >
+                          <CircleUserRound className="h-6 w-6" strokeWidth={1.75} />
+                        </div>
+                      ) : (
+                        <img
+                          src={isUser ? (userAvatar as string) : AI_AVATAR}
+                          alt={isUser ? 'You' : 'Lingual AI'}
+                          className="w-10 h-10 shrink-0 rounded-xl bg-card border-2 border-foreground object-cover object-center"
+                        />
+                      )}
                       <div
                         className={clsx(
                           'max-w-[85%] px-3 py-2.5 rounded-xl text-[11.7px] leading-[1.45] border-2',

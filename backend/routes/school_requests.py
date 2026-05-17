@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 
+import database
 from flask import Blueprint, jsonify, request
 
 from backend.route_deps import RouteDeps
+from backend.services.outbox import OutboxTemplate, enqueue_outbox_email
+from database import list_lingual_admin_emails
+
+
+def _public_base_url() -> str:
+    return os.environ.get('PUBLIC_BASE_URL', 'https://lingual.app')
 
 
 def _serialize_request(req: dict | None) -> dict | None:
@@ -72,6 +80,30 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
                 website_url=website_url,
                 canvas_instance_url=canvas_instance_url,
             )
+
+            # Fan-out outbox email to every active lingual admin.
+            review_url = f"{_public_base_url()}/app/lingual-admin/requests"
+            firestore_client = database.get_db()
+            for admin in list_lingual_admin_emails():
+                try:
+                    enqueue_outbox_email(
+                        db=firestore_client,
+                        recipient_email=admin['email'],
+                        recipient_name=admin.get('name'),
+                        template=OutboxTemplate.SCHOOL_REQUEST_TO_LINGUAL,
+                        template_data={
+                            'org_name': school_name,
+                            'requester_name': requester_name,
+                            'requester_email': requester_email,
+                            'review_url': review_url,
+                        },
+                        related_entity_type='school_request',
+                        related_entity_id=request_id,
+                        created_by_uid=uid,
+                    )
+                except Exception as exc:
+                    # Outbox enqueue must never break the business call.
+                    print(f"[outbox] failed to enqueue school_request_to_lingual: {exc}")
 
             created = deps.db.get_school_request(request_id)
             return jsonify({'success': True, 'request': _serialize_request(created)}), 201

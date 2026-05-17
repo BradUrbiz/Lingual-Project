@@ -24,6 +24,7 @@ frontend/.omc/
 .gstack/
 .venv312/
 .claude/
+.agents/
 
 # Playwright accessibility snapshot dumps from local QA sessions
 /after-*.yml

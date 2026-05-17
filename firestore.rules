@@ -161,6 +161,10 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /outbox_emails/{emailId} {
+      allow read, write: if false;  // service-account only; admin SDK bypasses
+    }
+
     match /canvas_connections/{connectionId} {
       allow read, write: if false;
     }

@@ -859,13 +859,24 @@ def resolve_user_school_context(uid, preferred_active_membership_id=None):
 
     active_roles = active_membership.get('roles', []) if active_membership else []
 
-    return {
+    result = {
         'memberships': memberships,
         'active_membership': active_membership,
         'active_membership_id': active_membership.get('id') if active_membership else None,
         'active_organization_id': active_membership.get('orgId') if active_membership else None,
         'active_roles': active_roles,
     }
+
+    # Surface onboarding/role fields for role-aware routing on the frontend.
+    user_doc = get_user(uid) or {}
+    profile = user_doc.get('profile') or {}
+    result['intended_role'] = profile.get('intended_role')
+    result['onboarding_state'] = profile.get('onboarding_state')
+    result['requires_legacy_role_pick'] = is_legacy_user_needing_role_pick(
+        user_doc, result.get('memberships') or []
+    )
+
+    return result
 
 
 def create_class(

@@ -88,3 +88,31 @@ class IsLegacyUserNeedingRolePickTest(unittest.TestCase):
         user_doc = {'profile': {}}
         memberships = [{'status': 'invited', 'roles': ['teacher']}]
         self.assertTrue(database.is_legacy_user_needing_role_pick(user_doc, memberships))
+
+
+class ResolveSchoolContextOnboardingTest(unittest.TestCase):
+    @patch('database.get_user_memberships')
+    @patch('database.get_user')
+    def test_includes_onboarding_fields(self, mock_get_user, mock_memberships):
+        mock_get_user.return_value = {
+            'profile': {'intended_role': 'teacher', 'onboarding_state': 'teacher_pending'},
+        }
+        mock_memberships.return_value = []
+
+        ctx = database.resolve_user_school_context('uid-1')
+
+        self.assertEqual(ctx['intended_role'], 'teacher')
+        self.assertEqual(ctx['onboarding_state'], 'teacher_pending')
+        self.assertFalse(ctx['requires_legacy_role_pick'])
+
+    @patch('database.get_user_memberships')
+    @patch('database.get_user')
+    def test_flags_legacy_user_when_no_role_or_membership(self, mock_get_user, mock_memberships):
+        mock_get_user.return_value = {'profile': {}}
+        mock_memberships.return_value = []
+
+        ctx = database.resolve_user_school_context('uid-1')
+
+        self.assertIsNone(ctx['intended_role'])
+        self.assertIsNone(ctx['onboarding_state'])
+        self.assertTrue(ctx['requires_legacy_role_pick'])

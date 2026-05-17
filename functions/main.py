@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any, Optional
 
 import resend
 from firebase_admin import initialize_app
 from firebase_functions import firestore_fn, scheduler_fn
 from firebase_functions.options import set_global_options
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 set_global_options(max_instances=10)
 initialize_app()
@@ -44,3 +46,24 @@ def send_via_resend(
         'html': html,
     })
     return {'mode': 'live', 'message_id': response.get('id')}
+
+
+_TEMPLATES_DIR = Path(__file__).parent / 'templates'
+_JINJA_ENV = Environment(
+    loader=FileSystemLoader(str(_TEMPLATES_DIR)),
+    autoescape=select_autoescape(['html', 'j2']),
+)
+
+_TEMPLATE_SUBJECTS = {
+    'school_request_to_lingual': lambda data: f"New school registration: {data['org_name']}",
+}
+
+
+def render_template(template_id: str, data: dict[str, Any]) -> tuple[str, str]:
+    """Return (subject, html) for the given template_id + merge data."""
+    if template_id not in _TEMPLATE_SUBJECTS:
+        raise KeyError(f"Unknown template_id: {template_id!r}")
+    template = _JINJA_ENV.get_template(f"{template_id}.html.j2")
+    html = template.render(**data)
+    subject = _TEMPLATE_SUBJECTS[template_id](data)
+    return subject, html

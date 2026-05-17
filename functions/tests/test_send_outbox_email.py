@@ -62,3 +62,32 @@ class ResendClientTest(unittest.TestCase):
                     )
                     payload = mock_resend.Emails.send.call_args[0][0]
                     self.assertEqual(payload['to'], ['admin@lingual.app'])
+
+
+class RenderTemplateTest(unittest.TestCase):
+    def setUp(self):
+        sys.modules.pop('functions.main', None)
+
+    def test_renders_school_request_to_lingual(self):
+        with patch('firebase_admin.initialize_app'):
+            from functions.main import render_template
+
+            subject, html = render_template(
+                'school_request_to_lingual',
+                {
+                    'org_name': 'SF Friends School',
+                    'requester_name': 'Pat',
+                    'requester_email': 'pat@sfschool.edu',
+                    'review_url': 'https://lingual.app/app/lingual-admin/requests',
+                },
+            )
+
+            self.assertEqual(subject, 'New school registration: SF Friends School')
+            self.assertIn('SF Friends School', html)
+            self.assertIn('https://lingual.app/app/lingual-admin/requests', html)
+
+    def test_unknown_template_raises(self):
+        with patch('firebase_admin.initialize_app'):
+            from functions.main import render_template
+            with self.assertRaises(KeyError):
+                render_template('made_up_template', {})

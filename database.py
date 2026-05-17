@@ -539,6 +539,23 @@ def get_user_by_lti_identity(issuer, canvas_user_id, client_id=''):
     return None
 
 
+def is_legacy_user_needing_role_pick(user_doc, memberships):
+    """Return True iff this user predates role-aware signup and has no usable role.
+
+    Decision rule: profile lacks both `intended_role` and `onboarding_state`,
+    AND the user has no `status='active'` memberships.
+    """
+    profile = (user_doc or {}).get('profile') or {}
+    if profile.get('intended_role'):
+        return False
+    if profile.get('onboarding_state'):
+        return False
+    for membership in memberships or []:
+        if (membership or {}).get('status') == 'active':
+            return False
+    return True
+
+
 def update_user(uid, updates):
     """Update top-level user fields."""
     payload = dict(updates or {})

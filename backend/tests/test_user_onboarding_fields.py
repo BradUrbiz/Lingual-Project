@@ -63,3 +63,28 @@ class UpdateUserProfileOnboardingTest(unittest.TestCase):
     def test_rejects_invalid_onboarding_state(self):
         with self.assertRaisesRegex(ValueError, 'Invalid onboarding_state'):
             database.update_user_profile('uid-1', onboarding_state='not-a-state')
+
+
+class IsLegacyUserNeedingRolePickTest(unittest.TestCase):
+    def test_no_role_and_no_memberships_needs_pick(self):
+        user_doc = {'profile': {'display_name': 'Pat'}}
+        self.assertTrue(database.is_legacy_user_needing_role_pick(user_doc, []))
+
+    def test_user_with_intended_role_does_not_need_pick(self):
+        user_doc = {'profile': {'intended_role': 'student'}}
+        self.assertFalse(database.is_legacy_user_needing_role_pick(user_doc, []))
+
+    def test_user_with_onboarding_state_does_not_need_pick(self):
+        user_doc = {'profile': {'onboarding_state': 'complete'}}
+        self.assertFalse(database.is_legacy_user_needing_role_pick(user_doc, []))
+
+    def test_user_with_active_membership_does_not_need_pick(self):
+        user_doc = {'profile': {}}
+        memberships = [{'status': 'active', 'roles': ['teacher']}]
+        self.assertFalse(database.is_legacy_user_needing_role_pick(user_doc, memberships))
+
+    def test_user_with_only_invited_membership_still_needs_pick(self):
+        """status='invited' is not yet active; counts as no membership."""
+        user_doc = {'profile': {}}
+        memberships = [{'status': 'invited', 'roles': ['teacher']}]
+        self.assertTrue(database.is_legacy_user_needing_role_pick(user_doc, memberships))

@@ -8,7 +8,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useLearningLocale } from '@/contexts/LearningLocaleContext';
 import { getUserProfile, saveInitialOnboarding } from '@/api/user';
 import { useAuth } from '@/hooks/useAuth';
-import { getPrivilegedHomeRoute, LEARNER_HOME_ROUTE, LEARNER_SETUP_ROUTE } from '@/lib/homeRoutes';
+import { getOnboardingDestination, LEARNER_HOME_ROUTE, LEARNER_SETUP_ROUTE } from '@/lib/homeRoutes';
 import { LEARNING_LOCALES } from '@/lib/learningLocales';
 import type { AssessmentPreference, LearningLocale } from '@/types';
 
@@ -28,9 +28,9 @@ export function InitialOnboardingPage() {
 
     const loadProfile = async () => {
       try {
-        const privilegedHomeRoute = getPrivilegedHomeRoute(user);
-        if (privilegedHomeRoute) {
-          navigate(privilegedHomeRoute, { replace: true });
+        const onboardingDestination = getOnboardingDestination(user);
+        if (onboardingDestination && onboardingDestination !== LEARNER_SETUP_ROUTE) {
+          navigate(onboardingDestination, { replace: true });
           return;
         }
 

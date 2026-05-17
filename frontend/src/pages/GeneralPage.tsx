@@ -15,7 +15,7 @@ import { AnimatedPage } from '@/components/layout/AnimatedPage';
 import { updateProfile, getUserProfile } from '../api/user';
 import type { Gender, Rigor, ProfileFormData } from '../types';
 import { useAuth } from '@/hooks/useAuth';
-import { getPrivilegedHomeRoute, LEARNER_HOME_ROUTE } from '@/lib/homeRoutes';
+import { getOnboardingDestination, LEARNER_HOME_ROUTE, STUDENT_SETUP_ROUTE } from '@/lib/homeRoutes';
 
 const GENDER_OPTIONS: { id: Gender; labelKey: string }[] = [
   { id: 'male', labelKey: 'general.male' },
@@ -75,9 +75,9 @@ export function GeneralPage() {
 
   const checkExistingProfile = useCallback(async () => {
     try {
-      const privilegedHomeRoute = getPrivilegedHomeRoute(user);
-      if (privilegedHomeRoute && !isEditMode) {
-        navigate(privilegedHomeRoute, { replace: true });
+      const onboardingDestination = getOnboardingDestination(user);
+      if (onboardingDestination && onboardingDestination !== STUDENT_SETUP_ROUTE && !isEditMode) {
+        navigate(onboardingDestination, { replace: true });
         return;
       }
 

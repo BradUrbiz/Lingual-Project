@@ -141,6 +141,10 @@ class SchoolRequestOutboxIntegrationTest(unittest.TestCase):
                     )
                     self.assertIn('org_name', c.kwargs['template_data'])
                     self.assertEqual(c.kwargs['related_entity_type'], 'school_request')
+                    self.assertTrue(
+                        c.kwargs['template_data']['review_url'].endswith('/app/admin/school-requests'),
+                        msg=f"review_url should point at live admin route, got: {c.kwargs['template_data']['review_url']}",
+                    )
 
     def test_outbox_failure_does_not_break_submission(self):
         """If enqueue_outbox_email raises, the submission still returns 201."""

@@ -87,7 +87,7 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             #   outer — catches get_db() / list_lingual_admin_emails() failures
             #   inner — keeps a bad enqueue for one admin from blocking others
             try:
-                review_url = f"{_public_base_url()}/app/lingual-admin/requests"
+                review_url = f"{_public_base_url()}/app/admin/school-requests"
                 firestore_client = database.get_db()
                 for admin in list_lingual_admin_emails():
                     try:

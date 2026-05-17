@@ -104,7 +104,7 @@ class EnqueueOutboxEmailTest(unittest.TestCase):
 
 
 class ListLingualAdminEmailsTest(unittest.TestCase):
-    def _make_doc(self, uid, status, roles=None):
+    def _make_mem_doc(self, uid, status, roles=None):
         """Build a mock Firestore document for a membership."""
         doc = MagicMock()
         doc.to_dict.return_value = {
@@ -114,10 +114,34 @@ class ListLingualAdminEmailsTest(unittest.TestCase):
         }
         return doc
 
+    # Keep the old name as an alias so any direct callers outside this file still work.
+    _make_doc = _make_mem_doc
+
+    def _make_user_doc(self, uid, email, name=None, display_name=None, lingual_admin=True):
+        """Build a mock Firestore document for a users/{uid} record."""
+        doc = MagicMock()
+        doc.id = uid
+        profile = {}
+        if display_name:
+            profile['display_name'] = display_name
+        doc.to_dict.return_value = {
+            'email': email,
+            'name': name,
+            'profile': profile,
+            'lingual_admin': lingual_admin,
+        }
+        return doc
+
+    def _patch_legacy_users(self, user_docs):
+        """Return a context-manager patch that makes the legacy users query return user_docs."""
+        mock_db = MagicMock()
+        mock_db.collection.return_value.where.return_value.stream.return_value = user_docs
+        return patch.object(database, 'get_db', return_value=mock_db)
+
     def test_happy_path_active_included_revoked_excluded(self):
         """Active lingual_admin is returned; revoked one is excluded."""
-        active_doc = self._make_doc('uid-a', 'active')
-        revoked_doc = self._make_doc('uid-b', 'revoked')
+        active_doc = self._make_mem_doc('uid-a', 'active')
+        revoked_doc = self._make_mem_doc('uid-b', 'revoked')
 
         def fake_get_user(uid):
             users = {
@@ -126,11 +150,11 @@ class ListLingualAdminEmailsTest(unittest.TestCase):
             return users.get(uid)
 
         mock_collection = MagicMock()
-        mock_collection.where.return_value.where.return_value.stream.return_value = [active_doc, revoked_doc]
         mock_collection.where.return_value.stream.return_value = [active_doc, revoked_doc]
 
         with patch.object(database, 'get_memberships_collection', return_value=mock_collection), \
-             patch.object(database, 'get_user', side_effect=fake_get_user):
+             patch.object(database, 'get_user', side_effect=fake_get_user), \
+             self._patch_legacy_users([]):
             result = database.list_lingual_admin_emails()
 
         self.assertEqual(len(result), 1)
@@ -139,20 +163,21 @@ class ListLingualAdminEmailsTest(unittest.TestCase):
         self.assertEqual(result[0]['name'], 'Admin Alpha')
 
     def test_empty_when_no_active_lingual_admins(self):
-        """Returns empty list when there are no active lingual_admin memberships."""
+        """Returns empty list when there are no active lingual_admin memberships or legacy flags."""
         mock_collection = MagicMock()
         mock_collection.where.return_value.stream.return_value = []
 
         with patch.object(database, 'get_memberships_collection', return_value=mock_collection), \
-             patch.object(database, 'get_user', return_value=None):
+             patch.object(database, 'get_user', return_value=None), \
+             self._patch_legacy_users([]):
             result = database.list_lingual_admin_emails()
 
         self.assertEqual(result, [])
 
     def test_deduplicates_same_uid_across_multiple_memberships(self):
         """A uid appearing in two active lingual_admin memberships yields one entry."""
-        doc1 = self._make_doc('uid-x', 'active')
-        doc2 = self._make_doc('uid-x', 'active')
+        doc1 = self._make_mem_doc('uid-x', 'active')
+        doc2 = self._make_mem_doc('uid-x', 'active')
 
         def fake_get_user(uid):
             return {'email': 'x@lingual.app', 'name': 'X', 'profile': {}}
@@ -161,7 +186,8 @@ class ListLingualAdminEmailsTest(unittest.TestCase):
         mock_collection.where.return_value.stream.return_value = [doc1, doc2]
 
         with patch.object(database, 'get_memberships_collection', return_value=mock_collection), \
-             patch.object(database, 'get_user', side_effect=fake_get_user):
+             patch.object(database, 'get_user', side_effect=fake_get_user), \
+             self._patch_legacy_users([]):
             result = database.list_lingual_admin_emails()
 
         self.assertEqual(len(result), 1)
@@ -169,8 +195,8 @@ class ListLingualAdminEmailsTest(unittest.TestCase):
 
     def test_result_sorted_by_uid(self):
         """Results are sorted alphabetically by uid for deterministic ordering."""
-        doc_z = self._make_doc('uid-z', 'active')
-        doc_a = self._make_doc('uid-a', 'active')
+        doc_z = self._make_mem_doc('uid-z', 'active')
+        doc_a = self._make_mem_doc('uid-a', 'active')
 
         def fake_get_user(uid):
             return {'email': f'{uid}@lingual.app', 'name': uid, 'profile': {}}
@@ -179,7 +205,82 @@ class ListLingualAdminEmailsTest(unittest.TestCase):
         mock_collection.where.return_value.stream.return_value = [doc_z, doc_a]
 
         with patch.object(database, 'get_memberships_collection', return_value=mock_collection), \
-             patch.object(database, 'get_user', side_effect=fake_get_user):
+             patch.object(database, 'get_user', side_effect=fake_get_user), \
+             self._patch_legacy_users([]):
             result = database.list_lingual_admin_emails()
 
         self.assertEqual([r['uid'] for r in result], ['uid-a', 'uid-z'])
+
+    # ------------------------------------------------------------------
+    # New tests: legacy lingual_admin flag union
+    # ------------------------------------------------------------------
+
+    def test_includes_legacy_lingual_admin_flag_users(self):
+        """A user with lingual_admin=True on their user doc but no membership is included."""
+        # No membership-based admins
+        mock_collection = MagicMock()
+        mock_collection.where.return_value.stream.return_value = []
+
+        legacy_user = self._make_user_doc(
+            uid='legacy-uid',
+            email='legacy@lingual.app',
+            name='Legacy Admin',
+            display_name='Legacy Admin Display',
+        )
+
+        with patch.object(database, 'get_memberships_collection', return_value=mock_collection), \
+             patch.object(database, 'get_user', return_value=None), \
+             self._patch_legacy_users([legacy_user]):
+            result = database.list_lingual_admin_emails()
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['uid'], 'legacy-uid')
+        self.assertEqual(result[0]['email'], 'legacy@lingual.app')
+        self.assertEqual(result[0]['name'], 'Legacy Admin Display')
+
+    def test_dedupes_when_user_has_both_membership_and_legacy_flag(self):
+        """A user with both an active membership AND the legacy flag appears exactly once."""
+        shared_uid = 'both-uid'
+        mem_doc = self._make_mem_doc(shared_uid, 'active')
+
+        def fake_get_user(uid):
+            return {'email': 'both@lingual.app', 'name': 'Both Admin', 'profile': {'display_name': 'Both Display'}}
+
+        mock_collection = MagicMock()
+        mock_collection.where.return_value.stream.return_value = [mem_doc]
+
+        legacy_user = self._make_user_doc(
+            uid=shared_uid,
+            email='both@lingual.app',
+            name='Both Admin',
+            display_name='Both Display',
+        )
+
+        with patch.object(database, 'get_memberships_collection', return_value=mock_collection), \
+             patch.object(database, 'get_user', side_effect=fake_get_user), \
+             self._patch_legacy_users([legacy_user]):
+            result = database.list_lingual_admin_emails()
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['uid'], shared_uid)
+
+    def test_legacy_only_user_with_no_email_is_skipped(self):
+        """A legacy-flag user whose user doc has no email field is not included."""
+        mock_collection = MagicMock()
+        mock_collection.where.return_value.stream.return_value = []
+
+        no_email_doc = MagicMock()
+        no_email_doc.id = 'no-email-uid'
+        no_email_doc.to_dict.return_value = {
+            'lingual_admin': True,
+            'name': 'No Email Admin',
+            'profile': {},
+            # no 'email' key
+        }
+
+        with patch.object(database, 'get_memberships_collection', return_value=mock_collection), \
+             patch.object(database, 'get_user', return_value=None), \
+             self._patch_legacy_users([no_email_doc]):
+            result = database.list_lingual_admin_emails()
+
+        self.assertEqual(result, [])

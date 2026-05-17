@@ -880,34 +880,55 @@ def resolve_user_school_context(uid, preferred_active_membership_id=None):
 
 
 def list_lingual_admin_emails():
-    """Return [{uid, email, name}] for every user with an active `lingual_admin` membership.
+    """Return [{uid, email, name}] for every user with Lingual-admin authority.
 
-    Used by outbox templates that fan out to vendor-side staff. Order is
-    deterministic by uid (alphabetical) so tests are stable.
+    Two sources are unioned:
+    1. Active memberships with role 'lingual_admin' (preferred, new model).
+    2. Legacy individual flag ``users/{uid}.lingual_admin == True`` (predates memberships).
+
+    Until the legacy flag is fully migrated, either source can grant authority;
+    this helper returns recipients for both paths so notification emails reach
+    everyone who could actually approve a school request.
+
+    Order is deterministic by uid (alphabetical) so tests are stable.
     """
+    recipients_by_uid = {}
+
+    # Source 1: active lingual_admin memberships
     membership_docs = (
         get_memberships_collection()
         .where('roles', 'array_contains', 'lingual_admin')
         .stream()
     )
-    seen_uids = set()
-    recipients = []
     for doc in membership_docs:
         data = doc.to_dict() or {}
         if data.get('status') != 'active':
             continue
         uid = data.get('uid')
-        if not uid or uid in seen_uids:
+        if not uid or uid in recipients_by_uid:
             continue
-        seen_uids.add(uid)
         user = get_user(uid) or {}
         email = user.get('email')
         if not email:
             continue
         display_name = (user.get('profile') or {}).get('display_name') or user.get('name')
-        recipients.append({'uid': uid, 'email': email, 'name': display_name})
-    recipients.sort(key=lambda r: r['uid'])
-    return recipients
+        recipients_by_uid[uid] = {'uid': uid, 'email': email, 'name': display_name}
+
+    # Source 2: legacy users.{uid}.lingual_admin == True
+    # This flag predates the memberships model; unioning ensures admins granted
+    # authority via either path receive notification emails.
+    for user_doc in get_db().collection('users').where('lingual_admin', '==', True).stream():
+        uid = user_doc.id
+        if uid in recipients_by_uid:
+            continue
+        data = user_doc.to_dict() or {}
+        email = data.get('email')
+        if not email:
+            continue
+        display_name = (data.get('profile') or {}).get('display_name') or data.get('name')
+        recipients_by_uid[uid] = {'uid': uid, 'email': email, 'name': display_name}
+
+    return sorted(recipients_by_uid.values(), key=lambda r: r['uid'])
 
 
 def create_class(

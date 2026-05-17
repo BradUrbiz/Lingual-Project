@@ -124,6 +124,10 @@ def _send_outbox_email_impl(event) -> None:
     })
 
 
+# Use on_document_written (not on_document_created) so the retry sweep's
+# 'failed' -> 'pending' status update re-triggers this function. The
+# early-exit guard on line 81 prevents loops by ignoring non-actionable
+# statuses ('sending', 'sent', 'sent_dev', 'dead_letter').
 @firestore_fn.on_document_written(document='outbox_emails/{emailId}')
 def send_outbox_email(event):
     """Send pending outbox emails. Also re-handles 'failed' docs that retry sweep promoted."""

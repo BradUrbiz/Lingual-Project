@@ -9,7 +9,7 @@ export function LingualAdminRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!(user as unknown as Record<string, unknown>).lingualAdmin) {
+  if (!user.lingualAdmin) {
     return <Navigate to="/app/learn" replace />;
   }
 

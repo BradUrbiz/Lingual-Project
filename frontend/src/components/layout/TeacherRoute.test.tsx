@@ -111,7 +111,7 @@ describe('TeacherRoute', () => {
     expect(screen.queryByText('Teacher Dashboard')).not.toBeInTheDocument();
   });
 
-  it('redirects users without memberships to school setup', () => {
+  it('redirects users without memberships to teacher join-org', () => {
     authState.user = {
       uid: 'new-user',
       email: 'new@example.com',
@@ -124,7 +124,7 @@ describe('TeacherRoute', () => {
         <MembershipProvider>
           <Routes>
             <Route path="/app/learn" element={<div>Learn Page</div>} />
-            <Route path="/school/setup" element={<div>School Setup</div>} />
+            <Route path="/signup/teacher/join-org" element={<div>Teacher Join Org</div>} />
             <Route
               path="/app/teacher"
               element={
@@ -138,7 +138,7 @@ describe('TeacherRoute', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('School Setup')).toBeInTheDocument();
+    expect(screen.getByText('Teacher Join Org')).toBeInTheDocument();
     expect(screen.queryByText('Teacher Dashboard')).not.toBeInTheDocument();
   });
 });

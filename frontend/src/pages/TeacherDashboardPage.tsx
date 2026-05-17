@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { TEACHER_JOIN_ORG_ROUTE } from '@/lib/homeRoutes';
 import {
   AlertTriangle,
   BookOpen,
@@ -419,8 +420,8 @@ export function TeacherDashboardPage() {
         <Alert variant="destructive">
           <AlertDescription>{error || 'Teacher dashboard is unavailable.'}</AlertDescription>
         </Alert>
-        <Button variant="outline" onClick={() => navigate('/school/setup')}>
-          Go to school setup
+        <Button variant="outline" onClick={() => navigate(TEACHER_JOIN_ORG_ROUTE)}>
+          Go to teacher join
         </Button>
       </div>
     );

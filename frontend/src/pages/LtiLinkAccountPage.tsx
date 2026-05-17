@@ -85,7 +85,7 @@ export function LtiLinkAccountPage() {
                 You need a Lingual account before you can use Canvas integration.
                 Sign up or log in, then relaunch from Canvas.
               </p>
-              <Link to="/auth" className="block">
+              <Link to="/login" className="block">
                 <Button className="w-full">
                   <LogIn className="mr-2 h-4 w-4" />
                   Sign Up / Log In

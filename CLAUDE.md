@@ -246,3 +246,4 @@ The repo ships a local plugin at `.claude/plugins/lingual-dev-agents/` with five
 - **Compliance gating is architecture, not polish.** Voice sessions fail closed without consent. Treat any change that touches voice, audio retention, or guardian flows as high-scrutiny.
 - **Analytics are heuristic for now** (see LIMITATIONS.md #7, #8). Do not market them as model-verified scoring until that's true.
 - **Canvas roster ≠ enrollments.** Preserve the decoupling from 2026-04-21.
+- **Implementation conventions** (test framework, DI patterns, naming, Cloud Function `_impl`+wrapper split, outbox usage, Plan 1 contract surface): see `docs/superpowers/codebase-conventions.md`. Read it before writing plan code.

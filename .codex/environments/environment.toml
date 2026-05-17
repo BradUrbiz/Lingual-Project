@@ -5,10 +5,12 @@ name = "Lingual-Project"
 [setup]
 script = ""
 
-[[actions]]
-name = "실행됨"
-icon = "run"
-command = "npm run dev"
+[setup.darwin]
+script = '''
+cd /Users/new/Documents/GitHub/Lingual-U/Lingual-Project
+
+pip install -r requirements.txt
+'''
 
 [[actions]]
 name = "Backend"

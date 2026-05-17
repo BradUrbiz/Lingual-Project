@@ -189,6 +189,28 @@ class SchoolRequestOutboxIntegrationTest(unittest.TestCase):
                 self.assertIn(resp.status_code, (200, 201))
                 mock_enq.assert_not_called()
 
+    def test_list_lingual_admin_emails_failure_does_not_break_submission(self):
+        """If listing admins itself fails, the submission still succeeds."""
+        with patch(
+            'backend.routes.school_requests.list_lingual_admin_emails',
+            side_effect=RuntimeError('firestore index missing'),
+        ):
+            with self.app.test_client() as client:
+                self._set_session(client, 'requester-1')
+                resp = client.post(
+                    '/api/school-requests',
+                    json={
+                        'schoolName': 'SF Friends School',
+                        'orgType': 'private',
+                        'websiteUrl': 'https://sfschool.edu',
+                        'email': 'alice@example.com',
+                        'name': 'Alice Teacher',
+                    },
+                )
+                self.assertIn(resp.status_code, (200, 201))
+                body = resp.get_json()
+                self.assertTrue(body['success'])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,21 +1,46 @@
-# Welcome to Cloud Functions for Firebase for Python!
-# To get started, simply uncomment the below code or create your own.
-# Deploy with `firebase deploy`
+"""Cloud Functions for Lingual transactional email."""
 
-from firebase_functions import https_fn
-from firebase_functions.options import set_global_options
+from __future__ import annotations
+
+import os
+from typing import Any, Optional
+
+import resend
 from firebase_admin import initialize_app
+from firebase_functions import firestore_fn, scheduler_fn
+from firebase_functions.options import set_global_options
 
-# For cost control, you can set the maximum number of containers that can be
-# running at the same time. This helps mitigate the impact of unexpected
-# traffic spikes by instead downgrading performance. This limit is a per-function
-# limit. You can override the limit for each function using the max_instances
-# parameter in the decorator, e.g. @https_fn.on_request(max_instances=5).
 set_global_options(max_instances=10)
+initialize_app()
 
-# initialize_app()
-#
-#
-# @https_fn.on_request()
-# def on_request_example(req: https_fn.Request) -> https_fn.Response:
-#     return https_fn.Response("Hello world!")
+DEV_MODE_SENTINEL = {'mode': 'dev', 'message_id': None}
+
+
+def _format_recipient(email: str, name: Optional[str]) -> str:
+    if name:
+        return f"{name} <{email}>"
+    return email
+
+
+def send_via_resend(
+    *,
+    to_email: str,
+    to_name: Optional[str],
+    subject: str,
+    html: str,
+) -> dict[str, Any]:
+    """Send via Resend, or return a dev sentinel if the API key is unset."""
+    api_key = os.environ.get('RESEND_API_KEY')
+    if not api_key:
+        print(f"[resend:dev] would send to {to_email!r} subject={subject!r}")
+        return DEV_MODE_SENTINEL
+
+    resend.api_key = api_key
+    from_address = os.environ.get('RESEND_FROM_ADDRESS', 'Lingual <noreply@lingual.app>')
+    response = resend.Emails.send({
+        'from': from_address,
+        'to': [_format_recipient(to_email, to_name)],
+        'subject': subject,
+        'html': html,
+    })
+    return {'mode': 'live', 'message_id': response.get('id')}

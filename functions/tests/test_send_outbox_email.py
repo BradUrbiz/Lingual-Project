@@ -91,3 +91,144 @@ class RenderTemplateTest(unittest.TestCase):
             from functions.main import render_template
             with self.assertRaises(KeyError):
                 render_template('made_up_template', {})
+
+
+from datetime import datetime, timezone
+
+
+class SendOutboxEmailTriggerTest(unittest.TestCase):
+    def setUp(self):
+        sys.modules.pop('functions.main', None)
+
+    def _make_event(self, after_dict):
+        ev = MagicMock()
+        ev.data = MagicMock()
+        ev.data.after = MagicMock()
+        ev.data.after.to_dict.return_value = after_dict
+        ev.data.after.reference = MagicMock()
+        ev.params = {'emailId': 'em-1'}
+        return ev
+
+    def test_pending_email_sends_and_updates_doc(self):
+        with patch('firebase_admin.initialize_app'):
+            from functions.main import _send_outbox_email_impl
+
+            with patch('functions.main.send_via_resend') as mock_send, \
+                 patch('functions.main.render_template') as mock_render:
+                mock_render.return_value = ('Subject', '<p>hi</p>')
+                mock_send.return_value = {'mode': 'live', 'message_id': 'msg_999'}
+
+                ev = self._make_event({
+                    'recipient': {'email': 'admin@lingual.app', 'name': 'Pat'},
+                    'template_id': 'school_request_to_lingual',
+                    'template_data': {
+                        'org_name': 'X',
+                        'requester_name': 'P',
+                        'requester_email': 'p@x',
+                        'review_url': 'https://x',
+                    },
+                    'status': 'pending',
+                    'attempt_count': 0,
+                })
+
+                _send_outbox_email_impl(ev)
+
+            update_calls = ev.data.after.reference.update.call_args_list
+            statuses = [c.args[0]['status'] for c in update_calls]
+            self.assertIn('sending', statuses)
+            self.assertIn('sent', statuses)
+            sent_call = next(c for c in update_calls if c.args[0]['status'] == 'sent')
+            self.assertEqual(sent_call.args[0]['resend_message_id'], 'msg_999')
+
+    def test_dev_mode_marks_sent_dev(self):
+        with patch('firebase_admin.initialize_app'):
+            from functions.main import _send_outbox_email_impl
+
+            with patch('functions.main.send_via_resend') as mock_send, \
+                 patch('functions.main.render_template') as mock_render:
+                mock_render.return_value = ('Subject', '<p>hi</p>')
+                mock_send.return_value = {'mode': 'dev', 'message_id': None}
+
+                ev = self._make_event({
+                    'recipient': {'email': 'admin@lingual.app', 'name': None},
+                    'template_id': 'school_request_to_lingual',
+                    'template_data': {
+                        'org_name': 'X',
+                        'requester_name': 'P',
+                        'requester_email': 'p@x',
+                        'review_url': 'https://x',
+                    },
+                    'status': 'pending',
+                    'attempt_count': 0,
+                })
+
+                _send_outbox_email_impl(ev)
+
+            update_calls = ev.data.after.reference.update.call_args_list
+            statuses = [c.args[0]['status'] for c in update_calls]
+            self.assertIn('sent_dev', statuses)
+
+    def test_resend_failure_marks_failed_with_retry_remaining(self):
+        with patch('firebase_admin.initialize_app'):
+            from functions.main import _send_outbox_email_impl
+
+            with patch('functions.main.send_via_resend') as mock_send, \
+                 patch('functions.main.render_template') as mock_render:
+                mock_render.return_value = ('Subject', '<p>hi</p>')
+                mock_send.side_effect = RuntimeError('boom')
+
+                ev = self._make_event({
+                    'recipient': {'email': 'admin@lingual.app', 'name': 'Pat'},
+                    'template_id': 'school_request_to_lingual',
+                    'template_data': {
+                        'org_name': 'X',
+                        'requester_name': 'P',
+                        'requester_email': 'p@x',
+                        'review_url': 'https://x',
+                    },
+                    'status': 'pending',
+                    'attempt_count': 2,
+                })
+
+                _send_outbox_email_impl(ev)
+
+            update_calls = ev.data.after.reference.update.call_args_list
+            final = update_calls[-1].args[0]
+            self.assertEqual(final['status'], 'failed')
+            self.assertEqual(final['attempt_count'], 3)
+            self.assertIn('boom', final['error'])
+
+    def test_attempts_exhausted_marks_dead_letter(self):
+        with patch('firebase_admin.initialize_app'):
+            from functions.main import _send_outbox_email_impl
+
+            with patch('functions.main.send_via_resend') as mock_send, \
+                 patch('functions.main.render_template') as mock_render:
+                mock_render.return_value = ('Subject', '<p>hi</p>')
+                mock_send.side_effect = RuntimeError('boom')
+
+                ev = self._make_event({
+                    'recipient': {'email': 'admin@lingual.app', 'name': 'Pat'},
+                    'template_id': 'school_request_to_lingual',
+                    'template_data': {
+                        'org_name': 'X',
+                        'requester_name': 'P',
+                        'requester_email': 'p@x',
+                        'review_url': 'https://x',
+                    },
+                    'status': 'failed',
+                    'attempt_count': 4,  # next attempt would be 5 → terminal
+                })
+
+                _send_outbox_email_impl(ev)
+
+            final_status = ev.data.after.reference.update.call_args_list[-1].args[0]['status']
+            self.assertEqual(final_status, 'dead_letter')
+
+    def test_already_sent_doc_is_skipped(self):
+        with patch('firebase_admin.initialize_app'):
+            from functions.main import _send_outbox_email_impl
+
+            ev = self._make_event({'status': 'sent', 'attempt_count': 1})
+            _send_outbox_email_impl(ev)
+            ev.data.after.reference.update.assert_not_called()

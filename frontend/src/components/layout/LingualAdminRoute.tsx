@@ -6,7 +6,7 @@ export function LingualAdminRoute({ children }: { children: ReactNode }) {
   const { user } = useAuth();
 
   if (!user) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   if (!(user as unknown as Record<string, unknown>).lingualAdmin) {

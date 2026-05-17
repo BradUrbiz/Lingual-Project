@@ -14,6 +14,9 @@ def build_auth_user_payload(uid, email, name, school_context):
         'activeMembershipId': school_context.get('active_membership_id'),
         'activeOrganizationId': school_context.get('active_organization_id'),
         'activeRoles': school_context.get('active_roles', []),
+        'intendedRole': school_context.get('intended_role'),
+        'onboardingState': school_context.get('onboarding_state'),
+        'requiresLegacyRolePick': bool(school_context.get('requires_legacy_role_pick')),
     }
 
 

@@ -199,5 +199,40 @@ class VerifyAuthIntendedRoleTest(unittest.TestCase):
         )
 
 
+class BuildAuthUserPayloadTest(unittest.TestCase):
+    def test_payload_includes_onboarding_fields(self):
+        from backend.routes.auth import build_auth_user_payload
+
+        ctx = {
+            'memberships': [],
+            'active_membership_id': None,
+            'active_organization_id': None,
+            'active_roles': [],
+            'intended_role': 'teacher',
+            'onboarding_state': 'role_selected',
+            'requires_legacy_role_pick': False,
+        }
+        payload = build_auth_user_payload('uid-1', 'pat@school.edu', 'Pat', ctx)
+
+        self.assertEqual(payload['intendedRole'], 'teacher')
+        self.assertEqual(payload['onboardingState'], 'role_selected')
+        self.assertEqual(payload['requiresLegacyRolePick'], False)
+
+    def test_payload_handles_missing_fields(self):
+        from backend.routes.auth import build_auth_user_payload
+
+        ctx = {
+            'memberships': [],
+            'active_membership_id': None,
+            'active_organization_id': None,
+            'active_roles': [],
+        }
+        payload = build_auth_user_payload('uid-1', 'pat@school.edu', 'Pat', ctx)
+
+        self.assertIsNone(payload['intendedRole'])
+        self.assertIsNone(payload['onboardingState'])
+        self.assertFalse(payload['requiresLegacyRolePick'])
+
+
 if __name__ == "__main__":
     unittest.main()

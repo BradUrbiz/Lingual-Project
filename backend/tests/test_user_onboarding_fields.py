@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import MagicMock, patch
 
 import database
 
@@ -31,3 +32,34 @@ class OnboardingConstantsTest(unittest.TestCase):
                 'complete',
             }),
         )
+
+
+class UpdateUserProfileOnboardingTest(unittest.TestCase):
+    @patch('database.get_user_ref')
+    def test_writes_intended_role(self, mock_get_user_ref):
+        user_ref = MagicMock()
+        mock_get_user_ref.return_value = user_ref
+
+        database.update_user_profile('uid-1', intended_role='teacher')
+
+        # update() is called with the full payload dict; check the field is present.
+        args, kwargs = user_ref.update.call_args
+        self.assertEqual(args[0]['profile.intended_role'], 'teacher')
+
+    @patch('database.get_user_ref')
+    def test_writes_onboarding_state(self, mock_get_user_ref):
+        user_ref = MagicMock()
+        mock_get_user_ref.return_value = user_ref
+
+        database.update_user_profile('uid-1', onboarding_state='role_selected')
+
+        args, _ = user_ref.update.call_args
+        self.assertEqual(args[0]['profile.onboarding_state'], 'role_selected')
+
+    def test_rejects_invalid_intended_role(self):
+        with self.assertRaisesRegex(ValueError, 'Invalid intended_role'):
+            database.update_user_profile('uid-1', intended_role='superuser')
+
+    def test_rejects_invalid_onboarding_state(self):
+        with self.assertRaisesRegex(ValueError, 'Invalid onboarding_state'):
+            database.update_user_profile('uid-1', onboarding_state='not-a-state')

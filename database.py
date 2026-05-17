@@ -552,8 +552,15 @@ def update_user_profile(uid, display_name=None, age=None, gender=None,
                         level_objective=None, assessment_preference=None,
                         ui_language=None, learning_locale=None,
                         avatar_url=None, contact_email=None, grade_level=None,
-                        native_language=None, location=None, school_name=None):
+                        native_language=None, location=None, school_name=None,
+                        intended_role=None, onboarding_state=None):
     """Update user profile fields."""
+    # Validate enum fields before touching Firestore.
+    if intended_role is not None and intended_role not in ALLOWED_INTENDED_ROLES:
+        raise ValueError(f"Invalid intended_role: {intended_role!r}")
+    if onboarding_state is not None and onboarding_state not in ALLOWED_ONBOARDING_STATES:
+        raise ValueError(f"Invalid onboarding_state: {onboarding_state!r}")
+
     user_ref = get_user_ref(uid)
     updates = {'updated_at': firestore.SERVER_TIMESTAMP}
 
@@ -589,6 +596,10 @@ def update_user_profile(uid, display_name=None, age=None, gender=None,
         updates['profile.location'] = location
     if school_name is not None:
         updates['profile.school_name'] = school_name
+    if intended_role is not None:
+        updates['profile.intended_role'] = intended_role
+    if onboarding_state is not None:
+        updates['profile.onboarding_state'] = onboarding_state
 
     user_ref.update(updates)
 

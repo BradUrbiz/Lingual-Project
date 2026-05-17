@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request, session
 
 from backend.route_deps import RouteDeps
+from database import ALLOWED_INTENDED_ROLES
 
 
 def build_auth_user_payload(uid, email, name, school_context):
@@ -36,7 +37,7 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
                 return jsonify({'success': False, 'error': 'No token provided'}), 400
 
             intended_role = data.get('intended_role')
-            if intended_role and intended_role not in {'student', 'teacher', 'admin'}:
+            if intended_role and intended_role not in ALLOWED_INTENDED_ROLES:
                 return jsonify({'success': False, 'error': 'Invalid intended_role'}), 400
 
             decoded_token = deps.firebase_auth.verify_id_token(id_token)

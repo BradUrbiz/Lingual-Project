@@ -9,16 +9,15 @@ import {
   CheckCircle,
   Menu,
   X,
-  ArrowRight,
   Loader2,
   Sparkles,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '@/hooks/useAuth';
-import { getUserProfile } from '@/api/user';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { staggerContainer, staggerItem, cardVariants } from '@/lib/animations';
-import { getPrivilegedHomeRoute, LEARNER_HOME_ROUTE, LEARNER_SETUP_ROUTE } from '@/lib/homeRoutes';
+import { getOnboardingDestination, LEARNER_HOME_ROUTE } from '@/lib/homeRoutes';
+import { Button } from '@/components/ui/button';
 
 const HERO_IMAGE = '/imgs/landing/hero.jpg';
 const AVATAR_IMAGES = [
@@ -30,55 +29,34 @@ const AVATAR_IMAGES = [
 
 export function LandingPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [checkingProfile, setCheckingProfile] = useState(false);
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const { t } = useLanguage();
 
   const handleLogin = () => {
     if (!user) {
-      navigate('/auth');
+      navigate('/login');
       return;
     }
-    navigate(getPrivilegedHomeRoute(user) ?? LEARNER_HOME_ROUTE);
+    navigate(getOnboardingDestination(user) ?? LEARNER_HOME_ROUTE);
   };
 
-  const handleGetStarted = async () => {
-    if (!user) {
-      navigate('/auth');
-      return;
-    }
+  type LandingRole = 'student' | 'teacher' | 'admin';
 
-    const privilegedHomeRoute = getPrivilegedHomeRoute(user);
-    if (privilegedHomeRoute) {
-      navigate(privilegedHomeRoute);
-      return;
-    }
-
-    setCheckingProfile(true);
-    try {
-      const profile = await getUserProfile();
-      if (profile.profileCompleted) {
-        if (profile.assessed) {
-          navigate(LEARNER_HOME_ROUTE);
-        } else if (profile.assessmentPreference === 'skip') {
-          navigate(LEARNER_HOME_ROUTE);
-        } else if (profile.assessmentPreference === 'take') {
-          navigate('/assessment');
-        } else {
-          navigate('/onboarding');
-        }
-      } else {
-        navigate(LEARNER_SETUP_ROUTE);
+  const handleStartAsRole = (role: LandingRole) => {
+    if (user) {
+      // Already signed in — route through the dispatcher and ignore the role
+      // because their memberships are the source of truth.
+      const dest = getOnboardingDestination(user);
+      if (dest) {
+        navigate(dest);
+        return;
       }
-    } catch {
-      navigate(LEARNER_SETUP_ROUTE);
-    } finally {
-      setCheckingProfile(false);
     }
+    navigate(`/signup?role=${role}`);
   };
 
-  if (loading || checkingProfile) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}>
@@ -131,7 +109,7 @@ export function LandingPage() {
                 {t('landing.nav.login')}
               </button>
               <motion.button
-                onClick={handleGetStarted}
+                onClick={() => handleStartAsRole('student')}
                 whileHover={{ y: -2, boxShadow: '6px 6px 0 0 #2D2A26' }}
                 whileTap={{ y: 2, boxShadow: '2px 2px 0 0 #2D2A26' }}
                 className="bg-primary text-primary-foreground font-bold py-3 px-6 rounded-xl border-3 border-foreground shadow-stamp transition-all"
@@ -171,7 +149,7 @@ export function LandingPage() {
               <button onClick={handleLogin} className="w-full text-center py-3 font-medium border-2 border-foreground rounded-xl">
                 {t('landing.nav.login')}
               </button>
-              <button onClick={handleGetStarted} className="w-full bg-primary text-primary-foreground py-3 rounded-xl font-bold border-3 border-foreground shadow-stamp-sm">
+              <button onClick={() => handleStartAsRole('student')} className="w-full bg-primary text-primary-foreground py-3 rounded-xl font-bold border-3 border-foreground shadow-stamp-sm">
                 {t('landing.nav.getStarted')}
               </button>
             </div>
@@ -216,24 +194,16 @@ export function LandingPage() {
                 {t('landing.hero.subtitle')}
               </motion.p>
 
-              <motion.div variants={staggerItem} className="flex flex-col sm:flex-row gap-4">
-                <motion.button
-                  onClick={handleGetStarted}
-                  whileHover={{ y: -3, boxShadow: '8px 8px 0 0 #2D2A26' }}
-                  whileTap={{ y: 2, boxShadow: '2px 2px 0 0 #2D2A26' }}
-                  className="bg-primary text-primary-foreground text-lg font-bold py-4 px-8 rounded-xl border-3 border-foreground shadow-stamp flex items-center justify-center gap-2 transition-all"
-                >
-                  {t('landing.hero.ctaPrimary')}
-                  <ArrowRight size={22} strokeWidth={2.5} />
-                </motion.button>
-                <motion.a
-                  href="#schools"
-                  whileHover={{ y: -2 }}
-                  whileTap={{ y: 1 }}
-                  className="bg-card text-foreground text-lg font-bold py-4 px-8 rounded-xl border-3 border-foreground flex items-center justify-center transition-all hover:bg-secondary"
-                >
-                  {t('landing.hero.ctaSecondary')}
-                </motion.a>
+              <motion.div variants={staggerItem} className="grid gap-3 sm:grid-cols-3">
+                <Button onClick={() => handleStartAsRole('student')} className="w-full justify-center">
+                  I'm a Student
+                </Button>
+                <Button onClick={() => handleStartAsRole('teacher')} variant="secondary" className="w-full justify-center">
+                  I'm a Teacher
+                </Button>
+                <Button onClick={() => handleStartAsRole('admin')} variant="outline" className="w-full justify-center">
+                  I'm a School Admin
+                </Button>
               </motion.div>
 
               <motion.div variants={staggerItem} className="mt-10 flex items-center gap-4">
@@ -468,7 +438,7 @@ export function LandingPage() {
               </ul>
 
               <motion.button
-                onClick={() => navigate('/school/setup')}
+                onClick={() => handleStartAsRole('admin')}
                 whileHover={{ y: -3, boxShadow: '6px 6px 0 0 #F5F0E8' }}
                 whileTap={{ y: 2 }}
                 className="bg-background text-ink font-bold py-4 px-8 rounded-xl border-3 border-background shadow-[4px_4px_0_0_#F5F0E8] transition-all"

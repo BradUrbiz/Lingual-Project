@@ -2743,6 +2743,29 @@ def update_school_request(request_id, updates):
     get_school_request_ref(request_id).update(updates)
 
 
+def cancel_school_request(request_id, uid):
+    """Mark a pending school request as cancelled.
+
+    Returns True on success, False when no such request exists.
+    Raises PermissionError if `uid` is not the requester.
+    Raises ValueError if the request is not in `pending` status.
+    """
+    req = get_school_request(request_id)
+    if req is None:
+        return False
+    if req.get('requester_uid') != uid:
+        raise PermissionError(f'Request {request_id} not owned by {uid}')
+    if req.get('status') != 'pending':
+        raise ValueError(
+            f'Request {request_id} is not pending (status={req.get("status")!r})'
+        )
+    update_school_request(request_id, {
+        'status': 'cancelled',
+        'cancelled_at': firestore.SERVER_TIMESTAMP,
+    })
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Teacher invite codes
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@ import io
 import os
 import unittest
 from contextlib import redirect_stderr
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import database
@@ -164,6 +165,53 @@ class HashAttestationIpTest(unittest.TestCase):
         output = buf.getvalue()
         self.assertIn('ATTESTATION_HASH_SALT', output)
         self.assertEqual(output.count('ATTESTATION_HASH_SALT'), 1)
+
+
+class CancelSchoolRequestTest(unittest.TestCase):
+    @patch('database.update_school_request')
+    @patch('database.get_school_request')
+    def test_cancels_own_pending_request(self, mock_get, mock_update):
+        mock_get.return_value = {
+            'id': 'req-1',
+            'requester_uid': 'uid-1',
+            'status': 'pending',
+        }
+        result = database.cancel_school_request('req-1', 'uid-1')
+        self.assertTrue(result)
+        args, _ = mock_update.call_args
+        updates = args[1]
+        self.assertEqual(args[0], 'req-1')
+        self.assertEqual(updates['status'], 'cancelled')
+        self.assertIn('cancelled_at', updates)
+
+    @patch('database.update_school_request')
+    @patch('database.get_school_request')
+    def test_rejects_wrong_owner(self, mock_get, mock_update):
+        mock_get.return_value = {
+            'id': 'req-1',
+            'requester_uid': 'uid-1',
+            'status': 'pending',
+        }
+        with self.assertRaisesRegex(PermissionError, 'not owned'):
+            database.cancel_school_request('req-1', 'uid-OTHER')
+        mock_update.assert_not_called()
+
+    @patch('database.update_school_request')
+    @patch('database.get_school_request')
+    def test_rejects_already_approved(self, mock_get, mock_update):
+        mock_get.return_value = {
+            'id': 'req-1',
+            'requester_uid': 'uid-1',
+            'status': 'approved',
+        }
+        with self.assertRaisesRegex(ValueError, 'not pending'):
+            database.cancel_school_request('req-1', 'uid-1')
+        mock_update.assert_not_called()
+
+    @patch('database.get_school_request')
+    def test_returns_false_when_not_found(self, mock_get):
+        mock_get.return_value = None
+        self.assertFalse(database.cancel_school_request('req-missing', 'uid-1'))
 
 
 if __name__ == '__main__':

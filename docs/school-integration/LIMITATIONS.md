@@ -221,6 +221,24 @@ business actions complete normally but do not produce those emails.
     can inject a fake DB at the boundary instead of relying on an env
     guard. Tracked in TASKS / TECH_SPEC.
 
+30. **Local dev shows intermittent browser 500s during long-running POSTs.**
+    `main.py` runs Werkzeug's threaded dev server (`app.run`) in development.
+    On Python 3.12, Werkzeug occasionally raises
+    `OSError: [Errno 9] Bad file descriptor` during socket cleanup when a
+    request handler holds the connection open across multiple Firestore
+    round-trips (e.g. the approve route's transaction + side effects +
+    outbox enqueue + final read). The Vite proxy interprets the dropped
+    upstream socket as a 500 and surfaces it to the browser, even though
+    the Flask request usually completes successfully on its own thread and
+    logs 200 in the access log. Production is unaffected because Cloud Run
+    uses `gunicorn --workers 1 --threads 8 --timeout 120 main:app` (see
+    Dockerfile), which handles socket lifecycle correctly. When a local
+    approve / submit shows a 500 in the browser: check the backend access
+    log for the actual status, and verify Firestore + outbox state — the
+    work is almost always already done. Optional follow-up: add a Makefile
+    target to run local dev under gunicorn (eliminates the race but loses
+    Flask's auto-reload convenience).
+
 28. **Role grants and changes require a session refresh to take effect.**
     `AuthContext` only re-fetches the auth payload via `/api/auth/verify`
     when Firebase Auth state changes (sign-in / sign-out) — not on every

@@ -13,7 +13,7 @@ class FakeTeacherRequestsDb(FakeDbBase):
         super().__init__()
         self.users = {}
         self.orgs = {}
-        self.memberships = []
+        self._membership_list = []  # renamed from memberships to avoid shadowing FakeDbBase.memberships (dict)
         self.teacher_join_requests = {}
         self._tjr_counter = 0
         self.outbox_writes = []
@@ -25,13 +25,18 @@ class FakeTeacherRequestsDb(FakeDbBase):
     def get_user_memberships(self, uid):
         return [
             {'orgId': m['org_id'], 'roles': m['roles'], 'status': m['status']}
-            for m in self.memberships if m['uid'] == uid
+            for m in self._membership_list if m['uid'] == uid
         ]
 
     # Org lookup
     def get_org_by_teacher_invite_code(self, code):
+        # Mirror production behavior: only return orgs with status='active'.
         for org_id, org in self.orgs.items():
-            if org.get('teacher_invite_code') == code and org.get('teacher_invite_code_active'):
+            if (
+                org.get('teacher_invite_code') == code
+                and org.get('teacher_invite_code_active')
+                and org.get('status') == 'active'  # NEW — mirrors Firestore query filter
+            ):
                 return {'id': org_id, **org}
         return None
 
@@ -88,6 +93,7 @@ class SubmitTeacherJoinRequestTest(unittest.TestCase):
             'name': 'SF Friends',
             'teacher_invite_code': 'ABC123',
             'teacher_invite_code_active': True,
+            'status': 'active',  # required by fake's status='active' filter (mirrors production)
         }
         client = app.test_client()
         with client.session_transaction() as sess:
@@ -131,8 +137,13 @@ class SubmitTeacherJoinRequestTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 404)
         self.assertFalse(resp.get_json()['success'])
 
-    def test_submit_invite_code_for_suspended_org_returns_409(self):
-        """Even if invite code is active, suspended orgs reject new joins."""
+    def test_submit_invite_code_for_suspended_org_returns_404(self):
+        """Suspended orgs are filtered out by get_org_by_teacher_invite_code.
+
+        Production filters status='active' at the Firestore query level, so
+        a stale invite code on a suspended org returns 404 (not found), not
+        a friendlier 409. v1.5 may distinguish; tracked in LIMITATIONS.md.
+        """
         app, db = _build_app()
         db.orgs['org-1'] = {
             'name': 'SF Friends',
@@ -145,8 +156,7 @@ class SubmitTeacherJoinRequestTest(unittest.TestCase):
             sess['user'] = {'uid': 'teacher-1', 'email': 't@x.com'}
 
         resp = client.post('/api/teacher-join-requests', json={'inviteCode': 'ABC123'})
-        self.assertEqual(resp.status_code, 409)
-        self.assertIn('not accepting', resp.get_json()['error'])
+        self.assertEqual(resp.status_code, 404)
 
     def test_submit_unknown_org_id_returns_404(self):
         app, db = _build_app()
@@ -160,7 +170,7 @@ class SubmitTeacherJoinRequestTest(unittest.TestCase):
     def test_submit_when_already_member_same_org_returns_422(self):
         app, db = _build_app()
         db.orgs['org-1'] = {'name': 'SF Friends', 'status': 'active'}
-        db.memberships.append({
+        db._membership_list.append({
             'uid': 'teacher-1', 'org_id': 'org-1',
             'roles': ['teacher'], 'status': 'active',
         })
@@ -177,7 +187,7 @@ class SubmitTeacherJoinRequestTest(unittest.TestCase):
         app, db = _build_app()
         db.orgs['org-1'] = {'name': 'SF Friends', 'status': 'active'}
         db.orgs['org-other'] = {'name': 'Existing School', 'status': 'active'}
-        db.memberships.append({
+        db._membership_list.append({
             'uid': 'teacher-1', 'org_id': 'org-other',
             'roles': ['teacher'], 'status': 'active',
         })

@@ -14,6 +14,7 @@ same blueprint for locality.
 from __future__ import annotations
 
 import logging
+import os
 
 from flask import Blueprint, jsonify, request
 
@@ -28,7 +29,6 @@ _TEACHER_DASHBOARD_PATH = '/app/teacher#pending-requests'
 
 def _base_url():
     """Used for email CTAs. Falls back to relative path in dev."""
-    import os
     return os.environ.get('PUBLIC_BASE_URL', '').rstrip('/')
 
 
@@ -65,14 +65,12 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
         if invite_code:
             org = deps.db.get_org_by_teacher_invite_code(invite_code)
             if not org:
+                # Note: get_org_by_teacher_invite_code() filters status='active'
+                # at the Firestore query level, so suspended orgs return None
+                # and hit this 404. v1.5 may split into two queries to return
+                # a friendlier 409 with "school not accepting new teachers";
+                # see LIMITATIONS.md.
                 return jsonify({'success': False, 'error': 'Invalid or expired invite code.'}), 404
-            if org.get('status') in ('suspended', 'archived', 'inactive'):
-                # Suspended / archived orgs reject new joins even if a stale
-                # invite code is still flagged active on the org doc.
-                return jsonify({
-                    'success': False,
-                    'error': 'This school is not accepting new teachers right now.',
-                }), 409
             source = 'invite_code'
         else:
             org = deps.db.get_organization(org_id_param)
@@ -113,13 +111,20 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
             invite_code=invite_code if source == 'invite_code' else None,
         )
 
-        # Notify admins via outbox. Failure to enqueue must NOT break the
-        # business call (Plan 1 invariant).
+        # Notify admins via outbox. Each enqueue is wrapped individually so
+        # a failure for one admin doesn't suppress the others. Failure of the
+        # admin lookup itself is wrapped in the outer except. (Plan 1 invariant:
+        # outbox issues must NEVER fail the business call.)
         try:
             user = deps.db.get_user(uid) or {}
             admins = deps.db.list_school_admin_emails(org_id)
-            source_label = 'invite code' if source == 'invite_code' else 'school search'
-            for admin in admins:
+        except Exception:
+            log.exception('list_school_admin_emails failed for org=%s', org_id)
+            admins = []
+
+        source_label = 'invite code' if source == 'invite_code' else 'school search'
+        for admin in admins:
+            try:
                 enqueue_outbox_email(
                     db=deps.db,
                     recipient_email=admin['email'],
@@ -136,8 +141,11 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
                     related_entity_id=request_id,
                     created_by_uid=uid,
                 )
-        except Exception:
-            log.exception('Outbox enqueue failed for teacher_join_request=%s', request_id)
+            except Exception:
+                log.exception(
+                    'Outbox enqueue failed for teacher_join_request=%s admin=%s',
+                    request_id, admin.get('uid'),
+                )
 
         # Mark user as awaiting admin review.
         try:

@@ -25,7 +25,8 @@ class FakeSchoolRequestOutboxDb(FakeDbBase):
     # -- School request methods --
 
     def create_school_request(self, requester_uid, requester_email, requester_name,
-                              school_name, org_type, website_url='', canvas_instance_url=''):
+                              school_name, org_type, website_url='', canvas_instance_url='',
+                              enriched=None):
         self._sr_counter += 1
         request_id = f'sr-{self._sr_counter}'
         self.school_requests[request_id] = {

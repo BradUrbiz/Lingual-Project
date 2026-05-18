@@ -45,6 +45,57 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
         if not deps.db.get_user_field(uid, 'lingual_admin'):
             raise PermissionError('Lingual admin access required.')
 
+    # -- Enriched-payload helpers (used by submit_school_request) -------------
+
+    _ENRICHED_FIELDS = (
+        ('location', 'location'),
+        ('schoolType', 'school_type'),
+        ('publicPrivate', 'public_private'),
+        ('gradeSize', 'grade_size'),
+        ('officialEmailDomains', 'official_email_domains'),
+    )
+
+    def _camel_to_snake_admin_identity(camel):
+        if not isinstance(camel, dict):
+            return None
+        return {
+            'full_name': (camel.get('fullName') or '').strip(),
+            'school_email': (camel.get('schoolEmail') or '').strip().lower(),
+            'role_title': (camel.get('roleTitle') or '').strip(),
+        }
+
+    def _camel_to_snake_integration(camel):
+        if not isinstance(camel, dict):
+            return None
+        return {
+            'canvas_url': (camel.get('canvasUrl') or '').strip(),
+            'canvas_integration_types': list(camel.get('canvasIntegrationTypes') or []),
+        }
+
+    def _camel_to_snake_curriculum(camel):
+        if not isinstance(camel, dict):
+            return None
+        return {
+            'grade_ranges': list(camel.get('gradeRanges') or []),
+            'languages_taught': list(camel.get('languagesTaught') or []),
+            'course_frameworks': list(camel.get('courseFrameworks') or []),
+        }
+
+    def _validate_enum(value, allowed, field):
+        if value is None or value == '':
+            return None
+        if value not in allowed:
+            raise ValueError(f'Invalid {field}: {value!r}')
+        return value
+
+    def _validate_enum_list(values, allowed, field):
+        if not values:
+            return []
+        bad = [v for v in values if v not in allowed]
+        if bad:
+            raise ValueError(f'Invalid {field} entries: {bad!r}')
+        return list(values)
+
     # -- User endpoints -------------------------------------------------------
 
     @bp.route('/api/school-requests', methods=['POST'])
@@ -60,7 +111,6 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             if not school_name:
                 return jsonify({'success': False, 'error': 'schoolName is required.'}), 400
 
-            # Reject if user already has a pending or approved request
             existing = deps.db.get_user_school_request(uid)
             if existing and existing.get('status') in ('pending', 'approved'):
                 return jsonify({'success': False, 'error': 'You already have a pending or approved request.'}), 409
@@ -71,6 +121,75 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             website_url = (data.get('websiteUrl') or '').strip()
             canvas_instance_url = (data.get('canvasInstanceUrl') or '').strip()
 
+            # --- Build the enriched payload ---
+            enriched = {}
+
+            for camel_key, snake_key in _ENRICHED_FIELDS:
+                if camel_key not in data:
+                    continue
+                value = data[camel_key]
+                if snake_key == 'school_type':
+                    value = _validate_enum(value, database.ALLOWED_SCHOOL_TYPES, 'schoolType')
+                elif snake_key == 'public_private':
+                    value = _validate_enum(value, database.ALLOWED_PUBLIC_PRIVATE, 'publicPrivate')
+                elif snake_key == 'grade_size':
+                    value = _validate_enum(value, database.ALLOWED_GRADE_SIZES, 'gradeSize')
+                elif snake_key == 'official_email_domains':
+                    value = [str(d).strip().lower() for d in (value or []) if str(d).strip()]
+                if value is not None:
+                    enriched[snake_key] = value
+
+            admin_identity_in = data.get('adminIdentity')
+            if admin_identity_in is not None:
+                ai = _camel_to_snake_admin_identity(admin_identity_in)
+                if ai is None:
+                    return jsonify({'success': False, 'error': 'adminIdentity must be an object'}), 400
+                if not admin_identity_in.get('authorizationAttested') is True:
+                    return jsonify({
+                        'success': False,
+                        'error': 'authorization attestation must be confirmed',
+                    }), 400
+                ai['authorization_attestation'] = {
+                    'confirmed_at': datetime.now(UTC).isoformat(),
+                    'ip_hash': database.hash_attestation_ip(request.remote_addr or ''),
+                    'user_agent': (request.user_agent.string or '')[:512],
+                }
+                enriched['admin_identity'] = ai
+
+            integration_in = data.get('integration')
+            if integration_in is not None:
+                integ = _camel_to_snake_integration(integration_in)
+                if integ is None:
+                    return jsonify({'success': False, 'error': 'integration must be an object'}), 400
+                integ['canvas_integration_types'] = _validate_enum_list(
+                    integ['canvas_integration_types'],
+                    database.ALLOWED_CANVAS_INTEGRATION_TYPES,
+                    'canvasIntegrationTypes',
+                )
+                enriched['integration'] = integ
+
+            curriculum_in = data.get('curriculum')
+            if curriculum_in is not None:
+                cur = _camel_to_snake_curriculum(curriculum_in)
+                if cur is None:
+                    return jsonify({'success': False, 'error': 'curriculum must be an object'}), 400
+                cur['grade_ranges'] = _validate_enum_list(
+                    cur['grade_ranges'], database.ALLOWED_GRADE_RANGES, 'gradeRanges')
+                cur['course_frameworks'] = _validate_enum_list(
+                    cur['course_frameworks'], database.ALLOWED_COURSE_FRAMEWORKS, 'courseFrameworks')
+                cur['languages_taught'] = [
+                    str(s).strip().lower() for s in cur['languages_taught'] if str(s).strip()
+                ]
+                enriched['curriculum'] = cur
+
+            pre_invites = data.get('preInvitedTeachers')
+            if pre_invites is not None:
+                if not isinstance(pre_invites, list):
+                    return jsonify({'success': False, 'error': 'preInvitedTeachers must be a list'}), 400
+                enriched['pre_invited_teachers'] = [
+                    str(e).strip().lower() for e in pre_invites if str(e).strip()
+                ]
+
             request_id = deps.db.create_school_request(
                 requester_uid=uid,
                 requester_email=requester_email,
@@ -79,7 +198,20 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
                 org_type=org_type,
                 website_url=website_url,
                 canvas_instance_url=canvas_instance_url,
+                enriched=enriched or None,
             )
+
+            # Drop the draft — submission is the success terminal.
+            try:
+                deps.db.delete_school_creation_draft(uid)
+            except Exception as exc:
+                print(f'[draft] cleanup failed after submit: {exc}')
+
+            # Move the user's onboarding state forward.
+            try:
+                deps.db.update_user_profile(uid, onboarding_state='awaiting_lingual')
+            except Exception as exc:
+                print(f'[onboarding] state update failed: {exc}')
 
             # Fan-out outbox email to every active lingual admin.
             # The entire block is fire-and-forget: failures must never break the
@@ -116,6 +248,8 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             created = deps.db.get_school_request(request_id)
             return jsonify({'success': True, 'request': _serialize_request(created)}), 201
 
+        except ValueError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 400
         except Exception as exc:
             print(f"School request submission error: {exc}")
             return jsonify({'success': False, 'error': str(exc)}), 500

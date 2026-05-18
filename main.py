@@ -26,6 +26,7 @@ def _validate_required_env() -> None:
     }
     feature = {
         'CANVAS_PAT_ENCRYPTION_KEY': 'Canvas connect returns 503 when a teacher clicks Connect',
+        'PUBLIC_BASE_URL': 'Email CTAs ship with relative URLs which break in email clients',
     }
     missing_hard = [
         f'  - {k}: {reason}'
@@ -154,6 +155,7 @@ from backend.routes.admin import create_admin_blueprint
 from backend.routes.integrations import create_integrations_blueprint
 from backend.routes.canvas_practice import create_canvas_practice_blueprint
 from backend.routes.school_requests import create_school_requests_blueprint
+from backend.routes.teacher_requests import create_teacher_requests_blueprint
 from backend.routes.lti import create_lti_blueprint
 from backend.services.membership_context import (
     SchoolContextNotFoundError,
@@ -428,6 +430,7 @@ def register_domain_blueprints():
     app.register_blueprint(create_integrations_blueprint(deps))
     app.register_blueprint(create_canvas_practice_blueprint(deps))
     app.register_blueprint(create_school_requests_blueprint(deps))
+    app.register_blueprint(create_teacher_requests_blueprint(deps))
     app.register_blueprint(create_lti_blueprint(deps))
     register_avatar_chat_routes(app, deps)
 

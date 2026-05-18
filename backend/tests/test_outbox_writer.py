@@ -21,10 +21,15 @@ class OutboxConstantsTest(unittest.TestCase):
         )
 
     def test_template_enum_is_exhaustive_for_v1(self):
-        # v1 wires only one template; later plans add more.
+        # v1 + Plan 4 wire four templates; later plans add more.
         self.assertEqual(
             {t.value for t in outbox.OutboxTemplate},
-            {'school_request_to_lingual'},
+            {
+                'school_request_to_lingual',
+                'teacher_join_request_to_admin',
+                'teacher_join_approved',
+                'teacher_join_declined',
+            },
         )
 
 

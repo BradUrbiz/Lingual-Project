@@ -374,23 +374,7 @@ export interface DeletionRequestDetail {
 }
 
 // --- School requests (onboarding approval flow) ---
-
-export interface SchoolRequest {
-  id: string;
-  schoolName: string;
-  orgType: string;
-  websiteUrl: string;
-  canvasInstanceUrl: string;
-  requesterUid: string;
-  requesterEmail: string;
-  requesterName: string;
-  status: 'pending' | 'approved' | 'rejected';
-  reviewedByUid: string | null;
-  reviewedAt: string | null;
-  rejectionReason: string | null;
-  createdOrgId: string | null;
-  createdAt: string | null;
-}
+// SchoolRequest has moved to ./schoolRequest.ts (Plan 3 — wizard payload types).
 
 export interface TeacherInvitation {
   id: string;

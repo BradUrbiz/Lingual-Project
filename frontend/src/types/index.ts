@@ -307,9 +307,26 @@ export type {
   OrgComplianceStudentEntry,
   OrgComplianceRosterData,
   OrgGuardianPacketsData,
-  SchoolRequest,
   TeacherInvitation,
 } from './school';
+
+export type {
+  CanvasIntegrationType,
+  CourseFramework,
+  GradeRange,
+  GradeSize,
+  PublicPrivate,
+  RejectionCategory,
+  SchoolRequest,
+  SchoolType,
+  WizardAdminIdentityInput,
+  WizardAdminIdentityStored,
+  WizardCurriculum,
+  WizardDraft,
+  WizardIntegration,
+  WizardLocation,
+  WizardSubmitPayload,
+} from './schoolRequest';
 
 export type {
   AssignmentAnalyticsData,

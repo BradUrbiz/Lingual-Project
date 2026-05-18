@@ -385,8 +385,8 @@ pre_invited_teachers?: string[]   // emails, consumed on approval
 created_org_id?: string           // populated after approval
 reviewed_at?: timestamp
 reviewed_by_uid?: string
-decline_reason?: string
-decline_category?: 'info_missing'|'fraud_risk'|'out_of_scope'|'duplicate'|'other'
+decline_reason?: string         // codebase implements this as `rejection_reason` (existing column name retained for migration safety)
+decline_category?: 'info_missing'|'fraud_risk'|'out_of_scope'|'duplicate'|'other'   // codebase implements this as `rejection_category`
 ```
 
 Schema migration is additive; existing rows have null new fields.

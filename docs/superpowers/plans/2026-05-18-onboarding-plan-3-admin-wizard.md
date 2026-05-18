@@ -864,7 +864,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Why:** When Lingual approves a request, every email in `pre_invited_teachers` becomes a row in `teacher_invitations` so Plan 4's teacher join flow can recognize them. We isolate the helper from the route so the approve endpoint stays compact.
 
-The existing `teacher_invitations` collection structure is already present from older work; we only write `email`, `org_id`, `created_by_uid`, `status='pending'`, `source='pre_invite'`, `created_at`. Plan 4 will define the consume side.
+**Schema compatibility note:** The existing `teacher_invitations` collection (see `database.py:2627` `create_teacher_invitation`) writes `{ org_id, uid, email, name, status, reviewed_by_uid, reviewed_at, created_at }`. Pre-invite rows do not yet have a `uid` or `name` (the teacher hasn't signed up), so we write those as `None`. We additionally add two new fields — `created_by_uid` (the school admin who pre-invited) and `source: 'pre_invite'` — so Plan 4 can distinguish pre-invite rows from admin-generated invitations when consuming them. All rows in the collection have the same key set after this; Plan 4's listers won't see KeyErrors.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -950,6 +950,12 @@ def record_school_request_pre_invites(*, org_id, requester_uid, emails):
 
     Returns the list of new invitation ids in input order (skipping blanks).
     Emails are stripped and lowercased before write.
+
+    Schema: matches the existing `teacher_invitations` doc shape from
+    `create_teacher_invitation`, with `uid` and `name` set to None (the teacher
+    hasn't signed up yet). Adds two new fields — `created_by_uid` and
+    `source` — that existing rows will have absent; Plan 4 readers should
+    treat them as optional.
     """
     cleaned = []
     for raw in emails or []:
@@ -969,12 +975,18 @@ def record_school_request_pre_invites(*, org_id, requester_uid, emails):
         ref = coll.document()
         ids.append(ref.id)
         batch.set(ref, {
-            'email': addr,
+            # Existing-schema fields (match create_teacher_invitation)
             'org_id': org_id,
-            'created_by_uid': requester_uid,
+            'uid': None,                  # unknown until the teacher signs up
+            'email': addr,
+            'name': None,                 # unknown until the teacher signs up
             'status': 'pending',
-            'source': 'pre_invite',
+            'reviewed_by_uid': None,
+            'reviewed_at': None,
             'created_at': firestore.SERVER_TIMESTAMP,
+            # New (additive) fields
+            'created_by_uid': requester_uid,
+            'source': 'pre_invite',
         })
     batch.commit()
     return ids
@@ -3258,6 +3270,13 @@ function clampStep(s: number): WizardStep {
   return s as WizardStep;
 }
 
+/**
+ * Immutably set a value at a dotted path. **Object paths only** — does not
+ * support array indices. The wizard's payload shape (`adminIdentity.fullName`,
+ * `location.country`, `curriculum.gradeRanges` as a whole) only needs object
+ * nesting. If a future field demands array writes, replace this with `lodash.set`
+ * or extend with index parsing.
+ */
 function setByPath(obj: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
   const parts = path.split('.');
   const next = { ...obj };
@@ -5507,7 +5526,7 @@ Example additions (only if not already present):
 
 - [ ] **Step 2: Append LIMITATIONS.md entries**
 
-Open `docs/school-integration/LIMITATIONS.md` and append three entries to the existing numbered list (use the next free numbers; the literals `N`, `N+1`, `N+2` below are placeholders — replace with the actual next sequence numbers in the file):
+Open `docs/school-integration/LIMITATIONS.md` and append five entries to the existing numbered list (use the next free numbers; the literals `N` through `N+4` below are placeholders — replace with the actual next sequence numbers in the file):
 
 ```
 N. **Wizard draft has no TTL.** A `school_creation_drafts/{uid}` document
@@ -5526,6 +5545,21 @@ N+2. **`school_creation_drafts` rules are not under automated coverage in
      extended. The rule mirrors the existing `users/{uid}` ownership
      pattern; a follow-up should add a rules test once a Java-enabled CI
      runner is available.
+
+N+3. **DB column names diverge from spec naming for decline / reject.**
+     Design spec §4 names `decline_reason` / `decline_category` on
+     `school_requests`. The implementation kept the pre-existing column
+     names `rejection_reason` / `rejection_category` to avoid migrating
+     historical rows. API responses use camelCase `rejectionReason` /
+     `rejectionCategory`. User-facing UI copy still says "Declined".
+     Future readers grepping for `decline_reason` will not find it.
+
+N+4. **Admin wizard is English-only.** Wizard labels, helper text, and
+     the three new email templates (`school_request_approved`,
+     `school_request_declined`, `teacher_invitation`) ship in English
+     only. `LanguageProvider` (en/ko) covers the learner app but is not
+     threaded through the wizard. Acceptable for v1 (admin audience is
+     US schools); revisit when expanding outside the US.
 ```
 
 - [ ] **Step 3: Commit**
@@ -5594,9 +5628,20 @@ Confirm in Firestore:
 - For each pre-invite email, a `teacher_invitations/` doc exists with `source='pre_invite'`.
 - Three new outbox docs queued: one `school_request_approved`, one `teacher_invitation` per pre-invite.
 
-- [ ] **Step 5: Verify the pending page resolves**
+- [ ] **Step 5: Verify the pending page resolves AND watch for the refresh-before-navigate race**
 
-Return to the original (admin) browser session. Within 30 seconds, `/signup/admin/pending` should call `refreshUser()` and then redirect to `/app/teacher` (the school-admin shares the teacher home until Plan 5 ships `/app/admin`). Verify in the DevTools network panel that `/api/auth/verify` is re-fetched (refresh) and the new payload includes the `school_admin` membership before the navigation completes.
+Return to the original (admin) browser session. Open DevTools → Network → filter for `verify`, and DevTools → Console. Within 30 seconds, `/signup/admin/pending` should:
+
+1. Issue a `GET /api/school-requests/mine` returning `status: 'approved'`.
+2. Issue a `POST /api/auth/verify` (the `refreshUser()` call) — the response payload must contain a `memberships` array with the new `school_admin` row.
+3. Navigate to `/app/teacher` and STAY there.
+
+**Failure modes to watch for** (these would indicate the race the test suite covers via `invocationCallOrder` but cannot fully reproduce):
+
+- The URL flickers to `/app/teacher` and then bounces back to `/signup/admin/pending` or `/signup/admin/org-wizard`. This means `navigate(...)` ran before `refreshUser()` resolved (or before React flushed the new user state), so `AppProtectedRoute` / `getOnboardingDestination` saw the stale user. **Mitigation**: confirm Task 28's implementation has `await refreshUser();` immediately followed by `navigate(...)`, and that there is no other `setState` between them that could be batched in a way that delays the user update.
+- The `verify` request fires AFTER the navigation. Same diagnosis — call ordering is wrong; the `await` may be missing.
+
+If either failure occurs, file the bug as a Plan 3 blocker and fix before merging. The most reliable fix, if React state batching turns out to be the culprit despite the await, is to have `refreshUser()` return the fresh `User` object and have `AdminPendingPage` pass it forward (e.g., via a one-shot `setBypassUser(user)` on `AuthContext`, or by waiting for the next render via a `useEffect` watching `user.memberships`). Document the chosen mitigation in `codebase-conventions.md` if it requires a pattern change.
 
 If your `lingu-480600` project has Resend wired and `RESEND_API_KEY` is set in the local environment, also check the recipient inboxes for the rendered emails. Otherwise verify in the Cloud Function logs that the dev-mode fallback fired (`status='sent_dev'`).
 

@@ -6,6 +6,7 @@ import {
   LINGUAL_ADMIN_HOME_ROUTE,
   STUDENT_SETUP_ROUTE,
   TEACHER_JOIN_ORG_ROUTE,
+  TEACHER_JOIN_PENDING_ROUTE,
   ADMIN_ORG_WIZARD_ROUTE,
   ROLE_PICKER_ROUTE,
 } from './homeRoutes';
@@ -83,9 +84,16 @@ describe('getOnboardingDestination', () => {
     expect(dest).toBe(TEACHER_JOIN_ORG_ROUTE);
   });
 
-  it('resumes intended teacher pending to teacher join-org page', () => {
+  it('routes teacher_pending state to the pending page', () => {
     const dest = getOnboardingDestination(
       userOf({ intendedRole: 'teacher', onboardingState: 'teacher_pending' }),
+    );
+    expect(dest).toBe(TEACHER_JOIN_PENDING_ROUTE);
+  });
+
+  it('still routes intendedRole=teacher without pending state to join-org', () => {
+    const dest = getOnboardingDestination(
+      userOf({ intendedRole: 'teacher', onboardingState: 'role_selected' }),
     );
     expect(dest).toBe(TEACHER_JOIN_ORG_ROUTE);
   });

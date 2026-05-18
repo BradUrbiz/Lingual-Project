@@ -11,6 +11,7 @@ export const LINGUAL_ADMIN_HOME_ROUTE = '/app/admin/school-requests';
 
 export const STUDENT_SETUP_ROUTE = '/signup/student/setup';
 export const TEACHER_JOIN_ORG_ROUTE = '/signup/teacher/join-org';
+export const TEACHER_JOIN_PENDING_ROUTE = '/signup/teacher/pending';
 export const ADMIN_ORG_WIZARD_ROUTE = '/signup/admin/org-wizard';
 export const ROLE_PICKER_ROUTE = '/signup';
 
@@ -83,10 +84,10 @@ export function getOnboardingDestination(user: User | null | undefined): string 
   }
 
   // 4) Resume in-flight signup based on intendedRole + onboardingState.
-  // TODO(Plan 3/4): when /signup/teacher/pending and /signup/admin/pending
-  // ship, branch on `onboardingState === 'teacher_pending'` /
-  // 'awaiting_lingual' to land on those pages instead of the form pages.
   if (user.intendedRole === 'student') return STUDENT_SETUP_ROUTE;
+  if (user.intendedRole === 'teacher' && user.onboardingState === 'teacher_pending') {
+    return TEACHER_JOIN_PENDING_ROUTE;
+  }
   if (user.intendedRole === 'teacher') return TEACHER_JOIN_ORG_ROUTE;
   if (user.intendedRole === 'admin') return ADMIN_ORG_WIZARD_ROUTE;
 

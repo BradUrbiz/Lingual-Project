@@ -120,6 +120,30 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             print(f"School request submission error: {exc}")
             return jsonify({'success': False, 'error': str(exc)}), 500
 
+    def _serialize_draft(draft):
+        if draft is None:
+            return None
+        updated = draft.get('updated_at')
+        return {
+            'uid': draft.get('uid'),
+            'currentStep': draft.get('current_step'),
+            'draftPayload': draft.get('draft_payload') or {},
+            'updatedAt': (
+                updated.isoformat()
+                if isinstance(updated, datetime)
+                else updated
+            ),
+        }
+
+    @bp.route('/api/school-requests/draft', methods=['GET'])
+    @deps.login_required
+    def get_school_request_draft():
+        uid = deps.get_current_user_uid()
+        if not uid:
+            return jsonify({'success': False, 'error': 'Authentication required.'}), 401
+        draft = deps.db.get_school_creation_draft(uid)
+        return jsonify({'success': True, 'draft': _serialize_draft(draft)}), 200
+
     @bp.route('/api/school-requests/mine', methods=['GET'])
     @deps.login_required
     def get_my_school_request():

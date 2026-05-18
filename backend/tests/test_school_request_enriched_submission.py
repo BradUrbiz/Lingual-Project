@@ -83,5 +83,139 @@ class CreateSchoolRequestEnrichedTest(unittest.TestCase):
         self.assertEqual(payload['status'], 'pending')
 
 
+from backend.tests.conftest import FakeDbBase, make_test_app, make_test_deps
+
+
+class FakeSchoolRequestDraftDb(FakeDbBase):
+    def __init__(self):
+        super().__init__()
+        self.drafts = {}              # uid -> draft dict
+        self.school_requests = {}     # id -> request dict
+        self.next_request_id = 1
+        self.created_invites = []     # list of teacher_invitations dicts
+        self.lingual_admins = []      # list of {email,name}
+
+    # -- drafts
+    def get_school_creation_draft(self, uid):
+        return self.drafts.get(uid)
+
+    def upsert_school_creation_draft(self, uid, *, current_step, draft_payload):
+        if not (1 <= current_step <= 4):
+            raise ValueError(f'current_step out of range: {current_step}')
+        if not isinstance(draft_payload, dict):
+            raise ValueError('draft_payload must be a dict')
+        self.drafts[uid] = {
+            'uid': uid,
+            'current_step': current_step,
+            'draft_payload': draft_payload,
+            'updated_at': 'NOW',
+        }
+
+    def delete_school_creation_draft(self, uid):
+        self.drafts.pop(uid, None)
+
+    # -- requests
+    def get_user_school_request(self, uid):
+        for req in self.school_requests.values():
+            if req.get('requester_uid') == uid:
+                return req
+        return None
+
+    def get_school_request(self, request_id):
+        return self.school_requests.get(request_id)
+
+    def create_school_request(self, *, requester_uid, requester_email, requester_name,
+                               school_name, org_type, website_url='',
+                               canvas_instance_url='', enriched=None):
+        req_id = f'req-{self.next_request_id}'
+        self.next_request_id += 1
+        req = {
+            'id': req_id,
+            'requester_uid': requester_uid,
+            'requester_email': requester_email,
+            'requester_name': requester_name,
+            'school_name': school_name,
+            'org_type': org_type,
+            'website_url': website_url,
+            'canvas_instance_url': canvas_instance_url,
+            'status': 'pending',
+            'reviewed_by_uid': None,
+            'reviewed_at': None,
+            'rejection_reason': None,
+            'rejection_category': None,
+            'created_org_id': None,
+        }
+        if enriched:
+            for key in (
+                'location', 'school_type', 'public_private', 'grade_size',
+                'official_email_domains', 'admin_identity', 'integration',
+                'curriculum', 'pre_invited_teachers',
+            ):
+                if key in enriched:
+                    req[key] = enriched[key]
+        self.school_requests[req_id] = req
+        return req_id
+
+    def cancel_school_request(self, request_id, uid):
+        req = self.school_requests.get(request_id)
+        if req is None:
+            return False
+        if req.get('requester_uid') != uid:
+            raise PermissionError(f'Request {request_id} not owned by {uid}')
+        if req.get('status') != 'pending':
+            raise ValueError(f'Request {request_id} is not pending')
+        req['status'] = 'cancelled'
+        return True
+
+    def get_user_field(self, uid, field):
+        user = self.users.get(uid)
+        if user:
+            return user.get(field)
+        return None
+
+
+class SchoolRequestDraftRouteTest(unittest.TestCase):
+    def setUp(self):
+        self.db = FakeSchoolRequestDraftDb()
+        self.db.users['uid-1'] = {
+            'uid': 'uid-1',
+            'name': 'Ada',
+            'email': 'a@b.test',
+            'profile': {'display_name': 'Ada'},
+        }
+        self.deps = make_test_deps(db=self.db)
+        from backend.routes.school_requests import create_school_requests_blueprint
+        bp = create_school_requests_blueprint(self.deps)
+        self.app = make_test_app(bp)
+        self.app.config['TESTING'] = True
+        self.client = self.app.test_client()
+
+    def _login(self, uid):
+        with self.client.session_transaction() as s:
+            s['user'] = {'uid': uid, 'email': f'{uid}@test.com'}
+
+    def test_returns_null_when_no_draft(self):
+        self._login('uid-1')
+        resp = self.client.get('/api/school-requests/draft')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertIsNone(body['draft'])
+
+    def test_returns_existing_draft(self):
+        self.db.drafts['uid-1'] = {
+            'uid': 'uid-1',
+            'current_step': 2,
+            'draft_payload': {'school_name': 'SF Friends'},
+            'updated_at': 'NOW',
+        }
+        self._login('uid-1')
+        resp = self.client.get('/api/school-requests/draft')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertEqual(body['draft']['currentStep'], 2)
+        self.assertEqual(body['draft']['draftPayload']['school_name'], 'SF Friends')
+
+
 if __name__ == '__main__':
     unittest.main()

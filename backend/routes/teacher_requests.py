@@ -1,0 +1,157 @@
+"""Teacher-join-request blueprint (Plan 4).
+
+Endpoints:
+- POST   /api/teacher-join-requests             submit by inviteCode or orgId
+- GET    /api/teacher-join-requests/me          poll own request (Task 5)
+- DELETE /api/teacher-join-requests/me          cancel own request (Task 5)
+- GET    /api/teacher-join-requests             list pending for admin's org (Task 6)
+- POST   /api/teacher-join-requests/<id>/approve  (Task 7)
+- POST   /api/teacher-join-requests/<id>/decline  (Task 8)
+
+Org search lives at GET /api/organizations/search (Task 9), registered on the
+same blueprint for locality.
+"""
+from __future__ import annotations
+
+import logging
+
+from flask import Blueprint, jsonify, request
+
+from backend.route_deps import RouteDeps
+from backend.services.outbox import OutboxTemplate, enqueue_outbox_email
+from backend.services.membership_context import SchoolContextPermissionError
+
+log = logging.getLogger(__name__)
+
+_TEACHER_DASHBOARD_PATH = '/app/teacher#pending-requests'
+
+
+def _base_url():
+    """Used for email CTAs. Falls back to relative path in dev."""
+    import os
+    return os.environ.get('PUBLIC_BASE_URL', '').rstrip('/')
+
+
+def _absolute_url(path: str) -> str:
+    base = _base_url()
+    return f"{base}{path}" if base else path
+
+
+def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
+    bp = Blueprint('teacher_requests', __name__)
+
+    @bp.route('/api/teacher-join-requests', methods=['POST'])
+    @deps.login_required
+    def submit_join_request():
+        uid = deps.get_current_user_uid()
+        if not uid:
+            return jsonify({'success': False, 'error': 'Authentication required.'}), 401
+
+        data = request.get_json(silent=True) or {}
+        invite_code = (data.get('inviteCode') or '').strip().upper() or None
+        org_id_param = (data.get('orgId') or '').strip() or None
+        if not invite_code and not org_id_param:
+            return jsonify({
+                'success': False,
+                'error': 'Either inviteCode or orgId is required.',
+            }), 400
+        if invite_code and org_id_param:
+            return jsonify({
+                'success': False,
+                'error': 'Provide exactly one of inviteCode or orgId.',
+            }), 400
+
+        # Resolve target org
+        if invite_code:
+            org = deps.db.get_org_by_teacher_invite_code(invite_code)
+            if not org:
+                return jsonify({'success': False, 'error': 'Invalid or expired invite code.'}), 404
+            if org.get('status') in ('suspended', 'archived', 'inactive'):
+                # Suspended / archived orgs reject new joins even if a stale
+                # invite code is still flagged active on the org doc.
+                return jsonify({
+                    'success': False,
+                    'error': 'This school is not accepting new teachers right now.',
+                }), 409
+            source = 'invite_code'
+        else:
+            org = deps.db.get_organization(org_id_param)
+            if not org or org.get('status') != 'active':
+                return jsonify({'success': False, 'error': 'School not found.'}), 404
+            source = 'search'
+
+        org_id = org['id']
+
+        # Multi-org membership is out of scope for v1 — any active membership
+        # in any org blocks a new join request (spec §3 edge case).
+        for m in deps.db.get_user_memberships(uid):
+            if m.get('status') == 'active':
+                already_org_name = ''
+                already = deps.db.get_organization(m.get('orgId'))
+                if already:
+                    already_org_name = already.get('name', '')
+                return jsonify({
+                    'success': False,
+                    'error': (
+                        f"You're already a member of {already_org_name or 'a school'}. "
+                        "Contact support to change."
+                    ),
+                }), 422
+
+        # Existing pending request?
+        existing = deps.db.get_pending_teacher_join_request_by_uid(uid)
+        if existing:
+            return jsonify({
+                'success': False,
+                'error': 'You already have a pending request. Cancel it before submitting a new one.',
+            }), 409
+
+        request_id = deps.db.create_teacher_join_request(
+            uid=uid,
+            org_id=org_id,
+            source=source,
+            invite_code=invite_code if source == 'invite_code' else None,
+        )
+
+        # Notify admins via outbox. Failure to enqueue must NOT break the
+        # business call (Plan 1 invariant).
+        try:
+            user = deps.db.get_user(uid) or {}
+            admins = deps.db.list_school_admin_emails(org_id)
+            source_label = 'invite code' if source == 'invite_code' else 'school search'
+            for admin in admins:
+                enqueue_outbox_email(
+                    db=deps.db,
+                    recipient_email=admin['email'],
+                    recipient_name=admin.get('name'),
+                    template=OutboxTemplate.TEACHER_JOIN_REQUEST_TO_ADMIN,
+                    template_data={
+                        'org_name': org.get('name', ''),
+                        'requester_name': user.get('name') or '(unnamed teacher)',
+                        'requester_email': user.get('email', ''),
+                        'source_label': source_label,
+                        'review_url': _absolute_url(_TEACHER_DASHBOARD_PATH),
+                    },
+                    related_entity_type='teacher_join_request',
+                    related_entity_id=request_id,
+                    created_by_uid=uid,
+                )
+        except Exception:
+            log.exception('Outbox enqueue failed for teacher_join_request=%s', request_id)
+
+        # Mark user as awaiting admin review.
+        try:
+            deps.db.update_user_profile(uid, onboarding_state='teacher_pending')
+        except Exception:
+            log.exception('onboarding_state update failed for uid=%s', uid)
+
+        return jsonify({
+            'success': True,
+            'requestId': request_id,
+            'orgId': org_id,
+            'orgName': org.get('name', ''),
+            'status': 'pending',
+            'source': source,
+        }), 201
+
+    return bp

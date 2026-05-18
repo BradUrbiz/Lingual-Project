@@ -8,6 +8,28 @@ from backend.routes.teacher_requests import create_teacher_requests_blueprint
 from backend.tests.conftest import FakeDbBase, make_test_app, make_test_deps
 
 
+class FakeFirestoreClient:
+    def __init__(self, outbox_writes):
+        self.outbox_writes = outbox_writes
+
+    def collection(self, name):
+        """Outbox writes go through get_db().collection('outbox_emails').document().set(...)."""
+        outer = self
+
+        class _DocRef:
+            def __init__(self):
+                self.id = f'eml-{len(outer.outbox_writes) + 1}'
+
+            def set(self, payload):
+                outer.outbox_writes.append({'id': self.id, **payload})
+
+        class _CollRef:
+            def document(self):
+                return _DocRef()
+
+        return _CollRef()
+
+
 class FakeTeacherRequestsDb(FakeDbBase):
     def __init__(self):
         super().__init__()
@@ -17,6 +39,7 @@ class FakeTeacherRequestsDb(FakeDbBase):
         self.teacher_join_requests = {}
         self._tjr_counter = 0
         self.outbox_writes = []
+        self.firestore_client = FakeFirestoreClient(self.outbox_writes)
 
     # User
     def get_user(self, uid):
@@ -123,18 +146,11 @@ class FakeTeacherRequestsDb(FakeDbBase):
     def set_user_last_active_membership(self, uid, membership_id):
         self.users.setdefault(uid, {})['last_active_membership_id'] = membership_id
 
+    def get_db(self):
+        return self.firestore_client
+
     def collection(self, name):
-        """Outbox writes go through deps.db.collection('outbox_emails').document().set(...)."""
-        outer = self
-        class _DocRef:
-            def __init__(self):
-                self.id = f'eml-{len(outer.outbox_writes) + 1}'
-            def set(self, payload):
-                outer.outbox_writes.append({'id': self.id, **payload})
-        class _CollRef:
-            def document(self):
-                return _DocRef()
-        return _CollRef()
+        raise AssertionError('route should pass deps.db.get_db() to enqueue_outbox_email')
 
     def resolve_user_school_context(self, uid, preferred_active_membership_id=None):
         """Override FakeDbBase.resolve_user_school_context to read _membership_list."""
@@ -206,6 +222,10 @@ class SubmitTeacherJoinRequestTest(unittest.TestCase):
         request = next(iter(db.teacher_join_requests.values()))
         self.assertEqual(request['source'], 'invite_code')
         self.assertEqual(request['org_id'], 'org-1')
+        admin_emails = [e for e in db.outbox_writes
+                        if e['template_id'] == 'teacher_join_request_to_admin']
+        self.assertEqual(len(admin_emails), 1)
+        self.assertEqual(admin_emails[0]['recipient']['email'], 'admin@x.com')
 
     def test_submit_by_org_id_succeeds(self):
         app, db = _build_app()
@@ -218,6 +238,10 @@ class SubmitTeacherJoinRequestTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 201)
         request = next(iter(db.teacher_join_requests.values()))
         self.assertEqual(request['source'], 'search')
+        self.assertIn(
+            ('teacher-1', {'intended_role': 'teacher', 'onboarding_state': 'teacher_pending'}),
+            db.profile_updates,
+        )
 
     def test_submit_invalid_invite_code_returns_404(self):
         app, db = _build_app()

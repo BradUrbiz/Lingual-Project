@@ -65,7 +65,7 @@ describe('TeacherJoinPendingPage', () => {
         await waitFor(() => expect(getMyMock).toHaveBeenCalledTimes(2));
     });
 
-    it('navigates to dashboard on approval', async () => {
+    it('navigates to dashboard when request clears', async () => {
         getMyMock.mockResolvedValueOnce({
             requestId: 'tjr-1', orgId: 'org-1', orgName: 'SF Friends',
             status: 'pending', source: 'search',
@@ -75,6 +75,41 @@ describe('TeacherJoinPendingPage', () => {
         await waitFor(() => expect(getMyMock).toHaveBeenCalledTimes(1));
         await act(async () => { vi.advanceTimersByTime(30_000); });
         await waitFor(() => expect(refreshUserMock).toHaveBeenCalled());
+        expect(navigate).toHaveBeenCalledWith('/app/teacher', { replace: true });
+    });
+
+    it('navigates to dashboard when polling returns approved', async () => {
+        getMyMock.mockResolvedValue({
+            requestId: 'tjr-1', orgId: 'org-1', orgName: 'SF Friends',
+            status: 'approved', source: 'search',
+        });
+        renderPage();
+        await waitFor(() => expect(refreshUserMock).toHaveBeenCalled());
+        expect(navigate).toHaveBeenCalledWith('/app/teacher', { replace: true });
+    });
+
+    it('retries dashboard navigation when auth refresh fails once', async () => {
+        getMyMock.mockResolvedValueOnce({
+            requestId: 'tjr-1', orgId: 'org-1', orgName: 'SF Friends',
+            status: 'pending', source: 'search',
+        });
+        getMyMock.mockResolvedValue({
+            requestId: 'tjr-1', orgId: 'org-1', orgName: 'SF Friends',
+            status: 'approved', source: 'search',
+        });
+        refreshUserMock
+            .mockRejectedValueOnce(new Error('refresh failed'))
+            .mockResolvedValueOnce(undefined);
+
+        renderPage();
+        await waitFor(() => expect(getMyMock).toHaveBeenCalledTimes(1));
+
+        await act(async () => { vi.advanceTimersByTime(30_000); });
+        await waitFor(() => expect(refreshUserMock).toHaveBeenCalledTimes(1));
+        expect(navigate).not.toHaveBeenCalled();
+
+        await act(async () => { vi.advanceTimersByTime(30_000); });
+        await waitFor(() => expect(refreshUserMock).toHaveBeenCalledTimes(2));
         expect(navigate).toHaveBeenCalledWith('/app/teacher', { replace: true });
     });
 

@@ -23,22 +23,32 @@ export function TeacherJoinPendingPage() {
     const fetchStatus = useCallback(async () => {
         try {
             const out = await getMyTeacherJoinRequest();
-            setReq(out);
-            if (!out && !navigatedRef.current) {
-                // Either approved (membership exists) or cleared. Resolve via auth refresh.
-                navigatedRef.current = true;
+            if ((!out || out.status === 'approved') && !navigatedRef.current) {
+                // Approved requests need a refreshed membership context before entering the dashboard.
                 await refreshUser();
+                navigatedRef.current = true;
                 navigate('/app/teacher', { replace: true });
+                return;
             }
+            setReq(out);
         } catch {
             // Network blip; next tick will retry.
         }
     }, [navigate, refreshUser]);
 
     useEffect(() => {
-        fetchStatus();
-        const timer = setInterval(fetchStatus, POLL_INTERVAL_MS);
-        return () => clearInterval(timer);
+        let cancelled = false;
+        const runFetchStatus = () => {
+            if (!cancelled) {
+                void fetchStatus();
+            }
+        };
+        queueMicrotask(runFetchStatus);
+        const timer = setInterval(runFetchStatus, POLL_INTERVAL_MS);
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
     }, [fetchStatus]);
 
     async function handleCancel() {

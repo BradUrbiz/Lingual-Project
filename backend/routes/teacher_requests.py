@@ -56,6 +56,13 @@ def _absolute_url(path: str) -> str:
     return f"{base}{path}" if base else path
 
 
+def _get_outbox_db(deps: RouteDeps):
+    get_db = getattr(deps.db, 'get_db', None)
+    if callable(get_db):
+        return get_db()
+    return deps.db
+
+
 def _isoformat(ts):
     """Serialize a Firestore/datetime timestamp to ISO 8601, or None."""
     if ts is None:
@@ -154,7 +161,7 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
         for admin in admins:
             try:
                 enqueue_outbox_email(
-                    db=deps.db,
+                    db=_get_outbox_db(deps),
                     recipient_email=admin['email'],
                     recipient_name=admin.get('name'),
                     template=OutboxTemplate.TEACHER_JOIN_REQUEST_TO_ADMIN,
@@ -177,7 +184,7 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
 
         # Mark user as awaiting admin review.
         try:
-            deps.db.update_user_profile(uid, onboarding_state='teacher_pending')
+            deps.db.update_user_profile(uid, intended_role='teacher', onboarding_state='teacher_pending')
         except Exception:
             log.exception('onboarding_state update failed for uid=%s', uid)
 
@@ -315,7 +322,7 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
                 )
             else:
                 enqueue_outbox_email(
-                    db=deps.db,
+                    db=_get_outbox_db(deps),
                     recipient_email=teacher_email,
                     recipient_name=teacher_user.get('name'),
                     template=OutboxTemplate.TEACHER_JOIN_APPROVED,
@@ -390,7 +397,7 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
                 )
             else:
                 enqueue_outbox_email(
-                    db=deps.db,
+                    db=_get_outbox_db(deps),
                     recipient_email=teacher_email,
                     recipient_name=teacher_user.get('name'),
                     template=OutboxTemplate.TEACHER_JOIN_DECLINED,

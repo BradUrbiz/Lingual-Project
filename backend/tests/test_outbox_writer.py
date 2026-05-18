@@ -24,7 +24,7 @@ class OutboxConstantsTest(unittest.TestCase):
         # v1 wires only one template; later plans add more.
         self.assertEqual(
             {t.value for t in outbox.OutboxTemplate},
-            {'school_request_to_lingual'},
+            {'school_request_to_lingual', 'school_request_approved', 'school_request_declined', 'teacher_invitation'},
         )
 
 
@@ -284,3 +284,26 @@ class ListLingualAdminEmailsTest(unittest.TestCase):
             result = database.list_lingual_admin_emails()
 
         self.assertEqual(result, [])
+
+
+class OutboxTemplateEnumTest(unittest.TestCase):
+    def test_school_request_approved_member(self):
+        from backend.services.outbox import OutboxTemplate
+        self.assertEqual(
+            OutboxTemplate.SCHOOL_REQUEST_APPROVED.value,
+            'school_request_approved',
+        )
+
+    def test_school_request_declined_member(self):
+        from backend.services.outbox import OutboxTemplate
+        self.assertEqual(
+            OutboxTemplate.SCHOOL_REQUEST_DECLINED.value,
+            'school_request_declined',
+        )
+
+    def test_teacher_invitation_member(self):
+        from backend.services.outbox import OutboxTemplate
+        self.assertEqual(
+            OutboxTemplate.TEACHER_INVITATION.value,
+            'teacher_invitation',
+        )

@@ -23,6 +23,9 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 class OutboxTemplate(str, Enum):
     SCHOOL_REQUEST_TO_LINGUAL = 'school_request_to_lingual'
+    SCHOOL_REQUEST_APPROVED = 'school_request_approved'
+    SCHOOL_REQUEST_DECLINED = 'school_request_declined'
+    TEACHER_INVITATION = 'teacher_invitation'
 
 
 def enqueue_outbox_email(

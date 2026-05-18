@@ -52,7 +52,7 @@ def _validate_required_env() -> None:
 _validate_required_env()
 
 app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=0, x_host=0, x_port=0, x_prefix=0)
 _secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 if os.environ.get('FLASK_ENV') == 'production' and _secret_key == 'dev-secret-key-change-in-production':
     raise RuntimeError('SECRET_KEY must be set in production — do not use the dev fallback')

@@ -408,7 +408,20 @@ class FakeDbBase:
         }
 
     def create_school_request_with_onboarding(self, **kwargs):
+        # Mirrors database.create_school_request_with_onboarding: the duplicate
+        # invariant lives inside the "transaction" so concurrent submits can't
+        # both pass a non-atomic precheck. The route's outer precheck stays
+        # for a friendly 409; this is the correctness backstop.
+        from database import DuplicateSchoolRequestError
         requester_uid = kwargs["requester_uid"]
+        for existing in (self.school_requests or {}).values():
+            if (
+                existing.get("requester_uid") == requester_uid
+                and existing.get("status") in ("pending", "approved")
+            ):
+                raise DuplicateSchoolRequestError(
+                    "You already have a pending or approved request."
+                )
         self.update_user_profile(
             requester_uid,
             onboarding_state="awaiting_lingual",

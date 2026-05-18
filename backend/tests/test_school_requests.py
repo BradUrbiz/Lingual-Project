@@ -245,6 +245,46 @@ class TestSchoolRequests(unittest.TestCase):
             self.assertEqual(resp.status_code, 400)
             self.assertIn('orgType', resp.get_json()['error'])
 
+    def test_submit_rejects_oversized_pre_invited_teachers(self):
+        """preInvitedTeachers raw size is capped BEFORE normalization, so a
+        client can't flood the route with thousands of duplicates and have
+        them silently dedupe to one entry."""
+        with self.app.test_client() as client:
+            self._set_session(client, 'user-1')
+            payload = self._valid_submit_payload()
+            # 26 distinct emails — one more than the cap of 25.
+            payload['preInvitedTeachers'] = [
+                f't{i}@ssfs.org' for i in range(26)
+            ]
+            resp = client.post('/api/school-requests', json=payload)
+            self.assertEqual(resp.status_code, 400)
+            self.assertIn('preInvitedTeachers', resp.get_json()['error'])
+
+    def test_submit_in_transaction_blocks_concurrent_duplicate(self):
+        """The in-transaction duplicate check raises DuplicateSchoolRequestError
+        when a pending request already exists, even if the caller skipped a
+        precheck. This is the correctness backstop for the race where two
+        concurrent POSTs both pass a non-atomic precheck."""
+        import database as db_module
+        self.db.create_school_request(
+            requester_uid='user-1',
+            requester_email='user@example.com',
+            requester_name='Regular User',
+            school_name='Pre-existing',
+            org_type='school',
+        )
+        # Call the helper directly — simulates the race where the route's
+        # outer precheck ran and saw nothing, then a concurrent submit
+        # committed before this txn started.
+        with self.assertRaises(db_module.DuplicateSchoolRequestError):
+            self.db.create_school_request_with_onboarding(
+                requester_uid='user-1',
+                requester_email='user@example.com',
+                requester_name='Regular User',
+                school_name='Race-condition Submit',
+                org_type='school',
+            )
+
     def test_check_own_request(self):
         """GET /api/school-requests/mine returns the user's request."""
         with self.app.test_client() as client:

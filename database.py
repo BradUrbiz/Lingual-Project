@@ -2717,10 +2717,21 @@ def create_school_request(requester_uid, requester_email, requester_name,
     return doc_ref.id
 
 
+class DuplicateSchoolRequestError(Exception):
+    """Raised when a user already has a pending or approved school request."""
+
+
 def create_school_request_with_onboarding(requester_uid, requester_email, requester_name,
                                           school_name, org_type, website_url='',
                                           canvas_instance_url='', *, enriched=None):
-    """Create a school request and advance admin onboarding atomically."""
+    """Create a school request and advance admin onboarding atomically.
+
+    Raises `DuplicateSchoolRequestError` if the requester already has a pending
+    or approved request — the check happens INSIDE the Firestore transaction,
+    so concurrent POSTs can't both pass a non-atomic precheck. The route's
+    precheck remains for a fast 409 response; this in-transaction guard is the
+    correctness backstop.
+    """
     client = get_db()
     request_ref = client.collection('school_requests').document()
     user_ref = client.collection('users').document(requester_uid)
@@ -2740,6 +2751,14 @@ def create_school_request_with_onboarding(requester_uid, requester_email, reques
 
     @firestore.transactional
     def _submit(transaction):
+        existing_query = client.collection('school_requests').where(
+            'requester_uid', '==', requester_uid
+        )
+        for doc in existing_query.stream(transaction=transaction):
+            if (doc.to_dict() or {}).get('status') in ('pending', 'approved'):
+                raise DuplicateSchoolRequestError(
+                    'You already have a pending or approved request.'
+                )
         transaction.set(request_ref, payload)
         transaction.update(user_ref, {
             'profile.onboarding_state': ONBOARDING_STATE_AWAITING_LINGUAL,

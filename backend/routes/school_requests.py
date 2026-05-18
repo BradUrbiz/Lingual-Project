@@ -186,6 +186,10 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
     def _normalize_pre_invited_teachers(values):
         if not isinstance(values, list):
             raise ValueError('preInvitedTeachers must be a list')
+        if len(values) > MAX_PRE_INVITED_TEACHERS:
+            raise ValueError(
+                f'preInvitedTeachers may include at most {MAX_PRE_INVITED_TEACHERS} emails.'
+            )
         normalized = []
         seen = set()
         for raw in values:
@@ -319,16 +323,19 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             if pre_invites is not None:
                 enriched['pre_invited_teachers'] = _normalize_pre_invited_teachers(pre_invites)
 
-            request_id = deps.db.create_school_request_with_onboarding(
-                requester_uid=uid,
-                requester_email=requester_email,
-                requester_name=requester_name,
-                school_name=school_name,
-                org_type=org_type,
-                website_url=website_url,
-                canvas_instance_url=canvas_instance_url,
-                enriched=enriched or None,
-            )
+            try:
+                request_id = deps.db.create_school_request_with_onboarding(
+                    requester_uid=uid,
+                    requester_email=requester_email,
+                    requester_name=requester_name,
+                    school_name=school_name,
+                    org_type=org_type,
+                    website_url=website_url,
+                    canvas_instance_url=canvas_instance_url,
+                    enriched=enriched or None,
+                )
+            except database.DuplicateSchoolRequestError as exc:
+                return jsonify({'success': False, 'error': str(exc)}), 409
 
             # Fan-out outbox email to every active lingual admin.
             # The entire block is fire-and-forget: failures must never break the

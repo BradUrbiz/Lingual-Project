@@ -14,7 +14,9 @@ Authenticated API endpoints (school_admin):
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, redirect, request, session, url_for
+import os
+
+from flask import Blueprint, jsonify, redirect, request, session
 
 from backend.route_deps import RouteDeps
 from backend.routes.curriculum_admin import _require_assignment_teacher_access
@@ -30,6 +32,20 @@ from backend.services.membership_context import SchoolContextPermissionError
 
 SCHOOL_ADMIN_ROLES = {'school_admin'}
 TEACHER_ALLOWED_ROLES = {'teacher', 'school_admin'}
+
+
+def _lti_callback_url() -> str:
+    """Build the canonical LTI callback URL.
+
+    Built from `PUBLIC_BASE_URL` rather than Flask's `request.host_url` /
+    `url_for(_external=True)` because ProxyFix is configured with
+    `x_proto=0, x_host=0` to avoid header spoofing. Without trusting
+    forwarded scheme/host, Flask sees the request as `http://<proxy-host>/`
+    behind Cloud Run, which would emit broken HTTP LTI callback URLs that
+    Canvas rejects.
+    """
+    base = os.environ.get('PUBLIC_BASE_URL', 'https://lingual.app').rstrip('/')
+    return f'{base}/lti/callback'
 
 
 def create_lti_blueprint(deps: RouteDeps) -> Blueprint:
@@ -136,7 +152,7 @@ def create_lti_blueprint(deps: RouteDeps) -> Blueprint:
                 'target_link_uri',
                 request.args.get(
                     'target_link_uri',
-                    url_for('lti.lti_callback', _external=True),
+                    _lti_callback_url(),
                 ),
             )
             return oidc_login.enable_check_cookies().redirect(target_link_uri)
@@ -637,7 +653,7 @@ def create_lti_blueprint(deps: RouteDeps) -> Blueprint:
 
             from pylti1p3.deep_link_resource import DeepLinkResource
             resource = DeepLinkResource()
-            resource.set_url(request.host_url.rstrip('/') + '/lti/callback')
+            resource.set_url(_lti_callback_url())
             resource.set_custom_params({'lingual_assignment_id': assignment_id})
             resource.set_title(assignment.get('title', 'Lingual Practice'))
 

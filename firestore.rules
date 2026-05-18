@@ -161,6 +161,10 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /school_creation_drafts/{uid} {
+      allow read, write: if isUserOwner(uid);
+    }
+
     match /outbox_emails/{emailId} {
       allow read, write: if false;  // service-account only; admin SDK bypasses
     }

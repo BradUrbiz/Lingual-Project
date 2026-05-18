@@ -144,6 +144,39 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
         draft = deps.db.get_school_creation_draft(uid)
         return jsonify({'success': True, 'draft': _serialize_draft(draft)}), 200
 
+    @bp.route('/api/school-requests/draft', methods=['PATCH'])
+    @deps.login_required
+    def patch_school_request_draft():
+        uid = deps.get_current_user_uid()
+        if not uid:
+            return jsonify({'success': False, 'error': 'Authentication required.'}), 401
+
+        data = request.get_json(silent=True) or {}
+        current_step = data.get('currentStep')
+        draft_payload = data.get('draftPayload')
+
+        if not isinstance(current_step, int) or not (1 <= current_step <= 4):
+            return jsonify({
+                'success': False,
+                'error': 'currentStep must be an integer in [1, 4].',
+            }), 400
+        if not isinstance(draft_payload, dict):
+            return jsonify({
+                'success': False,
+                'error': 'draftPayload must be a JSON object.',
+            }), 400
+
+        try:
+            deps.db.upsert_school_creation_draft(
+                uid,
+                current_step=current_step,
+                draft_payload=draft_payload,
+            )
+        except ValueError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 400
+
+        return jsonify({'success': True}), 200
+
     @bp.route('/api/school-requests/mine', methods=['GET'])
     @deps.login_required
     def get_my_school_request():

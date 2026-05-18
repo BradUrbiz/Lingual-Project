@@ -217,5 +217,59 @@ class SchoolRequestDraftRouteTest(unittest.TestCase):
         self.assertEqual(body['draft']['draftPayload']['school_name'], 'SF Friends')
 
 
+class SchoolRequestDraftSaveTest(SchoolRequestDraftRouteTest):
+    def test_patch_creates_draft(self):
+        self._login('uid-1')
+        resp = self.client.patch('/api/school-requests/draft', json={
+            'currentStep': 1,
+            'draftPayload': {'school_name': 'SF Friends'},
+        })
+        self.assertEqual(resp.status_code, 200, resp.get_json())
+        self.assertEqual(self.db.drafts['uid-1']['current_step'], 1)
+        self.assertEqual(
+            self.db.drafts['uid-1']['draft_payload']['school_name'],
+            'SF Friends',
+        )
+
+    def test_patch_overwrites_existing_draft(self):
+        self.db.drafts['uid-1'] = {
+            'uid': 'uid-1',
+            'current_step': 1,
+            'draft_payload': {'school_name': 'old'},
+            'updated_at': 'NOW',
+        }
+        self._login('uid-1')
+        resp = self.client.patch('/api/school-requests/draft', json={
+            'currentStep': 2,
+            'draftPayload': {'school_name': 'new', 'website_url': 'sf.org'},
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.db.drafts['uid-1']['current_step'], 2)
+        self.assertEqual(self.db.drafts['uid-1']['draft_payload']['school_name'], 'new')
+
+    def test_patch_rejects_invalid_step(self):
+        self._login('uid-1')
+        resp = self.client.patch('/api/school-requests/draft', json={
+            'currentStep': 9,
+            'draftPayload': {},
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('currentStep', resp.get_json()['error'])
+
+    def test_patch_rejects_non_dict_payload(self):
+        self._login('uid-1')
+        resp = self.client.patch('/api/school-requests/draft', json={
+            'currentStep': 1,
+            'draftPayload': 'oops',
+        })
+        self.assertEqual(resp.status_code, 400)
+
+    def test_patch_requires_auth(self):
+        resp = self.client.patch('/api/school-requests/draft', json={
+            'currentStep': 1, 'draftPayload': {},
+        })
+        self.assertIn(resp.status_code, (401, 302))
+
+
 if __name__ == '__main__':
     unittest.main()

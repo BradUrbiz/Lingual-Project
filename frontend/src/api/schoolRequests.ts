@@ -1,5 +1,5 @@
 import api from './index';
-import type { SchoolRequest, TeacherInvitation } from '@/types';
+import type { SchoolRequest } from '@/types';
 
 // --- School request (teacher submits, Lingual admin reviews) ---
 
@@ -86,57 +86,3 @@ export const deactivateTeacherInviteCode = async (): Promise<void> => {
   await api.delete('/schools/teacher-invite-code');
 };
 
-// --- Teacher invitations (teacher applies, school admin reviews) ---
-
-export const listTeacherInvitations = async (
-  status?: string,
-): Promise<TeacherInvitation[]> => {
-  const params = status ? { status } : undefined;
-  const response = await api.get<{ success: boolean; invitations: TeacherInvitation[] }>(
-    '/schools/teacher-invitations',
-    { params },
-  );
-  return response.data.invitations;
-};
-
-export const approveTeacherInvitation = async (
-  id: string,
-): Promise<TeacherInvitation> => {
-  const response = await api.post<{ success: boolean; invitation: TeacherInvitation }>(
-    `/schools/teacher-invitations/${id}/approve`,
-  );
-  return response.data.invitation;
-};
-
-export const rejectTeacherInvitation = async (
-  id: string,
-): Promise<TeacherInvitation> => {
-  const response = await api.post<{ success: boolean; invitation: TeacherInvitation }>(
-    `/schools/teacher-invitations/${id}/reject`,
-  );
-  return response.data.invitation;
-};
-
-// --- Join school as teacher ---
-
-export interface JoinSchoolAsTeacherResult {
-  invitationId: string;
-  membershipId?: string;
-  orgName: string;
-  status: string;
-}
-
-export const joinSchoolAsTeacher = async (
-  inviteCode: string,
-): Promise<JoinSchoolAsTeacherResult> => {
-  const response = await api.post<{ success: boolean } & JoinSchoolAsTeacherResult>(
-    '/schools/join-as-teacher',
-    { inviteCode },
-  );
-  return {
-    invitationId: response.data.invitationId,
-    membershipId: response.data.membershipId,
-    orgName: response.data.orgName,
-    status: response.data.status,
-  };
-};

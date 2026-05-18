@@ -318,4 +318,74 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
             'status': 'approved',
         }), 200
 
+    @bp.route('/api/teacher-join-requests/<request_id>/decline', methods=['POST'])
+    @deps.login_required
+    def admin_decline(request_id: str):
+        try:
+            ctx = deps.get_school_request_context()
+            ctx.require_any_role({'school_admin'})
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+
+        body = request.get_json(silent=True) or {}
+        reason = (body.get('reason') or '').strip()
+        if not reason:
+            return jsonify({'success': False, 'error': 'A reason is required.'}), 400
+
+        rec = deps.db.get_teacher_join_request(request_id)
+        if not rec:
+            return jsonify({'success': False, 'error': 'Request not found.'}), 404
+        if rec['org_id'] != ctx.active_organization_id:
+            return jsonify({'success': False, 'error': 'Not your org.'}), 403
+        if rec.get('status') != 'pending':
+            return jsonify({
+                'success': False,
+                'error': f"Request is already {rec.get('status')}.",
+            }), 409
+
+        admin_uid = deps.get_current_user_uid()
+        deps.db.update_teacher_join_request_status(
+            request_id=request_id,
+            status='declined',
+            reviewed_by_uid=admin_uid,
+            decline_reason=reason,
+        )
+        try:
+            deps.db.update_user_profile(rec['uid'], onboarding_state='role_selected')
+        except Exception:
+            log.exception('onboarding_state revert on decline failed uid=%s', rec['uid'])
+
+        try:
+            teacher_user = deps.db.get_user(rec['uid']) or {}
+            org = deps.db.get_organization(rec['org_id']) or {}
+            teacher_email = teacher_user.get('email') or ''
+            if not teacher_email:
+                log.warning(
+                    'decline: teacher uid=%s has no email on profile; skipping decline email',
+                    rec['uid'],
+                )
+            else:
+                enqueue_outbox_email(
+                    db=deps.db,
+                    recipient_email=teacher_email,
+                    recipient_name=teacher_user.get('name'),
+                    template=OutboxTemplate.TEACHER_JOIN_DECLINED,
+                    template_data={
+                        'org_name': org.get('name', ''),
+                        'decline_reason': reason,
+                        'retry_url': _absolute_url('/signup/teacher/join-org'),
+                    },
+                    related_entity_type='teacher_join_request',
+                    related_entity_id=request_id,
+                    created_by_uid=admin_uid,
+                )
+        except Exception:
+            log.exception('decline email enqueue failed request=%s', request_id)
+
+        return jsonify({
+            'success': True,
+            'requestId': request_id,
+            'status': 'declined',
+        }), 200
+
     return bp

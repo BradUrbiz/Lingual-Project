@@ -513,5 +513,59 @@ class ApproveTeacherJoinRequestTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 409)
 
 
+class DeclineTeacherJoinRequestTest(unittest.TestCase):
+    def _seed(self):
+        app, db = _build_app(uid='admin-1', user_email='admin@x.com')
+        db._membership_list.append({
+            'id': 'mem-1',
+            'uid': 'admin-1', 'org_id': 'org-1',
+            'roles': ['school_admin'], 'status': 'active',
+        })
+        db.orgs['org-1'] = {'name': 'SF Friends'}
+        db.users['teacher-99'] = {'email': 't99@x.com', 'name': 'T 99'}
+        db.teacher_join_requests['tjr-1'] = {
+            'uid': 'teacher-99', 'org_id': 'org-1',
+            'source': 'search', 'status': 'pending',
+        }
+        return app, db
+
+    def test_decline_requires_reason(self):
+        app, db = self._seed()
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'admin-1', 'email': 'admin@x.com'}
+            sess['active_organization_id'] = 'org-1'
+            sess['active_membership_id'] = 'mem-1'
+
+        resp = client.post('/api/teacher-join-requests/tjr-1/decline', json={})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_decline_marks_declined_and_emails_teacher(self):
+        app, db = self._seed()
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'admin-1', 'email': 'admin@x.com'}
+            sess['active_organization_id'] = 'org-1'
+            sess['active_membership_id'] = 'mem-1'
+
+        resp = client.post(
+            '/api/teacher-join-requests/tjr-1/decline',
+            json={'reason': 'Please use your school email.'},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(db.teacher_join_requests['tjr-1']['status'], 'declined')
+        self.assertEqual(
+            db.teacher_join_requests['tjr-1']['decline_reason'],
+            'Please use your school email.',
+        )
+        decline_emails = [e for e in db.outbox_writes
+                          if e['template_id'] == 'teacher_join_declined']
+        self.assertEqual(len(decline_emails), 1)
+        self.assertEqual(
+            decline_emails[0]['template_data']['decline_reason'],
+            'Please use your school email.',
+        )
+
+
 if __name__ == '__main__':
     unittest.main()

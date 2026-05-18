@@ -259,10 +259,15 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
         org_id = rec['org_id']
         admin_uid = deps.get_current_user_uid()
 
-        # TODO(v1.5): wrap these three writes in a Firestore batch/transaction
-        # so partial failure can't leave the system in an inconsistent state
-        # (membership created but request still pending, etc.). For pilot scale
-        # the probability is low; see LIMITATIONS.md.
+        # TODO(v1.5): wrap these three writes in a Firestore batch/transaction.
+        # Current risks at pilot scale (low probability, noted here for v1.5):
+        #   1. Partial write: membership created but request stays 'pending'
+        #      if update_teacher_join_request_status fails. Teacher has
+        #      access; UI still shows the request as pending.
+        #   2. Duplicate-approval race: two admins approving simultaneously
+        #      both pass the status=='pending' guard and each call
+        #      create_membership, producing two memberships for one teacher.
+        # See LIMITATIONS.md.
         membership_id = deps.db.create_membership(
             org_id=org_id,
             uid=target_uid,
@@ -283,19 +288,26 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
         try:
             teacher_user = deps.db.get_user(target_uid) or {}
             org = deps.db.get_organization(org_id) or {}
-            enqueue_outbox_email(
-                db=deps.db,
-                recipient_email=teacher_user.get('email', ''),
-                recipient_name=teacher_user.get('name'),
-                template=OutboxTemplate.TEACHER_JOIN_APPROVED,
-                template_data={
-                    'org_name': org.get('name', ''),
-                    'dashboard_url': _absolute_url('/app/teacher'),
-                },
-                related_entity_type='teacher_join_request',
-                related_entity_id=request_id,
-                created_by_uid=admin_uid,
-            )
+            teacher_email = teacher_user.get('email') or ''
+            if not teacher_email:
+                log.warning(
+                    'approve: teacher uid=%s has no email on profile; skipping approval email',
+                    target_uid,
+                )
+            else:
+                enqueue_outbox_email(
+                    db=deps.db,
+                    recipient_email=teacher_email,
+                    recipient_name=teacher_user.get('name'),
+                    template=OutboxTemplate.TEACHER_JOIN_APPROVED,
+                    template_data={
+                        'org_name': org.get('name', ''),
+                        'dashboard_url': _absolute_url('/app/teacher'),
+                    },
+                    related_entity_type='teacher_join_request',
+                    related_entity_id=request_id,
+                    created_by_uid=admin_uid,
+                )
         except Exception:
             log.exception('approval email enqueue failed request=%s', request_id)
 

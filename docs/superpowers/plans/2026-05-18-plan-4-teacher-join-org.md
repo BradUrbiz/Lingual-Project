@@ -29,12 +29,14 @@
 | `functions/templates/teacher_join_approved.html.j2` | Email template |
 | `functions/templates/teacher_join_declined.html.j2` | Email template |
 | `functions/tests/test_teacher_join_templates.py` | Template render snapshot tests |
+| `scripts/backfill_org_name_lower.py` | One-shot backfill of `organizations.name_lower` for orgs created before Plan 4 |
+| `scripts/backfill_school_admin_uids.py` | One-shot backfill of `organizations.school_admin_uids` for orgs created before Plan 4 |
 
 ### Backend — Modify
 
 | Path | Change |
 |---|---|
-| `database.py` | Add `teacher_join_requests` CRUD helpers, `search_organizations`, `list_school_admin_emails`, `ALLOWED_TEACHER_JOIN_REQUEST_STATUSES`, `TEACHER_JOIN_REQUESTS_COLLECTION`, `get_teacher_join_requests_collection()` |
+| `database.py` | Add `teacher_join_requests` CRUD helpers, `search_organizations`, `list_school_admin_emails`, `_sync_org_admin_uids`, `ALLOWED_TEACHER_JOIN_REQUEST_STATUSES`, `TEACHER_JOIN_REQUESTS_COLLECTION`, `get_teacher_join_requests_collection()`. Extend `create_organization` to write `name_lower`; extend `create_membership` to call `_sync_org_admin_uids` on school_admin grants. |
 | `backend/services/outbox.py` | Three new `OutboxTemplate` enum members |
 | `functions/main.py` | Three new entries in `_TEMPLATE_SUBJECTS` |
 | `backend/routes/schools.py` | Remove auto-approve block in `api_join_as_teacher` and replace with a 410 Gone pointer to the new endpoint |
@@ -132,12 +134,12 @@ class TeacherJoinRequestsHelpersTest(unittest.TestCase):
         self.client_patch.stop()
 
     def test_create_teacher_join_request_code_source(self):
-        """Code path writes source='invite_code' and invite_code_id."""
+        """Code path writes source='invite_code' and invite_code."""
         request_id = database.create_teacher_join_request(
             uid='teacher-1',
             org_id='org-1',
             source='invite_code',
-            invite_code_id='ABC123',
+            invite_code='ABC123',
         )
         self.assertEqual(request_id, 'tjr-1')
         self.fake_doc_ref.set.assert_called_once()
@@ -145,12 +147,12 @@ class TeacherJoinRequestsHelpersTest(unittest.TestCase):
         self.assertEqual(payload['uid'], 'teacher-1')
         self.assertEqual(payload['org_id'], 'org-1')
         self.assertEqual(payload['source'], 'invite_code')
-        self.assertEqual(payload['invite_code_id'], 'ABC123')
+        self.assertEqual(payload['invite_code'], 'ABC123')
         self.assertEqual(payload['status'], 'pending')
         self.assertIn('requested_at', payload)
 
     def test_create_teacher_join_request_search_source(self):
-        """Search path writes source='search' with no invite_code_id."""
+        """Search path writes source='search' with no invite_code."""
         database.create_teacher_join_request(
             uid='teacher-1',
             org_id='org-1',
@@ -158,7 +160,7 @@ class TeacherJoinRequestsHelpersTest(unittest.TestCase):
         )
         payload = self.fake_doc_ref.set.call_args[0][0]
         self.assertEqual(payload['source'], 'search')
-        self.assertNotIn('invite_code_id', payload)
+        self.assertNotIn('invite_code', payload)
 
     def test_create_teacher_join_request_rejects_invalid_source(self):
         with self.assertRaisesRegex(ValueError, 'Invalid source'):
@@ -210,6 +212,17 @@ class TeacherJoinRequestsHelpersTest(unittest.TestCase):
         self.assertEqual(updates['status'], 'approved')
         self.assertEqual(updates['reviewed_by_uid'], 'admin-1')
         self.assertIn('reviewed_at', updates)
+
+    def test_update_teacher_join_request_status_cancel_omits_review_metadata(self):
+        """Self-cancellation is not a review — must NOT stamp reviewed_*."""
+        database.update_teacher_join_request_status(
+            request_id='tjr-1',
+            status='cancelled',
+        )
+        updates = self.fake_doc_ref.update.call_args[0][0]
+        self.assertEqual(updates['status'], 'cancelled')
+        self.assertNotIn('reviewed_at', updates)
+        self.assertNotIn('reviewed_by_uid', updates)
 
     def test_update_teacher_join_request_status_rejects_invalid_status(self):
         with self.assertRaisesRegex(ValueError, 'Invalid status'):
@@ -271,7 +284,7 @@ def create_teacher_join_request(
     uid: str,
     org_id: str,
     source: str,
-    invite_code_id: str | None = None,
+    invite_code: str | None = None,
 ):
     """Create a teacher_join_requests doc in 'pending' status. Returns doc id."""
     if source not in ALLOWED_TEACHER_JOIN_REQUEST_SOURCES:
@@ -287,8 +300,8 @@ def create_teacher_join_request(
         'reviewed_by_uid': None,
         'decline_reason': None,
     }
-    if invite_code_id:
-        payload['invite_code_id'] = invite_code_id
+    if invite_code:
+        payload['invite_code'] = invite_code
     doc_ref.set(payload)
     return doc_ref.id
 
@@ -333,6 +346,12 @@ def list_pending_teacher_join_requests_by_org(org_id: str):
     return results
 
 
+_REVIEW_STATUSES = frozenset({
+    TEACHER_JOIN_REQUEST_STATUS_APPROVED,
+    TEACHER_JOIN_REQUEST_STATUS_DECLINED,
+})
+
+
 def update_teacher_join_request_status(
     *,
     request_id: str,
@@ -340,15 +359,19 @@ def update_teacher_join_request_status(
     reviewed_by_uid: str | None = None,
     decline_reason: str | None = None,
 ):
-    """Transition status with audit metadata. Caller validates permissions."""
+    """Transition status with audit metadata.
+
+    `reviewed_at` / `reviewed_by_uid` are stamped only for admin-review
+    transitions (approved, declined). Self-cancellation just updates `status`
+    — it's not a review.
+    """
     if status not in ALLOWED_TEACHER_JOIN_REQUEST_STATUSES:
         raise ValueError(f"Invalid status: {status!r}")
-    updates: dict = {
-        'status': status,
-        'reviewed_at': firestore.SERVER_TIMESTAMP,
-    }
-    if reviewed_by_uid is not None:
-        updates['reviewed_by_uid'] = reviewed_by_uid
+    updates: dict = {'status': status}
+    if status in _REVIEW_STATUSES:
+        updates['reviewed_at'] = firestore.SERVER_TIMESTAMP
+        if reviewed_by_uid is not None:
+            updates['reviewed_by_uid'] = reviewed_by_uid
     if decline_reason is not None:
         updates['decline_reason'] = decline_reason
     get_teacher_join_requests_collection().document(request_id).update(updates)
@@ -360,7 +383,7 @@ def update_teacher_join_request_status(
 python3 -m unittest backend.tests.test_database_teacher_join_requests -v
 ```
 
-Expected: 8 tests pass.
+Expected: 9 tests pass.
 
 - [ ] **Step 5: Commit**
 
@@ -541,6 +564,10 @@ def search_organizations(query: str, *, limit: int = 10):
     q = (query or '').strip().lower()
     if not q:
         return []
+    # Firestore prefix-range idiom: U+F8FF ('') is one of the highest
+    # Unicode private-use code points; [q, q + ''] covers every doc whose
+    # name_lower starts with q. NOTE: U+F8FF may render as empty quotes in
+    # some terminals — it is a real character.
     end = q + ''
     docs = (
         firestore.client()
@@ -593,27 +620,127 @@ def list_school_admin_emails(org_id: str):
     return recipients
 ```
 
-> **Note on `name_lower`:** `organizations` docs must populate `name_lower` (lowercased trimmed name) when created. Task 11 includes the backfill / write-path fix in `schools.py` and Plan 3's wizard already writes it. If `name_lower` is missing on existing rows, search will silently exclude them — acceptable for v1 (Plan 5 / migration script handles backfill).
+> **Critical dependency on `name_lower`:** the search query is a prefix range against `organizations.name_lower`. If this field isn't written on org creation, search silently returns empty. Steps 6–8 fix the write path in this same task. Do NOT assume Plan 3's wizard writes it — verify in code before relying on it.
 
-- [ ] **Step 4: Run test to verify pass**
+- [ ] **Step 4: Write the failing test for `name_lower` on org creation**
+
+Append to `backend/tests/test_database_teacher_join_requests.py`:
+
+```python
+class CreateOrganizationNameLowerTest(unittest.TestCase):
+    def setUp(self):
+        self.fake_doc_ref = MagicMock()
+        self.fake_doc_ref.id = 'org-new'
+        self.fake_collection = MagicMock()
+        self.fake_collection.document.return_value = self.fake_doc_ref
+        self.fake_client = MagicMock()
+        self.fake_client.collection.return_value = self.fake_collection
+        self.client_patch = patch('database.firestore.client', return_value=self.fake_client)
+        self.client_patch.start()
+
+    def tearDown(self):
+        self.client_patch.stop()
+
+    def test_create_organization_writes_name_lower(self):
+        database.create_organization(name='  SF Friends School  ')
+        payload = self.fake_doc_ref.set.call_args[0][0]
+        self.assertEqual(payload['name_lower'], 'sf friends school')
+```
+
+- [ ] **Step 5: Update `create_organization` in `database.py`**
+
+At the top of the `org_data` dict in `create_organization()` (around line 760), add the `name_lower` line:
+
+```python
+org_data = {
+    'name': name,
+    'name_lower': (name or '').strip().lower(),  # search prefix index
+    'type': org_type,
+    # ...rest unchanged
+}
+```
+
+- [ ] **Step 6: Run org-create test to verify**
+
+```bash
+python3 -m unittest backend.tests.test_database_teacher_join_requests.CreateOrganizationNameLowerTest -v
+```
+
+Expected: 1 test passes.
+
+- [ ] **Step 7: Add a backfill script for existing orgs**
+
+Create `scripts/backfill_org_name_lower.py`:
+
+```python
+"""Backfill organizations.name_lower for orgs created before Plan 4.
+
+Idempotent. Run with --dry-run first.
+
+Usage:
+    python3 scripts/backfill_org_name_lower.py --dry-run
+    python3 scripts/backfill_org_name_lower.py
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+
+import firebase_admin
+from firebase_admin import firestore
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dry-run', action='store_true')
+    args = parser.parse_args()
+
+    firebase_admin.initialize_app()
+    db = firestore.client()
+    updated = 0
+    skipped = 0
+    for doc in db.collection('organizations').stream():
+        data = doc.to_dict() or {}
+        name = data.get('name') or ''
+        expected = name.strip().lower()
+        if not expected:
+            skipped += 1
+            continue
+        if data.get('name_lower') == expected:
+            skipped += 1
+            continue
+        print(f"{'[DRY] ' if args.dry_run else ''}update {doc.id}: name_lower = {expected!r}")
+        if not args.dry_run:
+            doc.reference.update({'name_lower': expected})
+        updated += 1
+    print(f"\nDone. updated={updated} skipped={skipped}")
+
+
+if __name__ == '__main__':
+    sys.exit(main() or 0)
+```
+
+> **Coordination with Plan 3:** the admin org wizard (Plan 3) also creates orgs — verify in `backend/routes/school_requests.py` that the approval flow calls `database.create_organization()` (which now writes `name_lower`) rather than constructing the org doc by hand. If it bypasses the helper, file a coordination ticket against Plan 3.
+
+- [ ] **Step 8: Run all of Task 2's tests to verify pass**
 
 ```bash
 python3 -m unittest backend.tests.test_database_teacher_join_requests -v
 ```
 
-Expected: all tests pass (11 total in the file).
+Expected: all tests pass (14 total in the file after Task 2 — Task 1's helpers + the three new test classes added here).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add database.py backend/tests/test_database_teacher_join_requests.py
+git add database.py backend/tests/test_database_teacher_join_requests.py scripts/backfill_org_name_lower.py
 git commit -m "$(cat <<'EOF'
-feat(teacher-join): add org search + school_admin email helpers
+feat(teacher-join): org search + school_admin emails + name_lower writes
 
-search_organizations() returns metadata-only org search results
-(name, city, state, school_type) and excludes suspended/archived
-orgs. list_school_admin_emails(org_id) returns recipient records
-for outbox emails to active school_admins of an org.
+search_organizations() returns metadata-only results (name, city, state,
+school_type) for active orgs only. list_school_admin_emails(org_id) returns
+recipients for the outbox. create_organization now writes name_lower so the
+search index actually has data. Backfill script for legacy orgs included.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -899,15 +1026,15 @@ class FakeTeacherRequestsDb(FakeDbBase):
                 return {'id': rid, **r}
         return None
 
-    def create_teacher_join_request(self, *, uid, org_id, source, invite_code_id=None):
+    def create_teacher_join_request(self, *, uid, org_id, source, invite_code=None):
         self._tjr_counter += 1
         rid = f'tjr-{self._tjr_counter}'
         rec = {
             'uid': uid, 'org_id': org_id, 'source': source,
             'status': 'pending',
         }
-        if invite_code_id:
-            rec['invite_code_id'] = invite_code_id
+        if invite_code:
+            rec['invite_code'] = invite_code
         self.teacher_join_requests[rid] = rec
         return rid
 
@@ -978,6 +1105,23 @@ class SubmitTeacherJoinRequestTest(unittest.TestCase):
         resp = client.post('/api/teacher-join-requests', json={'inviteCode': 'XXXXXX'})
         self.assertEqual(resp.status_code, 404)
         self.assertFalse(resp.get_json()['success'])
+
+    def test_submit_invite_code_for_suspended_org_returns_409(self):
+        """Even if invite code is active, suspended orgs reject new joins."""
+        app, db = _build_app()
+        db.orgs['org-1'] = {
+            'name': 'SF Friends',
+            'teacher_invite_code': 'ABC123',
+            'teacher_invite_code_active': True,
+            'status': 'suspended',
+        }
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'teacher-1', 'email': 't@x.com'}
+
+        resp = client.post('/api/teacher-join-requests', json={'inviteCode': 'ABC123'})
+        self.assertEqual(resp.status_code, 409)
+        self.assertIn('not accepting', resp.get_json()['error'])
 
     def test_submit_unknown_org_id_returns_404(self):
         app, db = _build_app()
@@ -1130,6 +1274,13 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
             org = deps.db.get_org_by_teacher_invite_code(invite_code)
             if not org:
                 return jsonify({'success': False, 'error': 'Invalid or expired invite code.'}), 404
+            if org.get('status') != 'active':
+                # Suspended / archived orgs reject new joins even if a stale
+                # invite code is still flagged active on the org doc.
+                return jsonify({
+                    'success': False,
+                    'error': 'This school is not accepting new teachers right now.',
+                }), 409
             source = 'invite_code'
         else:
             org = deps.db.get_organization(org_id_param)
@@ -1167,7 +1318,7 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
             uid=uid,
             org_id=org_id,
             source=source,
-            invite_code_id=invite_code if source == 'invite_code' else None,
+            invite_code=invite_code if source == 'invite_code' else None,
         )
 
         # Notify admins via outbox. Failure to enqueue must NOT break the
@@ -1220,7 +1371,7 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
 python3 -m unittest backend.tests.test_teacher_requests_routes -v
 ```
 
-Expected: 8 tests pass.
+Expected: 9 tests pass.
 
 - [ ] **Step 5: Commit**
 
@@ -1370,7 +1521,7 @@ Inside `create_teacher_requests_blueprint(deps)` in `backend/routes/teacher_requ
         deps.db.update_teacher_join_request_status(
             request_id=rec['id'],
             status='cancelled',
-            reviewed_by_uid=uid,
+            # No reviewed_by_uid — cancellation is not a review action.
         )
         # Clear pending state on the user profile.
         try:
@@ -1688,7 +1839,10 @@ Inside `create_teacher_requests_blueprint(deps)`:
         org_id = rec['org_id']
         admin_uid = deps.get_current_user_uid()
 
-        # Create membership + mark request approved.
+        # TODO(v1.5): wrap these three writes in a Firestore batch/transaction
+        # so partial failure can't leave the system in an inconsistent state
+        # (membership created but request still pending, etc.). For pilot scale
+        # the probability is low; see LIMITATIONS.md.
         membership_id = deps.db.create_membership(
             org_id=org_id,
             uid=target_uid,
@@ -2197,7 +2351,252 @@ EOF
 
 ---
 
-## Task 11: Firestore rules + emulator test
+## Task 11: `organizations.school_admin_uids` denormalization
+
+**Why:** The teacher-join Firestore rule needs a way to check "is the caller a school_admin of this org?" Firestore rules can't run arbitrary queries, so we denormalize: each `organizations/{id}` doc carries a `school_admin_uids: string[]` array that the rule can `get()` and check with `hasAny()`. This task adds the array, keeps it in sync on every membership grant/revoke that touches `school_admin`, and provides a one-shot backfill for legacy orgs.
+
+**Files:**
+- Modify: `database.py` (add `_sync_org_admin_uids` helper, call from `create_membership`, expose for membership-removal paths)
+- Modify: `backend/tests/test_database_teacher_join_requests.py` (add a new test class)
+- Create: `scripts/backfill_school_admin_uids.py`
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `backend/tests/test_database_teacher_join_requests.py`:
+
+```python
+class SchoolAdminUidsDenormalizationTest(unittest.TestCase):
+    def setUp(self):
+        self.org_doc_ref = MagicMock()
+        self.org_doc_ref.id = 'org-1'
+        self.mem_doc_ref = MagicMock()
+        self.mem_doc_ref.id = 'mem-1'
+
+        # Two collections returned by client.collection(name)
+        self.fake_client = MagicMock()
+
+        def _collection(name):
+            mock = MagicMock()
+            if name == 'organizations':
+                mock.document.return_value = self.org_doc_ref
+            elif name == 'memberships':
+                mock.document.return_value = self.mem_doc_ref
+            return mock
+        self.fake_client.collection.side_effect = _collection
+
+        self.client_patch = patch('database.firestore.client', return_value=self.fake_client)
+        self.client_patch.start()
+
+    def tearDown(self):
+        self.client_patch.stop()
+
+    def test_create_membership_with_school_admin_role_adds_uid_to_org(self):
+        """create_membership(roles=['school_admin']) must ArrayUnion uid onto org."""
+        database.create_membership(
+            org_id='org-1',
+            uid='admin-1',
+            roles=['school_admin'],
+        )
+        # Org doc must have been updated with an ArrayUnion on school_admin_uids.
+        self.org_doc_ref.update.assert_called_once()
+        update_payload = self.org_doc_ref.update.call_args[0][0]
+        self.assertIn('school_admin_uids', update_payload)
+
+    def test_create_membership_teacher_only_does_not_touch_org_array(self):
+        """Non-admin role grant doesn't mutate school_admin_uids."""
+        database.create_membership(
+            org_id='org-1',
+            uid='teacher-1',
+            roles=['teacher'],
+        )
+        # Org doc must NOT have been updated.
+        self.org_doc_ref.update.assert_not_called()
+
+    def test_sync_org_admin_uids_remove_uses_array_remove(self):
+        """Explicit remove path uses ArrayRemove."""
+        database._sync_org_admin_uids('org-1', 'admin-1', add=False)
+        self.org_doc_ref.update.assert_called_once()
+        update_payload = self.org_doc_ref.update.call_args[0][0]
+        self.assertIn('school_admin_uids', update_payload)
+```
+
+- [ ] **Step 2: Run test to verify failure**
+
+```bash
+python3 -m unittest backend.tests.test_database_teacher_join_requests.SchoolAdminUidsDenormalizationTest -v
+```
+
+Expected: `AttributeError: module 'database' has no attribute '_sync_org_admin_uids'`.
+
+- [ ] **Step 3: Implement the helper + integrate with `create_membership`**
+
+In `database.py`, add the helper near the other org helpers (around line 770):
+
+```python
+def _sync_org_admin_uids(org_id: str, uid: str, *, add: bool) -> None:
+    """Maintain organizations/{id}.school_admin_uids in sync with membership grants.
+
+    Called whenever a membership touching the school_admin role is created or
+    removed. Idempotent; ArrayUnion / ArrayRemove are commutative.
+    """
+    if not org_id or not uid:
+        return
+    op = firestore.ArrayUnion([uid]) if add else firestore.ArrayRemove([uid])
+    get_organizations_collection().document(org_id).update({'school_admin_uids': op})
+```
+
+Update `create_membership()` (around line 784) to call the helper when `school_admin` is in the granted roles. Replace the function body:
+
+```python
+def create_membership(
+    org_id,
+    uid,
+    roles,
+    status='active',
+    primary_class_ids=None,
+    membership_id=None,
+):
+    """Create a membership document.
+
+    Side effect: if roles includes 'school_admin', also adds uid to
+    organizations/{org_id}.school_admin_uids (needed for Firestore rules
+    to authorize admin reads on Plan 4's teacher_join_requests).
+    """
+    doc_ref = get_membership_ref(membership_id) if membership_id else get_memberships_collection().document()
+    normalized_roles = _normalize_string_list(roles)
+    membership_data = {
+        'org_id': org_id,
+        'uid': uid,
+        'roles': normalized_roles,
+        'status': status,
+        'primary_class_ids': _normalize_string_list(primary_class_ids or []),
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    }
+    doc_ref.set(membership_data)
+    if 'school_admin' in normalized_roles and status == 'active':
+        _sync_org_admin_uids(org_id, uid, add=True)
+    return doc_ref.id
+```
+
+> **Membership-removal paths**: there are several ways memberships get deactivated or roles get changed (deletion_requests workflow, eventual role-change endpoint). Each one that downgrades school_admin must also call `_sync_org_admin_uids(org_id, uid, add=False)`. For Plan 4 we only ship the create-side hook because Plan 4 never deactivates school_admins. **Add a TODO comment** in `database.py` near the helper:
+>
+> ```python
+> # TODO: any future path that revokes a school_admin role (membership
+> # deletion, role-change endpoint, org suspension cascading to memberships)
+> # MUST call _sync_org_admin_uids(org_id, uid, add=False). Audit when
+> # implementing Plan 5 (Lingual admin org panel — suspend/restore).
+> ```
+
+- [ ] **Step 4: Run test to verify pass**
+
+```bash
+python3 -m unittest backend.tests.test_database_teacher_join_requests.SchoolAdminUidsDenormalizationTest -v
+```
+
+Expected: 3 tests pass.
+
+- [ ] **Step 5: Create the backfill script**
+
+Create `scripts/backfill_school_admin_uids.py`:
+
+```python
+"""Backfill organizations.school_admin_uids for orgs created before Plan 4.
+
+Walks every membership with role=school_admin & status=active, and ensures
+its uid is in the target org's school_admin_uids array.
+
+Idempotent. Run with --dry-run first.
+
+Usage:
+    python3 scripts/backfill_school_admin_uids.py --dry-run
+    python3 scripts/backfill_school_admin_uids.py
+"""
+from __future__ import annotations
+
+import argparse
+import collections
+import sys
+
+import firebase_admin
+from firebase_admin import firestore
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dry-run', action='store_true')
+    args = parser.parse_args()
+
+    firebase_admin.initialize_app()
+    db = firestore.client()
+
+    # Gather active school_admin memberships per org.
+    by_org: dict[str, set[str]] = collections.defaultdict(set)
+    for m in (
+        db.collection('memberships')
+          .where('status', '==', 'active')
+          .where('roles', 'array_contains', 'school_admin')
+          .stream()
+    ):
+        data = m.to_dict() or {}
+        org_id = data.get('org_id')
+        uid = data.get('uid')
+        if org_id and uid:
+            by_org[org_id].add(uid)
+
+    touched = 0
+    skipped = 0
+    for org_id, expected in by_org.items():
+        org_ref = db.collection('organizations').document(org_id)
+        org_doc = org_ref.get()
+        if not org_doc.exists:
+            skipped += 1
+            continue
+        current = set((org_doc.to_dict() or {}).get('school_admin_uids') or [])
+        missing = expected - current
+        if not missing:
+            skipped += 1
+            continue
+        print(f"{'[DRY] ' if args.dry_run else ''}org {org_id}: adding {sorted(missing)}")
+        if not args.dry_run:
+            org_ref.update({
+                'school_admin_uids': firestore.ArrayUnion(list(missing)),
+            })
+        touched += 1
+
+    print(f"\nDone. orgs_touched={touched} orgs_skipped={skipped}")
+
+
+if __name__ == '__main__':
+    sys.exit(main() or 0)
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add database.py backend/tests/test_database_teacher_join_requests.py scripts/backfill_school_admin_uids.py
+git commit -m "$(cat <<'EOF'
+feat(memberships): denormalize school_admin_uids onto org docs
+
+Firestore security rules can't run arbitrary queries, so we keep a
+school_admin_uids array on every organization doc and update it as a
+side effect of create_membership when school_admin is granted. Includes
+backfill script for orgs created before this commit.
+
+This unblocks the teacher_join_requests rule in the next task: an admin
+can read a request if their uid is in the target org's school_admin_uids.
+
+TODO comments flag every future membership-removal path that must also
+call _sync_org_admin_uids(add=False) — audit during Plan 5.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
+## Task 12: Firestore rules + emulator test
 
 **Files:**
 - Modify: `firestore.rules`
@@ -2290,66 +2689,19 @@ In `firestore.rules`, add a new block (place it near the `outbox_emails` block a
 
 ```
 match /teacher_join_requests/{requestId} {
-    // Requester can read their own pending/historical doc.
-    allow read: if request.auth != null
-                && resource.data.uid == request.auth.uid;
-
-    // School admin of the target org can read.
-    allow read: if request.auth != null
-                && exists(/databases/$(database)/documents/memberships/$(membershipIdForUser()))
-                // The above helper isn't standard; use the inline form below.
-                ;
-
-    // Clients never write directly; backend admin SDK bypasses rules.
-    allow write: if false;
-}
-```
-
-The helper-style query doesn't exist in Firestore rules — instead, use an explicit membership lookup. Replace the second `allow read` clause with:
-
-```
-    allow read: if request.auth != null
-                && exists(/databases/$(database)/documents/memberships/$(request.auth.uid + '_' + resource.data.org_id));
-```
-
-This requires memberships to use a composite ID `{uid}_{org_id}`. **Verify in the codebase first**: open `database.py:create_membership` and check the doc-id pattern. If memberships use auto-generated IDs (likely), the cleaner approach is to query within rules. Firestore rules do not support arbitrary queries — so the practical fix is to **denormalize** the school admin uids onto the org doc and check via:
-
-```
-    allow read: if request.auth != null
-                && get(/databases/$(database)/documents/organizations/$(resource.data.org_id))
-                    .data.school_admin_uids.hasAny([request.auth.uid]);
-```
-
-This requires:
-1. `organizations/{id}.school_admin_uids` array maintained in sync with memberships.
-2. Membership create/delete writes also update the org's `school_admin_uids` array.
-
-Add a small helper in `database.py`:
-
-```python
-def _sync_org_admin_uids(org_id: str, uid: str, *, add: bool):
-    """Maintain the denormalized organizations/{id}.school_admin_uids array."""
-    op = firestore.ArrayUnion([uid]) if add else firestore.ArrayRemove([uid])
-    get_organizations_collection().document(org_id).update({'school_admin_uids': op})
-```
-
-Call this from `create_membership(..., roles=['school_admin'])` and any membership-removal path. For Plan 4 specifically, we never create a school_admin via this flow (Plan 4 only creates teacher memberships) — but the rule still needs the array to exist for school_admins created by Plan 3. Backfill is a one-time script (Task 11.5 below or, easier, the Plan 3 approval flow already maintains it).
-
-> If `school_admin_uids` is not yet maintained anywhere in the codebase (verify before continuing): add a **minimal task**: extend `database.create_membership` to call `_sync_org_admin_uids` when roles contain `school_admin`, and run a one-shot backfill script. This is genuinely cross-cutting infra; flag it during execution and dispatch a sub-task if it's missing.
-
-Final rule (after the denormalization is in place):
-
-```
-match /teacher_join_requests/{requestId} {
     allow read: if request.auth != null
                 && (
                     resource.data.uid == request.auth.uid
                     || get(/databases/$(database)/documents/organizations/$(resource.data.org_id))
                         .data.school_admin_uids.hasAny([request.auth.uid])
                 );
+
+    // Clients never write directly; backend admin SDK bypasses rules.
     allow write: if false;
 }
 ```
+
+The admin clause relies on the `organizations.school_admin_uids` array maintained by Task 11. If a school_admin's uid isn't in that array (legacy org never backfilled), the rule denies them. Run `scripts/backfill_school_admin_uids.py` before deploying.
 
 - [ ] **Step 4: Update emulator test seed** to include `school_admin_uids` on the org:
 
@@ -2389,7 +2741,7 @@ EOF
 
 ---
 
-## Task 12: Frontend API client `teacherRequests.ts`
+## Task 13: Frontend API client `teacherRequests.ts`
 
 **Files:**
 - Create: `frontend/src/types/teacherJoin.ts`
@@ -2675,7 +3027,7 @@ EOF
 
 ---
 
-## Task 13: `TeacherJoinOrgPage` (Pane A + Pane B + Pane C)
+## Task 14: `TeacherJoinOrgPage` (Pane A + Pane B + Pane C)
 
 **Files:**
 - Create: `frontend/src/pages/TeacherJoinOrgPage.tsx`
@@ -3079,7 +3431,7 @@ EOF
 
 ---
 
-## Task 14: `TeacherJoinPendingPage`
+## Task 15: `TeacherJoinPendingPage`
 
 **Files:**
 - Create: `frontend/src/pages/TeacherJoinPendingPage.tsx`
@@ -3348,7 +3700,7 @@ EOF
 
 ---
 
-## Task 15: Wire new routes + `homeRoutes.ts` teacher_pending dispatch
+## Task 16: Wire new routes + `homeRoutes.ts` teacher_pending dispatch
 
 **Files:**
 - Modify: `frontend/src/App.tsx`
@@ -3466,7 +3818,7 @@ EOF
 
 ---
 
-## Task 16: `PendingTeacherRequestsSection` admin component
+## Task 17: `PendingTeacherRequestsSection` admin component
 
 **Files:**
 - Create: `frontend/src/components/teacher/PendingTeacherRequestsSection.tsx`
@@ -3719,7 +4071,7 @@ EOF
 
 ---
 
-## Task 17: Mount on `TeacherDashboardPage` + retire old invitations UI
+## Task 18: Mount on `TeacherDashboardPage` + retire old invitations UI
 
 **Files:**
 - Modify: `frontend/src/pages/TeacherDashboardPage.tsx`
@@ -3778,7 +4130,7 @@ EOF
 
 ---
 
-## Task 18: Delete legacy pages + API entries
+## Task 19: Delete legacy pages + API entries
 
 **Files:**
 - Delete: `frontend/src/pages/TeacherJoinSchoolPage.tsx`
@@ -3839,7 +4191,7 @@ EOF
 
 ---
 
-## Task 19: Update spec/docs to reflect shipped behavior
+## Task 20: Update spec/docs to reflect shipped behavior
 
 **Files:**
 - Modify: `docs/school-integration/TECH_SPEC.md`
@@ -3853,7 +4205,7 @@ Add a section under the teacher-onboarding chapter describing:
 - `teacher_join_requests/` collection schema (fields from Task 1)
 - Endpoints under `/api/teacher-join-requests/*` and `/api/organizations/search`
 - The approval workflow: pending → approved → membership creation + email
-- The `organizations/{id}.school_admin_uids` denormalization (Task 11)
+- The `organizations/{id}.school_admin_uids` denormalization (Task 12)
 
 - [ ] **Step 2: TASKS.md**
 
@@ -3867,6 +4219,8 @@ Mark Plan-4-related items complete with `[x]` and add any newly-discovered follo
 - [ ] Replace in-memory org search rate limiter with shared store when multi-replica
 - [ ] 7-day reminder email for stale pending teacher join requests (v1.5)
 - [ ] Realtime status listener on /signup/teacher/pending (replace 30s polling, v1.5)
+- [ ] Wrap teacher-join approve flow in a Firestore batch/transaction (v1.5 — see LIMITATIONS)
+- [ ] Document PUBLIC_BASE_URL in .env.example and deployment runbook
 ```
 
 - [ ] **Step 3: LIMITATIONS.md**
@@ -3883,6 +4237,8 @@ Add new entries:
 - Status polling is 30s; not realtime. A realtime listener is a v1.5 follow-up.
 - Search excludes suspended and archived orgs but does not respect any further geofencing.
 - **7-day reminder email to admins (spec §3) is not yet implemented.** Stale pending requests are visible on the admin dashboard but no automatic nudge is sent. Implement via a daily Cloud Function sweep that writes future-dated outbox docs once requests age past 7 days — v1.5 follow-up.
+- **Approval flow is not transactional.** `POST /api/teacher-join-requests/<id>/approve` performs three sequential Firestore writes (create membership, mark request approved, update user profile). If a later write fails after an earlier one succeeded, the system is briefly inconsistent (e.g. teacher has a membership but request still shows pending). Wrap in a Firestore batch in v1.5.
+- **`PUBLIC_BASE_URL` is a soft-required env var for outbound email CTAs.** Without it, email links use relative paths (`/app/teacher` rather than `https://lingual.app/app/teacher`), which break in email clients. Set in Cloud Run env for any deploy that should send real email.
 ```
 
 - [ ] **Step 4: codebase-conventions.md**
@@ -3895,7 +4251,7 @@ Append §14:
 After Plan 4 lands, the following is true and consumable:
 
 **Backend:**
-- `teacher_join_requests/{id}`: `{ uid, org_id, source, invite_code_id?, status, requested_at, reviewed_at?, reviewed_by_uid?, decline_reason? }`. Status enum: `pending | approved | declined | cancelled`. Source enum: `invite_code | search`.
+- `teacher_join_requests/{id}`: `{ uid, org_id, source, invite_code?, status, requested_at, reviewed_at?, reviewed_by_uid?, decline_reason? }`. Status enum: `pending | approved | declined | cancelled`. Source enum: `invite_code | search`.
 - New endpoints under `/api/teacher-join-requests/*` and `/api/organizations/search` (see `backend/routes/teacher_requests.py`).
 - `database.create_teacher_join_request`, `get_pending_teacher_join_request_by_uid`, `list_pending_teacher_join_requests_by_org`, `update_teacher_join_request_status`, `search_organizations`, `list_school_admin_emails`.
 - `OutboxTemplate.TEACHER_JOIN_REQUEST_TO_ADMIN | TEACHER_JOIN_APPROVED | TEACHER_JOIN_DECLINED`.
@@ -3934,7 +4290,7 @@ EOF
 
 ## Final verification
 
-After all 19 tasks have committed cleanly:
+After all 20 tasks have committed cleanly:
 
 ```bash
 make test-backend                    # all backend tests
@@ -3944,6 +4300,20 @@ cd frontend && npm run build         # type-check + build
 ```
 
 Expected: all green.
+
+**Pre-deploy backfills** (run on a staging env first, then production):
+
+```bash
+# Verify the backfills would touch the right rows
+python3 scripts/backfill_org_name_lower.py --dry-run
+python3 scripts/backfill_school_admin_uids.py --dry-run
+
+# Apply
+python3 scripts/backfill_org_name_lower.py
+python3 scripts/backfill_school_admin_uids.py
+```
+
+Set `PUBLIC_BASE_URL=https://lingual.app` in the Cloud Run service config so email CTAs link to absolute URLs. Confirm `RESEND_API_KEY` is still set in the Cloud Function runtime (Plan 1 infra).
 
 Then open a smoke test in the browser:
 1. Sign up as a teacher → role pick lands on join-org page.
@@ -3961,10 +4331,10 @@ If anything is off, debug via `superpowers:systematic-debugging` rather than pat
 
 | Spec §3 requirement | Implemented in |
 |---|---|
-| Pane A entry UI | Task 13 (TeacherJoinOrgPage) |
-| Pane B invite code | Task 13 + Task 4 backend |
-| Pane C search with debounced query | Task 13 + Task 9 backend |
-| "Can't find my school" → admin pivot | Task 13 |
+| Pane A entry UI | Task 14 (TeacherJoinOrgPage) |
+| Pane B invite code | Task 14 + Task 4 backend |
+| Pane C search with debounced query | Task 14 + Task 9 backend |
+| "Can't find my school" → admin pivot | Task 14 |
 | `teacher_join_requests` collection schema | Task 1 |
 | Both paths require admin approval | Task 4 + Task 10 (auto-approve removal) |
 | One pending per user | Task 4 (409 check) |
@@ -3976,12 +4346,13 @@ If anything is off, debug via `superpowers:systematic-debugging` rather than pat
 | `GET /api/organizations/search` rate-limited | Task 9 |
 | Email outbox: 3 templates | Task 3 |
 | Email at submit, approve, decline | Task 4, 7, 8 |
-| Pending page with 30s polling | Task 14 |
-| Admin review section on dashboard | Task 16 + Task 17 |
-| Firestore rules for new collection | Task 11 |
+| Pending page with 30s polling | Task 15 |
+| Admin review section on dashboard | Task 17 + Task 18 |
+| `organizations.school_admin_uids` denormalization | Task 11 |
+| Firestore rules for new collection | Task 12 |
 | Auto-approve removal | Task 10 |
-| Docs + LIMITATIONS sync | Task 19 |
-| 7-day admin reminder email | **Deferred to v1.5**, logged in LIMITATIONS (Task 19) |
+| Docs + LIMITATIONS sync | Task 20 |
+| 7-day admin reminder email | **Deferred to v1.5**, logged in LIMITATIONS (Task 20) |
 | Multi-org membership block | Task 4 (any active membership returns 422) |
 
 If any cell is empty after execution, that task didn't ship the spec's requirement and must be patched.

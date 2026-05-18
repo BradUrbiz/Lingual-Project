@@ -86,6 +86,41 @@ class FakeTeacherRequestsDb(FakeDbBase):
         if decline_reason is not None:
             rec['decline_reason'] = decline_reason
 
+    def list_pending_teacher_join_requests_by_org(self, org_id):
+        out = []
+        for rid, r in self.teacher_join_requests.items():
+            if r['org_id'] == org_id and r['status'] == 'pending':
+                out.append({'id': rid, **r})
+        return out
+
+    def resolve_user_school_context(self, uid, preferred_active_membership_id=None):
+        """Override FakeDbBase.resolve_user_school_context to read _membership_list."""
+        memberships = []
+        for i, m in enumerate(self._membership_list):
+            if m.get('uid') != uid or m.get('status') not in {'active', 'invited'}:
+                continue
+            org_id = m.get('org_id')
+            org = self.orgs.get(org_id) or {}
+            mem_id = m.get('id') or f'mem-{i}'
+            memberships.append({
+                'id': mem_id,
+                'orgId': org_id,
+                'orgName': org.get('name', ''),
+                'orgType': org.get('type'),
+                'roles': m.get('roles', []),
+                'status': m.get('status', 'active'),
+                'primaryClassIds': m.get('primaryClassIds', []),
+            })
+        active_membership_id = preferred_active_membership_id or self.user_active_memberships.get(uid)
+        active = next((m for m in memberships if m['id'] == active_membership_id), memberships[0] if memberships else None)
+        return {
+            'memberships': memberships,
+            'active_membership': active,
+            'active_membership_id': active.get('id') if active else None,
+            'active_organization_id': active.get('orgId') if active else None,
+            'active_roles': active.get('roles', []) if active else [],
+        }
+
 
 def _build_app(*, uid='teacher-1', user_email='t@x.com', user_name='Teacher'):
     db = FakeTeacherRequestsDb()
@@ -316,6 +351,50 @@ class PollAndCancelTest(unittest.TestCase):
         # Existing records are unchanged.
         self.assertEqual(db.teacher_join_requests['tjr-cancelled']['status'], 'cancelled')
         self.assertEqual(db.teacher_join_requests['tjr-approved']['status'], 'approved')
+
+
+class AdminListPendingTest(unittest.TestCase):
+    def _admin_app(self):
+        app, db = _build_app(uid='admin-1', user_email='admin@x.com', user_name='Admin')
+        db._membership_list.append({
+            'uid': 'admin-1', 'org_id': 'org-1',
+            'roles': ['school_admin'], 'status': 'active',
+        })
+        db.orgs['org-1'] = {'name': 'SF Friends'}
+        return app, db
+
+    def test_admin_sees_pending_for_own_org(self):
+        app, db = self._admin_app()
+        db.users['teacher-99'] = {'email': 't99@x.com', 'name': 'T 99'}
+        db.teacher_join_requests['tjr-1'] = {
+            'uid': 'teacher-99', 'org_id': 'org-1',
+            'source': 'invite_code', 'status': 'pending',
+        }
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'admin-1', 'email': 'admin@x.com'}
+            sess['active_organization_id'] = 'org-1'
+            sess['active_membership_id'] = 'mem-1'
+
+        resp = client.get('/api/teacher-join-requests')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertEqual(len(body['requests']), 1)
+        first = body['requests'][0]
+        self.assertEqual(first['requestId'], 'tjr-1')
+        self.assertEqual(first['uid'], 'teacher-99')
+        self.assertEqual(first['email'], 't99@x.com')
+        self.assertEqual(first['name'], 'T 99')
+
+    def test_non_admin_gets_403(self):
+        app, db = _build_app(uid='teacher-1')
+        # No school_admin membership.
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'teacher-1', 'email': 't@x.com'}
+
+        resp = client.get('/api/teacher-join-requests')
+        self.assertEqual(resp.status_code, 403)
 
 
 if __name__ == '__main__':

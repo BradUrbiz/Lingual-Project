@@ -162,6 +162,30 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
             'source': source,
         }), 201
 
+    @bp.route('/api/teacher-join-requests', methods=['GET'])
+    @deps.login_required
+    def admin_list_pending():
+        try:
+            ctx = deps.get_school_request_context()
+            ctx.require_any_role({'school_admin'})
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        org_id = ctx.active_organization_id
+        records = deps.db.list_pending_teacher_join_requests_by_org(org_id)
+        out = []
+        for rec in records:
+            user = deps.db.get_user(rec['uid']) or {}
+            out.append({
+                'requestId': rec['id'],
+                'uid': rec['uid'],
+                'name': user.get('name') or '',
+                'email': user.get('email') or '',
+                'source': rec.get('source'),
+                'status': rec.get('status'),
+                'requestedAt': str(rec['requested_at']) if rec.get('requested_at') else None,
+            })
+        return jsonify({'success': True, 'requests': out}), 200
+
     @bp.route('/api/teacher-join-requests/me', methods=['GET'])
     @deps.login_required
     def get_my_request():

@@ -52,6 +52,20 @@ Owner: Engineering + Product
 - [x] Create class manually flow.
 - [x] Invite student flow (class join code + student join page + roster management).
 - [x] Add basic teacher-facing setup checklist state.
+- [x] Hybrid teacher join: invite code + name search (Plan 4)
+- [x] Admin approval pipeline with email notification (Plan 4)
+- [x] Removed auto-approve from /api/schools/join-as-teacher (Plan 4)
+- [x] organizations.school_admin_uids denormalization for rules (Plan 4)
+- [x] PendingTeacherRequestsSection on TeacherDashboardPage (Plan 4)
+- [ ] Backfill `organizations.school_admin_uids` for orgs created before Plan 4 — run `scripts/backfill_school_admin_uids.py`
+- [ ] Backfill `organizations.name_lower` for orgs created before Plan 4 — run `scripts/backfill_org_name_lower.py`
+- [ ] **(Plan 5 acceptance)** Any membership-removal path MUST call `_sync_org_admin_uids(org_id, uid, add=False)` when removing `school_admin`. Extend `backend/tests/test_school_admin_uids_invariant.py` with the removal regression.
+- [ ] Replace in-memory org search rate limiter with a shared store (Redis / Firestore counter) when scaling to multi-replica.
+- [ ] 7-day reminder email for stale pending teacher join requests (v1.5). **Product decision needed before launch.**
+- [ ] Realtime status listener on `/signup/teacher/pending` (replace 30s polling, v1.5).
+- [ ] Wrap teacher-join approve flow in a Firestore batch/transaction (v1.5). Introduces the project's first transactional path — plan it cross-cuttingly.
+- [ ] Document `PUBLIC_BASE_URL` in `.env.example` and the deployment runbook.
+- [ ] Top-level `try/except` wrapper around the main body of each route in `backend/routes/teacher_requests.py` (matches `school_requests.py` pattern; ensures Firestore transient errors return shaped JSON, not unformatted HTML 500).
 
 ### LMS / roster import
 

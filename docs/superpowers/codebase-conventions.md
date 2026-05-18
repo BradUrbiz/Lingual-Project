@@ -238,3 +238,49 @@ Cloud Functions tests are not yet in any Makefile target — run with `python3 -
 ## 13. When something here is wrong
 
 This doc is itself a Plan 1 byproduct. If a future plan discovers a different convention or this doc is out of date, the *code* is the source of truth — update this file in the same PR that changes the convention.
+
+---
+
+## 14. Plan 4 contract surface
+
+After Plan 4 lands, the following is true and consumable by downstream plans:
+
+**Backend collections:**
+- `teacher_join_requests/{id}`: `{ uid, org_id, source, invite_code?, status, requested_at, reviewed_at?, reviewed_by_uid?, decline_reason? }`. Status enum: `pending | approved | declined | cancelled`. Source enum: `invite_code | search`. `reviewed_at`/`reviewed_by_uid` are stamped ONLY on `approved`/`declined` (self-cancellation does not stamp).
+- `organizations/{id}.school_admin_uids: string[]` — maintained as a side effect of `database.create_membership` whenever roles contain `school_admin` AND status is `active`. Read by the Firestore rule for `teacher_join_requests` to authorize admin reads.
+- `outbox_emails/{id}` template_ids extended: `teacher_join_request_to_admin`, `teacher_join_approved`, `teacher_join_declined`.
+
+**Backend endpoints** (`backend/routes/teacher_requests.py`):
+- `POST /api/teacher-join-requests` — submit by `inviteCode` OR `orgId` (exclusive). 201 on success; 400/404/409/422 guards.
+- `GET /api/teacher-join-requests/me` — latest non-cancelled request (200) or 204.
+- `DELETE /api/teacher-join-requests/me` — cancels pending request, reverts onboarding_state to `role_selected`.
+- `GET /api/teacher-join-requests` — admin pending list for own org.
+- `POST /api/teacher-join-requests/<id>/approve` — creates membership + outbox email.
+- `POST /api/teacher-join-requests/<id>/decline` — requires `reason`; outbox email with reason and retry URL.
+- `GET /api/organizations/search?q=<q>` — rate-limited (10 req/sec/uid, in-memory).
+
+**Backend retired:**
+- `POST /api/schools/join-as-teacher` returns **410 Gone** with a pointer to the new endpoint.
+
+**Database helpers** (`database.py`):
+- `create_teacher_join_request`, `get_pending_teacher_join_request_by_uid`, `get_latest_active_teacher_join_request_by_uid` (covers approved/declined for `/me` polling), `get_teacher_join_request`, `list_pending_teacher_join_requests_by_org`, `update_teacher_join_request_status` (raises `ValueError` if review transition lacks `reviewed_by_uid`).
+- `search_organizations`, `list_school_admin_emails`.
+- `_sync_org_admin_uids(org_id, uid, *, add)` — maintains the denormalized array.
+
+**Frontend:**
+- API client: `frontend/src/api/teacherRequests.ts`. Types: `frontend/src/types/teacherJoin.ts`.
+- Pages: `/signup/teacher/join-org` → `TeacherJoinOrgPage` (three panes), `/signup/teacher/pending` → `TeacherJoinPendingPage` (30s polling).
+- Component: `PendingTeacherRequestsSection` mounted on `TeacherDashboardPage`.
+- Dispatcher (`homeRoutes.ts`): `onboardingState='teacher_pending'` → `TEACHER_JOIN_PENDING_ROUTE`.
+
+**Firestore rules:**
+- `teacher_join_requests/{id}` — read by requester OR school_admin (via `school_admin_uids` lookup); all writes via backend admin SDK.
+
+**Env vars:**
+- `PUBLIC_BASE_URL` — feature-gated. Drives absolute URLs in outbox emails.
+
+**Vitest config:**
+- `fakeTimers: { shouldAdvanceTime: true }` was added so RTL's `waitFor` works inside `vi.useFakeTimers()` blocks (TeacherJoinPendingPage's polling tests).
+
+**Forward obligation for Plan 5+:**
+Any membership-removal path MUST call `_sync_org_admin_uids(org_id, uid, add=False)` when the removed role contained `school_admin`. Extend `backend/tests/test_school_admin_uids_invariant.py` with the removal regression. Without this, the `school_admin_uids` array drifts and the rule keeps granting read access to former admins.

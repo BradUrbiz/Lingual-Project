@@ -1042,4 +1042,64 @@ Official references used to shape the architecture:
 - Should analytics rollups run in Flask, Cloud Functions, or scheduled GCP jobs for beta?
 - Should curriculum package payloads live fully in Firestore, Cloud Storage, or a mixed model?
 - Do we store any raw audio by default for general speaking assignments, or only for pronunciation-enabled assignments?
+
+## 13. Teacher Join-Org Flow (Plan 4)
+
+Teachers join an existing org via one of two paths:
+
+1. **Invite code** — admin-generated 6-char org-wide code (existing
+   `teacher_invite_code` on the org doc).
+2. **Search** — teacher types school name; backend prefix-matches on
+   `organizations.name_lower`.
+
+Both paths create a `teacher_join_requests/{id}` document and notify
+the org's school admins via the outbox. The auto-approve behavior from
+commit 4bbcbe3 is removed; every join goes through an admin review.
+
+**Collection: `teacher_join_requests/{id}`**
+
+| Field | Type | Notes |
+|---|---|---|
+| `uid` | str | requesting teacher |
+| `org_id` | str | target org |
+| `source` | `invite_code` \| `search` | submission path |
+| `invite_code` | str? | populated when source=invite_code |
+| `status` | `pending` \| `approved` \| `declined` \| `cancelled` | |
+| `requested_at` | timestamp | |
+| `reviewed_at` | timestamp? | stamped only on approved/declined |
+| `reviewed_by_uid` | str? | stamped only on approved/declined |
+| `decline_reason` | str? | required when status=declined |
+
+**Endpoints** (all on the `teacher_requests` blueprint):
+
+| Method | Path | Caller | Effect |
+|---|---|---|---|
+| POST | `/api/teacher-join-requests` | teacher | submits request, queues admin email |
+| GET | `/api/teacher-join-requests/me` | teacher | latest non-cancelled request (status + decline reason) |
+| DELETE | `/api/teacher-join-requests/me` | teacher | cancels pending request, reverts onboarding_state |
+| GET | `/api/teacher-join-requests` | school_admin | pending list for own org |
+| POST | `/api/teacher-join-requests/<id>/approve` | school_admin | creates membership + sends teacher email |
+| POST | `/api/teacher-join-requests/<id>/decline` | school_admin | sets status=declined, sends teacher email |
+| GET | `/api/organizations/search?q=<q>` | signed-in user | metadata-only prefix search, rate-limited |
+
+**`organizations.school_admin_uids` denormalization**
+
+The teacher_join_requests Firestore rule needs to authorize school_admin
+reads without running a query (Firestore rules cannot query). To support
+this, every organization carries a `school_admin_uids: string[]` array
+that is maintained as a side-effect of `database.create_membership` when
+a school_admin role is granted on an active membership. The rule
+`get(...).data.school_admin_uids.hasAny([request.auth.uid])` consults
+this array.
+
+**Future obligation:** any membership-removal path (revoke, role-downgrade,
+org-suspend cascade) MUST call `_sync_org_admin_uids(org_id, uid, add=False)`.
+Without this, the array drifts and the rule keeps granting read access
+to former admins. Plan 5 must extend `test_school_admin_uids_invariant.py`
+to cover the removal path.
+
+**Outbox templates added:**
+- `teacher_join_request_to_admin` (on submit → org admins)
+- `teacher_join_approved` (on approve → teacher)
+- `teacher_join_declined` (on decline → teacher)
 - ~~Which LMS gets the first real integration path: Google Classroom or Canvas?~~ **Resolved: Canvas LMS first. Implemented with PAT-based auth, per-class connections stored in `canvas_connections` (encrypted PAT via AES-256-GCM), roster visibility via `canvas_roster_entries/` (Canvas-truth view only; does not create enrollments — see the 2026-04-21 roster-decouple invariant in §4.1), and `canvas_course_content` for student module view. See `backend/services/canvas/` and `backend/routes/integrations.py`. Enrollments are created only by join code (student action) or LTI launch (consent-by-click), never by PAT sync.**

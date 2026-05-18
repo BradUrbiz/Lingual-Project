@@ -453,7 +453,6 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             if req.get('status') != 'pending':
                 return jsonify({'success': False, 'error': 'Only pending requests can be approved.'}), 409
 
-            # Create the organization and membership
             org_id = deps.db.create_organization(
                 name=req['school_name'],
                 org_type=req.get('org_type', 'school'),
@@ -472,6 +471,64 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
                 'reviewed_at': datetime.now(UTC),
                 'created_org_id': org_id,
             })
+
+            # Move the requester's onboarding state forward.
+            try:
+                deps.db.update_user_profile(req['requester_uid'], onboarding_state='complete')
+            except Exception as exc:
+                print(f'[onboarding] state update failed on approval: {exc}')
+
+            # --- Best-effort side effects ---
+            pre_invites = req.get('pre_invited_teachers') or []
+            try:
+                if pre_invites:
+                    deps.db.record_school_request_pre_invites(
+                        org_id=org_id,
+                        requester_uid=req['requester_uid'],
+                        emails=pre_invites,
+                    )
+            except Exception as exc:
+                print(f'[pre-invites] record failed: {exc}')
+
+            firestore_client = database.get_db()
+            base = _public_base_url()
+            try:
+                enqueue_outbox_email(
+                    db=firestore_client,
+                    recipient_email=req.get('requester_email') or '',
+                    recipient_name=req.get('requester_name'),
+                    template=OutboxTemplate.SCHOOL_REQUEST_APPROVED,
+                    template_data={
+                        'org_name': req.get('school_name'),
+                        'requester_name': req.get('requester_name'),
+                        'login_url': f'{base}/login',
+                    },
+                    related_entity_type='school_request',
+                    related_entity_id=request_id,
+                    created_by_uid=uid,
+                )
+            except Exception as exc:
+                print(f'[outbox] school_request_approved enqueue failed: {exc}')
+
+            inviter_name = (req.get('admin_identity') or {}).get('full_name') or req.get('requester_name') or 'A school administrator'
+            for email in pre_invites:
+                try:
+                    enqueue_outbox_email(
+                        db=firestore_client,
+                        recipient_email=email,
+                        recipient_name=None,
+                        template=OutboxTemplate.TEACHER_INVITATION,
+                        template_data={
+                            'org_name': req.get('school_name'),
+                            'inviter_name': inviter_name,
+                            'signup_url': f'{base}/signup?role=teacher',
+                        },
+                        related_entity_type='school_request',
+                        related_entity_id=request_id,
+                        created_by_uid=uid,
+                    )
+                except Exception as exc:
+                    print(f'[outbox] teacher_invitation enqueue failed for {email}: {exc}')
 
             updated = deps.db.get_school_request(request_id)
             return jsonify({'success': True, 'request': _serialize_request(updated)}), 200

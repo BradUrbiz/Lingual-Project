@@ -73,6 +73,39 @@ def render_template(template_id: str, data: dict[str, Any]) -> tuple[str, str]:
 MAX_OUTBOX_ATTEMPTS = 5
 
 
+def _claim_pending_outbox_email(ref) -> dict[str, Any] | None:
+    """Atomically claim a pending outbox email before calling the provider.
+
+    Firestore/Eventarc triggers are at-least-once. A transaction keeps duplicate
+    trigger deliveries from sending the same email twice: only one invocation
+    can observe status='pending' and move it to 'sending'.
+    """
+    transaction = fb_firestore.client().transaction()
+
+    @fb_firestore.transactional
+    def _claim(tx):
+        snapshot = ref.get(transaction=tx)
+        if getattr(snapshot, 'exists', True) is False:
+            return None
+        current = snapshot.to_dict() or {}
+        if current.get('status') != 'pending':
+            return None
+
+        attempt = int(current.get('attempt_count') or 0) + 1
+        update_payload = {
+            'status': 'sending',
+            'attempt_count': attempt,
+            'last_attempt_at': fb_firestore.SERVER_TIMESTAMP,
+        }
+        tx.update(ref, update_payload)
+
+        claimed = dict(current)
+        claimed.update(update_payload)
+        return claimed
+
+    return _claim(transaction)
+
+
 def _send_outbox_email_impl(event) -> None:
     """Business logic for send_outbox_email; extracted so tests can call it directly.
 
@@ -89,19 +122,16 @@ def _send_outbox_email_impl(event) -> None:
         return
 
     ref = event.data.after.reference
-    attempt = int(after.get('attempt_count') or 0) + 1
-
-    ref.update({
-        'status': 'sending',
-        'attempt_count': attempt,
-        'last_attempt_at': fb_firestore.SERVER_TIMESTAMP,
-    })
+    claimed = _claim_pending_outbox_email(ref)
+    if claimed is None:
+        return
+    attempt = int(claimed.get('attempt_count') or 0)
 
     try:
         subject, html = render_template(
-            after['template_id'], after.get('template_data') or {}
+            claimed['template_id'], claimed.get('template_data') or {}
         )
-        recipient = after.get('recipient') or {}
+        recipient = claimed.get('recipient') or {}
         result = send_via_resend(
             to_email=recipient.get('email'),
             to_name=recipient.get('name'),

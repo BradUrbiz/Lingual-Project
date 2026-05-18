@@ -109,16 +109,87 @@ class SendOutboxEmailTriggerTest(unittest.TestCase):
         ev.params = {'emailId': 'em-1'}
         return ev
 
+    def _claimed_payload(self, payload):
+        claimed = dict(payload)
+        claimed['status'] = 'sending'
+        claimed['attempt_count'] = int(payload.get('attempt_count') or 0) + 1
+        return claimed
+
+    def test_claim_pending_doc_updates_status_inside_transaction(self):
+        with patch('firebase_admin.initialize_app'):
+            from functions.main import _claim_pending_outbox_email
+
+            snapshot = MagicMock()
+            snapshot.exists = True
+            snapshot.to_dict.return_value = {
+                'status': 'pending',
+                'attempt_count': 2,
+                'template_id': 'school_request_to_lingual',
+            }
+            ref = MagicMock()
+            ref.get.return_value = snapshot
+            transaction = MagicMock()
+            mock_db = MagicMock()
+            mock_db.transaction.return_value = transaction
+
+            with patch('functions.main.fb_firestore.client', return_value=mock_db):
+                claimed = _claim_pending_outbox_email(ref)
+
+            self.assertIsNotNone(claimed)
+            self.assertEqual(claimed['status'], 'sending')
+            self.assertEqual(claimed['attempt_count'], 3)
+            transaction.update.assert_called_once()
+            update_ref, update_payload = transaction.update.call_args.args
+            self.assertEqual(update_ref, ref)
+            self.assertEqual(update_payload['status'], 'sending')
+            self.assertEqual(update_payload['attempt_count'], 3)
+            self.assertIn('last_attempt_at', update_payload)
+            ref.update.assert_not_called()
+
+    def test_claim_non_pending_doc_returns_none_without_transaction_update(self):
+        with patch('firebase_admin.initialize_app'):
+            from functions.main import _claim_pending_outbox_email
+
+            snapshot = MagicMock()
+            snapshot.exists = True
+            snapshot.to_dict.return_value = {'status': 'sending', 'attempt_count': 1}
+            ref = MagicMock()
+            ref.get.return_value = snapshot
+            transaction = MagicMock()
+            mock_db = MagicMock()
+            mock_db.transaction.return_value = transaction
+
+            with patch('functions.main.fb_firestore.client', return_value=mock_db):
+                claimed = _claim_pending_outbox_email(ref)
+
+            self.assertIsNone(claimed)
+            transaction.update.assert_not_called()
+
+    def test_pending_event_skips_send_when_transaction_claim_loses_race(self):
+        with patch('firebase_admin.initialize_app'):
+            from functions.main import _send_outbox_email_impl
+
+            ev = self._make_event({'status': 'pending', 'attempt_count': 0})
+            with patch('functions.main._claim_pending_outbox_email', return_value=None), \
+                 patch('functions.main.render_template') as mock_render, \
+                 patch('functions.main.send_via_resend') as mock_send:
+                _send_outbox_email_impl(ev)
+
+            mock_render.assert_not_called()
+            mock_send.assert_not_called()
+            ev.data.after.reference.update.assert_not_called()
+
     def test_pending_email_sends_and_updates_doc(self):
         with patch('firebase_admin.initialize_app'):
             from functions.main import _send_outbox_email_impl
 
             with patch('functions.main.send_via_resend') as mock_send, \
-                 patch('functions.main.render_template') as mock_render:
+                 patch('functions.main.render_template') as mock_render, \
+                 patch('functions.main._claim_pending_outbox_email') as mock_claim:
                 mock_render.return_value = ('Subject', '<p>hi</p>')
                 mock_send.return_value = {'mode': 'live', 'message_id': 'msg_999'}
 
-                ev = self._make_event({
+                payload = {
                     'recipient': {'email': 'admin@lingual.app', 'name': 'Pat'},
                     'template_id': 'school_request_to_lingual',
                     'template_data': {
@@ -129,13 +200,14 @@ class SendOutboxEmailTriggerTest(unittest.TestCase):
                     },
                     'status': 'pending',
                     'attempt_count': 0,
-                })
+                }
+                mock_claim.return_value = self._claimed_payload(payload)
+                ev = self._make_event(payload)
 
                 _send_outbox_email_impl(ev)
 
             update_calls = ev.data.after.reference.update.call_args_list
             statuses = [c.args[0]['status'] for c in update_calls]
-            self.assertIn('sending', statuses)
             self.assertIn('sent', statuses)
             sent_call = next(c for c in update_calls if c.args[0]['status'] == 'sent')
             self.assertEqual(sent_call.args[0]['resend_message_id'], 'msg_999')
@@ -145,11 +217,12 @@ class SendOutboxEmailTriggerTest(unittest.TestCase):
             from functions.main import _send_outbox_email_impl
 
             with patch('functions.main.send_via_resend') as mock_send, \
-                 patch('functions.main.render_template') as mock_render:
+                 patch('functions.main.render_template') as mock_render, \
+                 patch('functions.main._claim_pending_outbox_email') as mock_claim:
                 mock_render.return_value = ('Subject', '<p>hi</p>')
                 mock_send.return_value = {'mode': 'dev', 'message_id': None}
 
-                ev = self._make_event({
+                payload = {
                     'recipient': {'email': 'admin@lingual.app', 'name': None},
                     'template_id': 'school_request_to_lingual',
                     'template_data': {
@@ -160,7 +233,9 @@ class SendOutboxEmailTriggerTest(unittest.TestCase):
                     },
                     'status': 'pending',
                     'attempt_count': 0,
-                })
+                }
+                mock_claim.return_value = self._claimed_payload(payload)
+                ev = self._make_event(payload)
 
                 _send_outbox_email_impl(ev)
 
@@ -173,11 +248,12 @@ class SendOutboxEmailTriggerTest(unittest.TestCase):
             from functions.main import _send_outbox_email_impl
 
             with patch('functions.main.send_via_resend') as mock_send, \
-                 patch('functions.main.render_template') as mock_render:
+                 patch('functions.main.render_template') as mock_render, \
+                 patch('functions.main._claim_pending_outbox_email') as mock_claim:
                 mock_render.return_value = ('Subject', '<p>hi</p>')
                 mock_send.side_effect = RuntimeError('boom')
 
-                ev = self._make_event({
+                payload = {
                     'recipient': {'email': 'admin@lingual.app', 'name': 'Pat'},
                     'template_id': 'school_request_to_lingual',
                     'template_data': {
@@ -188,7 +264,9 @@ class SendOutboxEmailTriggerTest(unittest.TestCase):
                     },
                     'status': 'pending',
                     'attempt_count': 2,
-                })
+                }
+                mock_claim.return_value = self._claimed_payload(payload)
+                ev = self._make_event(payload)
 
                 _send_outbox_email_impl(ev)
 
@@ -207,11 +285,12 @@ class SendOutboxEmailTriggerTest(unittest.TestCase):
             from functions.main import _send_outbox_email_impl
 
             with patch('functions.main.send_via_resend') as mock_send, \
-                 patch('functions.main.render_template') as mock_render:
+                 patch('functions.main.render_template') as mock_render, \
+                 patch('functions.main._claim_pending_outbox_email') as mock_claim:
                 mock_render.return_value = ('Subject', '<p>hi</p>')
                 mock_send.side_effect = RuntimeError('boom')
 
-                ev = self._make_event({
+                payload = {
                     'recipient': {'email': 'admin@lingual.app', 'name': 'Pat'},
                     'template_id': 'school_request_to_lingual',
                     'template_data': {
@@ -222,7 +301,9 @@ class SendOutboxEmailTriggerTest(unittest.TestCase):
                     },
                     'status': 'pending',
                     'attempt_count': 4,  # next attempt would be 5 → terminal
-                })
+                }
+                mock_claim.return_value = self._claimed_payload(payload)
+                ev = self._make_event(payload)
 
                 _send_outbox_email_impl(ev)
 

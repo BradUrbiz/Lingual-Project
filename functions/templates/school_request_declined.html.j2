@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111;max-width:560px;margin:0 auto;padding:32px 16px;line-height:1.5;">
+  <h1 style="margin:0 0 16px;font-size:22px;">School registration needs more info</h1>
+  <p>Hi {{ requester_name | e }},</p>
+  <p>We weren't able to approve <strong>{{ org_name | e }}</strong> as submitted.</p>
+  {% if reason %}
+    <p style="background:#fff7d6;border:1px solid #f0d870;padding:12px 14px;border-radius:8px;">
+      <strong>Reviewer notes:</strong><br>{{ reason | e }}
+    </p>
+  {% endif %}
+  <p>You can edit your submission and resubmit, or reach out to us at <a href="{{ support_url | e }}">{{ support_url | e }}</a> with questions.</p>
+  <hr style="border:none;border-top:1px solid #eee;margin:32px 0;">
+  <p style="color:#888;font-size:12px;">Lingual — Teacher-designed practice, AI-executed at student scale.</p>
+</body>
+</html>

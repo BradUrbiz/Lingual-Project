@@ -62,5 +62,65 @@ class SchoolCreationDraftAccessorsTest(unittest.TestCase):
         self.assertEqual(ref, mock_coll.return_value.document.return_value)
 
 
+class SchoolCreationDraftHelpersTest(unittest.TestCase):
+    @patch('database.get_school_creation_draft_ref')
+    def test_get_returns_none_when_missing(self, mock_ref):
+        snap = MagicMock()
+        snap.exists = False
+        mock_ref.return_value.get.return_value = snap
+        self.assertIsNone(database.get_school_creation_draft('uid-1'))
+
+    @patch('database.get_school_creation_draft_ref')
+    def test_get_returns_data_when_present(self, mock_ref):
+        snap = MagicMock()
+        snap.exists = True
+        snap.to_dict.return_value = {
+            'current_step': 2,
+            'draft_payload': {'school_name': 'SF Friends'},
+        }
+        mock_ref.return_value.get.return_value = snap
+        draft = database.get_school_creation_draft('uid-1')
+        self.assertEqual(draft['current_step'], 2)
+        self.assertEqual(draft['draft_payload'], {'school_name': 'SF Friends'})
+        self.assertEqual(draft['uid'], 'uid-1')
+
+    @patch('database.get_school_creation_draft_ref')
+    def test_upsert_writes_payload(self, mock_ref):
+        database.upsert_school_creation_draft(
+            'uid-1',
+            current_step=3,
+            draft_payload={'school_name': 'SF Friends'},
+        )
+        args, kwargs = mock_ref.return_value.set.call_args
+        payload = args[0]
+        self.assertEqual(payload['current_step'], 3)
+        self.assertEqual(payload['draft_payload'], {'school_name': 'SF Friends'})
+        self.assertIn('updated_at', payload)
+        self.assertEqual(kwargs, {'merge': True})
+
+    def test_upsert_rejects_step_below_min(self):
+        with self.assertRaisesRegex(ValueError, 'current_step'):
+            database.upsert_school_creation_draft(
+                'uid-1', current_step=0, draft_payload={},
+            )
+
+    def test_upsert_rejects_step_above_max(self):
+        with self.assertRaisesRegex(ValueError, 'current_step'):
+            database.upsert_school_creation_draft(
+                'uid-1', current_step=5, draft_payload={},
+            )
+
+    def test_upsert_rejects_non_dict_payload(self):
+        with self.assertRaisesRegex(ValueError, 'draft_payload'):
+            database.upsert_school_creation_draft(
+                'uid-1', current_step=1, draft_payload='not a dict',
+            )
+
+    @patch('database.get_school_creation_draft_ref')
+    def test_delete_calls_doc_delete(self, mock_ref):
+        database.delete_school_creation_draft('uid-1')
+        mock_ref.return_value.delete.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -440,6 +440,50 @@ def get_school_creation_draft_ref(uid):
     return get_school_creation_drafts_collection().document(uid)
 
 
+def get_school_creation_draft(uid):
+    """Return the user's wizard draft dict, or None if no draft exists.
+
+    The returned dict has keys `uid`, `current_step`, `draft_payload`, and
+    `updated_at` (Firestore Timestamp).
+    """
+    snap = get_school_creation_draft_ref(uid).get()
+    if not snap.exists:
+        return None
+    data = snap.to_dict() or {}
+    data['uid'] = uid
+    return data
+
+
+def upsert_school_creation_draft(uid, *, current_step, draft_payload):
+    """Create or update a user's wizard draft (merge semantics).
+
+    Raises ValueError if `current_step` is outside [WIZARD_STEP_MIN, WIZARD_STEP_MAX]
+    or `draft_payload` is not a dict.
+    """
+    if not isinstance(current_step, int) or not (
+        WIZARD_STEP_MIN <= current_step <= WIZARD_STEP_MAX
+    ):
+        raise ValueError(
+            f'current_step must be int in [{WIZARD_STEP_MIN}, {WIZARD_STEP_MAX}]; got {current_step!r}'
+        )
+    if not isinstance(draft_payload, dict):
+        raise ValueError(f'draft_payload must be a dict; got {type(draft_payload).__name__}')
+
+    get_school_creation_draft_ref(uid).set(
+        {
+            'current_step': current_step,
+            'draft_payload': draft_payload,
+            'updated_at': firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
+    )
+
+
+def delete_school_creation_draft(uid):
+    """Delete a user's wizard draft. Safe to call when no draft exists."""
+    get_school_creation_draft_ref(uid).delete()
+
+
 def get_practice_sessions_collection():
     """Get practice sessions collection."""
     return get_db().collection('practice_sessions')

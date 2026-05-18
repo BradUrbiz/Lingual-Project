@@ -2626,10 +2626,18 @@ def unlink_assignment_from_canvas_item(assignment_id, canvas_content_id):
 
 
 def create_school_request(requester_uid, requester_email, requester_name,
-                          school_name, org_type, website_url='', canvas_instance_url=''):
-    """Create a school join request."""
+                          school_name, org_type, website_url='',
+                          canvas_instance_url='', *, enriched=None):
+    """Create a school join request.
+
+    `enriched`, when provided, is merged into the document. Legal keys are the
+    Plan 3 wizard groups: `location`, `school_type`, `public_private`,
+    `grade_size`, `official_email_domains`, `admin_identity`, `integration`,
+    `curriculum`, `pre_invited_teachers`. Validation of inner values is the
+    route's responsibility (this function trusts its caller).
+    """
     doc_ref = get_school_requests_collection().document()
-    doc_ref.set({
+    payload = {
         'requester_uid': requester_uid,
         'requester_email': requester_email,
         'requester_name': requester_name,
@@ -2641,9 +2649,19 @@ def create_school_request(requester_uid, requester_email, requester_name,
         'reviewed_by_uid': None,
         'reviewed_at': None,
         'rejection_reason': None,
+        'rejection_category': None,
         'created_org_id': None,
         'created_at': firestore.SERVER_TIMESTAMP,
-    })
+    }
+    if enriched:
+        for key in (
+            'location', 'school_type', 'public_private', 'grade_size',
+            'official_email_domains', 'admin_identity', 'integration',
+            'curriculum', 'pre_invited_teachers',
+        ):
+            if key in enriched:
+                payload[key] = enriched[key]
+    doc_ref.set(payload)
     return doc_ref.id
 
 

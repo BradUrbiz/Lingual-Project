@@ -389,5 +389,43 @@ class SubmitEnrichedSchoolRequestTest(SchoolRequestDraftRouteTest):
         self.assertTrue(match, f'expected onboarding_state set, got {self.profile_updates!r}')
 
 
+class SerializeRequestTest(SchoolRequestDraftRouteTest):
+    def test_response_includes_camelcased_enriched_fields(self):
+        self.db.lingual_admins = []  # quiet outbox fan-out
+        self.db.list_lingual_admin_emails = lambda: []
+        self._login('uid-1')
+        resp = self.client.post('/api/school-requests', json={
+            'schoolName': 'SF Friends',
+            'orgType': 'school',
+            'schoolType': 'k12',
+            'publicPrivate': 'private',
+            'gradeSize': '50-100',
+            'location': {'country': 'US', 'state': 'CA'},
+            'adminIdentity': {
+                'fullName': 'Ada',
+                'schoolEmail': 'ada@ssfs.org',
+                'roleTitle': 'Principal',
+                'authorizationAttested': True,
+            },
+            'curriculum': {
+                'gradeRanges': ['g9_12'],
+                'languagesTaught': ['es'],
+                'courseFrameworks': ['ap'],
+            },
+            'preInvitedTeachers': ['t1@ssfs.org'],
+        })
+        self.assertEqual(resp.status_code, 201, resp.get_json())
+        req = resp.get_json()['request']
+        self.assertEqual(req['schoolType'], 'k12')
+        self.assertEqual(req['publicPrivate'], 'private')
+        self.assertEqual(req['gradeSize'], '50-100')
+        self.assertEqual(req['location']['country'], 'US')
+        self.assertEqual(req['adminIdentity']['fullName'], 'Ada')
+        # Attestation block is included verbatim (snake → camel where it matters)
+        self.assertIn('authorizationAttestation', req['adminIdentity'])
+        self.assertEqual(req['curriculum']['gradeRanges'], ['g9_12'])
+        self.assertEqual(req['preInvitedTeachers'], ['t1@ssfs.org'])
+
+
 if __name__ == '__main__':
     unittest.main()

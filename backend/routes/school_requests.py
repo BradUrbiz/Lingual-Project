@@ -19,6 +19,39 @@ def _serialize_request(req: dict | None) -> dict | None:
     """Convert snake_case Firestore fields to camelCase for the API response."""
     if req is None:
         return None
+
+    admin_identity = req.get('admin_identity')
+    admin_identity_out = None
+    if admin_identity:
+        att = admin_identity.get('authorization_attestation') or {}
+        admin_identity_out = {
+            'fullName': admin_identity.get('full_name'),
+            'schoolEmail': admin_identity.get('school_email'),
+            'roleTitle': admin_identity.get('role_title'),
+            'authorizationAttestation': {
+                'confirmedAt': att.get('confirmed_at'),
+                'ipHash': att.get('ip_hash'),
+                'userAgent': att.get('user_agent'),
+            },
+        }
+
+    integration = req.get('integration')
+    integration_out = None
+    if integration:
+        integration_out = {
+            'canvasUrl': integration.get('canvas_url'),
+            'canvasIntegrationTypes': integration.get('canvas_integration_types') or [],
+        }
+
+    curriculum = req.get('curriculum')
+    curriculum_out = None
+    if curriculum:
+        curriculum_out = {
+            'gradeRanges': curriculum.get('grade_ranges') or [],
+            'languagesTaught': curriculum.get('languages_taught') or [],
+            'courseFrameworks': curriculum.get('course_frameworks') or [],
+        }
+
     return {
         'id': req.get('id'),
         'requesterUid': req.get('requester_uid'),
@@ -32,8 +65,20 @@ def _serialize_request(req: dict | None) -> dict | None:
         'reviewedByUid': req.get('reviewed_by_uid'),
         'reviewedAt': req.get('reviewed_at').isoformat() if isinstance(req.get('reviewed_at'), datetime) else req.get('reviewed_at'),
         'rejectionReason': req.get('rejection_reason'),
+        'rejectionCategory': req.get('rejection_category'),
         'createdOrgId': req.get('created_org_id'),
         'createdAt': req.get('created_at').isoformat() if isinstance(req.get('created_at'), datetime) else req.get('created_at'),
+        'cancelledAt': req.get('cancelled_at').isoformat() if isinstance(req.get('cancelled_at'), datetime) else req.get('cancelled_at'),
+        # --- Enriched (Plan 3) ---
+        'location': req.get('location'),
+        'schoolType': req.get('school_type'),
+        'publicPrivate': req.get('public_private'),
+        'gradeSize': req.get('grade_size'),
+        'officialEmailDomains': req.get('official_email_domains') or [],
+        'adminIdentity': admin_identity_out,
+        'integration': integration_out,
+        'curriculum': curriculum_out,
+        'preInvitedTeachers': req.get('pre_invited_teachers') or [],
     }
 
 

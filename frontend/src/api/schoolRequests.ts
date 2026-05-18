@@ -1,14 +1,16 @@
 import api from './index';
-import type { SchoolRequest, TeacherInvitation } from '@/types';
+import type {
+  SchoolRequest,
+  TeacherInvitation,
+} from '@/types';
+import type {
+  WizardSubmitPayload,
+  WizardDraft,
+} from '@/types/schoolRequest';
 
 // --- School request (teacher submits, Lingual admin reviews) ---
 
-export interface SubmitSchoolRequestPayload {
-  schoolName: string;
-  orgType: string;
-  websiteUrl?: string;
-  canvasInstanceUrl?: string;
-}
+export type SubmitSchoolRequestPayload = WizardSubmitPayload;
 
 export const submitSchoolRequest = async (
   payload: SubmitSchoolRequestPayload,
@@ -25,6 +27,24 @@ export const getMySchoolRequest = async (): Promise<SchoolRequest | null> => {
     '/school-requests/mine',
   );
   return response.data.request;
+};
+
+export const cancelMySchoolRequest = async (): Promise<void> => {
+  await api.delete('/school-requests/mine');
+};
+
+export const getSchoolRequestDraft = async (): Promise<WizardDraft | null> => {
+  const response = await api.get<{ success: boolean; draft: WizardDraft | null }>(
+    '/school-requests/draft',
+  );
+  return response.data.draft;
+};
+
+export const saveSchoolRequestDraft = async (input: {
+  currentStep: 1 | 2 | 3 | 4;
+  draftPayload: Partial<WizardSubmitPayload>;
+}): Promise<void> => {
+  await api.patch('/school-requests/draft', input);
 };
 
 // --- Admin review ---
@@ -52,10 +72,14 @@ export const approveSchoolRequest = async (
 export const rejectSchoolRequest = async (
   id: string,
   reason?: string,
+  category?: string,
 ): Promise<SchoolRequest> => {
+  const body: Record<string, unknown> = {};
+  if (reason !== undefined) body.reason = reason;
+  if (category !== undefined) body.category = category;
   const response = await api.post<{ success: boolean; request: SchoolRequest }>(
     `/admin/school-requests/${id}/reject`,
-    { reason },
+    body,
   );
   return response.data.request;
 };

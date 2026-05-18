@@ -12,6 +12,7 @@ export const LINGUAL_ADMIN_HOME_ROUTE = '/app/admin/school-requests';
 export const STUDENT_SETUP_ROUTE = '/signup/student/setup';
 export const TEACHER_JOIN_ORG_ROUTE = '/signup/teacher/join-org';
 export const ADMIN_ORG_WIZARD_ROUTE = '/signup/admin/org-wizard';
+export const ADMIN_PENDING_ROUTE = '/signup/admin/pending';
 export const ROLE_PICKER_ROUTE = '/signup';
 
 // Legacy alias retained while pages still import it. New code should
@@ -83,11 +84,11 @@ export function getOnboardingDestination(user: User | null | undefined): string 
   }
 
   // 4) Resume in-flight signup based on intendedRole + onboardingState.
-  // TODO(Plan 3/4): when /signup/teacher/pending and /signup/admin/pending
-  // ship, branch on `onboardingState === 'teacher_pending'` /
-  // 'awaiting_lingual' to land on those pages instead of the form pages.
   if (user.intendedRole === 'student') return STUDENT_SETUP_ROUTE;
   if (user.intendedRole === 'teacher') return TEACHER_JOIN_ORG_ROUTE;
+  if (user.intendedRole === 'admin' && user.onboardingState === 'awaiting_lingual') {
+    return ADMIN_PENDING_ROUTE;
+  }
   if (user.intendedRole === 'admin') return ADMIN_ORG_WIZARD_ROUTE;
 
   // 5) Legacy users without intendedRole. Plan 6 will replace this with

@@ -114,14 +114,21 @@ export function AdminOrgWizardPage() {
 
   // 3. Autosave (debounced)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightSave = useRef<Promise<void> | null>(null);
   useEffect(() => {
     if (!loaded) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      void saveSchoolRequestDraft({
+      const savePromise = saveSchoolRequestDraft({
         currentStep: state.currentStep,
         draftPayload: state.payload,
-      }).catch((exc) => console.warn('[wizard] autosave failed', exc));
+      }).catch((exc) => console.warn('[wizard] autosave failed', exc))
+        .finally(() => {
+          if (inFlightSave.current === savePromise) {
+            inFlightSave.current = null;
+          }
+        });
+      inFlightSave.current = savePromise;
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -165,16 +172,19 @@ export function AdminOrgWizardPage() {
         setSubmitError('Please complete the admin identity and authorization in Step 2.');
         return;
       }
+      if (inFlightSave.current) {
+        await inFlightSave.current;
+      }
       await submitSchoolRequest({
         schoolName: state.payload.schoolName!,
         orgType: 'school',
-        websiteUrl: state.payload.websiteUrl,
-        location: state.payload.location,
-        schoolType: state.payload.schoolType,
-        publicPrivate: state.payload.publicPrivate,
-        gradeSize: state.payload.gradeSize,
+        websiteUrl: state.payload.websiteUrl!,
+        location: state.payload.location!,
+        schoolType: state.payload.schoolType!,
+        publicPrivate: state.payload.publicPrivate!,
+        gradeSize: state.payload.gradeSize!,
         officialEmailDomains: state.payload.officialEmailDomains,
-        adminIdentity: state.payload.adminIdentity,
+        adminIdentity: state.payload.adminIdentity!,
         integration: state.payload.integration,
         curriculum: state.payload.curriculum,
         preInvitedTeachers: state.payload.preInvitedTeachers,

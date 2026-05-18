@@ -368,6 +368,12 @@ class FakeDbBase:
     def set_user_last_active_membership(self, uid: str, membership_id: str):
         self.user_active_memberships[uid] = membership_id
 
+    def update_user_profile(self, uid: str, **_kwargs):
+        pass
+
+    def delete_school_creation_draft(self, uid: str):
+        pass
+
     def resolve_user_school_context(self, uid: str, preferred_active_membership_id: str | None = None):
         memberships = []
         for membership in self.memberships.values():

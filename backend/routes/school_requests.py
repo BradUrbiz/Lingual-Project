@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
+import re
 from datetime import UTC, datetime
+from urllib.parse import urlparse
 
 import database
 from flask import Blueprint, jsonify, request
@@ -13,6 +16,10 @@ from database import list_lingual_admin_emails
 
 def _public_base_url() -> str:
     return os.environ.get('PUBLIC_BASE_URL', 'https://lingual.app')
+
+
+_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+MAX_DRAFT_PAYLOAD_BYTES = 64_000
 
 
 def _serialize_request(req: dict | None) -> dict | None:
@@ -93,7 +100,6 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
     # -- Enriched-payload helpers (used by submit_school_request) -------------
 
     _ENRICHED_FIELDS = (
-        ('location', 'location'),
         ('schoolType', 'school_type'),
         ('publicPrivate', 'public_private'),
         ('gradeSize', 'grade_size'),
@@ -141,6 +147,41 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             raise ValueError(f'Invalid {field} entries: {bad!r}')
         return list(values)
 
+    def _validate_required_url(value, field):
+        parsed = urlparse(value or '')
+        if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+            raise ValueError(f'{field} must be a valid http(s) URL.')
+        return value
+
+    def _validate_required_location(value):
+        if not isinstance(value, dict):
+            raise ValueError('location must be an object.')
+        country = str(value.get('country') or '').strip()
+        state = str(value.get('state') or '').strip()
+        county = str(value.get('county') or '').strip()
+        if not country:
+            raise ValueError('location.country is required.')
+        if not state:
+            raise ValueError('location.state is required.')
+        out = {'country': country, 'state': state}
+        if county:
+            out['county'] = county
+        return out
+
+    def _authenticated_requester_contact(uid):
+        user_doc = deps.db.get_user(uid) or {}
+        profile = user_doc.get('profile') or {}
+        email = str(user_doc.get('email') or '').strip().lower()
+        name = str(profile.get('display_name') or user_doc.get('name') or '').strip()
+        if not email:
+            raise ValueError('Authenticated user email is required.')
+        return email, name
+
+    def _attestation_ip():
+        if request.access_route:
+            return request.access_route[0] or ''
+        return request.remote_addr or ''
+
     # -- User endpoints -------------------------------------------------------
 
     @bp.route('/api/school-requests', methods=['POST'])
@@ -155,23 +196,29 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             school_name = (data.get('schoolName') or '').strip()
             if not school_name:
                 return jsonify({'success': False, 'error': 'schoolName is required.'}), 400
+            if len(school_name) > 120:
+                return jsonify({'success': False, 'error': 'schoolName must be 120 characters or fewer.'}), 400
 
             existing = deps.db.get_user_school_request(uid)
             if existing and existing.get('status') in ('pending', 'approved'):
                 return jsonify({'success': False, 'error': 'You already have a pending or approved request.'}), 409
 
             org_type = (data.get('orgType') or 'school').strip()
-            requester_email = (data.get('email') or '').strip()
-            requester_name = (data.get('name') or '').strip()
+            requester_email, requester_name = _authenticated_requester_contact(uid)
             website_url = (data.get('websiteUrl') or '').strip()
+            _validate_required_url(website_url, 'websiteUrl')
             canvas_instance_url = (data.get('canvasInstanceUrl') or '').strip()
 
             # --- Build the enriched payload ---
             enriched = {}
 
+            enriched['location'] = _validate_required_location(data.get('location'))
+
             for camel_key, snake_key in _ENRICHED_FIELDS:
                 if camel_key not in data:
-                    continue
+                    if snake_key == 'official_email_domains':
+                        continue
+                    return jsonify({'success': False, 'error': f'{camel_key} is required.'}), 400
                 value = data[camel_key]
                 if snake_key == 'school_type':
                     value = _validate_enum(value, database.ALLOWED_SCHOOL_TYPES, 'schoolType')
@@ -184,19 +231,33 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
                 if value is not None:
                     enriched[snake_key] = value
 
+            for required_key in ('school_type', 'public_private', 'grade_size'):
+                if not enriched.get(required_key):
+                    return jsonify({'success': False, 'error': f'{required_key} is required.'}), 400
+
             admin_identity_in = data.get('adminIdentity')
+            if admin_identity_in is None:
+                return jsonify({'success': False, 'error': 'adminIdentity is required.'}), 400
             if admin_identity_in is not None:
                 ai = _camel_to_snake_admin_identity(admin_identity_in)
                 if ai is None:
                     return jsonify({'success': False, 'error': 'adminIdentity must be an object'}), 400
-                if not admin_identity_in.get('authorizationAttested') is True:
+                if not ai['full_name']:
+                    return jsonify({'success': False, 'error': 'adminIdentity.fullName is required.'}), 400
+                if not ai['school_email']:
+                    return jsonify({'success': False, 'error': 'adminIdentity.schoolEmail is required.'}), 400
+                if not _EMAIL_RE.match(ai['school_email']):
+                    return jsonify({'success': False, 'error': 'adminIdentity.schoolEmail must be a valid email.'}), 400
+                if not ai['role_title']:
+                    return jsonify({'success': False, 'error': 'adminIdentity.roleTitle is required.'}), 400
+                if admin_identity_in.get('authorizationAttested') is not True:
                     return jsonify({
                         'success': False,
                         'error': 'authorization attestation must be confirmed',
                     }), 400
                 ai['authorization_attestation'] = {
                     'confirmed_at': datetime.now(UTC).isoformat(),
-                    'ip_hash': database.hash_attestation_ip(request.remote_addr or ''),
+                    'ip_hash': database.hash_attestation_ip(_attestation_ip()),
                     'user_agent': (request.user_agent.string or '')[:512],
                 }
                 enriched['admin_identity'] = ai
@@ -344,6 +405,16 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
                 'success': False,
                 'error': 'draftPayload must be a JSON object.',
             }), 400
+        encoded = json.dumps(
+            draft_payload,
+            ensure_ascii=False,
+            separators=(',', ':'),
+        ).encode('utf-8')
+        if len(encoded) > MAX_DRAFT_PAYLOAD_BYTES:
+            return jsonify({
+                'success': False,
+                'error': 'draftPayload is too large.',
+            }), 400
 
         try:
             deps.db.upsert_school_creation_draft(
@@ -453,24 +524,19 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             if req.get('status') != 'pending':
                 return jsonify({'success': False, 'error': 'Only pending requests can be approved.'}), 409
 
-            org_id = deps.db.create_organization(
-                name=req['school_name'],
-                org_type=req.get('org_type', 'school'),
-                pilot_stage='beta',
-            )
-            membership_id = deps.db.create_membership(
-                org_id=org_id,
-                uid=req['requester_uid'],
-                roles=['school_admin'],
-            )
-            deps.db.set_user_last_active_membership(req['requester_uid'], membership_id)
+            try:
+                approval = deps.db.approve_school_request(
+                    request_id,
+                    reviewed_by_uid=uid,
+                )
+            except ValueError as exc:
+                return jsonify({'success': False, 'error': str(exc)}), 409
 
-            deps.db.update_school_request(request_id, {
-                'status': 'approved',
-                'reviewed_by_uid': uid,
-                'reviewed_at': datetime.now(UTC),
-                'created_org_id': org_id,
-            })
+            if not approval:
+                return jsonify({'success': False, 'error': 'Request not found.'}), 404
+
+            req = approval['request']
+            org_id = approval['org_id']
 
             # Move the requester's onboarding state forward.
             try:
@@ -490,9 +556,9 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             except Exception as exc:
                 print(f'[pre-invites] record failed: {exc}')
 
-            firestore_client = database.get_db()
             base = _public_base_url()
             try:
+                firestore_client = database.get_db()
                 enqueue_outbox_email(
                     db=firestore_client,
                     recipient_email=req.get('requester_email') or '',
@@ -510,25 +576,29 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             except Exception as exc:
                 print(f'[outbox] school_request_approved enqueue failed: {exc}')
 
-            inviter_name = (req.get('admin_identity') or {}).get('full_name') or req.get('requester_name') or 'A school administrator'
-            for email in pre_invites:
-                try:
-                    enqueue_outbox_email(
-                        db=firestore_client,
-                        recipient_email=email,
-                        recipient_name=None,
-                        template=OutboxTemplate.TEACHER_INVITATION,
-                        template_data={
-                            'org_name': req.get('school_name'),
-                            'inviter_name': inviter_name,
-                            'signup_url': f'{base}/signup?role=teacher',
-                        },
-                        related_entity_type='school_request',
-                        related_entity_id=request_id,
-                        created_by_uid=uid,
-                    )
-                except Exception as exc:
-                    print(f'[outbox] teacher_invitation enqueue failed for {email}: {exc}')
+            try:
+                firestore_client = database.get_db()
+                inviter_name = (req.get('admin_identity') or {}).get('full_name') or req.get('requester_name') or 'A school administrator'
+                for email in pre_invites:
+                    try:
+                        enqueue_outbox_email(
+                            db=firestore_client,
+                            recipient_email=email,
+                            recipient_name=None,
+                            template=OutboxTemplate.TEACHER_INVITATION,
+                            template_data={
+                                'org_name': req.get('school_name'),
+                                'inviter_name': inviter_name,
+                                'signup_url': f'{base}/signup?role=teacher',
+                            },
+                            related_entity_type='school_request',
+                            related_entity_id=request_id,
+                            created_by_uid=uid,
+                        )
+                    except Exception as exc:
+                        print(f'[outbox] teacher_invitation enqueue failed for {email}: {exc}')
+            except Exception as exc:
+                print(f'[outbox] teacher_invitation fan-out aborted: {exc}')
 
             updated = deps.db.get_school_request(request_id)
             return jsonify({'success': True, 'request': _serialize_request(updated)}), 200

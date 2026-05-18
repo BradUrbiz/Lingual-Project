@@ -2743,6 +2743,91 @@ def update_school_request(request_id, updates):
     get_school_request_ref(request_id).update(updates)
 
 
+def approve_school_request(request_id, reviewed_by_uid):
+    """Atomically approve a pending school request and create its admin org.
+
+    Returns a dict with `request`, `org_id`, and `membership_id`.
+    Returns None if the request does not exist.
+    Raises ValueError if the request is no longer pending.
+    """
+    client = get_db()
+    request_ref = client.collection('school_requests').document(request_id)
+    org_ref = client.collection('organizations').document()
+    membership_ref = client.collection('memberships').document()
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _approve(transaction):
+        snap = request_ref.get(transaction=transaction)
+        if not snap.exists:
+            return None
+
+        req = snap.to_dict() or {}
+        if req.get('status') != 'pending':
+            raise ValueError(
+                f'Request {request_id} is not pending (status={req.get("status")!r})'
+            )
+
+        requester_uid = req.get('requester_uid')
+        if not requester_uid:
+            raise ValueError(f'Request {request_id} is missing requester_uid')
+
+        org_data = {
+            'name': req['school_name'],
+            'type': req.get('org_type', 'school'),
+            'status': 'active',
+            'pilot_stage': 'beta',
+            'default_modality_policy': 'hybrid',
+            'default_retention_policy': 'standard_school',
+            'lms_capabilities': [],
+            'created_at': firestore.SERVER_TIMESTAMP,
+            'updated_at': firestore.SERVER_TIMESTAMP,
+        }
+        membership_data = {
+            'org_id': org_ref.id,
+            'uid': requester_uid,
+            'roles': ['school_admin'],
+            'status': 'active',
+            'primary_class_ids': [],
+            'created_at': firestore.SERVER_TIMESTAMP,
+            'updated_at': firestore.SERVER_TIMESTAMP,
+        }
+        request_updates = {
+            'status': 'approved',
+            'reviewed_by_uid': reviewed_by_uid,
+            'reviewed_at': firestore.SERVER_TIMESTAMP,
+            'created_org_id': org_ref.id,
+            'updated_at': firestore.SERVER_TIMESTAMP,
+        }
+
+        transaction.set(org_ref, org_data)
+        transaction.set(membership_ref, membership_data)
+        transaction.set(
+            client.collection('users').document(requester_uid),
+            {
+                'last_active_membership_id': membership_ref.id,
+                'updated_at': firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+        transaction.update(request_ref, request_updates)
+
+        approved = dict(req)
+        approved.update({
+            'id': request_id,
+            'status': 'approved',
+            'reviewed_by_uid': reviewed_by_uid,
+            'created_org_id': org_ref.id,
+        })
+        return {
+            'request': approved,
+            'org_id': org_ref.id,
+            'membership_id': membership_ref.id,
+        }
+
+    return _approve(transaction)
+
+
 def cancel_school_request(request_id, uid):
     """Mark a pending school request as cancelled.
 

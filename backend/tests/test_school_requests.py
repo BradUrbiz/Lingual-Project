@@ -69,6 +69,38 @@ class FakeSchoolRequestDb(FakeDbBase):
             self.school_requests[request_id].update(updates)
             self.school_requests[request_id]['updated_at'] = datetime.now(UTC)
 
+    def approve_school_request(self, request_id, reviewed_by_uid):
+        req = self.school_requests.get(request_id)
+        if req is None:
+            return None
+        if req.get('status') != 'pending':
+            raise ValueError(
+                f'Request {request_id} is not pending (status={req.get("status")!r})'
+            )
+
+        org_id = self.create_organization(
+            name=req['school_name'],
+            org_type=req.get('org_type', 'school'),
+            pilot_stage='beta',
+        )
+        membership_id = self.create_membership(
+            org_id=org_id,
+            uid=req['requester_uid'],
+            roles=['school_admin'],
+        )
+        self.set_user_last_active_membership(req['requester_uid'], membership_id)
+        self.update_school_request(request_id, {
+            'status': 'approved',
+            'reviewed_by_uid': reviewed_by_uid,
+            'reviewed_at': datetime.now(UTC),
+            'created_org_id': org_id,
+        })
+        return {
+            'request': dict(self.school_requests[request_id]),
+            'org_id': org_id,
+            'membership_id': membership_id,
+        }
+
     def get_user_field(self, uid, field):
         user = self.users.get(uid)
         if user:
@@ -112,18 +144,30 @@ class TestSchoolRequests(unittest.TestCase):
         with client.session_transaction() as sess:
             sess['user'] = {'uid': uid, 'email': f'{uid}@test.com'}
 
+    def _valid_submit_payload(self, school_name='Springfield Elementary'):
+        return {
+            'schoolName': school_name,
+            'orgType': 'school',
+            'websiteUrl': 'https://springfield.example',
+            'location': {'country': 'US', 'state': 'IL'},
+            'schoolType': 'k12',
+            'publicPrivate': 'public',
+            'gradeSize': '100-200',
+            'adminIdentity': {
+                'fullName': 'Regular User',
+                'schoolEmail': 'user@example.com',
+                'roleTitle': 'Principal',
+                'authorizationAttested': True,
+            },
+        }
+
     # ── User endpoints ──────────────────────────────────────────────
 
     def test_submit_request(self):
         """POST /api/school-requests with valid data returns 201, status=pending."""
         with self.app.test_client() as client:
             self._set_session(client, 'user-1')
-            resp = client.post('/api/school-requests', json={
-                'schoolName': 'Springfield Elementary',
-                'orgType': 'school',
-                'email': 'user@example.com',
-                'name': 'Regular User',
-            })
+            resp = client.post('/api/school-requests', json=self._valid_submit_payload())
             self.assertEqual(resp.status_code, 201)
             data = resp.get_json()
             self.assertTrue(data['success'])
@@ -135,14 +179,10 @@ class TestSchoolRequests(unittest.TestCase):
         """Submitting twice returns 409 on the second attempt."""
         with self.app.test_client() as client:
             self._set_session(client, 'user-1')
-            resp1 = client.post('/api/school-requests', json={
-                'schoolName': 'Springfield Elementary',
-            })
+            resp1 = client.post('/api/school-requests', json=self._valid_submit_payload())
             self.assertEqual(resp1.status_code, 201)
 
-            resp2 = client.post('/api/school-requests', json={
-                'schoolName': 'Another School',
-            })
+            resp2 = client.post('/api/school-requests', json=self._valid_submit_payload('Another School'))
             self.assertEqual(resp2.status_code, 409)
             self.assertFalse(resp2.get_json()['success'])
 
@@ -158,9 +198,7 @@ class TestSchoolRequests(unittest.TestCase):
         """GET /api/school-requests/mine returns the user's request."""
         with self.app.test_client() as client:
             self._set_session(client, 'user-1')
-            client.post('/api/school-requests', json={
-                'schoolName': 'Springfield Elementary',
-            })
+            client.post('/api/school-requests', json=self._valid_submit_payload())
 
             resp = client.get('/api/school-requests/mine')
             self.assertEqual(resp.status_code, 200)
@@ -250,6 +288,8 @@ class TestSchoolRequests(unittest.TestCase):
             resp = client.post(f'/api/admin/school-requests/{request_id}/approve')
             self.assertEqual(resp.status_code, 409)
             self.assertFalse(resp.get_json()['success'])
+            self.assertEqual(len(self.db.organizations), 1)
+            self.assertEqual(len(self.db.memberships), 1)
 
     def test_admin_reject_request(self):
         """POST reject with reason sets status=rejected."""

@@ -95,6 +95,10 @@ class TestFakeDbBase(unittest.TestCase):
         self.assertEqual(ctx["active_roles"], ["teacher"])
         self.assertEqual(ctx["active_organization_id"], org_id)
 
+    def test_optional_plan3_side_effect_stubs_are_safe_noops(self):
+        self.db.update_user_profile("u-1", onboarding_state="awaiting_lingual")
+        self.db.delete_school_creation_draft("u-1")
+
     def test_crud_assignment(self):
         aid = self.db.create_assignment(org_id="o", class_id="c", title="Test", status="published", task_type="information_gap")
         self.assertIsNotNone(self.db.get_assignment(aid))

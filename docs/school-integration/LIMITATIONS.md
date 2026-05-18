@@ -189,3 +189,14 @@ relevant business actions complete normally but do not produce email.
     only. `LanguageProvider` (en/ko) covers the learner app but is not
     threaded through the wizard. Acceptable for v1 (admin audience is
     US schools); revisit when expanding outside the US.
+
+27. **Approved admin pending state auto-navigates instead of showing a
+    dashboard CTA.** Design spec §4 says the pending page should surface a
+    "Continue to dashboard" CTA once Lingual approves the request. The current
+    implementation refreshes the user session and immediately navigates to
+    `/app/teacher` when `/api/school-requests/mine` returns `approved`.
+    Impact: approved admins do land in the correct school-admin experience
+    after the membership is refreshed, but they do not see an intermediate
+    approval confirmation or explicit CTA. Planned follow-up: replace the
+    immediate redirect with an approved-state panel once the dedicated
+    school-admin home route lands.

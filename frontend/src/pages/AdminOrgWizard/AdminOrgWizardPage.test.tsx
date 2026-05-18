@@ -130,4 +130,48 @@ describe('AdminOrgWizardPage', () => {
       expect(navigateMock).toHaveBeenCalledWith('/signup/admin/pending', expect.anything()),
     );
   });
+
+  it('waits for an in-flight autosave before submitting', async () => {
+    vi.useFakeTimers();
+    let resolveSave!: () => void;
+    saveDraftMock.mockReturnValueOnce(new Promise<void>((resolve) => {
+      resolveSave = resolve;
+    }));
+    submitMock.mockResolvedValueOnce({ id: 'req-1' });
+    getDraftMock.mockResolvedValueOnce({
+      uid: 'uid-1', currentStep: 4,
+      draftPayload: {
+        schoolName: 'SF Friends', websiteUrl: 'https://sf.org',
+        schoolType: 'k12', publicPrivate: 'private', gradeSize: '50-100',
+        location: { country: 'US', state: 'CA' },
+        adminIdentity: {
+          fullName: 'Ada', schoolEmail: 'ada@ssfs.org',
+          roleTitle: 'Principal', authorizationAttested: true,
+        },
+      },
+      updatedAt: null,
+    });
+
+    renderAt('/signup/admin/org-wizard?step=4');
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByRole('button', { name: /submit for lingual approval/i })).toBeInTheDocument();
+
+    const input = screen.getByLabelText(/teacher email/i);
+    fireEvent.change(input, { target: { value: 'teacher@ssfs.org' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await act(async () => { vi.advanceTimersByTime(900); });
+    expect(saveDraftMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /submit for lingual approval/i }));
+    expect(submitMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveSave();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(submitMock).toHaveBeenCalledTimes(1);
+  });
 });

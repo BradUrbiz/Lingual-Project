@@ -7,6 +7,7 @@ import {
   STUDENT_SETUP_ROUTE,
   TEACHER_JOIN_ORG_ROUTE,
   ADMIN_ORG_WIZARD_ROUTE,
+  ADMIN_PENDING_ROUTE,
   ROLE_PICKER_ROUTE,
 } from './homeRoutes';
 import type { User } from '@/types';
@@ -101,7 +102,7 @@ describe('getOnboardingDestination', () => {
     const dest = getOnboardingDestination(
       userOf({ intendedRole: 'admin', onboardingState: 'awaiting_lingual' }),
     );
-    expect(dest).toBe(ADMIN_ORG_WIZARD_ROUTE);
+    expect(dest).toBe(ADMIN_PENDING_ROUTE);
   });
 
   it('legacy user without role falls back to student setup until Plan 6', () => {

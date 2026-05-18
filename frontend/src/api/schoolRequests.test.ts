@@ -64,7 +64,11 @@ describe('schoolRequests api', () => {
     const req = await submitSchoolRequest({
       schoolName: 'SF Friends',
       orgType: 'school',
+      websiteUrl: 'https://ssfs.org',
+      location: { country: 'US', state: 'CA' },
       schoolType: 'k12',
+      publicPrivate: 'private',
+      gradeSize: '50-100',
       adminIdentity: {
         fullName: 'Ada', schoolEmail: 'ada@ssfs.org',
         roleTitle: 'Principal', authorizationAttested: true,

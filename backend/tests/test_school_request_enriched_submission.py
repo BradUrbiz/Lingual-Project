@@ -264,6 +264,16 @@ class SchoolRequestDraftSaveTest(SchoolRequestDraftRouteTest):
         })
         self.assertEqual(resp.status_code, 400)
 
+    def test_patch_rejects_oversized_payload(self):
+        self._login('uid-1')
+        resp = self.client.patch('/api/school-requests/draft', json={
+            'currentStep': 1,
+            'draftPayload': {'notes': 'x' * 65_000},
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('too large', resp.get_json()['error'])
+        self.assertNotIn('uid-1', self.db.drafts)
+
     def test_patch_requires_auth(self):
         resp = self.client.patch('/api/school-requests/draft', json={
             'currentStep': 1, 'draftPayload': {},
@@ -285,17 +295,58 @@ class SubmitEnrichedSchoolRequestTest(SchoolRequestDraftRouteTest):
             return list(self.db.lingual_admins)
         self.db.list_lingual_admin_emails = fake_list_admins
 
-    def test_thin_payload_still_creates_request(self):
+    def _valid_payload(self, **overrides):
+        payload = {
+            'schoolName': 'SF Friends',
+            'orgType': 'school',
+            'websiteUrl': 'https://ssfs.org',
+            'location': {'country': 'US', 'state': 'CA'},
+            'schoolType': 'k12',
+            'publicPrivate': 'private',
+            'gradeSize': '50-100',
+            'adminIdentity': {
+                'fullName': 'Ada Lovelace',
+                'schoolEmail': 'ada@ssfs.org',
+                'roleTitle': 'Principal',
+                'authorizationAttested': True,
+            },
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_thin_payload_is_rejected_by_route(self):
         self._login('uid-1')
         resp = self.client.post('/api/school-requests', json={
             'schoolName': 'SF Friends',
             'orgType': 'school',
         })
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(len(self.db.school_requests), 0)
+
+    def test_submit_requires_admin_identity_attestation(self):
+        self._login('uid-1')
+        resp = self.client.post('/api/school-requests', json={
+            'schoolName': 'SF Friends',
+            'orgType': 'school',
+            'websiteUrl': 'https://ssfs.org',
+            'location': {'country': 'US', 'state': 'CA'},
+            'schoolType': 'k12',
+            'publicPrivate': 'private',
+            'gradeSize': '50-100',
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('adminIdentity', resp.get_json()['error'])
+
+    def test_submit_stamps_requester_contact_from_authenticated_user(self):
+        self._login('uid-1')
+        resp = self.client.post('/api/school-requests', json=self._valid_payload(
+            email='spoof@example.test',
+            name='Spoofed Name',
+        ))
         self.assertEqual(resp.status_code, 201, resp.get_json())
-        self.assertEqual(len(self.db.school_requests), 1)
         req = list(self.db.school_requests.values())[0]
-        self.assertEqual(req['school_name'], 'SF Friends')
-        self.assertNotIn('location', req)
+        self.assertEqual(req['requester_email'], 'a@b.test')
+        self.assertEqual(req['requester_name'], 'Ada')
 
     def test_enriched_payload_persists_nested_fields(self):
         self._login('uid-1')
@@ -339,28 +390,44 @@ class SubmitEnrichedSchoolRequestTest(SchoolRequestDraftRouteTest):
         self.assertEqual(req['pre_invited_teachers'],
                          ['t1@ssfs.org', 't2@ssfs.org'])
 
+    def test_submit_uses_forwarded_for_attestation_ip(self):
+        self._login('uid-1')
+        resp = self.client.post(
+            '/api/school-requests',
+            json=self._valid_payload(),
+            environ_base={
+                'REMOTE_ADDR': '10.0.0.10',
+                'HTTP_X_FORWARDED_FOR': '203.0.113.9, 10.0.0.10',
+                'HTTP_USER_AGENT': 'pytest',
+            },
+        )
+
+        self.assertEqual(resp.status_code, 201, resp.get_json())
+        req = list(self.db.school_requests.values())[0]
+        att = req['admin_identity']['authorization_attestation']
+        self.assertEqual(
+            att['ip_hash'],
+            database.hash_attestation_ip('203.0.113.9'),
+        )
+
     def test_submit_rejects_unchecked_attestation(self):
         self._login('uid-1')
-        resp = self.client.post('/api/school-requests', json={
-            'schoolName': 'SF Friends',
-            'orgType': 'school',
-            'adminIdentity': {
+        resp = self.client.post('/api/school-requests', json=self._valid_payload(
+            adminIdentity={
                 'fullName': 'Ada',
                 'schoolEmail': 'ada@ssfs.org',
                 'roleTitle': 'Principal',
                 'authorizationAttested': False,
             },
-        })
+        ))
         self.assertEqual(resp.status_code, 400)
         self.assertIn('authorization', resp.get_json()['error'].lower())
 
     def test_submit_rejects_invalid_school_type(self):
         self._login('uid-1')
-        resp = self.client.post('/api/school-requests', json={
-            'schoolName': 'SF Friends',
-            'orgType': 'school',
-            'schoolType': 'NOT_A_TYPE',
-        })
+        resp = self.client.post('/api/school-requests', json=self._valid_payload(
+            schoolType='NOT_A_TYPE',
+        ))
         self.assertEqual(resp.status_code, 400)
         self.assertIn('schoolType', resp.get_json()['error'])
 
@@ -370,17 +437,13 @@ class SubmitEnrichedSchoolRequestTest(SchoolRequestDraftRouteTest):
             'draft_payload': {}, 'updated_at': 'NOW',
         }
         self._login('uid-1')
-        resp = self.client.post('/api/school-requests', json={
-            'schoolName': 'SF Friends', 'orgType': 'school',
-        })
+        resp = self.client.post('/api/school-requests', json=self._valid_payload())
         self.assertEqual(resp.status_code, 201)
         self.assertNotIn('uid-1', self.db.drafts)
 
     def test_submit_sets_onboarding_state(self):
         self._login('uid-1')
-        resp = self.client.post('/api/school-requests', json={
-            'schoolName': 'SF Friends', 'orgType': 'school',
-        })
+        resp = self.client.post('/api/school-requests', json=self._valid_payload())
         self.assertEqual(resp.status_code, 201)
         match = [
             kwargs for uid, kwargs in self.profile_updates
@@ -397,6 +460,7 @@ class SerializeRequestTest(SchoolRequestDraftRouteTest):
         resp = self.client.post('/api/school-requests', json={
             'schoolName': 'SF Friends',
             'orgType': 'school',
+            'websiteUrl': 'https://ssfs.org',
             'schoolType': 'k12',
             'publicPrivate': 'private',
             'gradeSize': '50-100',

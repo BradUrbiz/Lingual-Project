@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import firebase_admin
 from firebase_admin import credentials, auth as firebase_auth
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 load_dotenv()
 
@@ -51,6 +52,7 @@ def _validate_required_env() -> None:
 _validate_required_env()
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 _secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 if os.environ.get('FLASK_ENV') == 'production' and _secret_key == 'dev-secret-key-change-in-production':
     raise RuntimeError('SECRET_KEY must be set in production — do not use the dev fallback')

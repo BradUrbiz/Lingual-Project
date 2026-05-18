@@ -20,6 +20,37 @@ class FakeApprovalDb(FakeDbBase):
     def update_school_request(self, request_id, updates):
         self.requests[request_id].update(updates)
 
+    def approve_school_request(self, request_id, reviewed_by_uid):
+        req = self.requests.get(request_id)
+        if req is None:
+            return None
+        if req.get('status') != 'pending':
+            raise ValueError(
+                f'Request {request_id} is not pending (status={req.get("status")!r})'
+            )
+
+        org_id = self.create_organization(
+            name=req['school_name'],
+            org_type=req.get('org_type', 'school'),
+            pilot_stage='beta',
+        )
+        membership_id = self.create_membership(
+            org_id=org_id,
+            uid=req['requester_uid'],
+            roles=['school_admin'],
+        )
+        self.set_user_last_active_membership(req['requester_uid'], membership_id)
+        self.update_school_request(request_id, {
+            'status': 'approved',
+            'reviewed_by_uid': reviewed_by_uid,
+            'created_org_id': org_id,
+        })
+        return {
+            'request': dict(self.requests[request_id]),
+            'org_id': org_id,
+            'membership_id': membership_id,
+        }
+
     def create_organization(self, **kwargs):
         org_id = f'org-{len(self.orgs_created)+1}'
         self.orgs_created.append({'id': org_id, **kwargs})

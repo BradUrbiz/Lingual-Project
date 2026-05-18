@@ -111,11 +111,10 @@ export function AdminPendingPage() {
           </ul>
         </div>
       )}
+      <p className="text-sm text-muted-foreground">
+        Need to change the details? Cancel this request before editing and resubmitting it.
+      </p>
       <div className="flex flex-wrap gap-3">
-        <button type="button" onClick={() => navigate('/signup/admin/org-wizard')}
-                className="rounded-md border px-4 py-2 text-sm">
-          Edit request
-        </button>
         <button type="button" onClick={handleCancel} disabled={cancelling}
                 className="rounded-md border px-4 py-2 text-sm disabled:opacity-60">
           {cancelling ? 'Cancelling…' : 'Cancel request'}

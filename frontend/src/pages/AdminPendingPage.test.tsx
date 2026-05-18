@@ -51,6 +51,18 @@ describe('AdminPendingPage', () => {
     expect(screen.getByText(/awaiting/i)).toBeInTheDocument();
   });
 
+  it('does not offer edit while the request is still pending', async () => {
+    getMineMock.mockResolvedValue({
+      id: 'r1', status: 'pending', schoolName: 'SF Friends',
+      requesterEmail: 'ada@ssfs.org',
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText(/SF Friends/)).toBeInTheDocument());
+
+    expect(screen.queryByRole('button', { name: /edit request/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/cancel this request before editing/i)).toBeInTheDocument();
+  });
+
   it('redirects to the wizard when no request exists', async () => {
     getMineMock.mockResolvedValue(null);
     renderPage();

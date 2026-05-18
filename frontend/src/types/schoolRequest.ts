@@ -61,14 +61,14 @@ export interface WizardCurriculum {
 export interface WizardSubmitPayload {
   schoolName: string;
   orgType: string;
-  websiteUrl?: string;
+  websiteUrl: string;
   canvasInstanceUrl?: string;          // legacy thin field; kept for back-compat
-  location?: WizardLocation;
-  schoolType?: SchoolType;
-  publicPrivate?: PublicPrivate;
-  gradeSize?: GradeSize;
+  location: WizardLocation;
+  schoolType: SchoolType;
+  publicPrivate: PublicPrivate;
+  gradeSize: GradeSize;
   officialEmailDomains?: string[];
-  adminIdentity?: WizardAdminIdentityInput;
+  adminIdentity: WizardAdminIdentityInput;
   integration?: WizardIntegration;
   curriculum?: WizardCurriculum;
   preInvitedTeachers?: string[];

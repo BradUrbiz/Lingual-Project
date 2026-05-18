@@ -120,6 +120,19 @@ class TeacherJoinRequestsHelpersTest(unittest.TestCase):
                 reviewed_by_uid='admin-1',
             )
 
+    def test_update_teacher_join_request_status_review_requires_actor(self):
+        """Approved/declined transitions require reviewed_by_uid for audit integrity."""
+        with self.assertRaisesRegex(ValueError, 'reviewed_by_uid is required'):
+            database.update_teacher_join_request_status(
+                request_id='tjr-1',
+                status='approved',
+            )
+        with self.assertRaisesRegex(ValueError, 'reviewed_by_uid is required'):
+            database.update_teacher_join_request_status(
+                request_id='tjr-1',
+                status='declined',
+            )
+
 
 if __name__ == '__main__':
     unittest.main()

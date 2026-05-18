@@ -2710,7 +2710,7 @@ ALLOWED_TEACHER_JOIN_REQUEST_STATUSES = frozenset({
 
 
 def get_teacher_join_requests_collection():
-    return firestore.client().collection(TEACHER_JOIN_REQUESTS_COLLECTION)
+    return get_db().collection(TEACHER_JOIN_REQUESTS_COLLECTION)
 
 
 def create_teacher_join_request(
@@ -2803,9 +2803,13 @@ def update_teacher_join_request_status(
         raise ValueError(f"Invalid status: {status!r}")
     updates: dict = {'status': status}
     if status in _REVIEW_STATUSES:
+        if reviewed_by_uid is None:
+            raise ValueError(
+                "reviewed_by_uid is required for review transitions "
+                f"(status={status!r})"
+            )
         updates['reviewed_at'] = firestore.SERVER_TIMESTAMP
-        if reviewed_by_uid is not None:
-            updates['reviewed_by_uid'] = reviewed_by_uid
+        updates['reviewed_by_uid'] = reviewed_by_uid
     if decline_reason is not None:
         updates['decline_reason'] = decline_reason
     get_teacher_join_requests_collection().document(request_id).update(updates)

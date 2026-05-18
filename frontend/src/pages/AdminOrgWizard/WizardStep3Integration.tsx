@@ -52,8 +52,16 @@ export function WizardStep3Integration({ state, dispatch }: WizardStep3Props) {
   const [usesCanvas, setUsesCanvas] = useState<'yes' | 'no' | 'unknown' | null>(
     integration ? 'yes' : null,
   );
-  const curriculum = state.curriculum ?? {
-    gradeRanges: [], languagesTaught: [], courseFrameworks: [],
+  // Every nested array gets its own default. The reducer's SET_FIELD on
+  // `curriculum.gradeRanges` creates a partial curriculum object (with the
+  // other two arrays undefined), so a top-level `state.curriculum ?? {...}`
+  // wasn't enough — `.join()` / `.includes()` would crash on the undefined
+  // siblings. Normalize each field defensively here, mirroring the same
+  // pattern WizardStep1Organization uses for location.
+  const curriculum = {
+    gradeRanges: state.curriculum?.gradeRanges ?? [],
+    languagesTaught: state.curriculum?.languagesTaught ?? [],
+    courseFrameworks: state.curriculum?.courseFrameworks ?? [],
   };
 
   function chooseUsesCanvas(v: 'yes' | 'no' | 'unknown') {

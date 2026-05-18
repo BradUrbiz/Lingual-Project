@@ -52,6 +52,21 @@ describe('WizardStep3Integration', () => {
       value: ['g6_8', 'g9_12'],
     });
   });
+
+  it('renders without crashing when curriculum is partial', () => {
+    // The reducer's SET_FIELD on `curriculum.gradeRanges` produces a partial
+    // curriculum object with the other arrays undefined. The component must
+    // default each nested array independently so .join() / .includes() don't
+    // crash on the partial.
+    const dispatch = vi.fn();
+    expect(() => render(
+      <WizardStep3Integration
+        state={{ curriculum: { gradeRanges: ['g6_8'] } as never }}
+        dispatch={dispatch}
+      />,
+    )).not.toThrow();
+    expect(screen.getByLabelText(/languages taught/i)).toHaveValue('');
+  });
 });
 
 describe('validateStep3', () => {

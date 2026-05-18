@@ -308,5 +308,60 @@ class CreateOrganizationNameLowerTest(unittest.TestCase):
         self.assertEqual(payload['name_lower'], 'sf friends school')
 
 
+class SchoolAdminUidsDenormalizationTest(unittest.TestCase):
+    def setUp(self):
+        self.org_doc_ref = MagicMock()
+        self.org_doc_ref.id = 'org-1'
+        self.mem_doc_ref = MagicMock()
+        self.mem_doc_ref.id = 'mem-1'
+
+        # Two collections returned by client.collection(name)
+        self.fake_client = MagicMock()
+
+        def _collection(name):
+            mock = MagicMock()
+            if name == 'organizations':
+                mock.document.return_value = self.org_doc_ref
+            elif name == 'memberships':
+                mock.document.return_value = self.mem_doc_ref
+            return mock
+        self.fake_client.collection.side_effect = _collection
+
+        self.client_patch = patch('database.firestore.client', return_value=self.fake_client)
+        self.client_patch.start()
+
+    def tearDown(self):
+        self.client_patch.stop()
+
+    def test_create_membership_with_school_admin_role_adds_uid_to_org(self):
+        """create_membership(roles=['school_admin']) must ArrayUnion uid onto org."""
+        database.create_membership(
+            org_id='org-1',
+            uid='admin-1',
+            roles=['school_admin'],
+        )
+        # Org doc must have been updated with an ArrayUnion on school_admin_uids.
+        self.org_doc_ref.update.assert_called_once()
+        update_payload = self.org_doc_ref.update.call_args[0][0]
+        self.assertIn('school_admin_uids', update_payload)
+
+    def test_create_membership_teacher_only_does_not_touch_org_array(self):
+        """Non-admin role grant doesn't mutate school_admin_uids."""
+        database.create_membership(
+            org_id='org-1',
+            uid='teacher-1',
+            roles=['teacher'],
+        )
+        # Org doc must NOT have been updated.
+        self.org_doc_ref.update.assert_not_called()
+
+    def test_sync_org_admin_uids_remove_uses_array_remove(self):
+        """Explicit remove path uses ArrayRemove."""
+        database._sync_org_admin_uids('org-1', 'admin-1', add=False)
+        self.org_doc_ref.update.assert_called_once()
+        update_payload = self.org_doc_ref.update.call_args[0][0]
+        self.assertIn('school_admin_uids', update_payload)
+
+
 if __name__ == '__main__':
     unittest.main()

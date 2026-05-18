@@ -845,6 +845,23 @@ def list_school_admin_emails(org_id: str):
     return recipients
 
 
+def _sync_org_admin_uids(org_id: str, uid: str, *, add: bool) -> None:
+    """Maintain organizations/{id}.school_admin_uids in sync with membership grants.
+
+    Called whenever a membership touching the school_admin role is created or
+    removed. Idempotent; ArrayUnion / ArrayRemove are commutative.
+
+    TODO: any future path that revokes a school_admin role (membership
+    deletion, role-change endpoint, org suspension cascading to memberships)
+    MUST call _sync_org_admin_uids(org_id, uid, add=False). Audit when
+    implementing Plan 5 (Lingual admin org panel — suspend/restore).
+    """
+    if not org_id or not uid:
+        return
+    op = firestore.ArrayUnion([uid]) if add else firestore.ArrayRemove([uid])
+    get_organizations_collection().document(org_id).update({'school_admin_uids': op})
+
+
 def create_membership(
     org_id,
     uid,
@@ -855,16 +872,19 @@ def create_membership(
 ):
     """Create a membership document."""
     doc_ref = get_membership_ref(membership_id) if membership_id else get_memberships_collection().document()
+    normalized_roles = _normalize_string_list(roles)
     membership_data = {
         'org_id': org_id,
         'uid': uid,
-        'roles': _normalize_string_list(roles),
+        'roles': normalized_roles,
         'status': status,
         'primary_class_ids': _normalize_string_list(primary_class_ids or []),
         'created_at': firestore.SERVER_TIMESTAMP,
         'updated_at': firestore.SERVER_TIMESTAMP,
     }
     doc_ref.set(membership_data)
+    if 'school_admin' in normalized_roles and status == 'active':
+        _sync_org_admin_uids(org_id, uid, add=True)
     return doc_ref.id
 
 

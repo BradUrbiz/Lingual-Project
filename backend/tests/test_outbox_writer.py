@@ -1,9 +1,11 @@
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
 from backend.services import outbox
 from backend.services.outbox import (
     OUTBOX_EMAILS_COLLECTION,
+    OutboxBlockedInTestMode,
     OutboxTemplate,
     enqueue_outbox_email,
 )
@@ -29,6 +31,17 @@ class OutboxConstantsTest(unittest.TestCase):
 
 
 class EnqueueOutboxEmailTest(unittest.TestCase):
+    # These tests exercise the actual write logic, so they explicitly opt out
+    # of the conftest guard (LINGUAL_BLOCK_OUTBOX_WRITES=1) by removing it for
+    # the duration of each test. The guard is verified separately in
+    # OutboxBlockGuardTest below.
+    def setUp(self):
+        self._prev_block = os.environ.pop('LINGUAL_BLOCK_OUTBOX_WRITES', None)
+
+    def tearDown(self):
+        if self._prev_block is not None:
+            os.environ['LINGUAL_BLOCK_OUTBOX_WRITES'] = self._prev_block
+
     def test_writes_doc_with_expected_shape(self):
         db = MagicMock()
         doc_ref = MagicMock()
@@ -307,3 +320,53 @@ class OutboxTemplateEnumTest(unittest.TestCase):
             OutboxTemplate.TEACHER_INVITATION.value,
             'teacher_invitation',
         )
+
+
+class OutboxBlockGuardTest(unittest.TestCase):
+    """Verify that LINGUAL_BLOCK_OUTBOX_WRITES=1 prevents real outbox writes.
+
+    Backstops the conftest-set env var that protects every test in this
+    directory from leaking real Firestore writes to production. The route
+    handlers wrap each enqueue call in try/except, so the OutboxBlockedInTestMode
+    is caught at runtime and tests still exercise the full route path —
+    they just don't pollute the live outbox queue.
+    """
+
+    def test_raises_when_env_var_is_set(self):
+        db = MagicMock()
+        with patch.dict(os.environ, {'LINGUAL_BLOCK_OUTBOX_WRITES': '1'}):
+            with self.assertRaises(OutboxBlockedInTestMode):
+                enqueue_outbox_email(
+                    db=db,
+                    recipient_email='someone@example.com',
+                    recipient_name='Someone',
+                    template=OutboxTemplate.SCHOOL_REQUEST_TO_LINGUAL,
+                    template_data={'org_name': 'Should Not Write'},
+                )
+        db.collection.assert_not_called()
+
+    def test_does_not_raise_when_env_var_is_unset(self):
+        db = MagicMock()
+        env = {k: v for k, v in os.environ.items() if k != 'LINGUAL_BLOCK_OUTBOX_WRITES'}
+        with patch.dict(os.environ, env, clear=True):
+            enqueue_outbox_email(
+                db=db,
+                recipient_email='someone@example.com',
+                recipient_name='Someone',
+                template=OutboxTemplate.SCHOOL_REQUEST_TO_LINGUAL,
+                template_data={'org_name': 'Should Write'},
+            )
+        db.collection.assert_called_once_with(OUTBOX_EMAILS_COLLECTION)
+
+    def test_does_not_raise_when_env_var_is_empty(self):
+        # An empty string should NOT trigger the guard — only the literal '1'.
+        db = MagicMock()
+        with patch.dict(os.environ, {'LINGUAL_BLOCK_OUTBOX_WRITES': ''}):
+            enqueue_outbox_email(
+                db=db,
+                recipient_email='someone@example.com',
+                recipient_name='Someone',
+                template=OutboxTemplate.SCHOOL_REQUEST_TO_LINGUAL,
+                template_data={'org_name': 'Should Write'},
+            )
+        db.collection.assert_called_once_with(OUTBOX_EMAILS_COLLECTION)

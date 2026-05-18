@@ -10,6 +10,7 @@ integration live in the Cloud Function, not here.
 
 from __future__ import annotations
 
+import os
 import re
 from enum import Enum
 from typing import Any
@@ -19,6 +20,32 @@ from firebase_admin import firestore
 OUTBOX_EMAILS_COLLECTION = 'outbox_emails'
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+# Test-mode safety guard. When `LINGUAL_BLOCK_OUTBOX_WRITES=1` is set in the
+# environment, `enqueue_outbox_email` refuses to write to Firestore and raises
+# `OutboxBlockedInTestMode`. The submit/approve/reject route handlers already
+# wrap each enqueue call in try/except (intentional fan-out resilience), so
+# the error is caught and logged — tests still exercise the full route code
+# path, but no real outbox doc lands in production Firestore.
+#
+# Why this is needed: the route handlers call `database.get_db()` directly
+# (not via a deps abstraction), so a test that exercises a route with the
+# prod service account in scope will write real outbox docs to prod, which
+# the deployed Cloud Function will then process and send. This actually
+# happened during the Plan 3 ship — see LIMITATIONS #29.
+#
+# Set automatically in backend/tests/conftest.py so every backend test
+# inherits the guard. Production env never has this set.
+_OUTBOX_BLOCK_ENV_VAR = 'LINGUAL_BLOCK_OUTBOX_WRITES'
+
+
+class OutboxBlockedInTestMode(RuntimeError):
+    """Raised by enqueue_outbox_email when LINGUAL_BLOCK_OUTBOX_WRITES is set.
+
+    Caught by the route's existing outbox try/except wrappers — propagates as
+    a logged warning rather than a 500. Tests can assert on this class to
+    verify the guard fired.
+    """
 
 
 class OutboxTemplate(str, Enum):
@@ -46,6 +73,11 @@ def enqueue_outbox_email(
     Pass `transaction` to enqueue atomically with other Firestore writes.
     Returns the new document id.
     """
+    if os.environ.get(_OUTBOX_BLOCK_ENV_VAR) == '1':
+        raise OutboxBlockedInTestMode(
+            f'Outbox writes are blocked: {_OUTBOX_BLOCK_ENV_VAR}=1. '
+            f'Would have written template={template.value} to {recipient_email!r}.'
+        )
     if not _EMAIL_RE.match(recipient_email or ''):
         raise ValueError(f"Invalid recipient_email: {recipient_email!r}")
     if not isinstance(template_data, dict):

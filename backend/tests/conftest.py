@@ -11,6 +11,7 @@ Provides:
 
 from __future__ import annotations
 
+import os
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -18,6 +19,14 @@ from typing import Any
 from flask import Flask, session
 
 from backend.route_deps import RouteDeps
+
+# Test-mode safety guard for the outbox writer. See
+# `backend/services/outbox.py:_OUTBOX_BLOCK_ENV_VAR` for the full rationale.
+# Set at conftest import time so every backend test inherits the protection
+# regardless of how it's invoked. Without this, any test that exercises a
+# route which calls `enqueue_outbox_email` against the prod-pointed
+# `database.get_db()` will write real outbox docs to production Firestore.
+os.environ.setdefault('LINGUAL_BLOCK_OUTBOX_WRITES', '1')
 from backend.services.membership_context import resolve_school_request_context
 
 

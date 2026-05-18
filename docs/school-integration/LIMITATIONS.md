@@ -202,6 +202,25 @@ business actions complete normally but do not produce those emails.
     immediate redirect with an approved-state panel once the dedicated
     school-admin home route lands.
 
+29. **Backend tests can write to production Firestore without isolation.**
+    Route handlers (e.g. `submit_school_request`) call `database.get_db()`
+    directly instead of going through a `deps`-injected client, so a test
+    that POSTs to `/api/school-requests` while the prod service account is
+    in scope writes real outbox docs to production. This actually happened
+    during the Plan 3 smoke test: a `make test-backend` run created ~27
+    outbox docs that the deployed Cloud Function later picked up and sent
+    as real emails to kimmi@l1ngual.com. Symptom was "I got 4 emails for
+    SF Friends and Springfield Elementary" (fixture school names from
+    `test_school_requests.py` and `test_school_request_outbox_integration.py`).
+    Mitigated by a runtime guard in `backend/services/outbox.py`:
+    `LINGUAL_BLOCK_OUTBOX_WRITES=1` makes `enqueue_outbox_email` raise
+    `OutboxBlockedInTestMode`, which the route's existing fan-out
+    try/except wrappers catch and log. `backend/tests/conftest.py` sets the
+    env var at import time so every test inherits the protection. Proper
+    long-term fix: route the Firestore client through `RouteDeps` so tests
+    can inject a fake DB at the boundary instead of relying on an env
+    guard. Tracked in TASKS / TECH_SPEC.
+
 28. **Role grants and changes require a session refresh to take effect.**
     `AuthContext` only re-fetches the auth payload via `/api/auth/verify`
     when Firebase Auth state changes (sign-in / sign-out) — not on every

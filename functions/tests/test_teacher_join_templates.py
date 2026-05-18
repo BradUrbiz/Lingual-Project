@@ -63,6 +63,18 @@ class TeacherJoinTemplatesTest(unittest.TestCase):
         self.assertIn('Please use your school email.', html)
         self.assertIn('https://lingual.app/signup/teacher/join-org', html)
 
+    def test_declined_without_reason_omits_reason_block(self):
+        """If decline_reason is None, the 'Reason:' paragraph must not render."""
+        _, html = self.main.render_template(
+            'teacher_join_declined',
+            {
+                'org_name': 'SF Friends',
+                'decline_reason': None,
+                'retry_url': 'https://lingual.app/signup/teacher/join-org',
+            },
+        )
+        self.assertNotIn('Reason:', html)
+
 
 if __name__ == '__main__':
     unittest.main()

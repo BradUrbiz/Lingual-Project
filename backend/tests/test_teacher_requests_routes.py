@@ -70,7 +70,9 @@ class FakeTeacherRequestsDb(FakeDbBase):
 
     # Profile update (used by blueprint after request creation)
     def update_user_profile(self, uid, **kwargs):
-        pass
+        # Capture for assertions; no-op semantics otherwise.
+        self.profile_updates = getattr(self, 'profile_updates', [])
+        self.profile_updates.append((uid, kwargs))
 
     def update_teacher_join_request_status(self, *, request_id, status,
                                             reviewed_by_uid=None,
@@ -278,6 +280,12 @@ class PollAndCancelTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.get_json()['success'])
         self.assertEqual(db.teacher_join_requests['tjr-1']['status'], 'cancelled')
+        # Confirm onboarding_state revert was attempted on the user profile.
+        revert_calls = [
+            (uid, kwargs) for uid, kwargs in (db.profile_updates or [])
+            if uid == 'teacher-1' and kwargs.get('onboarding_state') == 'role_selected'
+        ]
+        self.assertEqual(len(revert_calls), 1)
 
     def test_delete_me_returns_404_when_no_pending(self):
         app, db = _build_app()
@@ -287,6 +295,27 @@ class PollAndCancelTest(unittest.TestCase):
 
         resp = client.delete('/api/teacher-join-requests/me')
         self.assertEqual(resp.status_code, 404)
+
+    def test_delete_me_ignores_non_pending_request(self):
+        """DELETE only acts on pending requests — approved/declined/cancelled return 404."""
+        app, db = _build_app()
+        db.teacher_join_requests['tjr-cancelled'] = {
+            'uid': 'teacher-1', 'org_id': 'org-1',
+            'source': 'search', 'status': 'cancelled',
+        }
+        db.teacher_join_requests['tjr-approved'] = {
+            'uid': 'teacher-1', 'org_id': 'org-1',
+            'source': 'invite_code', 'status': 'approved',
+        }
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'teacher-1', 'email': 't@x.com'}
+
+        resp = client.delete('/api/teacher-join-requests/me')
+        self.assertEqual(resp.status_code, 404)
+        # Existing records are unchanged.
+        self.assertEqual(db.teacher_join_requests['tjr-cancelled']['status'], 'cancelled')
+        self.assertEqual(db.teacher_join_requests['tjr-approved']['status'], 'approved')
 
 
 if __name__ == '__main__':

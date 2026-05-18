@@ -758,6 +758,7 @@ def create_organization(
     doc_ref = get_organization_ref(org_id) if org_id else get_organizations_collection().document()
     org_data = {
         'name': name,
+        'name_lower': (name or '').strip().lower(),  # search prefix index
         'type': org_type,
         'status': status,
         'pilot_stage': pilot_stage,
@@ -779,6 +780,69 @@ def get_organization(org_id):
     data = doc.to_dict()
     data['id'] = doc.id
     return data
+
+
+def search_organizations(query: str, *, limit: int = 10):
+    """Public-ish org search. Returns metadata only — no PII, no counts.
+
+    Matches against `name_lower` prefix; orgs must be `status='active'`.
+    """
+    q = (query or '').strip().lower()
+    if not q:
+        return []
+    # Firestore prefix-range idiom: U+F8FF ('') is one of the highest
+    # Unicode private-use code points; [q, q + ''] covers every doc whose
+    # name_lower starts with q.
+    end = q + ''
+    docs = (
+        get_db()
+        .collection('organizations')
+        .where('name_lower', '>=', q)
+        .where('name_lower', '<=', end)
+        .limit(limit)
+    ).stream()
+    results = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        if data.get('status') != 'active':
+            continue
+        results.append({
+            'id': doc.id,
+            'name': data.get('name', ''),
+            'city': data.get('city'),
+            'state': data.get('state'),
+            'school_type': data.get('school_type'),
+        })
+    return results
+
+
+def list_school_admin_emails(org_id: str):
+    """Return [{uid, email, name}] for every active school_admin of the org."""
+    membership_docs = (
+        get_db()
+        .collection('memberships')
+        .where('org_id', '==', org_id)
+        .where('status', '==', 'active')
+        .where('roles', 'array_contains', 'school_admin')
+    ).stream()
+    recipients = []
+    seen = set()
+    for m in membership_docs:
+        data = m.to_dict() or {}
+        uid = data.get('uid')
+        if not uid or uid in seen:
+            continue
+        seen.add(uid)
+        user_doc = get_db().collection('users').document(uid).get()
+        if not user_doc.exists:
+            continue
+        user = user_doc.to_dict() or {}
+        email = user.get('email')
+        if not email:
+            continue
+        display_name = (user.get('profile') or {}).get('display_name') or user.get('name')
+        recipients.append({'uid': uid, 'email': email, 'name': display_name})
+    return recipients
 
 
 def create_membership(

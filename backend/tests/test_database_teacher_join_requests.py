@@ -134,5 +134,155 @@ class TeacherJoinRequestsHelpersTest(unittest.TestCase):
             )
 
 
+class OrgSearchHelperTest(unittest.TestCase):
+    def setUp(self):
+        self.fake_client = MagicMock()
+        self.client_patch = patch('database.firestore.client', return_value=self.fake_client)
+        self.client_patch.start()
+
+    def tearDown(self):
+        self.client_patch.stop()
+
+    def _seed_org_docs(self, orgs: list[dict]):
+        docs = []
+        for org in orgs:
+            d = MagicMock()
+            d.id = org['id']
+            d.to_dict.return_value = {k: v for k, v in org.items() if k != 'id'}
+            docs.append(d)
+        query = MagicMock()
+        query.stream.return_value = iter(docs)
+        # search_organizations chains: collection().where().where().limit()
+        self.fake_client.collection.return_value.where.return_value.where.return_value.limit.return_value = query
+
+    def test_search_organizations_returns_metadata_only(self):
+        """Search response excludes sensitive fields."""
+        self._seed_org_docs([
+            {
+                'id': 'org-1',
+                'name': 'San Francisco Friends School',
+                'name_lower': 'san francisco friends school',
+                'city': 'San Francisco',
+                'state': 'CA',
+                'school_type': 'k12',
+                'status': 'active',
+                # Sensitive fields below MUST NOT appear in result.
+                'admin_email_domains': ['@sfs.org'],
+                'student_count': 412,
+                'teacher_count': 38,
+            },
+        ])
+        results = database.search_organizations('san fran', limit=10)
+        self.assertEqual(len(results), 1)
+        result = results[0]
+        self.assertEqual(result['id'], 'org-1')
+        self.assertEqual(result['name'], 'San Francisco Friends School')
+        self.assertEqual(result['city'], 'San Francisco')
+        self.assertEqual(result['state'], 'CA')
+        self.assertEqual(result['school_type'], 'k12')
+        self.assertNotIn('admin_email_domains', result)
+        self.assertNotIn('student_count', result)
+        self.assertNotIn('teacher_count', result)
+
+    def test_search_organizations_excludes_suspended_archived(self):
+        self._seed_org_docs([
+            {'id': 'org-1', 'name': 'Active', 'name_lower': 'active', 'status': 'active'},
+            {'id': 'org-2', 'name': 'Susp', 'name_lower': 'susp', 'status': 'suspended'},
+            {'id': 'org-3', 'name': 'Arch', 'name_lower': 'arch', 'status': 'archived'},
+        ])
+        results = database.search_organizations('a', limit=10)
+        ids = [r['id'] for r in results]
+        self.assertIn('org-1', ids)
+        self.assertNotIn('org-2', ids)
+        self.assertNotIn('org-3', ids)
+
+    def test_search_organizations_blank_query_returns_empty(self):
+        """Empty / whitespace-only query yields no results, no DB hit."""
+        result = database.search_organizations('   ', limit=10)
+        self.assertEqual(result, [])
+        self.fake_client.collection.assert_not_called()
+
+
+class ListSchoolAdminEmailsTest(unittest.TestCase):
+    def setUp(self):
+        self.fake_client = MagicMock()
+        self.client_patch = patch('database.firestore.client', return_value=self.fake_client)
+        self.client_patch.start()
+        # Memberships query
+        self.memberships_query = MagicMock()
+        # Users
+        self.users_doc = MagicMock()
+
+    def tearDown(self):
+        self.client_patch.stop()
+
+    def test_returns_active_school_admins_for_org(self):
+        m1 = MagicMock()
+        m1.to_dict.return_value = {
+            'org_id': 'org-1', 'uid': 'admin-1',
+            'roles': ['school_admin'], 'status': 'active',
+        }
+        m2 = MagicMock()
+        m2.to_dict.return_value = {
+            'org_id': 'org-1', 'uid': 'admin-2',
+            'roles': ['school_admin', 'teacher'], 'status': 'active',
+        }
+        m3 = MagicMock()
+        m3.to_dict.return_value = {
+            'org_id': 'org-1', 'uid': 'admin-inactive',
+            'roles': ['school_admin'], 'status': 'invited',
+        }
+        self.memberships_query.stream.return_value = iter([m1, m2, m3])
+
+        users = {
+            'admin-1': {'email': 'a1@x.com', 'name': 'A1', 'profile': {'display_name': 'A One'}},
+            'admin-2': {'email': 'a2@x.com', 'name': 'A2'},
+        }
+
+        def _collection(name):
+            mock = MagicMock()
+            if name == 'memberships':
+                mock.where.return_value.where.return_value.where.return_value.stream.return_value = (
+                    iter([m1, m2, m3])
+                )
+            elif name == 'users':
+                def _doc(uid):
+                    doc_mock = MagicMock()
+                    if uid in users:
+                        doc_mock.get.return_value.to_dict.return_value = users[uid]
+                        doc_mock.get.return_value.exists = True
+                    else:
+                        doc_mock.get.return_value.exists = False
+                    return doc_mock
+                mock.document.side_effect = _doc
+            return mock
+
+        self.fake_client.collection.side_effect = _collection
+
+        results = database.list_school_admin_emails('org-1')
+        emails = sorted(r['email'] for r in results)
+        self.assertEqual(emails, ['a1@x.com', 'a2@x.com'])
+
+
+class CreateOrganizationNameLowerTest(unittest.TestCase):
+    def setUp(self):
+        self.fake_doc_ref = MagicMock()
+        self.fake_doc_ref.id = 'org-new'
+        self.fake_collection = MagicMock()
+        self.fake_collection.document.return_value = self.fake_doc_ref
+        self.fake_client = MagicMock()
+        self.fake_client.collection.return_value = self.fake_collection
+        self.client_patch = patch('database.firestore.client', return_value=self.fake_client)
+        self.client_patch.start()
+
+    def tearDown(self):
+        self.client_patch.stop()
+
+    def test_create_organization_writes_name_lower(self):
+        database.create_organization(name='  SF Friends School  ')
+        payload = self.fake_doc_ref.set.call_args[0][0]
+        self.assertEqual(payload['name_lower'], 'sf friends school')
+
+
 if __name__ == '__main__':
     unittest.main()

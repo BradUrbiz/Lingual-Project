@@ -16,6 +16,13 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 set_global_options(max_instances=10)
 initialize_app()
 
+# RESEND_API_KEY is declared as a secret on each @firestore_fn / @scheduler_fn
+# decorator (`secrets=['RESEND_API_KEY']`) so the Functions 2nd gen runtime
+# mounts it into the function's env. Without the per-decorator declaration,
+# os.environ['RESEND_API_KEY'] would be unset even when the secret exists in
+# Secret Manager, and the function would silently fall into dev-mode (sent_dev).
+# Provision the secret with: `firebase functions:secrets:set RESEND_API_KEY`.
+
 DEV_MODE_SENTINEL = {'mode': 'dev', 'message_id': None}
 
 
@@ -174,7 +181,10 @@ def _send_outbox_email_impl(event) -> None:
 # 'sending', 'sent', 'sent_dev', 'dead_letter') are ignored by the
 # early-exit guard. The sweep promotes failed→pending and the new write
 # fires this trigger; the trigger never sees 'failed' directly.
-@firestore_fn.on_document_written(document='outbox_emails/{emailId}')
+@firestore_fn.on_document_written(
+    document='outbox_emails/{emailId}',
+    secrets=['RESEND_API_KEY'],
+)
 def send_outbox_email(event):
     """Send pending outbox emails. Triggered by new writes and sweep promotions."""
     return _send_outbox_email_impl(event)
@@ -219,7 +229,10 @@ def _retry_outbox_sweep_impl() -> None:
         doc.reference.update({'last_swept_at': fb_firestore.SERVER_TIMESTAMP})
 
 
-@scheduler_fn.on_schedule(schedule='every 5 minutes')
+@scheduler_fn.on_schedule(
+    schedule='every 5 minutes',
+    secrets=['RESEND_API_KEY'],
+)
 def retry_outbox_sweep(event) -> None:
     """Cloud Function wrapper: delegates to the pure impl for testability."""
     _retry_outbox_sweep_impl()

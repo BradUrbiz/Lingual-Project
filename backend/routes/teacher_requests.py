@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import logging
 import os
+import time
+from collections import deque
 
 from flask import Blueprint, jsonify, request
 
@@ -25,6 +27,23 @@ from backend.services.membership_context import SchoolContextPermissionError
 log = logging.getLogger(__name__)
 
 _TEACHER_DASHBOARD_PATH = '/app/teacher#pending-requests'
+
+# Per-uid rate limit: at most 10 search calls per 1-second window.
+_RATE_LIMIT_PER_UID: dict[str, deque] = {}
+_RATE_LIMIT_MAX = 10
+_RATE_LIMIT_WINDOW_SECONDS = 1.0
+
+
+def _check_rate_limit(uid: str) -> bool:
+    now = time.monotonic()
+    bucket = _RATE_LIMIT_PER_UID.setdefault(uid, deque())
+    cutoff = now - _RATE_LIMIT_WINDOW_SECONDS
+    while bucket and bucket[0] < cutoff:
+        bucket.popleft()
+    if len(bucket) >= _RATE_LIMIT_MAX:
+        return False
+    bucket.append(now)
+    return True
 
 
 def _base_url():
@@ -392,5 +411,19 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
             'requestId': request_id,
             'status': 'declined',
         }), 200
+
+    @bp.route('/api/organizations/search', methods=['GET'])
+    @deps.login_required
+    def org_search():
+        uid = deps.get_current_user_uid()
+        if not uid:
+            return jsonify({'success': False, 'error': 'Authentication required.'}), 401
+        if not _check_rate_limit(uid):
+            return jsonify({'success': False, 'error': 'Too many requests.'}), 429
+        query = (request.args.get('q') or '').strip()
+        if not query:
+            return jsonify({'success': True, 'results': []}), 200
+        results = deps.db.search_organizations(query, limit=10)
+        return jsonify({'success': True, 'results': results}), 200
 
     return bp

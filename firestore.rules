@@ -161,6 +161,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /teacher_join_requests/{requestId} {
+      allow read: if request.auth != null
+                  && (
+                      resource.data.uid == request.auth.uid
+                      || get(/databases/$(database)/documents/organizations/$(resource.data.org_id))
+                          .data.school_admin_uids.hasAny([request.auth.uid])
+                  );
+
+      // Clients never write directly; backend admin SDK bypasses rules.
+      allow write: if false;
+    }
+
     match /outbox_emails/{emailId} {
       allow read, write: if false;  // service-account only; admin SDK bypasses
     }

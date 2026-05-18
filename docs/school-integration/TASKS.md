@@ -46,6 +46,13 @@ Owner: Engineering + Product
 
 ## Phase 2: School onboarding and roster workflows
 
+### Admin school registration wizard
+
+- [x] Admin org wizard — 4-step form with autosave draft
+- [x] Authorization attestation with server-stamped IP hash + UA
+- [x] Pre-invite teachers list on submit; auto-invitations on approval
+- [x] Approval / decline transactional emails via outbox
+
 ### Teacher onboarding
 
 - [x] Design separate school onboarding flow from learner onboarding.

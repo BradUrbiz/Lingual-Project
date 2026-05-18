@@ -157,3 +157,35 @@ They are added in subsequent onboarding plans (Plans 3–6). Until then, the
 relevant business actions complete normally but do not produce email.
 
 **Sweep gap to watch:** `retry_outbox_sweep` in `functions/main.py` only re-promotes `status='failed'` documents back to `pending`. It does NOT yet pick up `pending` documents whose `scheduled_for` is in the past (intended for reminder emails). With v1 templates all being immediate (`scheduled_for = SERVER_TIMESTAMP`), the Firestore `on_document_written` trigger handles every email synchronously — this gap is latent. Before Plan 3+ wires any reminder template (e.g., `school_request_reminder_to_lingual`, `join_request_reminder_to_admin`), extend `_retry_outbox_sweep_impl` to also query `('status', '==', 'pending') AND ('scheduled_for', '<=', now)` and re-touch those docs to fire the trigger. The composite index `(status, scheduled_for)` added in `firestore.indexes.json` already supports that query.
+
+22. **Wizard draft has no TTL.** A `school_creation_drafts/{uid}` document
+   lives until the user either submits successfully (route deletes it) or
+   cancels the in-flight request. Stale drafts persist indefinitely.
+
+23. **Pre-invite emails are best-effort at approval time.** The approve
+    route enqueues one `teacher_invitation` outbox doc per email and one
+    `school_request_approved` doc to the requester. Failures to enqueue
+    are logged but do not block the approval response — the membership,
+    org, and `teacher_invitations/` rows are written first.
+
+24. **`school_creation_drafts` rules are not under automated coverage in
+    this plan.** Task 18 added the owner-only rule but the Firebase
+    emulator test suite (`firebase-tests/`, Java required) was not
+    extended. The rule mirrors the existing `users/{uid}` ownership
+    pattern; a follow-up should add a rules test once a Java-enabled CI
+    runner is available.
+
+25. **DB column names diverge from spec naming for decline / reject.**
+    Design spec §4 names `decline_reason` / `decline_category` on
+    `school_requests`. The implementation kept the pre-existing column
+    names `rejection_reason` / `rejection_category` to avoid migrating
+    historical rows. API responses use camelCase `rejectionReason` /
+    `rejectionCategory`. User-facing UI copy still says "Declined".
+    Future readers grepping for `decline_reason` will not find it.
+
+26. **Admin wizard is English-only.** Wizard labels, helper text, and
+    the three new email templates (`school_request_approved`,
+    `school_request_declined`, `teacher_invitation`) ship in English
+    only. `LanguageProvider` (en/ko) covers the learner app but is not
+    threaded through the wizard. Acceptable for v1 (admin audience is
+    US schools); revisit when expanding outside the US.

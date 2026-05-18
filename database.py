@@ -280,6 +280,70 @@ ALLOWED_ONBOARDING_STATES = frozenset({
     ONBOARDING_STATE_COMPLETE,
 })
 
+# School registration wizard enums (Plan 3)
+
+ALLOWED_SCHOOL_TYPES = frozenset({
+    'middle',
+    'high',
+    'k12',
+    'university',
+    'language_academy',
+    'district',
+    'other',
+})
+
+ALLOWED_PUBLIC_PRIVATE = frozenset({
+    'public',
+    'private',
+    'charter',
+    'other',
+})
+
+ALLOWED_GRADE_SIZES = frozenset({
+    '<50',
+    '50-100',
+    '100-200',
+    '200-500',
+    '500+',
+})
+
+ALLOWED_CANVAS_INTEGRATION_TYPES = frozenset({
+    'lti13',
+    'roster_sync',
+    'grade_passback',
+    'sso',
+})
+
+ALLOWED_GRADE_RANGES = frozenset({
+    'k_2',
+    'g3_5',
+    'g6_8',
+    'g9_12',
+    'undergrad',
+    'graduate',
+    'adult_ed',
+})
+
+ALLOWED_COURSE_FRAMEWORKS = frozenset({
+    'ap',
+    'actfl',
+    'cefr',
+    'ib',
+    'school_specific',
+    'none',
+})
+
+ALLOWED_REJECTION_CATEGORIES = frozenset({
+    'info_missing',
+    'fraud_risk',
+    'out_of_scope',
+    'duplicate',
+    'other',
+})
+
+WIZARD_STEP_MIN = 1
+WIZARD_STEP_MAX = 4
+
 
 def _utc_now():
     return datetime.now(UTC)

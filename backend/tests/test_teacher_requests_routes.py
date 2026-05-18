@@ -93,6 +93,37 @@ class FakeTeacherRequestsDb(FakeDbBase):
                 out.append({'id': rid, **r})
         return out
 
+    def get_teacher_join_request(self, request_id):
+        rec = self.teacher_join_requests.get(request_id)
+        if rec is None:
+            return None
+        return {'id': request_id, **rec}
+
+    def create_membership(self, *, org_id, uid, roles):
+        self._mem_counter = getattr(self, '_mem_counter', 0) + 1
+        membership_id = f'mem-{self._mem_counter}'
+        self._membership_list.append({
+            'id': membership_id, 'org_id': org_id, 'uid': uid,
+            'roles': roles, 'status': 'active',
+        })
+        return membership_id
+
+    def set_user_last_active_membership(self, uid, membership_id):
+        self.users.setdefault(uid, {})['last_active_membership_id'] = membership_id
+
+    def collection(self, name):
+        """Outbox writes go through deps.db.collection('outbox_emails').document().set(...)."""
+        outer = self
+        class _DocRef:
+            def __init__(self):
+                self.id = f'eml-{len(outer.outbox_writes) + 1}'
+            def set(self, payload):
+                outer.outbox_writes.append({'id': self.id, **payload})
+        class _CollRef:
+            def document(self):
+                return _DocRef()
+        return _CollRef()
+
     def resolve_user_school_context(self, uid, preferred_active_membership_id=None):
         """Override FakeDbBase.resolve_user_school_context to read _membership_list."""
         memberships = []
@@ -411,6 +442,75 @@ class AdminListPendingTest(unittest.TestCase):
         body = resp.get_json()
         self.assertTrue(body['success'])
         self.assertEqual(body['requests'], [])
+
+
+class ApproveTeacherJoinRequestTest(unittest.TestCase):
+    def _admin_app(self):
+        app, db = _build_app(uid='admin-1', user_email='admin@x.com')
+        db._membership_list.append({
+            'id': 'mem-1',
+            'uid': 'admin-1', 'org_id': 'org-1',
+            'roles': ['school_admin'], 'status': 'active',
+        })
+        db.orgs['org-1'] = {'name': 'SF Friends'}
+        db.users['teacher-99'] = {'email': 't99@x.com', 'name': 'T 99'}
+        db.teacher_join_requests['tjr-1'] = {
+            'uid': 'teacher-99', 'org_id': 'org-1',
+            'source': 'invite_code', 'status': 'pending',
+        }
+        return app, db
+
+    def test_approve_creates_membership_and_outbox_email(self):
+        app, db = self._admin_app()
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'admin-1', 'email': 'admin@x.com'}
+            sess['active_organization_id'] = 'org-1'
+            sess['active_membership_id'] = 'mem-1'
+
+        resp = client.post('/api/teacher-join-requests/tjr-1/approve')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertIn('membershipId', body)
+        # Request marked approved
+        self.assertEqual(db.teacher_join_requests['tjr-1']['status'], 'approved')
+        # Membership recorded
+        teacher_mem = [
+            m for m in db._membership_list
+            if m['uid'] == 'teacher-99' and m['org_id'] == 'org-1'
+        ]
+        self.assertEqual(len(teacher_mem), 1)
+        # Outbox: one approval email queued
+        approval_emails = [e for e in db.outbox_writes
+                           if e['template_id'] == 'teacher_join_approved']
+        self.assertEqual(len(approval_emails), 1)
+        self.assertEqual(approval_emails[0]['recipient']['email'], 't99@x.com')
+
+    def test_approve_wrong_org_returns_403(self):
+        app, db = self._admin_app()
+        # Move the request to a different org so admin shouldn't see it.
+        db.teacher_join_requests['tjr-1']['org_id'] = 'other-org'
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'admin-1', 'email': 'admin@x.com'}
+            sess['active_organization_id'] = 'org-1'
+            sess['active_membership_id'] = 'mem-1'
+
+        resp = client.post('/api/teacher-join-requests/tjr-1/approve')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_approve_already_decided_returns_409(self):
+        app, db = self._admin_app()
+        db.teacher_join_requests['tjr-1']['status'] = 'approved'
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'admin-1', 'email': 'admin@x.com'}
+            sess['active_organization_id'] = 'org-1'
+            sess['active_membership_id'] = 'mem-1'
+
+        resp = client.post('/api/teacher-join-requests/tjr-1/approve')
+        self.assertEqual(resp.status_code, 409)
 
 
 if __name__ == '__main__':

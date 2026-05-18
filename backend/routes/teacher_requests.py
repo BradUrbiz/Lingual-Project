@@ -235,4 +235,75 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
             log.exception('onboarding_state revert failed for uid=%s', uid)
         return jsonify({'success': True}), 200
 
+    @bp.route('/api/teacher-join-requests/<request_id>/approve', methods=['POST'])
+    @deps.login_required
+    def admin_approve(request_id: str):
+        try:
+            ctx = deps.get_school_request_context()
+            ctx.require_any_role({'school_admin'})
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+
+        rec = deps.db.get_teacher_join_request(request_id)
+        if not rec:
+            return jsonify({'success': False, 'error': 'Request not found.'}), 404
+        if rec['org_id'] != ctx.active_organization_id:
+            return jsonify({'success': False, 'error': 'Not your org.'}), 403
+        if rec.get('status') != 'pending':
+            return jsonify({
+                'success': False,
+                'error': f"Request is already {rec.get('status')}.",
+            }), 409
+
+        target_uid = rec['uid']
+        org_id = rec['org_id']
+        admin_uid = deps.get_current_user_uid()
+
+        # TODO(v1.5): wrap these three writes in a Firestore batch/transaction
+        # so partial failure can't leave the system in an inconsistent state
+        # (membership created but request still pending, etc.). For pilot scale
+        # the probability is low; see LIMITATIONS.md.
+        membership_id = deps.db.create_membership(
+            org_id=org_id,
+            uid=target_uid,
+            roles=['teacher'],
+        )
+        deps.db.set_user_last_active_membership(target_uid, membership_id)
+        deps.db.update_teacher_join_request_status(
+            request_id=request_id,
+            status='approved',
+            reviewed_by_uid=admin_uid,
+        )
+        try:
+            deps.db.update_user_profile(target_uid, onboarding_state='complete')
+        except Exception:
+            log.exception('onboarding_state update on approval failed uid=%s', target_uid)
+
+        # Notify teacher.
+        try:
+            teacher_user = deps.db.get_user(target_uid) or {}
+            org = deps.db.get_organization(org_id) or {}
+            enqueue_outbox_email(
+                db=deps.db,
+                recipient_email=teacher_user.get('email', ''),
+                recipient_name=teacher_user.get('name'),
+                template=OutboxTemplate.TEACHER_JOIN_APPROVED,
+                template_data={
+                    'org_name': org.get('name', ''),
+                    'dashboard_url': _absolute_url('/app/teacher'),
+                },
+                related_entity_type='teacher_join_request',
+                related_entity_id=request_id,
+                created_by_uid=admin_uid,
+            )
+        except Exception:
+            log.exception('approval email enqueue failed request=%s', request_id)
+
+        return jsonify({
+            'success': True,
+            'requestId': request_id,
+            'membershipId': membership_id,
+            'status': 'approved',
+        }), 200
+
     return bp

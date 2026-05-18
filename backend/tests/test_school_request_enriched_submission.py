@@ -427,5 +427,35 @@ class SerializeRequestTest(SchoolRequestDraftRouteTest):
         self.assertEqual(req['preInvitedTeachers'], ['t1@ssfs.org'])
 
 
+class CancelMySchoolRequestRouteTest(SchoolRequestDraftRouteTest):
+    def setUp(self):
+        super().setUp()
+        # Seed a pending request for uid-1
+        self.db.school_requests['req-1'] = {
+            'id': 'req-1',
+            'requester_uid': 'uid-1',
+            'status': 'pending',
+            'school_name': 'SF Friends',
+        }
+
+    def test_cancels_pending(self):
+        self._login('uid-1')
+        resp = self.client.delete('/api/school-requests/mine')
+        self.assertEqual(resp.status_code, 200, resp.get_json())
+        self.assertEqual(self.db.school_requests['req-1']['status'], 'cancelled')
+
+    def test_returns_404_when_no_request(self):
+        self.db.school_requests.clear()
+        self._login('uid-1')
+        resp = self.client.delete('/api/school-requests/mine')
+        self.assertEqual(resp.status_code, 404)
+
+    def test_returns_409_when_already_approved(self):
+        self.db.school_requests['req-1']['status'] = 'approved'
+        self._login('uid-1')
+        resp = self.client.delete('/api/school-requests/mine')
+        self.assertEqual(resp.status_code, 409)
+
+
 if __name__ == '__main__':
     unittest.main()

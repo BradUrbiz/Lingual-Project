@@ -371,6 +371,34 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             print(f"School request lookup error: {exc}")
             return jsonify({'success': False, 'error': str(exc)}), 500
 
+    @bp.route('/api/school-requests/mine', methods=['DELETE'])
+    @deps.login_required
+    def cancel_my_school_request():
+        try:
+            uid = deps.get_current_user_uid()
+            if not uid:
+                return jsonify({'success': False, 'error': 'Authentication required.'}), 401
+
+            existing = deps.db.get_user_school_request(uid)
+            if not existing or existing.get('status') == 'cancelled':
+                return jsonify({'success': False, 'error': 'No request to cancel.'}), 404
+
+            try:
+                ok = deps.db.cancel_school_request(existing['id'], uid)
+            except ValueError as exc:
+                return jsonify({'success': False, 'error': str(exc)}), 409
+            except PermissionError as exc:
+                return jsonify({'success': False, 'error': str(exc)}), 403
+
+            if not ok:
+                return jsonify({'success': False, 'error': 'No request to cancel.'}), 404
+
+            return jsonify({'success': True}), 200
+
+        except Exception as exc:
+            print(f"School request cancellation error: {exc}")
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
     # -- Admin endpoints ------------------------------------------------------
 
     @bp.route('/api/admin/school-requests', methods=['GET'])

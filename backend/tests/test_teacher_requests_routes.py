@@ -52,6 +52,18 @@ class FakeTeacherRequestsDb(FakeDbBase):
                 return {'id': rid, **r}
         return None
 
+    def get_latest_active_teacher_join_request_by_uid(self, uid):
+        # Most recent non-cancelled request — pending, approved, or declined.
+        candidates = [
+            {'id': rid, **r}
+            for rid, r in self.teacher_join_requests.items()
+            if r['uid'] == uid and r['status'] in ('pending', 'approved', 'declined')
+        ]
+        # No ordering by requested_at since the fake doesn't track timestamps;
+        # return the highest doc id alphabetically (good enough for tests).
+        candidates.sort(key=lambda c: c['id'], reverse=True)
+        return candidates[0] if candidates else None
+
     def create_teacher_join_request(self, *, uid, org_id, source, invite_code=None):
         self._tjr_counter += 1
         rid = f'tjr-{self._tjr_counter}'
@@ -362,6 +374,39 @@ class PollAndCancelTest(unittest.TestCase):
         resp = client.delete('/api/teacher-join-requests/me')
         self.assertEqual(resp.status_code, 404)
 
+    def test_get_me_surfaces_declined_request_with_reason(self):
+        """After admin declines, GET /me returns 200 with status + reason."""
+        app, db = _build_app()
+        db.orgs['org-1'] = {'name': 'SF Friends'}
+        db.teacher_join_requests['tjr-1'] = {
+            'uid': 'teacher-1', 'org_id': 'org-1',
+            'source': 'invite_code', 'status': 'declined',
+            'decline_reason': 'Use your school email.',
+        }
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'teacher-1', 'email': 't@x.com'}
+
+        resp = client.get('/api/teacher-join-requests/me')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertEqual(body['status'], 'declined')
+        self.assertEqual(body['declineReason'], 'Use your school email.')
+
+    def test_get_me_skips_cancelled_request(self):
+        """Cancelled requests are not surfaced — user explicitly walked away."""
+        app, db = _build_app()
+        db.teacher_join_requests['tjr-cancel'] = {
+            'uid': 'teacher-1', 'org_id': 'org-1',
+            'source': 'search', 'status': 'cancelled',
+        }
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'teacher-1', 'email': 't@x.com'}
+
+        resp = client.get('/api/teacher-join-requests/me')
+        self.assertEqual(resp.status_code, 204)
+
     def test_delete_me_ignores_non_pending_request(self):
         """DELETE only acts on pending requests — approved/declined/cancelled return 404."""
         app, db = _build_app()
@@ -539,6 +584,65 @@ class DeclineTeacherJoinRequestTest(unittest.TestCase):
 
         resp = client.post('/api/teacher-join-requests/tjr-1/decline', json={})
         self.assertEqual(resp.status_code, 400)
+
+    def test_decline_request_not_found_returns_404(self):
+        app, db = self._seed()
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'admin-1', 'email': 'admin@x.com'}
+            sess['active_organization_id'] = 'org-1'
+            sess['active_membership_id'] = 'mem-1'
+
+        resp = client.post(
+            '/api/teacher-join-requests/missing/decline',
+            json={'reason': 'whatever'},
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_decline_wrong_org_returns_403(self):
+        app, db = self._seed()
+        db.teacher_join_requests['tjr-1']['org_id'] = 'other-org'
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'admin-1', 'email': 'admin@x.com'}
+            sess['active_organization_id'] = 'org-1'
+            sess['active_membership_id'] = 'mem-1'
+
+        resp = client.post(
+            '/api/teacher-join-requests/tjr-1/decline',
+            json={'reason': 'whatever'},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_decline_already_decided_returns_409(self):
+        app, db = self._seed()
+        db.teacher_join_requests['tjr-1']['status'] = 'approved'
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'admin-1', 'email': 'admin@x.com'}
+            sess['active_organization_id'] = 'org-1'
+            sess['active_membership_id'] = 'mem-1'
+
+        resp = client.post(
+            '/api/teacher-join-requests/tjr-1/decline',
+            json={'reason': 'whatever'},
+        )
+        self.assertEqual(resp.status_code, 409)
+
+    def test_decline_reason_max_length(self):
+        app, db = self._seed()
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'admin-1', 'email': 'admin@x.com'}
+            sess['active_organization_id'] = 'org-1'
+            sess['active_membership_id'] = 'mem-1'
+
+        resp = client.post(
+            '/api/teacher-join-requests/tjr-1/decline',
+            json={'reason': 'x' * 2001},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('2000', resp.get_json()['error'])
 
     def test_decline_marks_declined_and_emails_teacher(self):
         app, db = self._seed()

@@ -120,6 +120,30 @@ class TeacherJoinRequestsHelpersTest(unittest.TestCase):
                 reviewed_by_uid='admin-1',
             )
 
+    def test_get_latest_active_teacher_join_request_by_uid_returns_declined(self):
+        """Declined requests must surface so /me can show decline_reason."""
+        doc = MagicMock()
+        doc.id = 'tjr-1'
+        doc.to_dict.return_value = {
+            'uid': 'teacher-1', 'status': 'declined',
+            'decline_reason': 'Use your school email.',
+        }
+        query = MagicMock()
+        query.stream.return_value = iter([doc])
+        # Chain: where, where, order_by, limit
+        self.fake_collection.where.return_value.where.return_value.order_by.return_value.limit.return_value = query
+
+        result = database.get_latest_active_teacher_join_request_by_uid('teacher-1')
+        self.assertEqual(result['id'], 'tjr-1')
+        self.assertEqual(result['status'], 'declined')
+        self.assertEqual(result['decline_reason'], 'Use your school email.')
+
+    def test_get_latest_active_teacher_join_request_by_uid_none(self):
+        query = MagicMock()
+        query.stream.return_value = iter([])
+        self.fake_collection.where.return_value.where.return_value.order_by.return_value.limit.return_value = query
+        self.assertIsNone(database.get_latest_active_teacher_join_request_by_uid('teacher-1'))
+
     def test_update_teacher_join_request_status_review_requires_actor(self):
         """Approved/declined transitions require reviewed_by_uid for audit integrity."""
         with self.assertRaisesRegex(ValueError, 'reviewed_by_uid is required'):

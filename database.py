@@ -2819,6 +2819,32 @@ def get_pending_teacher_join_request_by_uid(uid: str):
     return None
 
 
+def get_latest_active_teacher_join_request_by_uid(uid: str):
+    """Return the user's latest request that hasn't been cancelled, or None.
+
+    Used by GET /api/teacher-join-requests/me so the teacher can see the
+    outcome (pending/approved/declined) of their last submission. Cancelled
+    requests are excluded — the user chose to abandon them and should not
+    be shown as a pending state on their next login.
+    """
+    query = (
+        get_teacher_join_requests_collection()
+        .where('uid', '==', uid)
+        .where('status', 'in', [
+            TEACHER_JOIN_REQUEST_STATUS_PENDING,
+            TEACHER_JOIN_REQUEST_STATUS_APPROVED,
+            TEACHER_JOIN_REQUEST_STATUS_DECLINED,
+        ])
+        .order_by('requested_at', direction=firestore.Query.DESCENDING)
+        .limit(1)
+    )
+    for doc in query.stream():
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        return data
+    return None
+
+
 def get_teacher_join_request(request_id: str):
     doc = get_teacher_join_requests_collection().document(request_id).get()
     if not doc.exists:

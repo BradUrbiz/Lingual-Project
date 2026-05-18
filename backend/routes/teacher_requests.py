@@ -201,7 +201,7 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
         uid = deps.get_current_user_uid()
         if not uid:
             return jsonify({'success': False, 'error': 'Authentication required.'}), 401
-        rec = deps.db.get_pending_teacher_join_request_by_uid(uid)
+        rec = deps.db.get_latest_active_teacher_join_request_by_uid(uid)
         if not rec:
             return ('', 204)
         org = deps.db.get_organization(rec['org_id']) or {}
@@ -331,6 +331,11 @@ def create_teacher_requests_blueprint(deps: RouteDeps) -> Blueprint:
         reason = (body.get('reason') or '').strip()
         if not reason:
             return jsonify({'success': False, 'error': 'A reason is required.'}), 400
+        if len(reason) > 2000:
+            return jsonify({
+                'success': False,
+                'error': 'Reason must be 2000 characters or fewer.',
+            }), 400
 
         rec = deps.db.get_teacher_join_request(request_id)
         if not rec:

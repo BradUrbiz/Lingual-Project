@@ -2684,6 +2684,133 @@ def update_teacher_invitation(invitation_id, updates):
     get_teacher_invitations_collection().document(invitation_id).update(updates)
 
 
+# ============================================================================
+# Teacher Join Requests (Plan 4)
+# ============================================================================
+
+TEACHER_JOIN_REQUESTS_COLLECTION = 'teacher_join_requests'
+
+TEACHER_JOIN_REQUEST_SOURCE_INVITE_CODE = 'invite_code'
+TEACHER_JOIN_REQUEST_SOURCE_SEARCH = 'search'
+ALLOWED_TEACHER_JOIN_REQUEST_SOURCES = frozenset({
+    TEACHER_JOIN_REQUEST_SOURCE_INVITE_CODE,
+    TEACHER_JOIN_REQUEST_SOURCE_SEARCH,
+})
+
+TEACHER_JOIN_REQUEST_STATUS_PENDING = 'pending'
+TEACHER_JOIN_REQUEST_STATUS_APPROVED = 'approved'
+TEACHER_JOIN_REQUEST_STATUS_DECLINED = 'declined'
+TEACHER_JOIN_REQUEST_STATUS_CANCELLED = 'cancelled'
+ALLOWED_TEACHER_JOIN_REQUEST_STATUSES = frozenset({
+    TEACHER_JOIN_REQUEST_STATUS_PENDING,
+    TEACHER_JOIN_REQUEST_STATUS_APPROVED,
+    TEACHER_JOIN_REQUEST_STATUS_DECLINED,
+    TEACHER_JOIN_REQUEST_STATUS_CANCELLED,
+})
+
+
+def get_teacher_join_requests_collection():
+    return firestore.client().collection(TEACHER_JOIN_REQUESTS_COLLECTION)
+
+
+def create_teacher_join_request(
+    *,
+    uid: str,
+    org_id: str,
+    source: str,
+    invite_code: str | None = None,
+):
+    """Create a teacher_join_requests doc in 'pending' status. Returns doc id."""
+    if source not in ALLOWED_TEACHER_JOIN_REQUEST_SOURCES:
+        raise ValueError(f"Invalid source: {source!r}")
+    doc_ref = get_teacher_join_requests_collection().document()
+    payload = {
+        'uid': uid,
+        'org_id': org_id,
+        'source': source,
+        'status': TEACHER_JOIN_REQUEST_STATUS_PENDING,
+        'requested_at': firestore.SERVER_TIMESTAMP,
+        'reviewed_at': None,
+        'reviewed_by_uid': None,
+        'decline_reason': None,
+    }
+    if invite_code:
+        payload['invite_code'] = invite_code
+    doc_ref.set(payload)
+    return doc_ref.id
+
+
+def get_pending_teacher_join_request_by_uid(uid: str):
+    """Return the user's single open (pending) request, or None."""
+    query = (
+        get_teacher_join_requests_collection()
+        .where('uid', '==', uid)
+        .where('status', '==', TEACHER_JOIN_REQUEST_STATUS_PENDING)
+        .limit(1)
+    )
+    for doc in query.stream():
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        return data
+    return None
+
+
+def get_teacher_join_request(request_id: str):
+    doc = get_teacher_join_requests_collection().document(request_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict() or {}
+    data['id'] = doc.id
+    return data
+
+
+def list_pending_teacher_join_requests_by_org(org_id: str):
+    """List all pending requests targeting the given org, newest first."""
+    query = (
+        get_teacher_join_requests_collection()
+        .where('org_id', '==', org_id)
+        .where('status', '==', TEACHER_JOIN_REQUEST_STATUS_PENDING)
+        .order_by('requested_at', direction=firestore.Query.DESCENDING)
+    )
+    results = []
+    for doc in query.stream():
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        results.append(data)
+    return results
+
+
+_REVIEW_STATUSES = frozenset({
+    TEACHER_JOIN_REQUEST_STATUS_APPROVED,
+    TEACHER_JOIN_REQUEST_STATUS_DECLINED,
+})
+
+
+def update_teacher_join_request_status(
+    *,
+    request_id: str,
+    status: str,
+    reviewed_by_uid: str | None = None,
+    decline_reason: str | None = None,
+):
+    """Transition status with audit metadata.
+
+    `reviewed_at` / `reviewed_by_uid` are stamped only for admin-review
+    transitions (approved, declined). Self-cancellation just updates `status`
+    — it's not a review.
+    """
+    if status not in ALLOWED_TEACHER_JOIN_REQUEST_STATUSES:
+        raise ValueError(f"Invalid status: {status!r}")
+    updates: dict = {'status': status}
+    if status in _REVIEW_STATUSES:
+        updates['reviewed_at'] = firestore.SERVER_TIMESTAMP
+        if reviewed_by_uid is not None:
+            updates['reviewed_by_uid'] = reviewed_by_uid
+    if decline_reason is not None:
+        updates['decline_reason'] = decline_reason
+    get_teacher_join_requests_collection().document(request_id).update(updates)
+
+
 # ── LTI platform CRUD ────────────────────────────────────────────────────
 
 

@@ -214,5 +214,69 @@ class CancelSchoolRequestTest(unittest.TestCase):
         self.assertFalse(database.cancel_school_request('req-missing', 'uid-1'))
 
 
+class RecordPreInvitesTest(unittest.TestCase):
+    @patch('database.get_db')
+    def test_writes_one_doc_per_email_via_batch(self, mock_get_db):
+        client = MagicMock()
+        mock_get_db.return_value = client
+        batch = MagicMock()
+        client.batch.return_value = batch
+
+        ids = database.record_school_request_pre_invites(
+            org_id='org-1',
+            requester_uid='uid-1',
+            emails=['a@x.test', 'b@x.test'],
+        )
+
+        self.assertEqual(len(ids), 2)
+        # Two `batch.set(...)` calls expected, one per email.
+        self.assertEqual(batch.set.call_count, 2)
+        batch.commit.assert_called_once()
+
+    @patch('database.get_db')
+    def test_skips_empty_or_whitespace_emails(self, mock_get_db):
+        client = MagicMock()
+        mock_get_db.return_value = client
+        batch = MagicMock()
+        client.batch.return_value = batch
+
+        ids = database.record_school_request_pre_invites(
+            org_id='org-1',
+            requester_uid='uid-1',
+            emails=['  ', '', 'good@x.test'],
+        )
+
+        self.assertEqual(len(ids), 1)
+        self.assertEqual(batch.set.call_count, 1)
+
+    @patch('database.get_db')
+    def test_lowercases_and_strips_emails(self, mock_get_db):
+        client = MagicMock()
+        mock_get_db.return_value = client
+        batch = MagicMock()
+        client.batch.return_value = batch
+
+        database.record_school_request_pre_invites(
+            org_id='org-1',
+            requester_uid='uid-1',
+            emails=['  Foo@X.test  '],
+        )
+
+        payload = batch.set.call_args[0][1]
+        self.assertEqual(payload['email'], 'foo@x.test')
+
+    @patch('database.get_db')
+    def test_no_emails_means_no_batch_commit(self, mock_get_db):
+        client = MagicMock()
+        mock_get_db.return_value = client
+
+        ids = database.record_school_request_pre_invites(
+            org_id='org-1', requester_uid='uid-1', emails=[],
+        )
+
+        self.assertEqual(ids, [])
+        client.batch.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()

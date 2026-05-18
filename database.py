@@ -2766,6 +2766,53 @@ def cancel_school_request(request_id, uid):
     return True
 
 
+def record_school_request_pre_invites(*, org_id, requester_uid, emails):
+    """Create teacher_invitations rows for a list of pre-invite emails.
+
+    Returns the list of new invitation ids in input order (skipping blanks).
+    Emails are stripped and lowercased before write.
+
+    Schema: matches the existing `teacher_invitations` doc shape from
+    `create_teacher_invitation`, with `uid` and `name` set to None (the teacher
+    hasn't signed up yet). Adds two new fields — `created_by_uid` and
+    `source` — that existing rows will have absent; Plan 4 readers should
+    treat them as optional.
+    """
+    cleaned = []
+    for raw in emails or []:
+        if not isinstance(raw, str):
+            continue
+        addr = raw.strip().lower()
+        if addr:
+            cleaned.append(addr)
+    if not cleaned:
+        return []
+
+    client = get_db()
+    coll = client.collection('teacher_invitations')
+    batch = client.batch()
+    ids = []
+    for addr in cleaned:
+        ref = coll.document()
+        ids.append(ref.id)
+        batch.set(ref, {
+            # Existing-schema fields (match create_teacher_invitation)
+            'org_id': org_id,
+            'uid': None,                  # unknown until the teacher signs up
+            'email': addr,
+            'name': None,                 # unknown until the teacher signs up
+            'status': 'pending',
+            'reviewed_by_uid': None,
+            'reviewed_at': None,
+            'created_at': firestore.SERVER_TIMESTAMP,
+            # New (additive) fields
+            'created_by_uid': requester_uid,
+            'source': 'pre_invite',
+        })
+    batch.commit()
+    return ids
+
+
 # ---------------------------------------------------------------------------
 # Teacher invite codes
 # ---------------------------------------------------------------------------

@@ -1084,6 +1084,95 @@ def list_organizations(
     return {'items': items, 'next_cursor': next_cursor}
 
 
+def list_org_memberships(
+    *,
+    org_id: str,
+    roles: tuple = ('school_admin', 'teacher'),
+) -> list:
+    """Active memberships for an org, filtered to staff roles by default.
+
+    Students are excluded by default per FERPA. Returns [{ membership_id,
+    uid, email, name, roles[], status, joined_at }, ...].
+    """
+    q = (
+        get_db()
+        .collection('memberships')
+        .where('org_id', '==', org_id)
+        .where('status', '==', 'active')
+    )
+    rows = []
+    for m in q.stream():
+        data = m.to_dict() or {}
+        member_roles = data.get('roles') or []
+        if not any(r in member_roles for r in roles):
+            continue
+        uid = data.get('uid')
+        user = get_user(uid) if uid else None
+        if not user:
+            continue
+        rows.append({
+            'membership_id': m.id,
+            'uid': uid,
+            'email': user.get('email'),
+            'name': (user.get('profile') or {}).get('display_name') or user.get('name'),
+            'roles': member_roles,
+            'status': data.get('status'),
+            'joined_at': data.get('joined_at'),
+        })
+    return rows
+
+
+def list_org_classes_summary(*, org_id: str) -> list:
+    """Class metadata rows for an org. No class internals.
+
+    Used by the Lingual admin org-detail Classes tab. Returns a curated
+    summary view — does NOT include status, canvas linkage, locale, etc.
+    For the full record view used by school-admin/teacher routes, see the
+    older ``list_org_classes(org_id, status='active')`` function below.
+
+    NOTE: Plan 5 originally specified the name ``list_org_classes`` for this
+    helper, but that name was already taken by a pre-existing function with
+    a different shape and several active callers (admin.py, lti.py,
+    schools.py). Renamed to ``list_org_classes_summary`` to avoid breaking
+    those callers while preserving the admin-panel intent.
+    """
+    q = (
+        get_db()
+        .collection('classes')
+        .where('org_id', '==', org_id)
+    )
+    rows = []
+    for c in q.stream():
+        data = c.to_dict() or {}
+        rows.append({
+            'id': c.id,
+            'name': data.get('name'),
+            'term': data.get('term'),
+            'subject': data.get('subject'),
+            'teacher_membership_ids': data.get('teacher_membership_ids') or [],
+            'created_at': data.get('created_at'),
+            'last_activity_at': data.get('last_activity_at'),
+        })
+    return rows
+
+
+def list_org_audit_events(*, org_id: str, limit: int = 50) -> list:
+    """Audit rows scoped to this org, newest first."""
+    q = (
+        get_db()
+        .collection(LINGUAL_ADMIN_AUDIT_COLLECTION)
+        .where('target_org_id', '==', org_id)
+        .order_by('created_at', direction='DESCENDING')
+        .limit(limit)
+    )
+    rows = []
+    for a in q.stream():
+        data = a.to_dict() or {}
+        data['id'] = a.id
+        rows.append(data)
+    return rows
+
+
 def list_school_admin_emails(org_id: str):
     """Return [{uid, email, name}] for every active school_admin of the org."""
     membership_docs = (

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import os
 from pathlib import Path
 from typing import Any, Optional
@@ -13,8 +14,17 @@ from firebase_functions import firestore_fn, scheduler_fn
 from firebase_functions.options import set_global_options
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+# Alias used by the auto-restore scheduler (Plan 5 Task 11). A second name
+# (rather than reusing `fb_firestore`) keeps the test-time patch target
+# (`functions.main._fb_firestore`) cleanly scoped to the auto-restore
+# code path — patching the shared `fb_firestore` alias would affect the
+# outbox trigger helpers too.
+_fb_firestore = fb_firestore
+
 set_global_options(max_instances=10)
 initialize_app()
+
+logger = logging.getLogger(__name__)
 
 # RESEND_API_KEY is declared as a secret on each @firestore_fn / @scheduler_fn
 # decorator (`secrets=['RESEND_API_KEY']`) so the Functions 2nd gen runtime
@@ -250,3 +260,158 @@ def _retry_outbox_sweep_impl() -> None:
 def retry_outbox_sweep(event) -> None:
     """Cloud Function wrapper: delegates to the pure impl for testability."""
     _retry_outbox_sweep_impl()
+
+
+# ---------------------------------------------------------------------------
+# Plan 5 Task 11: auto-restore suspended orgs
+# ---------------------------------------------------------------------------
+# Suspended orgs may carry an optional `suspended_until` datetime. The
+# scheduler below runs hourly, finds orgs whose deadline has passed, and
+# returns them to `active`. The org update and the
+# `lingual_admin_audit` row commit atomically in one Firestore batch (C2
+# invariant), then a fan-out enqueues `org_restored` outbox emails — one per
+# active school_admin. Per-org failures are fail-soft so a single bad row
+# does not block the rest of the batch.
+
+_AUTO_RESTORE_ACTOR_UID = 'system:auto_restore'
+
+
+def _list_orgs_due_for_auto_restore() -> list[dict[str, Any]]:
+    """Return suspended orgs whose `suspended_until` is in the past.
+
+    Wrapped as a module-level function so tests can patch it without faking
+    a Firestore query stream.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc)
+    db = _fb_firestore.client()
+    query = (
+        db.collection('organizations')
+        .where('status', '==', 'suspended')
+        .where('suspended_until', '<=', now)
+    )
+    rows: list[dict[str, Any]] = []
+    for doc in query.stream():
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        rows.append(data)
+    return rows
+
+
+def _restore_org_via_admin_sdk(org_id: str, org_name: str = '') -> None:
+    """Atomic auto-restore: org status flip + audit row in one batch.
+
+    Mirrors `database.restore_organization` (which the Cloud Function cannot
+    import — `functions/` is a separate deploy package). Same fields, same
+    atomicity guarantee, fixed `actor_uid='system:auto_restore'`.
+    """
+    db = _fb_firestore.client()
+    batch = db.batch()
+
+    org_ref = db.collection('organizations').document(org_id)
+    batch.update(org_ref, {
+        'status': 'active',
+        'suspended_at': None,
+        'suspended_by_uid': None,
+        'suspend_reason': None,
+        'suspended_until': None,
+        'restored_at': _fb_firestore.SERVER_TIMESTAMP,
+        'restored_by_uid': _AUTO_RESTORE_ACTOR_UID,
+        'updated_at': _fb_firestore.SERVER_TIMESTAMP,
+    })
+
+    audit_ref = db.collection('lingual_admin_audit').document()
+    batch.set(audit_ref, {
+        'actor_uid': _AUTO_RESTORE_ACTOR_UID,
+        'action': 'org_restored',
+        'target': {'type': 'organization', 'id': org_id},
+        'target_org_id': org_id,
+        'metadata': {'trigger': 'auto_restore', 'org_name': org_name},
+        'ip_hash': '',
+        'user_agent': 'cloud_function:auto_restore_suspended_orgs',
+        'created_at': _fb_firestore.SERVER_TIMESTAMP,
+    })
+
+    batch.commit()
+
+
+def _enqueue_outbox_for_restore(org_id: str, org_name: str) -> None:
+    """Queue one ``org_restored`` outbox email per active school_admin.
+
+    The outbox doc shape matches `backend.services.outbox.enqueue_outbox_email`
+    (nested ``recipient: {email, name}``) so the existing
+    `send_outbox_email` trigger can consume it. We cannot import the
+    backend helper from the Cloud Functions package — they deploy
+    independently — so the shape is duplicated here.
+    """
+    db = _fb_firestore.client()
+    org_snap = db.collection('organizations').document(org_id).get()
+    if not getattr(org_snap, 'exists', False):
+        return
+    org_data = org_snap.to_dict() or {}
+    admin_uids = org_data.get('school_admin_uids') or []
+    public_base = os.environ.get('PUBLIC_BASE_URL', 'https://l1ngual.com')
+    dashboard_url = f'{public_base}/app/admin'
+
+    for uid in admin_uids:
+        user_snap = db.collection('users').document(uid).get()
+        if not getattr(user_snap, 'exists', False):
+            continue
+        user = user_snap.to_dict() or {}
+        email = user.get('email')
+        if not email:
+            continue
+        display_name = (
+            (user.get('profile') or {}).get('display_name')
+            or user.get('name', '')
+        )
+        db.collection('outbox_emails').add({
+            'status': 'pending',
+            'template_id': 'org_restored',
+            'recipient': {'email': email, 'name': display_name},
+            'template_data': {
+                'org_name': org_name,
+                'dashboard_url': dashboard_url,
+            },
+            'attempt_count': 0,
+            'created_at': _fb_firestore.SERVER_TIMESTAMP,
+            'scheduled_for': _fb_firestore.SERVER_TIMESTAMP,
+        })
+
+
+def _auto_restore_suspended_orgs_impl() -> None:
+    """Pure logic, directly callable from tests.
+
+    Per-org failures are fail-soft — one bad org does not block the rest.
+    Email fan-out is also fail-soft and runs AFTER the atomic restore, so a
+    Resend / outbox outage cannot undo a restore that already committed.
+    """
+    for org in _list_orgs_due_for_auto_restore():
+        org_id = org.get('id')
+        org_name = org.get('name', 'your school')
+        try:
+            _restore_org_via_admin_sdk(org_id, org_name)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception('[auto-restore] failed for org=%s: %s', org_id, exc)
+            continue
+        try:
+            _enqueue_outbox_for_restore(org_id, org_name)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                '[auto-restore] email fan-out failed for org=%s: %s', org_id, exc
+            )
+        logger.info('[auto-restore] restored org=%s', org_id)
+
+
+@scheduler_fn.on_schedule(
+    schedule='every 60 minutes',
+    timeout_sec=540,
+    retry_count=3,
+)
+def auto_restore_suspended_orgs(event) -> None:
+    """Thin wrapper for testability — see `_auto_restore_suspended_orgs_impl`.
+
+    This function does not call Resend directly; it only enqueues
+    ``outbox_emails`` docs. The ``send_outbox_email`` Firestore trigger
+    picks them up and sends — so RESEND_API_KEY is not declared here.
+    """
+    _auto_restore_suspended_orgs_impl()

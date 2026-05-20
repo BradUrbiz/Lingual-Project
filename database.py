@@ -1026,17 +1026,39 @@ def list_organizations(
     Returns ``{ 'items': [...], 'next_cursor': dict | None }``.
 
     ``cursor`` shape: ``{ 'name_lower': str, 'id': str }`` — the last doc seen.
+
+    Pagination contract: ``next_cursor`` is set whenever the returned page is
+    full (``len(items) == limit``), even if there are no further results in
+    the underlying collection. Callers MUST handle the case where a follow-up
+    call with that cursor returns ``{'items': [], 'next_cursor': None}``.
+    (A ``limit + 1`` lookahead fix would be more elegant but requires a
+    larger refactor — current behavior is intentional.)
+
+    Filter semantics: ``None`` (the default) means "no filter applied".
+    Any other value — including the empty string ``''`` — is treated as an
+    explicit filter value and forwarded to Firestore as
+    ``where(field, '==', value)``. Validation rejects non-empty values that
+    are outside the allowed set for ``status`` / ``school_type`` /
+    ``public_or_private``; ``country`` is free-form.
     """
     if status is not None:
         _validate_org_status(status)
+    if school_type and school_type not in ALLOWED_SCHOOL_TYPES:
+        raise ValueError(
+            f'Invalid school_type {school_type!r}; allowed: {sorted(ALLOWED_SCHOOL_TYPES)}'
+        )
+    if public_or_private and public_or_private not in ALLOWED_PUBLIC_PRIVATE:
+        raise ValueError(
+            f'Invalid public_or_private {public_or_private!r}; allowed: {sorted(ALLOWED_PUBLIC_PRIVATE)}'
+        )
     query = get_db().collection('organizations')
-    if status:
+    if status is not None:
         query = query.where('status', '==', status)
-    if school_type:
+    if school_type is not None:
         query = query.where('school_type', '==', school_type)
-    if country:
+    if country is not None:
         query = query.where('country', '==', country)
-    if public_or_private:
+    if public_or_private is not None:
         query = query.where('public_or_private', '==', public_or_private)
     if created_after is not None:
         query = query.where('created_at', '>=', created_after)

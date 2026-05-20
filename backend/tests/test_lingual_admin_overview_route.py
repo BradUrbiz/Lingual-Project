@@ -23,9 +23,17 @@ class FakeOverviewDb(FakeDbBase):
         return 4
 
     def list_recent_audit_events(self, *, limit):
+        # Real Firestore reads return snake_case keys + datetime objects for
+        # `created_at`. The fake mirrors that so we exercise the route's
+        # camelize+ISO conversion (P2 #3 regression).
+        import datetime
         return [
             {'id': 'a1', 'action': 'request_approved', 'actor_uid': 'u1',
-             'target': {'type': 'school_request', 'id': 'r1'}, 'created_at': None},
+             'target': {'type': 'school_request', 'id': 'r1'},
+             'target_org_id': 'o1', 'ip_hash': 'h', 'user_agent': 'ua',
+             'metadata': {'note': 'looks fine'},
+             'created_at': datetime.datetime(2026, 5, 1, 12, 0, 0,
+                                             tzinfo=datetime.timezone.utc)},
         ]
 
 
@@ -53,7 +61,20 @@ class LingualAdminOverviewRouteTests(unittest.TestCase):
         self.assertEqual(data['tiles']['suspendedOrgs'], 1)
         self.assertEqual(data['tiles']['newRequestsLast7d'], 4)
         self.assertEqual(len(data['recentActivity']), 1)
-        self.assertEqual(data['recentActivity'][0]['action'], 'request_approved')
+        row = data['recentActivity'][0]
+        self.assertEqual(row['action'], 'request_approved')
+        # P2 #3 regression: wire shape is camelCase, not snake_case.
+        # Pre-fix, the dashboard rendered blanks for actor + timestamp.
+        self.assertEqual(row['actorUid'], 'u1')
+        self.assertEqual(row['targetOrgId'], 'o1')
+        self.assertEqual(row['ipHash'], 'h')
+        self.assertEqual(row['userAgent'], 'ua')
+        # datetime objects are normalized to ISO 8601 strings on the wire.
+        self.assertEqual(row['createdAt'], '2026-05-01T12:00:00+00:00')
+        # snake_case keys must not leak through.
+        self.assertNotIn('actor_uid', row)
+        self.assertNotIn('target_org_id', row)
+        self.assertNotIn('created_at', row)
 
     def test_non_admin_is_403(self):
         with self.client.session_transaction() as sess:

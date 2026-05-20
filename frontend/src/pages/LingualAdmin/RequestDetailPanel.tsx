@@ -28,7 +28,16 @@ export function RequestDetailPanel(props: RequestDetailPanelProps) {
       <dl className="mt-6 space-y-3 text-sm">
         <div><dt className="text-neutral-500">Requester</dt><dd>{request.requesterName} &lt;{request.requesterEmail}&gt;</dd></div>
         <div><dt className="text-neutral-500">Website</dt><dd>{request.websiteUrl || '—'}</dd></div>
-        <div><dt className="text-neutral-500">Location</dt><dd>{[request.county, request.state, request.country].filter(Boolean).join(', ')}</dd></div>
+        <div>
+          <dt className="text-neutral-500">Location</dt>
+          <dd>
+            {[
+              request.location?.county,
+              request.location?.state,
+              request.location?.country,
+            ].filter(Boolean).join(', ') || '—'}
+          </dd>
+        </div>
         <div><dt className="text-neutral-500">Org type</dt><dd>{request.orgType} / {request.schoolType}</dd></div>
         <div>
           <dt className="text-neutral-500">Pre-invited teachers</dt>
@@ -42,8 +51,8 @@ export function RequestDetailPanel(props: RequestDetailPanelProps) {
         <div>
           <dt className="text-neutral-500">Attestation</dt>
           <dd className="font-mono text-xs">
-            ip_hash={request.attestation.ipHash || '—'}{' '}
-            ua={request.attestation.userAgent?.slice(0, 40) || '—'}
+            ip_hash={request.adminIdentity?.authorizationAttestation?.ipHash || '—'}{' '}
+            ua={request.adminIdentity?.authorizationAttestation?.userAgent?.slice(0, 40) || '—'}
           </dd>
         </div>
       </dl>

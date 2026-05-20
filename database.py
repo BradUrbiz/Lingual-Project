@@ -3208,6 +3208,16 @@ def _build_school_request_payload(requester_uid, requester_email, requester_name
         ):
             if key in enriched:
                 payload[key] = enriched[key]
+        # Denormalize location.country to top-level `country` so the Plan 5
+        # `list_school_requests(country=...)` filter (and its composite
+        # index `country ASC, created_at DESC`) matches Plan 3 wizard
+        # submissions. Without this, every wizard request had country
+        # only at `location.country`, the filter queried top-level
+        # `country`, and the Requests page country filter returned 0
+        # matches in production.
+        loc = enriched.get('location') if isinstance(enriched.get('location'), dict) else None
+        if loc and loc.get('country'):
+            payload['country'] = loc['country']
     return payload
 
 
@@ -3450,14 +3460,27 @@ def approve_school_request(
         if not requester_uid:
             raise ValueError(f'Request {request_id} is missing requester_uid')
 
+        # Denormalized fields populated at approval time:
+        # - `name_lower` powers the orgs-list `order_by('name_lower')` (Plan 5
+        #   `list_organizations`). Without it the new org never appears in the
+        #   sorted page.
+        # - `school_admin_uids` is the denormalized admin-uid array Plan 4
+        #   relies on for teacher-join admin lookup and Plan 5 uses for the
+        #   `restore_organization` outbox fan-out. `create_membership` would
+        #   normally call `_sync_org_admin_uids(add=True)` to populate this,
+        #   but the membership below is written via `transaction.set(...)`
+        #   directly (it has to live inside the transaction) so the
+        #   denormalization is inlined here.
         org_data = {
             'name': req['school_name'],
+            'name_lower': (req.get('school_name') or '').strip().lower(),
             'type': req.get('org_type', 'school'),
             'status': 'active',
             'pilot_stage': 'beta',
             'default_modality_policy': 'hybrid',
             'default_retention_policy': 'standard_school',
             'lms_capabilities': [],
+            'school_admin_uids': [requester_uid],
             'created_at': firestore.SERVER_TIMESTAMP,
             'updated_at': firestore.SERVER_TIMESTAMP,
         }

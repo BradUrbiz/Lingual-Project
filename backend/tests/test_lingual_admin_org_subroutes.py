@@ -35,8 +35,13 @@ class FakeSubrouteDb(FakeDbBase):
                  'created_at': None, 'last_activity_at': None}]
 
     def list_org_audit_events(self, *, org_id, limit):
+        # Real Firestore reads return snake_case + datetime. Route must
+        # camelize and ISO-stringify per P2 #3.
+        import datetime
         return [{'id': 'a1', 'action': 'org_suspended', 'actor_uid': 'admin-uid',
-                 'metadata': {'reason': 'r'}, 'created_at': None,
+                 'metadata': {'reason': 'r'}, 'ip_hash': 'h', 'user_agent': 'ua',
+                 'created_at': datetime.datetime(2026, 5, 2, 9, 30,
+                                                 tzinfo=datetime.timezone.utc),
                  'target': {'type': 'organization', 'id': 'o1'}, 'target_org_id': 'o1'}]
 
 
@@ -73,7 +78,13 @@ class MembersClassesAuditRouteTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertEqual(len(data['items']), 1)
-        self.assertEqual(data['items'][0]['action'], 'org_suspended')
+        row = data['items'][0]
+        self.assertEqual(row['action'], 'org_suspended')
+        # P2 #3 regression: org audit tab consumes camelCase too.
+        self.assertEqual(row['actorUid'], 'admin-uid')
+        self.assertEqual(row['targetOrgId'], 'o1')
+        self.assertEqual(row['createdAt'], '2026-05-02T09:30:00+00:00')
+        self.assertNotIn('actor_uid', row)
 
     def test_unknown_org_is_404_on_each(self):
         for sub in ('members', 'classes', 'audit'):

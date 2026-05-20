@@ -8,6 +8,7 @@ import { LearningLocaleProvider } from './contexts/LearningLocaleContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AppProtectedRoute } from './components/layout/AppProtectedRoute';
 import { TeacherRoute } from './components/layout/TeacherRoute';
+import { SchoolAdminRoute } from './components/layout/SchoolAdminRoute';
 import { LingualAdminRoute } from './components/layout/LingualAdminRoute';
 import { LoadingSpinner } from './components/common';
 import { useAuth } from './hooks/useAuth';
@@ -198,28 +199,34 @@ function AnimatedRoutes() {
               </TeacherRoute>
             )}
           />
+          {/*
+            /app/admin/* requires a school_admin membership specifically.
+            TeacherRoute allows both teacher and school_admin (P2 #5 fix);
+            SchoolAdminRoute narrows to school_admin so a teacher-only user
+            who manually navigates here is redirected to /app/teacher.
+          */}
           <Route
             path="admin"
             element={withRouteSuspense(
-              <TeacherRoute>
+              <SchoolAdminRoute>
                 <SchoolAdminHomePage />
-              </TeacherRoute>
+              </SchoolAdminRoute>
             )}
           />
           <Route
             path="admin/deletion-requests"
             element={withRouteSuspense(
-              <TeacherRoute>
+              <SchoolAdminRoute>
                 <AdminDeletionRequestsPage />
-              </TeacherRoute>
+              </SchoolAdminRoute>
             )}
           />
           <Route
             path="admin/compliance"
             element={withRouteSuspense(
-              <TeacherRoute>
+              <SchoolAdminRoute>
                 <AdminCompliancePage />
-              </TeacherRoute>
+              </SchoolAdminRoute>
             )}
           />
           {/*

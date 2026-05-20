@@ -50,31 +50,52 @@ export interface RequestsListResponse {
   nextCursor: { leadingValue: string | null; id: string } | null;
 }
 
-export interface AttestationDetail {
+// SchoolRequestDetail mirrors the backend `_serialize_request` wire shape
+// in `backend/routes/school_requests.py`. Plan 3 nests location, admin
+// identity (with attestation), integration, and curriculum under their own
+// objects; the panel must traverse those, not flat top-level keys.
+
+export interface LocationDetail {
+  country?: string;
+  state?: string;
+  county?: string;
+}
+
+export interface AuthorizationAttestation {
+  confirmedAt: string | null;
   ipHash: string;
   userAgent: string;
-  attestedAt: string | null;
+}
+
+export interface AdminIdentityDetail {
+  fullName?: string;
+  schoolEmail?: string;
+  roleTitle?: string;
+  authorizationAttestation: AuthorizationAttestation;
 }
 
 export interface IntegrationDetail {
-  lms: string | null;
-  instanceUrl: string | null;
+  canvasUrl: string | null;
+  canvasIntegrationTypes: string[];
 }
 
 export interface CurriculumDetail {
-  language?: string;
-  levels?: string[];
+  gradeRanges?: string[];
+  languagesTaught?: string[];
+  courseFrameworks?: string[];
 }
 
 export interface SchoolRequestDetail extends SchoolRequestRow {
   requesterUid?: string;
-  requesterTitle?: string;
   websiteUrl?: string;
-  state?: string;
-  county?: string;
+  canvasInstanceUrl?: string;
+  location?: LocationDetail;
+  publicPrivate?: string;
+  gradeSize?: number;
+  officialEmailDomains?: string[];
   preInvitedTeachers: string[];
-  attestation: AttestationDetail;
-  integration: IntegrationDetail;
+  adminIdentity?: AdminIdentityDetail;
+  integration?: IntegrationDetail;
   curriculum?: CurriculumDetail;
 }
 

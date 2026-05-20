@@ -79,6 +79,13 @@ def _serialize_request(req: dict | None) -> dict | None:
         'createdAt': req.get('created_at').isoformat() if isinstance(req.get('created_at'), datetime) else req.get('created_at'),
         'cancelledAt': req.get('cancelled_at').isoformat() if isinstance(req.get('cancelled_at'), datetime) else req.get('cancelled_at'),
         # --- Enriched (Plan 3) ---
+        # `country` is denormalized to the top level by
+        # `_build_school_request_payload` so Plan 5's country filter +
+        # composite index work. Exposed here so the list rows
+        # (`SchoolRequestRow.country`) can render it without traversing
+        # `location.country`. Falls back to `location.country` for any
+        # pre-fix rows that pre-date the denormalization.
+        'country': req.get('country') or (req.get('location') or {}).get('country'),
         'location': req.get('location'),
         'schoolType': req.get('school_type'),
         'publicPrivate': req.get('public_private'),

@@ -87,6 +87,38 @@ def _parse_iso8601(value):
         raise ValueError(f'invalid ISO 8601 datetime: {value}') from exc
 
 
+def _camel_audit_row(row):
+    """Convert a raw ``lingual_admin_audit`` row to the camelCase wire shape.
+
+    ``AuditLogger.build_audit_doc`` writes snake_case keys (``actor_uid``,
+    ``created_at``, ``target_org_id``, ``ip_hash``, ``user_agent``). The
+    dashboard recent-activity feed and the org audit tab both consume the
+    camelCase TS DTO (``actorUid``, ``createdAt``, ...). Without this
+    transform the FE renders blank actor/timestamp cells against real
+    Firestore audit data, even though the underlying row exists.
+
+    ``created_at`` is converted to ISO 8601 when Firestore returns a
+    ``DatetimeWithNanoseconds`` (post-write read) and passed through
+    unchanged otherwise (None / pre-existing string).
+    """
+    if not row:
+        return row
+    created_at = row.get('created_at')
+    if created_at is not None and hasattr(created_at, 'isoformat'):
+        created_at = created_at.isoformat()
+    return {
+        'id': row.get('id'),
+        'actorUid': row.get('actor_uid'),
+        'action': row.get('action'),
+        'target': row.get('target'),
+        'targetOrgId': row.get('target_org_id'),
+        'metadata': row.get('metadata'),
+        'ipHash': row.get('ip_hash'),
+        'userAgent': row.get('user_agent'),
+        'createdAt': created_at,
+    }
+
+
 def _camel_org_row(row):
     """Reshape a Firestore organization row to the camelCase response DTO.
 
@@ -142,7 +174,10 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
             'newRequestsLast7d': deps.db.count_school_requests_since(since=seven_days_ago),
         }
         feed = deps.db.list_recent_audit_events(limit=20)
-        return jsonify({'tiles': tiles, 'recentActivity': feed}), 200
+        return jsonify({
+            'tiles': tiles,
+            'recentActivity': [_camel_audit_row(r) for r in feed],
+        }), 200
 
     @bp.get('/requests')
     def list_requests():
@@ -334,7 +369,7 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
 
         limit = min(int(request.args.get('limit', 50)), 200)
         items = deps.db.list_org_audit_events(org_id=org_id, limit=limit)
-        return jsonify({'items': items}), 200
+        return jsonify({'items': [_camel_audit_row(r) for r in items]}), 200
 
     @bp.get('/requests/<request_id>')
     def get_request_detail(request_id):

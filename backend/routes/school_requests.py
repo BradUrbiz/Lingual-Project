@@ -94,12 +94,6 @@ def _serialize_request(req: dict | None) -> dict | None:
 def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
     bp = Blueprint('school_requests', __name__)
 
-    def _require_lingual_admin(uid: str):
-        """Raise PermissionError if the user is not a lingual_admin."""
-        context = deps.db.resolve_user_school_context(uid)
-        if not context.get('lingual_admin'):
-            raise PermissionError('Lingual admin access required.')
-
     # -- Enriched-payload helpers (used by submit_school_request) -------------
 
     _ENRICHED_FIELDS = (
@@ -489,210 +483,39 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             print(f"School request cancellation error: {exc}")
             return jsonify({'success': False, 'error': str(exc)}), 500
 
-    # -- Admin endpoints ------------------------------------------------------
+    # -- Legacy admin endpoints (Gone) ----------------------------------------
+    #
+    # Plan 5 moved the lingual-admin surface to `/api/lingual-admin/*`. The
+    # routes below are kept only to return 410 Gone with a pointer to the new
+    # path, so clients that have not migrated yet get an actionable error
+    # instead of a 404. They take no auth/lookup work and never touch the DB.
 
     @bp.route('/api/admin/school-requests', methods=['GET'])
-    @deps.login_required
     def admin_list_school_requests():
-        try:
-            uid = deps.get_current_user_uid()
-            _require_lingual_admin(uid)
-
-            status_filter = request.args.get('status') or None
-            result = deps.db.list_school_requests(status_filter=status_filter)
-            # `list_school_requests` returns `{'items': [...], 'next_cursor': ...}`
-            # since the Plan 5 extension. Pre-Plan-5 callers care only about
-            # the rows, so extract `items` and keep the legacy response shape.
-            requests_list = result['items'] if isinstance(result, dict) else result
-            return jsonify({
-                'success': True,
-                'requests': [_serialize_request(r) for r in requests_list],
-            }), 200
-
-        except PermissionError:
-            return jsonify({'success': False, 'error': 'Forbidden'}), 403
-        except Exception as exc:
-            print(f"Admin list school requests error: {exc}")
-            return jsonify({'success': False, 'error': str(exc)}), 500
+        return jsonify({
+            'error': 'gone',
+            'message': 'Use GET /api/lingual-admin/requests instead',
+        }), 410
 
     @bp.route('/api/admin/school-requests/<request_id>', methods=['GET'])
-    @deps.login_required
     def admin_get_school_request(request_id):
-        try:
-            uid = deps.get_current_user_uid()
-            _require_lingual_admin(uid)
-
-            req = deps.db.get_school_request(request_id)
-            if not req:
-                return jsonify({'success': False, 'error': 'Request not found.'}), 404
-
-            return jsonify({'success': True, 'request': _serialize_request(req)}), 200
-
-        except PermissionError:
-            return jsonify({'success': False, 'error': 'Forbidden'}), 403
-        except Exception as exc:
-            print(f"Admin get school request error: {exc}")
-            return jsonify({'success': False, 'error': str(exc)}), 500
+        return jsonify({
+            'error': 'gone',
+            'message': f'Use GET /api/lingual-admin/requests/{request_id} instead',
+        }), 410
 
     @bp.route('/api/admin/school-requests/<request_id>/approve', methods=['POST'])
-    @deps.login_required
     def admin_approve_school_request(request_id):
-        try:
-            uid = deps.get_current_user_uid()
-            _require_lingual_admin(uid)
-
-            req = deps.db.get_school_request(request_id)
-            if not req:
-                return jsonify({'success': False, 'error': 'Request not found.'}), 404
-            if req.get('status') != 'pending':
-                return jsonify({'success': False, 'error': 'Only pending requests can be approved.'}), 409
-
-            try:
-                approval = deps.db.approve_school_request(
-                    request_id,
-                    reviewed_by_uid=uid,
-                )
-            except ValueError as exc:
-                return jsonify({'success': False, 'error': str(exc)}), 409
-
-            if not approval:
-                return jsonify({'success': False, 'error': 'Request not found.'}), 404
-
-            req = approval['request']
-            org_id = approval['org_id']
-
-            # Move the requester's onboarding state forward.
-            try:
-                deps.db.update_user_profile(req['requester_uid'], onboarding_state='complete')
-            except Exception as exc:
-                print(f'[onboarding] state update failed on approval: {exc}')
-
-            # --- Best-effort side effects ---
-            pre_invites = req.get('pre_invited_teachers') or []
-            try:
-                if pre_invites:
-                    deps.db.record_school_request_pre_invites(
-                        org_id=org_id,
-                        requester_uid=req['requester_uid'],
-                        emails=pre_invites,
-                    )
-            except Exception as exc:
-                print(f'[pre-invites] record failed: {exc}')
-
-            base = _public_base_url()
-            try:
-                firestore_client = database.get_db()
-                enqueue_outbox_email(
-                    db=firestore_client,
-                    recipient_email=req.get('requester_email') or '',
-                    recipient_name=req.get('requester_name'),
-                    template=OutboxTemplate.SCHOOL_REQUEST_APPROVED,
-                    template_data={
-                        'org_name': req.get('school_name'),
-                        'requester_name': req.get('requester_name'),
-                        'login_url': f'{base}/login',
-                    },
-                    related_entity_type='school_request',
-                    related_entity_id=request_id,
-                    created_by_uid=uid,
-                )
-            except Exception as exc:
-                print(f'[outbox] school_request_approved enqueue failed: {exc}')
-
-            try:
-                firestore_client = database.get_db()
-                inviter_name = (req.get('admin_identity') or {}).get('full_name') or req.get('requester_name') or 'A school administrator'
-                for email in pre_invites:
-                    try:
-                        enqueue_outbox_email(
-                            db=firestore_client,
-                            recipient_email=email,
-                            recipient_name=None,
-                            template=OutboxTemplate.TEACHER_INVITATION,
-                            template_data={
-                                'org_name': req.get('school_name'),
-                                'inviter_name': inviter_name,
-                                'signup_url': f'{base}/signup?role=teacher',
-                            },
-                            related_entity_type='school_request',
-                            related_entity_id=request_id,
-                            created_by_uid=uid,
-                        )
-                    except Exception as exc:
-                        print(f'[outbox] teacher_invitation enqueue failed for {email}: {exc}')
-            except Exception as exc:
-                print(f'[outbox] teacher_invitation fan-out aborted: {exc}')
-
-            updated = deps.db.get_school_request(request_id)
-            return jsonify({'success': True, 'request': _serialize_request(updated)}), 200
-
-        except PermissionError:
-            return jsonify({'success': False, 'error': 'Forbidden'}), 403
-        except Exception as exc:
-            print(f"Admin approve school request error: {exc}")
-            return jsonify({'success': False, 'error': str(exc)}), 500
+        return jsonify({
+            'error': 'gone',
+            'message': f'Use POST /api/lingual-admin/requests/{request_id}/approve instead',
+        }), 410
 
     @bp.route('/api/admin/school-requests/<request_id>/reject', methods=['POST'])
-    @deps.login_required
     def admin_reject_school_request(request_id):
-        try:
-            uid = deps.get_current_user_uid()
-            _require_lingual_admin(uid)
-
-            req = deps.db.get_school_request(request_id)
-            if not req:
-                return jsonify({'success': False, 'error': 'Request not found.'}), 404
-            if req.get('status') != 'pending':
-                return jsonify({'success': False, 'error': 'Only pending requests can be rejected.'}), 409
-
-            data = request.get_json() or {}
-            reason = (data.get('reason') or '').strip()
-            category = (data.get('category') or '').strip()
-            if not reason:
-                return jsonify({'success': False, 'error': 'reason is required.'}), 400
-            if not category:
-                return jsonify({'success': False, 'error': 'category is required.'}), 400
-            if category and category not in database.ALLOWED_REJECTION_CATEGORIES:
-                return jsonify({
-                    'success': False,
-                    'error': f'Invalid category: {category!r}',
-                }), 400
-
-            deps.db.update_school_request(request_id, {
-                'status': 'rejected',
-                'reviewed_by_uid': uid,
-                'reviewed_at': datetime.now(UTC),
-                'rejection_reason': reason,
-                'rejection_category': category or None,
-            })
-
-            try:
-                enqueue_outbox_email(
-                    db=database.get_db(),
-                    recipient_email=req.get('requester_email') or '',
-                    recipient_name=req.get('requester_name'),
-                    template=OutboxTemplate.SCHOOL_REQUEST_DECLINED,
-                    template_data={
-                        'org_name': req.get('school_name'),
-                        'requester_name': req.get('requester_name'),
-                        'reason': reason,
-                        'category': category or 'other',
-                        'support_url': 'mailto:support@l1ngual.com',
-                    },
-                    related_entity_type='school_request',
-                    related_entity_id=request_id,
-                    created_by_uid=uid,
-                )
-            except Exception as exc:
-                print(f'[outbox] school_request_declined enqueue failed: {exc}')
-
-            updated = deps.db.get_school_request(request_id)
-            return jsonify({'success': True, 'request': _serialize_request(updated)}), 200
-
-        except PermissionError:
-            return jsonify({'success': False, 'error': 'Forbidden'}), 403
-        except Exception as exc:
-            print(f"Admin reject school request error: {exc}")
-            return jsonify({'success': False, 'error': str(exc)}), 500
+        return jsonify({
+            'error': 'gone',
+            'message': f'Use POST /api/lingual-admin/requests/{request_id}/decline instead',
+        }), 410
 
     return bp

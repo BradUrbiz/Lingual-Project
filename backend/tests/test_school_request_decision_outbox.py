@@ -78,10 +78,18 @@ class FakeApprovalDb(FakeDbBase):
         pass
 
 
-class ApproveSchoolRequestOutboxTest(unittest.TestCase):
+class LegacyApproveSchoolRequestEndpointTest(unittest.TestCase):
+    """Plan 5 Task 24: the legacy `/api/admin/school-requests/<id>/approve`
+    endpoint now returns 410 Gone. All approval-side-effect behavior moved to
+    `/api/lingual-admin/requests/<id>/approve` and is covered by
+    `test_lingual_admin_approve_route.py`.
+
+    These tests only assert the deprecation contract — no outbox enqueue, no
+    DB mutation, no auth check happens on the legacy path.
+    """
+
     def setUp(self):
         self.db = FakeApprovalDb()
-        # Seed the Lingual admin user
         self.db.users = {'lingual-1': {
             'email': 'la@lingual.app',
             'name': 'LA',
@@ -107,73 +115,33 @@ class ApproveSchoolRequestOutboxTest(unittest.TestCase):
 
     @patch('backend.routes.school_requests.database.get_db', return_value=MagicMock())
     @patch('backend.routes.school_requests.enqueue_outbox_email')
-    def test_approve_enqueues_approved_email_to_requester(self, mock_enqueue, _mock_get_db):
+    def test_legacy_approve_returns_410(self, mock_enqueue, _mock_get_db):
         resp = self.client.post('/api/admin/school-requests/req-1/approve')
-        self.assertEqual(resp.status_code, 200, resp.get_json())
-        approved_calls = [
-            c for c in mock_enqueue.call_args_list
-            if c.kwargs.get('template').value == 'school_request_approved'
-        ]
-        self.assertEqual(len(approved_calls), 1, mock_enqueue.call_args_list)
-        kwargs = approved_calls[0].kwargs
-        self.assertEqual(kwargs['recipient_email'], 'ada@ssfs.org')
-        self.assertEqual(kwargs['template_data']['org_name'], 'SF Friends')
-        self.assertEqual(kwargs['template_data']['requester_name'], 'Ada')
-        self.assertIn('login_url', kwargs['template_data'])
+        self.assertEqual(resp.status_code, 410, resp.get_json())
+        body = resp.get_json()
+        self.assertEqual(body['error'], 'gone')
+        self.assertIn('lingual-admin', body['message'])
+        self.assertIn('approve', body['message'])
 
     @patch('backend.routes.school_requests.database.get_db', return_value=MagicMock())
     @patch('backend.routes.school_requests.enqueue_outbox_email')
-    def test_approve_records_pre_invites(self, mock_enqueue, _mock_get_db):
-        resp = self.client.post('/api/admin/school-requests/req-1/approve')
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(len(self.db.pre_invites_recorded), 1)
-        org_id, requester_uid, emails = self.db.pre_invites_recorded[0]
-        self.assertEqual(requester_uid, 'uid-A')
-        self.assertEqual(emails, ['t1@ssfs.org', 't2@ssfs.org'])
-
-    @patch('backend.routes.school_requests.database.get_db', return_value=MagicMock())
-    @patch('backend.routes.school_requests.enqueue_outbox_email')
-    def test_approve_enqueues_one_invitation_per_pre_invite(self, mock_enqueue, _mock_get_db):
-        resp = self.client.post('/api/admin/school-requests/req-1/approve')
-        self.assertEqual(resp.status_code, 200)
-        invite_calls = [
-            c for c in mock_enqueue.call_args_list
-            if c.kwargs.get('template').value == 'teacher_invitation'
-        ]
-        self.assertEqual(len(invite_calls), 2)
-        emails_sent = {c.kwargs['recipient_email'] for c in invite_calls}
-        self.assertEqual(emails_sent, {'t1@ssfs.org', 't2@ssfs.org'})
-
-    @patch('backend.routes.school_requests.database.get_db', return_value=MagicMock())
-    @patch('backend.routes.school_requests.enqueue_outbox_email')
-    def test_approve_succeeds_when_no_pre_invites(self, mock_enqueue, _mock_get_db):
-        self.db.requests['req-1']['pre_invited_teachers'] = []
-        resp = self.client.post('/api/admin/school-requests/req-1/approve')
-        self.assertEqual(resp.status_code, 200)
-        approved_calls = [
-            c for c in mock_enqueue.call_args_list
-            if c.kwargs.get('template').value == 'school_request_approved'
-        ]
-        self.assertEqual(len(approved_calls), 1)
-
-    @patch('backend.routes.school_requests.database.get_db', return_value=MagicMock())
-    @patch('backend.routes.school_requests.enqueue_outbox_email')
-    def test_approve_returns_200_even_if_pre_invite_record_blows_up(self, mock_enqueue, _mock_get_db):
-        def boom(*_a, **_kw):
-            raise RuntimeError('firestore down')
-        self.db.record_school_request_pre_invites = boom
-        resp = self.client.post('/api/admin/school-requests/req-1/approve')
-        self.assertEqual(resp.status_code, 200, resp.get_json())
-        self.assertTrue(any(
-            c.kwargs.get('template').value == 'school_request_approved'
-            for c in mock_enqueue.call_args_list
-        ))
+    def test_legacy_approve_does_not_enqueue_outbox(self, mock_enqueue, _mock_get_db):
+        """Side effects must not fire on the deprecated path."""
+        self.client.post('/api/admin/school-requests/req-1/approve')
+        mock_enqueue.assert_not_called()
+        self.assertEqual(self.db.pre_invites_recorded, [])
+        # The request stays pending — no DB mutation on 410.
+        self.assertEqual(self.db.requests['req-1']['status'], 'pending')
 
 
-class RejectSchoolRequestOutboxTest(unittest.TestCase):
+class LegacyRejectSchoolRequestEndpointTest(unittest.TestCase):
+    """Plan 5 Task 24: the legacy `/api/admin/school-requests/<id>/reject`
+    endpoint now returns 410 Gone, pointing callers at
+    `/api/lingual-admin/requests/<id>/decline`.
+    """
+
     def setUp(self):
         self.db = FakeApprovalDb()
-        # Seed Lingual admin user
         self.db.users = {'lingual-1': {
             'email': 'la@lingual.app',
             'name': 'LA',
@@ -197,69 +165,29 @@ class RejectSchoolRequestOutboxTest(unittest.TestCase):
 
     @patch('backend.routes.school_requests.database.get_db', return_value=MagicMock())
     @patch('backend.routes.school_requests.enqueue_outbox_email')
-    def test_reject_persists_reason_and_category(self, mock_enqueue, _mock_get_db):
+    def test_legacy_reject_returns_410_pointing_at_decline(self, mock_enqueue, _mock_get_db):
         resp = self.client.post('/api/admin/school-requests/req-2/reject', json={
             'reason': 'Website not reachable.',
             'category': 'info_missing',
         })
-        self.assertEqual(resp.status_code, 200, resp.get_json())
-        self.assertEqual(self.db.requests['req-2']['status'], 'rejected')
-        self.assertEqual(self.db.requests['req-2']['rejection_reason'], 'Website not reachable.')
-        self.assertEqual(self.db.requests['req-2']['rejection_category'], 'info_missing')
+        self.assertEqual(resp.status_code, 410, resp.get_json())
+        body = resp.get_json()
+        self.assertEqual(body['error'], 'gone')
+        self.assertIn('lingual-admin', body['message'])
+        # The new verb is `decline`, not `reject` — surface that explicitly.
+        self.assertIn('decline', body['message'])
 
     @patch('backend.routes.school_requests.database.get_db', return_value=MagicMock())
     @patch('backend.routes.school_requests.enqueue_outbox_email')
-    def test_reject_enqueues_declined_email_to_requester(self, mock_enqueue, _mock_get_db):
-        resp = self.client.post('/api/admin/school-requests/req-2/reject', json={
-            'reason': 'Need more info', 'category': 'info_missing',
+    def test_legacy_reject_does_not_mutate_state(self, mock_enqueue, _mock_get_db):
+        """No DB writes, no outbox enqueues on the deprecated path."""
+        self.client.post('/api/admin/school-requests/req-2/reject', json={
+            'reason': 'r', 'category': 'info_missing',
         })
-        self.assertEqual(resp.status_code, 200)
-        declined = [
-            c for c in mock_enqueue.call_args_list
-            if c.kwargs.get('template').value == 'school_request_declined'
-        ]
-        self.assertEqual(len(declined), 1)
-        kwargs = declined[0].kwargs
-        self.assertEqual(kwargs['recipient_email'], 'bob@ssfs.org')
-        self.assertEqual(kwargs['template_data']['org_name'], 'SF Friends')
-        self.assertEqual(kwargs['template_data']['reason'], 'Need more info')
-        self.assertEqual(kwargs['template_data']['category'], 'info_missing')
-        self.assertIn('support_url', kwargs['template_data'])
-
-    @patch('backend.routes.school_requests.database.get_db', return_value=MagicMock())
-    @patch('backend.routes.school_requests.enqueue_outbox_email')
-    def test_reject_requires_reason_and_category(self, mock_enqueue, _mock_get_db):
-        resp = self.client.post('/api/admin/school-requests/req-2/reject', json={
-            'category': 'other',
-        })
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn('reason', resp.get_json()['error'])
-        self.assertEqual(self.db.requests['req-2']['status'], 'pending')
-
-        resp = self.client.post('/api/admin/school-requests/req-2/reject', json={
-            'reason': 'Need more info.',
-        })
-        self.assertEqual(resp.status_code, 400)
-        self.assertIn('category', resp.get_json()['error'])
-        self.assertEqual(self.db.requests['req-2']['status'], 'pending')
         mock_enqueue.assert_not_called()
-
-    @patch('backend.routes.school_requests.database.get_db', return_value=MagicMock())
-    @patch('backend.routes.school_requests.enqueue_outbox_email')
-    def test_reject_rejects_invalid_category(self, mock_enqueue, _mock_get_db):
-        resp = self.client.post('/api/admin/school-requests/req-2/reject', json={
-            'reason': 'r', 'category': 'NOT_A_CATEGORY',
-        })
-        self.assertEqual(resp.status_code, 400)
         self.assertEqual(self.db.requests['req-2']['status'], 'pending')
-        mock_enqueue.assert_not_called()
-
-    @patch('backend.routes.school_requests.database.get_db', return_value=MagicMock())
-    @patch('backend.routes.school_requests.enqueue_outbox_email')
-    def test_reject_returns_409_on_already_decided(self, mock_enqueue, _mock_get_db):
-        self.db.requests['req-2']['status'] = 'approved'
-        resp = self.client.post('/api/admin/school-requests/req-2/reject', json={'reason': 'r'})
-        self.assertEqual(resp.status_code, 409)
+        self.assertNotIn('rejection_reason', self.db.requests['req-2'])
+        self.assertNotIn('rejection_category', self.db.requests['req-2'])
 
 
 if __name__ == '__main__':

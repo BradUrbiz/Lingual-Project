@@ -320,163 +320,67 @@ class TestSchoolRequests(unittest.TestCase):
             self.assertTrue(data['success'])
             self.assertIsNone(data['request'])
 
-    # ── Admin endpoints ─────────────────────────────────────────────
+    # ── Legacy admin endpoints (410 Gone, Plan 5) ───────────────────
+    #
+    # The lingual-admin surface moved to `/api/lingual-admin/*`. The legacy
+    # `/api/admin/school-requests*` routes now return 410 Gone with a pointer
+    # to the new path. They don't authenticate, look up records, or touch the
+    # DB — they just emit the migration hint.
 
-    def test_admin_list_requests(self):
-        """GET /api/admin/school-requests lists all requests."""
-        # Create a request as a regular user
-        self.db.create_school_request(
-            requester_uid='user-1',
-            requester_email='user@example.com',
-            requester_name='Regular User',
-            school_name='Springfield Elementary',
-            org_type='school',
-        )
+    def test_legacy_admin_list_returns_410(self):
+        """GET /api/admin/school-requests returns 410 with new-path hint."""
         with self.app.test_client() as client:
-            self._set_session(client, 'admin-1')
             resp = client.get('/api/admin/school-requests')
-            self.assertEqual(resp.status_code, 200)
-            data = resp.get_json()
-            self.assertTrue(data['success'])
-            self.assertEqual(len(data['requests']), 1)
-            self.assertEqual(data['requests'][0]['schoolName'], 'Springfield Elementary')
+            self.assertEqual(resp.status_code, 410)
+            body = resp.get_json()
+            self.assertEqual(body['error'], 'gone')
+            self.assertIn('lingual-admin', body['message'])
 
-    def test_membership_lingual_admin_can_access_admin_routes(self):
-        """Active membership role=lingual_admin grants the same route access as legacy flag."""
-        list_request_id = self.db.create_school_request(
-            requester_uid='user-1',
-            requester_email='user@example.com',
-            requester_name='Regular User',
-            school_name='Springfield Elementary',
-            org_type='school',
-        )
-        approve_request_id = self.db.create_school_request(
-            requester_uid='user-1',
-            requester_email='user@example.com',
-            requester_name='Regular User',
-            school_name='Approve Me',
-            org_type='school',
-        )
-        reject_request_id = self.db.create_school_request(
-            requester_uid='user-1',
-            requester_email='user@example.com',
-            requester_name='Regular User',
-            school_name='Reject Me',
-            org_type='school',
-        )
-
+    def test_legacy_admin_get_returns_410(self):
+        """GET /api/admin/school-requests/<id> returns 410 with new-path hint."""
         with self.app.test_client() as client:
-            self._set_session(client, 'membership-admin-1')
+            resp = client.get('/api/admin/school-requests/sr-1')
+            self.assertEqual(resp.status_code, 410)
+            body = resp.get_json()
+            self.assertEqual(body['error'], 'gone')
+            self.assertIn('lingual-admin', body['message'])
+            self.assertIn('sr-1', body['message'])
 
-            resp_list = client.get('/api/admin/school-requests')
-            self.assertEqual(resp_list.status_code, 200, resp_list.get_json())
-
-            resp_detail = client.get(f'/api/admin/school-requests/{list_request_id}')
-            self.assertEqual(resp_detail.status_code, 200, resp_detail.get_json())
-
-            resp_approve = client.post(
-                f'/api/admin/school-requests/{approve_request_id}/approve',
-            )
-            self.assertEqual(resp_approve.status_code, 200, resp_approve.get_json())
-
-            resp_reject = client.post(
-                f'/api/admin/school-requests/{reject_request_id}/reject',
-                json={'reason': 'Website not reachable.', 'category': 'info_missing'},
-            )
-            self.assertEqual(resp_reject.status_code, 200, resp_reject.get_json())
-
-    def test_admin_approve_request(self):
-        """POST approve creates org + membership, status=approved."""
-        request_id = self.db.create_school_request(
-            requester_uid='user-1',
-            requester_email='user@example.com',
-            requester_name='Regular User',
-            school_name='Springfield Elementary',
-            org_type='school',
-        )
+    def test_legacy_admin_approve_returns_410(self):
+        """POST /api/admin/school-requests/<id>/approve returns 410."""
         with self.app.test_client() as client:
-            self._set_session(client, 'admin-1')
-            resp = client.post(f'/api/admin/school-requests/{request_id}/approve')
-            self.assertEqual(resp.status_code, 200)
-            data = resp.get_json()
-            self.assertTrue(data['success'])
-            self.assertEqual(data['request']['status'], 'approved')
-            self.assertIsNotNone(data['request']['createdOrgId'])
+            resp = client.post('/api/admin/school-requests/sr-1/approve')
+            self.assertEqual(resp.status_code, 410)
+            body = resp.get_json()
+            self.assertEqual(body['error'], 'gone')
+            self.assertIn('lingual-admin', body['message'])
+            self.assertIn('approve', body['message'])
 
-            # Verify org was created
-            org_id = data['request']['createdOrgId']
-            org = self.db.get_organization(org_id)
-            self.assertIsNotNone(org)
-            self.assertEqual(org['name'], 'Springfield Elementary')
-
-            # Verify membership was created
-            memberships = [
-                m for m in self.db.memberships.values()
-                if m.get('uid') == 'user-1' and m.get('orgId') == org_id
-            ]
-            self.assertEqual(len(memberships), 1)
-            self.assertIn('school_admin', memberships[0]['roles'])
-
-    def test_admin_approve_rejects_non_pending(self):
-        """Approving an already-approved request returns 409."""
-        request_id = self.db.create_school_request(
-            requester_uid='user-1',
-            requester_email='user@example.com',
-            requester_name='Regular User',
-            school_name='Springfield Elementary',
-            org_type='school',
-        )
-        # Approve it first
+    def test_legacy_admin_reject_returns_410(self):
+        """POST /api/admin/school-requests/<id>/reject returns 410 pointing at /decline."""
         with self.app.test_client() as client:
-            self._set_session(client, 'admin-1')
-            client.post(f'/api/admin/school-requests/{request_id}/approve')
-            org_count_after_first_approval = len(self.db.organizations)
-            membership_count_after_first_approval = len(self.db.memberships)
-
-            # Try to approve again
-            resp = client.post(f'/api/admin/school-requests/{request_id}/approve')
-            self.assertEqual(resp.status_code, 409)
-            self.assertFalse(resp.get_json()['success'])
-            self.assertEqual(len(self.db.organizations), org_count_after_first_approval)
-            self.assertEqual(len(self.db.memberships), membership_count_after_first_approval)
-
-    def test_admin_reject_request(self):
-        """POST reject with reason sets status=rejected."""
-        request_id = self.db.create_school_request(
-            requester_uid='user-1',
-            requester_email='user@example.com',
-            requester_name='Regular User',
-            school_name='Springfield Elementary',
-            org_type='school',
-        )
-        with self.app.test_client() as client:
-            self._set_session(client, 'admin-1')
             resp = client.post(
-                f'/api/admin/school-requests/{request_id}/reject',
-                json={'reason': 'Not a real school', 'category': 'fraud_risk'},
+                '/api/admin/school-requests/sr-1/reject',
+                json={'reason': 'whatever', 'category': 'info_missing'},
             )
-            self.assertEqual(resp.status_code, 200)
-            data = resp.get_json()
-            self.assertTrue(data['success'])
-            self.assertEqual(data['request']['status'], 'rejected')
-            self.assertEqual(data['request']['rejectionReason'], 'Not a real school')
+            self.assertEqual(resp.status_code, 410)
+            body = resp.get_json()
+            self.assertEqual(body['error'], 'gone')
+            self.assertIn('lingual-admin', body['message'])
+            # The replacement is /decline, not /reject.
+            self.assertIn('decline', body['message'])
 
-    def test_non_admin_blocked(self):
-        """Non-admin user gets 403 on admin endpoints."""
+    def test_legacy_admin_endpoints_do_not_require_auth(self):
+        """410 is returned regardless of caller — no session, no role check."""
         with self.app.test_client() as client:
-            self._set_session(client, 'nonadmin-1')
-
-            resp_list = client.get('/api/admin/school-requests')
-            self.assertEqual(resp_list.status_code, 403)
-
-            resp_detail = client.get('/api/admin/school-requests/sr-1')
-            self.assertEqual(resp_detail.status_code, 403)
-
-            resp_approve = client.post('/api/admin/school-requests/sr-1/approve')
-            self.assertEqual(resp_approve.status_code, 403)
-
-            resp_reject = client.post('/api/admin/school-requests/sr-1/reject', json={})
-            self.assertEqual(resp_reject.status_code, 403)
+            # Unauthenticated (no session set)
+            for resp in (
+                client.get('/api/admin/school-requests'),
+                client.get('/api/admin/school-requests/sr-1'),
+                client.post('/api/admin/school-requests/sr-1/approve'),
+                client.post('/api/admin/school-requests/sr-1/reject', json={}),
+            ):
+                self.assertEqual(resp.status_code, 410)
 
 
 if __name__ == '__main__':

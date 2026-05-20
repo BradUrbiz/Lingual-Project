@@ -26,6 +26,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useLearningLocale } from '@/contexts/LearningLocaleContext';
 import { LEARNING_LOCALES } from '@/lib/learningLocales';
 import { getUserProfile, updateLearningLocale } from '@/api/user';
+import { getPrivilegedHomeRoute, LEARNER_HOME_ROUTE } from '@/lib/homeRoutes';
 import type { UserProfile } from '@/types';
 
 export function AppLayout() {
@@ -66,15 +67,15 @@ export function AppLayout() {
     : t('app.layout.role.student');
   const localeOption = LEARNING_LOCALES.find((locale) => locale.value === learningLocale);
   // Home button priority mirrors the post-login dispatcher in lib/homeRoutes:
-  // Lingual admin > school admin / teacher > learner. Otherwise a Lingual admin
-  // clicking the logo would land on /app/learn instead of their queue.
-  const homeDestination = user?.lingualAdmin
-    ? '/app/admin/school-requests'
-    : canAccessTeacherView
-    ? '/app/teacher'
-    : '/app/learn';
+  // Lingual admin > school admin > teacher > learner. Reusing
+  // `getPrivilegedHomeRoute` keeps the logo destination in lockstep with
+  // the post-login dispatcher (Plan 5 / Task 27 split school_admin off to
+  // /app/admin and lingual admins to /app/lingual-admin/requests).
+  const homeDestination = getPrivilegedHomeRoute(user) ?? LEARNER_HOME_ROUTE;
   const homeLabel = user?.lingualAdmin
     ? 'Go to Lingual admin dashboard'
+    : hasAnyRole(['school_admin'])
+    ? 'Go to school admin dashboard'
     : canAccessTeacherView
     ? 'Go to teacher dashboard'
     : 'Go to learning dashboard';

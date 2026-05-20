@@ -26,7 +26,6 @@ const AdminOrgWizardPage = lazy(() => import('./pages/AdminOrgWizard/AdminOrgWiz
 const AdminPendingPage = lazy(() => import('./pages/AdminPendingPage').then((module) => ({ default: module.AdminPendingPage })));
 const GeneralPage = lazy(() => import('./pages/GeneralPage').then((module) => ({ default: module.GeneralPage })));
 const InitialOnboardingPage = lazy(() => import('./pages/InitialOnboardingPage').then((module) => ({ default: module.InitialOnboardingPage })));
-const LingualSchoolRequestsPage = lazy(() => import('./pages/LingualSchoolRequestsPage').then((module) => ({ default: module.LingualSchoolRequestsPage })));
 const AssessmentPage = lazy(() => import('./pages/AssessmentPage').then((module) => ({ default: module.AssessmentPage })));
 const CategoriesPage = lazy(() => import('./pages/CategoriesPage').then((module) => ({ default: module.CategoriesPage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
@@ -52,6 +51,26 @@ const AdminCompliancePage = lazy(() => import('./pages/AdminCompliancePage').the
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));
 const LtiLinkAccountPage = lazy(() => import('./pages/LtiLinkAccountPage').then((m) => ({ default: m.LtiLinkAccountPage })));
 const LtiAssignmentPickerPage = lazy(() => import('./pages/LtiAssignmentPickerPage').then((m) => ({ default: m.LtiAssignmentPickerPage })));
+const SchoolAdminHomePage = lazy(() =>
+  import('./pages/SchoolAdminHomePage').then((m) => ({ default: m.SchoolAdminHomePage })),
+);
+const LingualAdminShell = lazy(() =>
+  import('./pages/LingualAdmin/LingualAdminShell').then((m) => ({ default: m.LingualAdminShell })),
+);
+const LingualAdminDashboardPage = lazy(() =>
+  import('./pages/LingualAdmin/LingualAdminDashboardPage').then((m) => ({
+    default: m.LingualAdminDashboardPage,
+  })),
+);
+const LingualRequestsPage = lazy(() =>
+  import('./pages/LingualAdmin/LingualRequestsPage').then((m) => ({ default: m.LingualRequestsPage })),
+);
+const LingualOrgsListPage = lazy(() =>
+  import('./pages/LingualAdmin/LingualOrgsListPage').then((m) => ({ default: m.LingualOrgsListPage })),
+);
+const LingualOrgDetailPage = lazy(() =>
+  import('./pages/LingualAdmin/LingualOrgDetailPage').then((m) => ({ default: m.LingualOrgDetailPage })),
+);
 
 function RouteLoadingScreen() {
   return (
@@ -180,6 +199,14 @@ function AnimatedRoutes() {
             )}
           />
           <Route
+            path="admin"
+            element={withRouteSuspense(
+              <TeacherRoute>
+                <SchoolAdminHomePage />
+              </TeacherRoute>
+            )}
+          />
+          <Route
             path="admin/deletion-requests"
             element={withRouteSuspense(
               <TeacherRoute>
@@ -195,14 +222,32 @@ function AnimatedRoutes() {
               </TeacherRoute>
             )}
           />
+          {/*
+            Legacy redirect: Plan 5 (Task 30) retires the in-app-shell mount
+            of LingualSchoolRequestsPage at /app/admin/school-requests. The
+            same surface now lives in the dedicated /app/lingual-admin tree.
+          */}
           <Route
             path="admin/school-requests"
+            element={<Navigate to="/app/lingual-admin/requests" replace />}
+          />
+          <Route
+            path="lingual-admin"
             element={withRouteSuspense(
               <LingualAdminRoute>
-                <LingualSchoolRequestsPage />
+                <LingualAdminShell />
               </LingualAdminRoute>
             )}
-          />
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={withRouteSuspense(<LingualAdminDashboardPage />)} />
+            <Route path="requests" element={withRouteSuspense(<LingualRequestsPage />)} />
+            <Route path="organizations" element={withRouteSuspense(<LingualOrgsListPage />)} />
+            <Route
+              path="organizations/:orgId"
+              element={withRouteSuspense(<LingualOrgDetailPage />)}
+            />
+          </Route>
         </Route>
       </Routes>
     </AnimatePresence>

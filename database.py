@@ -2105,18 +2105,18 @@ def list_student_classes(student_uid):
     return classes
 
 
-def create_practice_session(session_data, session_id=None, *, org_status_when_created='active'):
+def create_practice_session(session_data, session_id=None, *, org_status_when_created=ORG_STATUS_ACTIVE):
     """Create a practice session document.
 
     ``org_status_when_created`` snapshots the org's lifecycle status at the
-    moment this session was minted. It anchors the in-flight grace policy
-    in ``/api/practice-sessions/<id>/events``: a session that started while
-    the org was ``active`` continues to drain its events to closure even
-    after the org is suspended mid-session. New sessions on a suspended
-    org cannot reach this code path because the route-level guard blocks
-    them first. The kwarg is keyword-only so it cannot accidentally shadow
-    ``session_id`` positionally; the dict payload key takes precedence
-    when the caller has already injected one.
+    moment this session was minted (defaults to ``'active'``). It anchors
+    the in-flight grace policy in ``/api/practice-sessions/<id>/events``:
+    a session that started while the org was ``active`` continues to drain
+    its events to closure even after the org is suspended mid-session. New
+    sessions on a suspended org cannot reach this code path because the
+    route-level guard blocks them first. The kwarg is keyword-only so it
+    cannot accidentally shadow ``session_id`` positionally; the dict
+    payload key takes precedence when the caller has already injected one.
     """
     doc_ref = get_practice_session_ref(session_id) if session_id else get_practice_sessions_collection().document()
     payload = dict(session_data or {})

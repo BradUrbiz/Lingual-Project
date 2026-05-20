@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from flask import Blueprint, jsonify, request
 
+import database
 from backend.route_deps import RouteDeps
 from backend.services.assignment_resolver import (
     SUPPORTED_ASSIGNMENT_STATUSES,
@@ -476,7 +477,7 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             session_org_id = classroom.get('orgId') or session_payload.get('org_id')
             session_org = deps.db.get_organization(session_org_id) if session_org_id else None
             session_payload['org_status_when_created'] = (
-                (session_org or {}).get('status') or 'active'
+                (session_org or {}).get('status') or database.ORG_STATUS_ACTIVE
             )
             session_id = deps.db.create_practice_session(session_payload)
             session_record = deps.db.get_practice_session(session_id)
@@ -538,16 +539,15 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             session_org_id = session_record.get('org_id')
             if session_org_id:
                 org = deps.db.get_organization(session_org_id) or {}
-                current_status = org.get('status', 'active')
-                snapshot = session_record.get('org_status_when_created', 'active')
-                if current_status != 'active' and snapshot != 'active':
-                    payload_out = {
-                        'error': 'org_suspended',
-                        'reason': org.get('suspend_reason'),
-                    }
-                    if org.get('suspended_until') is not None:
-                        payload_out['until'] = org.get('suspended_until')
-                    return jsonify(payload_out), 403
+                current_status = org.get('status', database.ORG_STATUS_ACTIVE)
+                snapshot = session_record.get('org_status_when_created', database.ORG_STATUS_ACTIVE)
+                if current_status != database.ORG_STATUS_ACTIVE and snapshot != database.ORG_STATUS_ACTIVE:
+                    err = SuspendedOrgError(
+                        org_id=session_org_id,
+                        reason=org.get('suspend_reason'),
+                        until=org.get('suspended_until'),
+                    )
+                    return jsonify(err.to_payload()), 403
 
             deps.db.create_learning_event(
                 build_learning_event_payload(

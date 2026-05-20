@@ -104,6 +104,8 @@ class RemoveMembershipTests(unittest.TestCase):
             audit_entry=dict(SAMPLE_REMOVE_AUDIT),
         )
         self.assertEqual(len(batch.update.call_args_list), 1)
+        batch.set.assert_called_once()  # audit doc still set
+        batch.commit.assert_called_once()  # batch still commits
 
     @patch('database.get_membership')
     def test_missing_membership_raises(self, mock_get):

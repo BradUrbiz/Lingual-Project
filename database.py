@@ -1211,10 +1211,9 @@ def _sync_org_admin_uids(org_id: str, uid: str, *, add: bool) -> None:
     Called whenever a membership touching the school_admin role is created or
     removed. Idempotent; ArrayUnion / ArrayRemove are commutative.
 
-    TODO: any future path that revokes a school_admin role (membership
-    deletion, role-change endpoint, org suspension cascading to memberships)
-    MUST call _sync_org_admin_uids(org_id, uid, add=False). Audit when
-    implementing Plan 5 (Lingual admin org panel — suspend/restore).
+    NOTE: Plan 5's `remove_membership` (lines ~1338) inlines the equivalent
+    arrayRemove inside its Firestore batch for atomic audit. Any change to
+    this helper's behavior must be mirrored there.
     """
     if not org_id or not uid:
         return
@@ -1367,6 +1366,8 @@ def remove_membership(*, membership_id: str, actor_uid: str, audit_entry: dict) 
         org_id = m.get('org_id')
         uid = m.get('uid')
         if org_id and uid:
+            # Inline equivalent of _sync_org_admin_uids(org_id, uid, add=False),
+            # kept inline so it commits atomically with the membership update and audit row.
             batch.update(get_organization_ref(org_id), {
                 'school_admin_uids': firestore.ArrayRemove([uid]),
                 'updated_at': firestore.SERVER_TIMESTAMP,

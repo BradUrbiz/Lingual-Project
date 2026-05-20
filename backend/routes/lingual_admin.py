@@ -694,4 +694,57 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
 
         return jsonify({'ok': True, 'orgId': org_id}), 200
 
+    @bp.delete('/organizations/<org_id>/members/<membership_id>')
+    def remove_member(org_id, membership_id):
+        try:
+            uid = deps.get_current_user_uid()
+            _require_lingual_admin(uid)
+        except PermissionError as exc:
+            return jsonify({'error': str(exc)}), 403
+
+        org = deps.db.get_organization(org_id)
+        if not org:
+            return jsonify({'error': 'not_found'}), 404
+
+        membership = deps.db.get_membership(membership_id)
+        if not membership or membership.get('org_id') != org_id:
+            return jsonify({'error': 'not_found'}), 404
+
+        body = request.get_json(silent=True) or {}
+        reason = (body.get('reason') or '').strip()
+        if not reason:
+            return jsonify({'error': 'reason required'}), 400
+
+        # Build the audit doc here (not via AuditLogger.log) so it can be
+        # committed in the same Firestore batch as the membership soft-remove
+        # and the org `school_admin_uids` ArrayRemove. The Task 7 helper
+        # accepts `audit_entry=` and writes it atomically; on failure all
+        # three writes (membership status, org admin uids, audit row) are
+        # rolled back together.
+        audit_entry = deps.audit_logger.build_audit_doc(
+            actor_uid=uid,
+            action=AuditAction.MEMBERSHIP_REMOVED,
+            target_type='membership',
+            target_id=membership_id,
+            target_org_id=org_id,
+            metadata={
+                'reason': reason,
+                'removed_uid': membership.get('uid'),
+                'removed_roles': membership.get('roles') or [],
+            },
+            ip_hash=_hash_ip(_client_ip()),
+            user_agent=_user_agent(),
+        )
+
+        try:
+            deps.db.remove_membership(
+                membership_id=membership_id,
+                actor_uid=uid,
+                audit_entry=audit_entry,
+            )
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+
+        return jsonify({'ok': True}), 200
+
     return bp

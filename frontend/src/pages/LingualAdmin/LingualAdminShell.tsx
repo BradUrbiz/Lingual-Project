@@ -1,9 +1,9 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
 const NAV = [
-  { to: '/app/lingual-admin/dashboard', label: 'Dashboard' },
-  { to: '/app/lingual-admin/requests', label: 'Requests' },
-  { to: '/app/lingual-admin/organizations', label: 'Organizations' },
+  { to: '/lingual-admin/dashboard', label: 'Dashboard' },
+  { to: '/lingual-admin/requests', label: 'Requests' },
+  { to: '/lingual-admin/organizations', label: 'Organizations' },
 ];
 
 export function LingualAdminShell() {

@@ -305,3 +305,27 @@ business actions complete normally but do not produce those emails.
     rules test for `lingual_admin_audit` (Task 38) was skipped — the
     deny-all rule is verified by code inspection of `firestore.rules`
     rather than an automated `firebase-tests/` run.
+
+39. **Lingual admin panel was double-nested inside AppLayout.** _RESOLVED
+    post-review._ The Plan 5 ship initially mounted the panel at
+    `/app/lingual-admin/*`, which inherits AppLayout's sticky header (org
+    switcher, locale picker, learner nav) on top of `LingualAdminShell`'s
+    own aside chrome. The panel is now mounted at the top level
+    `/lingual-admin/*` so it bypasses AppLayout entirely; `LingualAdminRoute`
+    handles auth + role gating on its own, so no outer guard is needed. The
+    legacy `/app/admin/school-requests` redirect now targets the new home,
+    and the `school_request_to_lingual` email CTA URL was updated in the
+    same change to point at `/lingual-admin/requests` directly instead of
+    relying on a chain of redirects.
+
+40. **`nextCursor` wire shape was snake_case while TS types declared
+    camelCase.** _RESOLVED post-review._ `list_organizations` and
+    `list_school_requests` previously serialized the DB-layer cursor dict
+    (`{name_lower, id}` / `{leading_value, id}`) as-is, while the FE TS
+    types declared `{nameLower, id}` / `{leadingValue, id}`. The runtime
+    round-tripped by accident — FE stored the snake_case dict and sent it
+    back unchanged. The route layer now camelizes outbound cursors and
+    snake-cases inbound cursor query strings via `_camelize_cursor` /
+    `_snakeize_cursor` helpers in `backend/routes/lingual_admin.py`. DB
+    helpers continue to use snake_case keys internally (matching Firestore
+    field names); the transformation lives strictly at the route boundary.

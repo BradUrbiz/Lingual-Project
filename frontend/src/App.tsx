@@ -225,29 +225,36 @@ function AnimatedRoutes() {
           {/*
             Legacy redirect: Plan 5 (Task 30) retires the in-app-shell mount
             of LingualSchoolRequestsPage at /app/admin/school-requests. The
-            same surface now lives in the dedicated /app/lingual-admin tree.
+            Lingual admin surface now lives at /lingual-admin (top-level).
           */}
           <Route
             path="admin/school-requests"
-            element={<Navigate to="/app/lingual-admin/requests" replace />}
+            element={<Navigate to="/lingual-admin/requests" replace />}
           />
+        </Route>
+
+        {/*
+          Lingual admin panel — mounted at the top level (outside /app) so its
+          own LingualAdminShell chrome does not double-nest inside AppLayout.
+          `LingualAdminRoute` enforces both auth (redirect to /login when
+          signed-out) and the lingual_admin role.
+        */}
+        <Route
+          path="/lingual-admin"
+          element={withRouteSuspense(
+            <LingualAdminRoute>
+              <LingualAdminShell />
+            </LingualAdminRoute>
+          )}
+        >
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={withRouteSuspense(<LingualAdminDashboardPage />)} />
+          <Route path="requests" element={withRouteSuspense(<LingualRequestsPage />)} />
+          <Route path="organizations" element={withRouteSuspense(<LingualOrgsListPage />)} />
           <Route
-            path="lingual-admin"
-            element={withRouteSuspense(
-              <LingualAdminRoute>
-                <LingualAdminShell />
-              </LingualAdminRoute>
-            )}
-          >
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={withRouteSuspense(<LingualAdminDashboardPage />)} />
-            <Route path="requests" element={withRouteSuspense(<LingualRequestsPage />)} />
-            <Route path="organizations" element={withRouteSuspense(<LingualOrgsListPage />)} />
-            <Route
-              path="organizations/:orgId"
-              element={withRouteSuspense(<LingualOrgDetailPage />)}
-            />
-          </Route>
+            path="organizations/:orgId"
+            element={withRouteSuspense(<LingualOrgDetailPage />)}
+          />
         </Route>
       </Routes>
     </AnimatePresence>

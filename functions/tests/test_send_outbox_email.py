@@ -78,13 +78,13 @@ class RenderTemplateTest(unittest.TestCase):
                     'org_name': 'SF Friends School',
                     'requester_name': 'Pat',
                     'requester_email': 'pat@sfschool.edu',
-                    'review_url': 'https://lingual.app/app/lingual-admin/requests',
+                    'review_url': 'https://lingual.app/lingual-admin/requests',
                 },
             )
 
             self.assertEqual(subject, 'New school registration: SF Friends School')
             self.assertIn('SF Friends School', html)
-            self.assertIn('https://lingual.app/app/lingual-admin/requests', html)
+            self.assertIn('https://lingual.app/lingual-admin/requests', html)
 
     def test_unknown_template_raises(self):
         with patch('firebase_admin.initialize_app'):

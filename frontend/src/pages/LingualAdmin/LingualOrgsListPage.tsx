@@ -70,7 +70,7 @@ export function LingualOrgsListPage() {
           {items.map(o => (
             <tr key={o.id}>
               <td className="py-2 font-medium">
-                <Link to={`/app/lingual-admin/organizations/${o.id}`} className="hover:underline">
+                <Link to={`/lingual-admin/organizations/${o.id}`} className="hover:underline">
                   {o.name}
                 </Link>
               </td>

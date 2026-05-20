@@ -105,7 +105,7 @@ Owner: Engineering + Product
 
 ### Lingual admin panel (Plan 5)
 
-- [x] Routes mounted at `/app/lingual-admin/*` (dashboard, requests, organizations, org detail).
+- [x] Routes mounted at `/lingual-admin/*` (top-level, outside `/app`, so AppLayout does not double-nest with `LingualAdminShell`).
 - [x] `lingual_admin_audit` collection with `AuditLogger` service.
 - [x] 12 endpoints under `backend/routes/lingual_admin.py`.
 - [x] Org suspend/restore with email fan-out via outbox.
@@ -116,7 +116,7 @@ Owner: Engineering + Product
 - [x] `/app/admin` school_admin home route (separated from `/app/teacher`).
 - [x] AuthContext 5-min `/api/auth/verify` polling.
 - [x] Legacy `/api/admin/school-requests/*` endpoints return 410 Gone.
-- [x] Legacy `/app/admin/school-requests` route redirects to `/app/lingual-admin/requests`.
+- [x] Legacy `/app/admin/school-requests` route redirects to `/lingual-admin/requests`.
 
 - [ ] `PATCH /api/lingual-admin/organizations/<orgId>` (org metadata editing) — v1.5.
 - [ ] Realtime listener for org-detail audit feed (replace pagination, v1.5).

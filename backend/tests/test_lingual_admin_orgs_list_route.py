@@ -7,7 +7,9 @@ Confirms the list endpoint:
 - rejects invalid status values with 400 (via the DB's ValueError),
 - gates non-lingual-admin callers with 403,
 - computes memberCount from the school_admin_uids list,
-- passes through next_cursor as nextCursor in the response.
+- emits nextCursor with camelCase inner keys (name_lower → nameLower) on the
+  wire, and accepts camelCase cursor input that round-trips back to snake_case
+  before reaching the DB layer (Plan 5 Important #2 hardening).
 """
 import unittest
 
@@ -64,7 +66,28 @@ class OrgsListRouteTests(unittest.TestCase):
         self.assertEqual(data['items'][0]['name'], 'Alpha HS')
         self.assertEqual(data['items'][0]['schoolType'], 'high')
         self.assertEqual(data['items'][0]['memberCount'], 2)
+        # Cursor inner keys are camelCase on the wire to match FE TS types.
         self.assertEqual(data['nextCursor']['id'], 'o1')
+        self.assertEqual(data['nextCursor']['nameLower'], 'alpha hs')
+        self.assertNotIn('name_lower', data['nextCursor'])
+
+    def test_cursor_input_is_snakeized_for_db_layer(self):
+        """FE sends camelCase cursor; route transforms back to snake_case before
+        handing to the DB helper (which uses Firestore field names)."""
+        import json
+        cursor_param = json.dumps({'nameLower': 'lincoln high', 'id': 'o100'})
+        resp = self.client.get(
+            f'/api/lingual-admin/organizations?cursor={cursor_param}'
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            self.db.last_kwargs['cursor'],
+            {'name_lower': 'lincoln high', 'id': 'o100'},
+        )
+
+    def test_invalid_cursor_400(self):
+        resp = self.client.get('/api/lingual-admin/organizations?cursor=not-json')
+        self.assertEqual(resp.status_code, 400)
 
     def test_filters_passed(self):
         resp = self.client.get(

@@ -7,7 +7,7 @@ function renderShellAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/app/lingual-admin/*" element={<LingualAdminShell />}>
+        <Route path="/lingual-admin/*" element={<LingualAdminShell />}>
           <Route path="dashboard" element={<div>Dashboard view</div>} />
           <Route path="requests" element={<div>Requests view</div>} />
           <Route path="organizations" element={<div>Orgs view</div>} />
@@ -19,19 +19,19 @@ function renderShellAt(path: string) {
 
 describe('LingualAdminShell', () => {
   it('renders three nav links', () => {
-    renderShellAt('/app/lingual-admin/dashboard');
+    renderShellAt('/lingual-admin/dashboard');
     expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /requests/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /organizations/i })).toBeInTheDocument();
   });
 
   it('renders child outlet', () => {
-    renderShellAt('/app/lingual-admin/requests');
+    renderShellAt('/lingual-admin/requests');
     expect(screen.getByText('Requests view')).toBeInTheDocument();
   });
 
   it('marks the active link', () => {
-    renderShellAt('/app/lingual-admin/organizations');
+    renderShellAt('/lingual-admin/organizations');
     const orgsLink = screen.getByRole('link', { name: /organizations/i });
     expect(orgsLink).toHaveAttribute('aria-current', 'page');
   });

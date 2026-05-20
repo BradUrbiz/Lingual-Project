@@ -42,6 +42,31 @@ ALLOWED_DECLINE_CATEGORIES = frozenset({
     'info_missing', 'fraud_risk', 'out_of_scope', 'duplicate', 'other',
 })
 
+# Cursor shape lives on the wire as camelCase to match the FE TS types (Plan 5
+# Important #2 fix). DB helpers still use snake_case internally because that
+# matches Firestore field names, so we transform at the route boundary in both
+# directions. Unknown keys pass through unchanged so the mapping survives
+# additive cursor schema changes.
+_CURSOR_KEY_TO_CAMEL = {
+    'name_lower': 'nameLower',
+    'leading_value': 'leadingValue',
+}
+_CURSOR_KEY_TO_SNAKE = {v: k for k, v in _CURSOR_KEY_TO_CAMEL.items()}
+
+
+def _camelize_cursor(cursor):
+    """Transform a cursor dict's known snake_case keys to camelCase for the wire."""
+    if not cursor:
+        return cursor
+    return {_CURSOR_KEY_TO_CAMEL.get(k, k): v for k, v in cursor.items()}
+
+
+def _snakeize_cursor(cursor):
+    """Inverse of `_camelize_cursor` for cursor values arriving from the wire."""
+    if not cursor:
+        return cursor
+    return {_CURSOR_KEY_TO_SNAKE.get(k, k): v for k, v in cursor.items()}
+
 
 def _parse_iso8601(value):
     """Parse an ISO 8601 datetime string into a tz-aware datetime.
@@ -144,7 +169,7 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
 
         return jsonify({
             'items': [_serialize_request(r) for r in result['items']],
-            'nextCursor': result.get('next_cursor'),
+            'nextCursor': _camelize_cursor(result.get('next_cursor')),
         }), 200
 
     @bp.get('/organizations')
@@ -158,12 +183,14 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
         cursor_arg = request.args.get('cursor')
         cursor = None
         if cursor_arg:
-            # Cursor is a JSON-encoded {name_lower, id} dict produced by a
-            # prior page's response. Reject malformed input with 400 rather
-            # than letting Firestore silently return a wrong page.
+            # Cursor is a JSON-encoded {nameLower, id} dict produced by a
+            # prior page's response. We transform back to {name_lower, id}
+            # before handing to the DB helper, which uses Firestore field
+            # names. Reject malformed input with 400 rather than letting
+            # Firestore silently return a wrong page.
             try:
                 import json
-                cursor = json.loads(cursor_arg)
+                cursor = _snakeize_cursor(json.loads(cursor_arg))
             except Exception:
                 return jsonify({'error': 'invalid cursor'}), 400
 
@@ -180,7 +207,7 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
 
         return jsonify({
             'items': [_camel_org_row(r) for r in result['items']],
-            'nextCursor': result.get('next_cursor'),
+            'nextCursor': _camelize_cursor(result.get('next_cursor')),
         }), 200
 
     @bp.get('/organizations/<org_id>')

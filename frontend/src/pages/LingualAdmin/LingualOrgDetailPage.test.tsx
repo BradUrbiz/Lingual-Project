@@ -12,7 +12,7 @@ function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/app/lingual-admin/organizations/:orgId" element={<LingualOrgDetailPage />} />
+        <Route path="/lingual-admin/organizations/:orgId" element={<LingualOrgDetailPage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -24,7 +24,7 @@ describe('LingualOrgDetailPage', () => {
       id: 'o1', name: 'Sunset HS', status: 'active',
       schoolAdminContacts: [{ membershipId: 'm1', uid: 'u1', email: 'a@x.com' }],
     } as any);
-    renderAt('/app/lingual-admin/organizations/o1');
+    renderAt('/lingual-admin/organizations/o1');
     await waitFor(() => screen.getByText('Sunset HS'));
     expect(screen.getByText('a@x.com', { exact: false })).toBeInTheDocument();
   });
@@ -33,7 +33,7 @@ describe('LingualOrgDetailPage', () => {
     vi.mocked(api.fetchOrgDetail).mockResolvedValue({
       id: 'o1', name: 'Sunset HS', status: 'active', schoolAdminContacts: [],
     } as any);
-    renderAt('/app/lingual-admin/organizations/o1');
+    renderAt('/lingual-admin/organizations/o1');
     await waitFor(() => screen.getByText('Sunset HS'));
     expect(screen.getByRole('button', { name: /suspend/i })).toBeInTheDocument();
   });
@@ -43,7 +43,7 @@ describe('LingualOrgDetailPage', () => {
       id: 'o1', name: 'Sunset HS', status: 'suspended', schoolAdminContacts: [],
       suspendReason: 'compliance review',
     } as any);
-    renderAt('/app/lingual-admin/organizations/o1');
+    renderAt('/lingual-admin/organizations/o1');
     await waitFor(() => screen.getByText('Sunset HS'));
     expect(screen.getByRole('button', { name: /restore/i })).toBeInTheDocument();
   });
@@ -53,7 +53,7 @@ describe('LingualOrgDetailPage', () => {
       id: 'o1', name: 'Sunset HS', status: 'active', schoolAdminContacts: [],
     } as any);
     vi.mocked(api.suspendOrg).mockResolvedValue();
-    renderAt('/app/lingual-admin/organizations/o1');
+    renderAt('/lingual-admin/organizations/o1');
     await waitFor(() => screen.getByText('Sunset HS'));
     fireEvent.click(screen.getByRole('button', { name: /suspend/i }));
     fireEvent.change(screen.getByLabelText(/reason/i), { target: { value: 'fraud risk' } });

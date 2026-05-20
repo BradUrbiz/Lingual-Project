@@ -70,7 +70,8 @@ export function AppLayout() {
   // Lingual admin > school admin > teacher > learner. Reusing
   // `getPrivilegedHomeRoute` keeps the logo destination in lockstep with
   // the post-login dispatcher (Plan 5 / Task 27 split school_admin off to
-  // /app/admin and lingual admins to /app/lingual-admin/requests).
+  // /app/admin and lingual admins to /lingual-admin/requests; the latter is
+  // mounted at the top level so it bypasses AppLayout entirely).
   const homeDestination = getPrivilegedHomeRoute(user) ?? LEARNER_HOME_ROUTE;
   const homeLabel = user?.lingualAdmin
     ? 'Go to Lingual admin dashboard'

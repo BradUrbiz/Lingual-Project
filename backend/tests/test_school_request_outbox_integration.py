@@ -157,7 +157,7 @@ class SchoolRequestOutboxIntegrationTest(unittest.TestCase):
                     self.assertIn('org_name', c.kwargs['template_data'])
                     self.assertEqual(c.kwargs['related_entity_type'], 'school_request')
                     self.assertTrue(
-                        c.kwargs['template_data']['review_url'].endswith('/app/admin/school-requests'),
+                        c.kwargs['template_data']['review_url'].endswith('/lingual-admin/requests'),
                         msg=f"review_url should point at live admin route, got: {c.kwargs['template_data']['review_url']}",
                     )
 

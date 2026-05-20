@@ -41,6 +41,6 @@ describe('LingualOrgsListPage', () => {
     renderWithRouter();
     await waitFor(() => screen.getByText('Sunset HS'));
     const link = screen.getByRole('link', { name: /sunset hs/i });
-    expect(link).toHaveAttribute('href', '/app/lingual-admin/organizations/o1');
+    expect(link).toHaveAttribute('href', '/lingual-admin/organizations/o1');
   });
 });

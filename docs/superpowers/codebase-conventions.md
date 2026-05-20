@@ -306,7 +306,7 @@ After Plan 5 lands, the following is true and consumable:
 - Both `_send_outbox_email_impl` and `_auto_restore_suspended_orgs_impl` follow the `_impl + decorated wrapper` pattern (see §7).
 
 **Frontend:**
-- `SCHOOL_ADMIN_HOME_ROUTE = '/app/admin'`. `LINGUAL_ADMIN_HOME_ROUTE = '/app/lingual-admin/requests'`.
+- `SCHOOL_ADMIN_HOME_ROUTE = '/app/admin'`. `LINGUAL_ADMIN_HOME_ROUTE = '/lingual-admin/requests'`. The Lingual admin panel is mounted at the top level (outside `/app`) so its `LingualAdminShell` chrome bypasses AppLayout's sticky header.
 - `getOnboardingDestination` order: `lingual_admin` → `school_admin` → `teacher` → `student` → completed → resume by `intended_role` → legacy → role picker.
 - `AuthContext` polls `/api/auth/verify` every 5 min on signed-in users; diff detected → state updated.
 - `frontend/src/api/lingualAdmin.ts` exports a typed client for all 12 endpoints.

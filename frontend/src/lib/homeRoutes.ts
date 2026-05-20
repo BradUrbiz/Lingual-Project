@@ -6,10 +6,12 @@ export const LEARNER_HOME_ROUTE = '/app/learn';
 export const TEACHER_HOME_ROUTE = '/app/teacher';
 // Plan 5 (Task 27) splits the post-login dispatcher:
 //   - school_admin users land on the new admin dashboard at /app/admin
-//   - Lingual-side superadmins land on /app/lingual-admin/requests
-// The legacy /app/admin/school-requests surface is retired by Plan 5.
+//   - Lingual-side superadmins land on /lingual-admin/requests
+// The Lingual admin panel is mounted at the top level (outside /app) so its
+// own shell chrome does not double-nest inside AppLayout. The legacy
+// /app/admin/school-requests surface is retired by Plan 5.
 export const SCHOOL_ADMIN_HOME_ROUTE = '/app/admin';
-export const LINGUAL_ADMIN_HOME_ROUTE = '/app/lingual-admin/requests';
+export const LINGUAL_ADMIN_HOME_ROUTE = '/lingual-admin/requests';
 
 export const STUDENT_SETUP_ROUTE = '/signup/student/setup';
 export const TEACHER_JOIN_ORG_ROUTE = '/signup/teacher/join-org';

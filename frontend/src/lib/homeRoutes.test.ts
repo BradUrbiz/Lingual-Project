@@ -137,8 +137,8 @@ describe('Plan 5 routing additions', () => {
     expect(SCHOOL_ADMIN_HOME_ROUTE).toBe('/app/admin');
   });
 
-  it('LINGUAL_ADMIN_HOME_ROUTE points at /app/lingual-admin/requests', () => {
-    expect(LINGUAL_ADMIN_HOME_ROUTE).toBe('/app/lingual-admin/requests');
+  it('LINGUAL_ADMIN_HOME_ROUTE points at /lingual-admin/requests', () => {
+    expect(LINGUAL_ADMIN_HOME_ROUTE).toBe('/lingual-admin/requests');
   });
 
   it('school_admin with no teacher role goes to /app/admin', () => {

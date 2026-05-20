@@ -39,6 +39,16 @@ class OrgSuspendedTemplateTests(unittest.TestCase):
         })
         self.assertNotIn('2026', html)
 
+    def test_reason_is_html_escaped(self):
+        _, html = self.main.render_template('org_suspended', {
+            'org_name': 'Sunset HS',
+            'reason': '<script>alert(1)</script>',
+            'suspended_until': None,
+            'support_email': 'help@l1ngual.com',
+        })
+        self.assertNotIn('<script>', html)
+        self.assertIn('&lt;script&gt;', html)
+
 
 class OrgRestoredTemplateTests(unittest.TestCase):
     @classmethod

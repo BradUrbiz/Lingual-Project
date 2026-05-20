@@ -3360,13 +3360,44 @@ def update_school_request(request_id, updates):
     get_school_request_ref(request_id).update(updates)
 
 
-def approve_school_request(request_id, reviewed_by_uid):
+def approve_school_request(
+    request_id=None,
+    reviewed_by_uid=None,
+    *,
+    reviewer_uid=None,
+    internal_note=None,
+    audit_entry=None,
+):
     """Atomically approve a pending school request and create its admin org.
 
-    Returns a dict with `request`, `org_id`, and `membership_id`.
+    Backward-compat surface (Plan 3 callers):
+        approve_school_request(request_id, reviewed_by_uid=uid)
+    No audit row is written and the legacy return keys (`request`, `org_id`,
+    `membership_id`) are populated.
+
+    Plan 5 surface (audited):
+        approve_school_request(
+            request_id=...,
+            reviewer_uid=...,
+            internal_note=...,
+            audit_entry={...},
+        )
+    The `audit_entry` dict is committed in the same transaction as the
+    org/membership/request writes (atomic-with-audit, matching Tasks 8/9/14).
+    Pre-invite teacher rows from `request.pre_invited_teachers` are also
+    written inside the transaction so a Plan 5 approval is fully atomic.
+
+    The new shape additionally returns `request_id`, `created_org_id`, and
+    `pre_invite_invitation_ids`; the legacy keys remain for Plan 3.
+
     Returns None if the request does not exist.
     Raises ValueError if the request is no longer pending.
     """
+    # Allow `reviewer_uid` (Plan 5) or `reviewed_by_uid` (Plan 3 legacy).
+    actor_uid = reviewer_uid if reviewer_uid is not None else reviewed_by_uid
+    if not actor_uid:
+        raise ValueError('reviewer_uid (or reviewed_by_uid) is required')
+
     client = get_db()
     request_ref = client.collection('school_requests').document(request_id)
     org_ref = client.collection('organizations').document()
@@ -3411,11 +3442,13 @@ def approve_school_request(request_id, reviewed_by_uid):
         }
         request_updates = {
             'status': 'approved',
-            'reviewed_by_uid': reviewed_by_uid,
+            'reviewed_by_uid': actor_uid,
             'reviewed_at': firestore.SERVER_TIMESTAMP,
             'created_org_id': org_ref.id,
             'updated_at': firestore.SERVER_TIMESTAMP,
         }
+        if internal_note:
+            request_updates['internal_note'] = internal_note
 
         transaction.set(org_ref, org_data)
         transaction.set(membership_ref, membership_data)
@@ -3429,14 +3462,66 @@ def approve_school_request(request_id, reviewed_by_uid):
         )
         transaction.update(request_ref, request_updates)
 
+        # Pre-invite teacher rows — written inside the transaction so the
+        # approve operation is fully atomic when the audited Plan 5 surface
+        # is used. (Plan 3's route still calls `record_school_request_pre_invites`
+        # after the fact for fan-out emails; that's a no-op duplicate guard is
+        # not needed here because the legacy path passes `audit_entry=None`,
+        # which means pre-invite writes are skipped — preserving Plan 3 behavior.)
+        pre_invite_ids: list[str] = []
+        if audit_entry is not None:
+            raw_emails = req.get('pre_invited_teachers') or []
+            cleaned: list[str] = []
+            for raw in raw_emails:
+                if not isinstance(raw, str):
+                    continue
+                addr = raw.strip().lower()
+                if addr:
+                    cleaned.append(addr)
+            invite_coll = client.collection('teacher_invitations')
+            for addr in cleaned:
+                ref = invite_coll.document()
+                pre_invite_ids.append(ref.id)
+                transaction.set(ref, {
+                    'org_id': org_ref.id,
+                    'uid': None,
+                    'email': addr,
+                    'name': None,
+                    'status': 'pending',
+                    'reviewed_by_uid': None,
+                    'reviewed_at': None,
+                    'created_at': firestore.SERVER_TIMESTAMP,
+                    'created_by_uid': requester_uid,
+                    'source': 'pre_invite',
+                })
+
+        # Audit row — committed in the same transaction as the business
+        # writes so a partial approval can never produce a row in the org
+        # collection without a matching audit entry. Plan 3 callers do not
+        # pass `audit_entry`, preserving the legacy un-audited behavior.
+        if audit_entry is not None:
+            audit_doc = dict(audit_entry)
+            audit_doc['created_at'] = firestore.SERVER_TIMESTAMP
+            if audit_doc.get('target_org_id') is None:
+                audit_doc['target_org_id'] = org_ref.id
+            transaction.set(
+                client.collection(LINGUAL_ADMIN_AUDIT_COLLECTION).document(),
+                audit_doc,
+            )
+
         approved = dict(req)
         approved.update({
             'id': request_id,
             'status': 'approved',
-            'reviewed_by_uid': reviewed_by_uid,
+            'reviewed_by_uid': actor_uid,
             'created_org_id': org_ref.id,
         })
         return {
+            # Plan 5 (audited) keys
+            'request_id': request_id,
+            'created_org_id': org_ref.id,
+            'pre_invite_invitation_ids': pre_invite_ids,
+            # Legacy (Plan 3) keys — kept for backward compat.
             'request': approved,
             'org_id': org_ref.id,
             'membership_id': membership_ref.id,

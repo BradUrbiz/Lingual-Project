@@ -25,12 +25,15 @@ from flask import Blueprint, jsonify, request
 
 from backend.route_deps import RouteDeps
 from backend.routes.school_requests import _serialize_request
+from backend.services.audit import AuditAction
 from backend.services.audit_utils import (  # noqa: F401  -- re-export
     client_ip as _client_ip,
     hash_ip as _hash_ip,
     public_base_url as _public_base_url,
     user_agent as _user_agent,
 )
+
+MAX_INTERNAL_NOTE_LEN = 2000
 
 
 def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
@@ -109,5 +112,54 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
         if not row:
             return jsonify({'error': 'not_found'}), 404
         return jsonify(_serialize_request(row)), 200
+
+    @bp.post('/requests/<request_id>/approve')
+    def approve_request(request_id):
+        try:
+            uid = deps.get_current_user_uid()
+            _require_lingual_admin(uid)
+        except PermissionError as exc:
+            return jsonify({'error': str(exc)}), 403
+
+        body = request.get_json(silent=True) or {}
+        internal_note = (body.get('internalNote') or '').strip() or None
+        if internal_note and len(internal_note) > MAX_INTERNAL_NOTE_LEN:
+            return jsonify({'error': 'internalNote too long'}), 400
+
+        # Build the audit doc here (not via AuditLogger.log) so it can be
+        # committed in the same Firestore batch as the org/membership/request
+        # writes. The helper accepts `audit_entry=` and writes it
+        # atomically; on failure both the business write and the audit
+        # row are rolled back together.
+        audit_entry = deps.audit_logger.build_audit_doc(
+            actor_uid=uid,
+            action=AuditAction.REQUEST_APPROVED,
+            target_type='school_request',
+            target_id=request_id,
+            target_org_id=None,
+            metadata={'internal_note': internal_note},
+            ip_hash=_hash_ip(_client_ip()),
+            user_agent=_user_agent(),
+        )
+
+        try:
+            result = deps.db.approve_school_request(
+                request_id=request_id,
+                reviewer_uid=uid,
+                internal_note=internal_note,
+                audit_entry=audit_entry,
+            )
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+
+        if not result:
+            return jsonify({'error': 'not_found'}), 404
+
+        return jsonify({
+            'requestId': result.get('request_id'),
+            'createdOrgId': result.get('created_org_id'),
+            'membershipId': result.get('membership_id'),
+            'preInviteInvitationIds': result.get('pre_invite_invitation_ids') or [],
+        }), 200
 
     return bp

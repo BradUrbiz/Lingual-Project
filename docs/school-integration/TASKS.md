@@ -123,6 +123,7 @@ Owner: Engineering + Product
 - [ ] Bulk export of org audit feed as CSV — v1.5.
 - [ ] Internationalize Lingual admin panel UI (en-only in v1).
 - [ ] Wire `school_request_reminder_to_lingual` once the outbox sweep gap (LIMITATIONS #21) is closed.
+- [ ] Delete orphan Firestore composite index `enrollments(status, student_uid, updated_at DESC)` (LIMITATIONS #41) — safe, redundant with the IaC-managed `(student_uid, status, updated_at DESC)` index. Targeted `gcloud firestore indexes composite delete` command in LIMITATIONS #41.
 - [ ] Reminder email for inactive suspended orgs (≥30 days suspended_until in past with auto-restore disabled) — needs product decision before launch.
 
 ## Phase 3: Canvas content and assignment authoring

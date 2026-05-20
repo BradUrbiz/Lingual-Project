@@ -329,3 +329,23 @@ business actions complete normally but do not produce those emails.
     `_snakeize_cursor` helpers in `backend/routes/lingual_admin.py`. DB
     helpers continue to use snake_case keys internally (matching Firestore
     field names); the transformation lives strictly at the route boundary.
+
+41. **Production Firestore has 1 orphan composite index not managed by
+    `firestore.indexes.json`.** `gcloud firestore indexes composite list`
+    reports an extra index on `enrollments` with fields
+    `(status ASC, student_uid ASC, updated_at DESC)` (id `CICAgOjXh4EK`,
+    state `READY`). The matching IaC-managed index — same fields in
+    `(student_uid, status, updated_at)` order — already serves
+    `database.list_student_enrollments(student_uid, status)`. Firestore
+    matches composite indexes to equality-filter queries regardless of
+    which equality field comes first in the index, so the orphan is
+    genuinely redundant. Almost certainly created via the Firebase console
+    "Create index" error link before the IaC entry was added; never
+    appears in any commit of `firestore.indexes.json` (verified via
+    `git log -p`). Functional impact: none. Cost impact: one index's
+    storage on a small admin-side collection. Symptom: every
+    `firebase deploy --only firestore:indexes` prints the line "there are
+    1 indexes defined in your project that are not present in your
+    firestore indexes file." Cleanup is safe, targeted, and deferred to
+    v1.5 so the Plan 5 merge stays focused:
+    `gcloud firestore indexes composite delete projects/lingu-480600/databases/\(default\)/collectionGroups/enrollments/indexes/CICAgOjXh4EK`

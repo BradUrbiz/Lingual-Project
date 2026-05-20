@@ -181,6 +181,13 @@ service cloud.firestore {
       allow read, write: if false;  // service-account only; admin SDK bypasses
     }
 
+    match /lingual_admin_audit/{auditId} {
+      // Service account only — clients never see this collection directly.
+      // The backend (with admin credentials) writes rows and the lingual_admin
+      // routes read them; client SDKs cannot.
+      allow read, write: if false;
+    }
+
     match /canvas_connections/{connectionId} {
       allow read, write: if false;
     }

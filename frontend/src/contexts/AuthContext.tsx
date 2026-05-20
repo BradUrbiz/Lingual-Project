@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import {
   EmailAuthProvider,
   onAuthStateChanged,
@@ -78,12 +78,34 @@ const getAuthErrorMessage = (err: unknown, fallback: string) => {
   }
 };
 
+const POLL_INTERVAL_MS = 5 * 60 * 1000;
+
+export function hasMembershipDiff(prev: User | null, next: User | null): boolean {
+  if (!prev || !next) return prev !== next;
+  if (prev.lingualAdmin !== next.lingualAdmin) return true;
+  const prevRoles = JSON.stringify((prev.activeRoles || []).slice().sort());
+  const nextRoles = JSON.stringify((next.activeRoles || []).slice().sort());
+  if (prevRoles !== nextRoles) return true;
+  const prevMems = JSON.stringify(
+    (prev.memberships || [])
+      .map((m) => `${m.orgId ?? ''}:${(m.roles || []).slice().sort().join(',')}:${m.status}`)
+      .sort(),
+  );
+  const nextMems = JSON.stringify(
+    (next.memberships || [])
+      .map((m) => `${m.orgId ?? ''}:${(m.roles || []).slice().sort().join(',')}:${m.status}`)
+      .sort(),
+  );
+  return prevMems !== nextMems;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const updateAvatarUrl = (url: string) => setAvatarUrl(url);
 
@@ -148,6 +170,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => unsubscribe();
   }, []);
+
+  // Periodic re-verify so role/membership/suspension changes made by an admin
+  // propagate to the active session without requiring sign-out.
+  // See LIMITATIONS #28.
+  useEffect(() => {
+    if (!user) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+    pollRef.current = setInterval(async () => {
+      try {
+        const fbUser = auth.currentUser;
+        if (!fbUser) return;
+        const idToken = await fbUser.getIdToken();
+        const result = await verifyToken(idToken);
+        if (!result.success || !result.user) return;
+        const next = result.user as User;
+        setUser((prev) => (hasMembershipDiff(prev, next) ? next : prev));
+      } catch (err) {
+        console.warn('[auth] periodic verify failed', err);
+      }
+    }, POLL_INTERVAL_MS);
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+    // We intentionally key only on user?.uid; the effect body uses setUser(prev
+    // => …) and reads auth.currentUser directly, so the latest `user` object
+    // is not needed inside the interval callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
 
   const signInWithEmail = async (email: string, password: string) => {
     setLoading(true);

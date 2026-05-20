@@ -1176,6 +1176,63 @@ def list_org_audit_events(*, org_id: str, limit: int = 50) -> list:
     return rows
 
 
+# --- Plan 5 lingual-admin overview dashboard helpers ---------------------
+#
+# Four read-only aggregates that back GET /api/lingual-admin/overview:
+# pending request count, org status counts, recent-request velocity, and
+# the activity feed. Kept lightweight — no per-doc reads beyond the feed.
+
+
+def count_school_requests_pending() -> int:
+    """Count school_requests with status == 'pending'."""
+    q = (
+        get_db()
+        .collection('school_requests')
+        .where('status', '==', 'pending')
+    )
+    snap = q.count().get()
+    return snap[0][0].value if snap else 0
+
+
+def count_organizations_by_status(status: str) -> int:
+    """Count organizations filtered by status. Raises ValueError on unknown status."""
+    _validate_org_status(status)
+    q = (
+        get_db()
+        .collection('organizations')
+        .where('status', '==', status)
+    )
+    snap = q.count().get()
+    return snap[0][0].value if snap else 0
+
+
+def count_school_requests_since(*, since) -> int:
+    """Count school_requests created at-or-after the given timestamp."""
+    q = (
+        get_db()
+        .collection('school_requests')
+        .where('created_at', '>=', since)
+    )
+    snap = q.count().get()
+    return snap[0][0].value if snap else 0
+
+
+def list_recent_audit_events(*, limit: int = 20) -> list:
+    """Recent lingual-admin audit rows across all targets, newest first."""
+    q = (
+        get_db()
+        .collection(LINGUAL_ADMIN_AUDIT_COLLECTION)
+        .order_by('created_at', direction='DESCENDING')
+        .limit(limit)
+    )
+    rows = []
+    for a in q.stream():
+        data = a.to_dict() or {}
+        data['id'] = a.id
+        rows.append(data)
+    return rows
+
+
 def list_school_admin_emails(org_id: str):
     """Return [{uid, email, name}] for every active school_admin of the org."""
     membership_docs = (

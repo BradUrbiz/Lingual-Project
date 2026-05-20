@@ -13,6 +13,8 @@ Plan 5 cannot drift on the audit trust boundary.
 """
 from __future__ import annotations
 
+import datetime
+
 from flask import Blueprint, jsonify
 
 from backend.route_deps import RouteDeps
@@ -40,5 +42,24 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
         except PermissionError as exc:
             return jsonify({'error': str(exc)}), 403
         return jsonify({'ok': True}), 200
+
+    @bp.get('/overview')
+    def get_overview():
+        try:
+            uid = deps.get_current_user_uid()
+            _require_lingual_admin(uid)
+        except PermissionError as exc:
+            return jsonify({'error': str(exc)}), 403
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        seven_days_ago = now - datetime.timedelta(days=7)
+        tiles = {
+            'pendingRequests': deps.db.count_school_requests_pending(),
+            'activeOrgs': deps.db.count_organizations_by_status('active'),
+            'suspendedOrgs': deps.db.count_organizations_by_status('suspended'),
+            'newRequestsLast7d': deps.db.count_school_requests_since(since=seven_days_ago),
+        }
+        feed = deps.db.list_recent_audit_events(limit=20)
+        return jsonify({'tiles': tiles, 'recentActivity': feed}), 200
 
     return bp

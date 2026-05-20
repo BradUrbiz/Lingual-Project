@@ -335,13 +335,13 @@ def _restore_org_via_admin_sdk(org_id: str, org_name: str = '') -> None:
 
 
 def _enqueue_outbox_for_restore(org_id: str, org_name: str) -> None:
-    """Queue one ``org_restored`` outbox email per active school_admin.
+    """Queue one ``org_restored`` email per active school_admin.
 
-    The outbox doc shape matches `backend.services.outbox.enqueue_outbox_email`
-    (nested ``recipient: {email, name}``) so the existing
-    `send_outbox_email` trigger can consume it. We cannot import the
-    backend helper from the Cloud Functions package — they deploy
-    independently — so the shape is duplicated here.
+    WARNING: keep this doc shape in sync with
+    backend/services/outbox.py::enqueue_outbox_email. There is no shared
+    constant — Cloud Functions deploys a separate dependency tree and
+    cannot import the backend module. If you add a field there, add it
+    here too.
     """
     db = _fb_firestore.client()
     org_snap = db.collection('organizations').document(org_id).get()

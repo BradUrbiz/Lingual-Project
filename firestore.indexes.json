@@ -341,6 +341,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "organizations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "suspended_until",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

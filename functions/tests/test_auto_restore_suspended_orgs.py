@@ -105,6 +105,56 @@ class AutoRestoreSuspendedOrgsTests(unittest.TestCase):
             _auto_restore_suspended_orgs_impl()  # no raise
             mock_restore.assert_called_once_with('o1', 'A')
 
+    def test_enqueue_outbox_for_restore_writes_correct_shape(self):
+        """Outbox doc shape must match what send_outbox_email consumes
+        (nested recipient.{email,name}, template_id, template_data, status,
+        attempt_count, scheduled_for, created_at)."""
+        with patch('firebase_admin.initialize_app'):
+            from functions.main import _enqueue_outbox_for_restore
+        with patch('functions.main._fb_firestore') as mock_fb, \
+             patch.dict('os.environ', {'PUBLIC_BASE_URL': 'https://test.example'}):
+            db = MagicMock()
+            mock_fb.client.return_value = db
+
+            org_doc = MagicMock()
+            org_doc.exists = True
+            org_doc.to_dict.return_value = {'school_admin_uids': ['u1']}
+
+            user_doc = MagicMock()
+            user_doc.exists = True
+            user_doc.to_dict.return_value = {
+                'email': 'admin@example.com',
+                'profile': {'display_name': 'Alice'},
+            }
+
+            org_col = MagicMock()
+            org_col.document.return_value.get.return_value = org_doc
+            users_col = MagicMock()
+            users_col.document.return_value.get.return_value = user_doc
+            outbox_col = MagicMock()
+
+            def collection_router(name):
+                return {
+                    'organizations': org_col,
+                    'users': users_col,
+                    'outbox_emails': outbox_col,
+                }[name]
+            db.collection.side_effect = collection_router
+
+            _enqueue_outbox_for_restore('o1', 'Sunset HS')
+
+            outbox_col.add.assert_called_once()
+            doc = outbox_col.add.call_args[0][0]
+            # Verify shape matches send_outbox_email consumer
+            self.assertEqual(doc['status'], 'pending')
+            self.assertEqual(doc['template_id'], 'org_restored')
+            self.assertEqual(doc['recipient'], {'email': 'admin@example.com', 'name': 'Alice'})
+            self.assertEqual(doc['template_data']['org_name'], 'Sunset HS')
+            self.assertEqual(doc['template_data']['dashboard_url'], 'https://test.example/app/admin')
+            self.assertEqual(doc['attempt_count'], 0)
+            self.assertIn('created_at', doc)
+            self.assertIn('scheduled_for', doc)
+
 
 if __name__ == '__main__':
     unittest.main()

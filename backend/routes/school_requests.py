@@ -499,7 +499,11 @@ def create_school_requests_blueprint(deps: RouteDeps) -> Blueprint:
             _require_lingual_admin(uid)
 
             status_filter = request.args.get('status') or None
-            requests_list = deps.db.list_school_requests(status_filter=status_filter)
+            result = deps.db.list_school_requests(status_filter=status_filter)
+            # `list_school_requests` returns `{'items': [...], 'next_cursor': ...}`
+            # since the Plan 5 extension. Pre-Plan-5 callers care only about
+            # the rows, so extract `items` and keep the legacy response shape.
+            requests_list = result['items'] if isinstance(result, dict) else result
             return jsonify({
                 'success': True,
                 'requests': [_serialize_request(r) for r in requests_list],

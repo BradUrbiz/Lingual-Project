@@ -57,12 +57,24 @@ class FakeSchoolRequestDb(FakeDbBase):
         matches.sort(key=lambda r: r.get('created_at') or '', reverse=True)
         return dict(matches[0])
 
-    def list_school_requests(self, status_filter=None):
+    def list_school_requests(self, *, status_filter=None, school_type=None,
+                             country=None, requested_after=None,
+                             requested_before=None, sort='requested_at_desc',
+                             limit=50, cursor=None):
         results = list(self.school_requests.values())
         if status_filter:
             results = [r for r in results if r.get('status') == status_filter]
-        results.sort(key=lambda r: r.get('created_at') or '', reverse=True)
-        return [dict(r) for r in results]
+        if school_type:
+            results = [r for r in results if r.get('school_type') == school_type]
+        if country:
+            results = [r for r in results if r.get('country') == country]
+        if sort == 'name':
+            results.sort(key=lambda r: r.get('school_name') or '')
+        elif sort == 'requested_at_asc':
+            results.sort(key=lambda r: r.get('created_at') or '')
+        else:  # 'requested_at_desc' default
+            results.sort(key=lambda r: r.get('created_at') or '', reverse=True)
+        return {'items': [dict(r) for r in results[:limit]], 'next_cursor': None}
 
     def update_school_request(self, request_id, updates):
         if request_id in self.school_requests:

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import datetime
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 from backend.route_deps import RouteDeps
 from backend.services.audit_utils import (  # noqa: F401  -- re-export
@@ -62,4 +62,56 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
         feed = deps.db.list_recent_audit_events(limit=20)
         return jsonify({'tiles': tiles, 'recentActivity': feed}), 200
 
+    @bp.get('/requests')
+    def list_requests():
+        try:
+            uid = deps.get_current_user_uid()
+            _require_lingual_admin(uid)
+        except PermissionError as exc:
+            return jsonify({'error': str(exc)}), 403
+
+        status = request.args.get('status') or None
+        school_type = request.args.get('schoolType') or None
+        country = request.args.get('country') or None
+        sort = request.args.get('sort', 'requested_at_desc')
+
+        try:
+            result = deps.db.list_school_requests(
+                status_filter=status,
+                school_type=school_type,
+                country=country,
+                sort=sort,
+            )
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+
+        return jsonify({
+            'items': [_camel_request_row(r) for r in result['items']],
+            'nextCursor': result.get('next_cursor'),
+        }), 200
+
     return bp
+
+
+def _camel_request_row(row: dict) -> dict:
+    """snake_case Firestore row -> camelCase response row.
+
+    Kept module-level so other lingual-admin routes (request detail,
+    approve/reject responses) can reuse the same mapping.
+    """
+    out = dict(row)
+    rename = {
+        'school_name': 'schoolName',
+        'org_type': 'orgType',
+        'school_type': 'schoolType',
+        'created_at': 'createdAt',
+        'requester_uid': 'requesterUid',
+        'requester_email': 'requesterEmail',
+        'requester_name': 'requesterName',
+        'rejection_reason': 'rejectionReason',
+        'rejection_category': 'rejectionCategory',
+    }
+    for src, dst in rename.items():
+        if src in out:
+            out[dst] = out.pop(src)
+    return out

@@ -3286,18 +3286,72 @@ def get_user_school_request(uid):
     return None
 
 
-def list_school_requests(status_filter=None):
-    """List school requests, optionally filtered by status."""
+ALLOWED_REQUEST_SORTS = frozenset({'requested_at_desc', 'requested_at_asc', 'name'})
+
+
+def list_school_requests(
+    *,
+    status_filter=None,
+    school_type=None,
+    country=None,
+    requested_after=None,
+    requested_before=None,
+    sort='requested_at_desc',
+    limit=50,
+    cursor=None,
+):
+    """List school requests with filters, sort, and a deterministic cursor.
+
+    Always returns a dict ``{'items': [...], 'next_cursor': ...}``. Callers
+    in Plan 3 (`admin_list_school_requests`) and Plan 5 (the lingual-admin
+    requests list) both go through this entry point so that the Firestore
+    query shape, audit-relevant filters, and pagination semantics stay
+    consistent across surfaces.
+    """
+    if sort not in ALLOWED_REQUEST_SORTS:
+        raise ValueError(f'Invalid sort {sort!r}')
+
     query = get_school_requests_collection()
     if status_filter:
         query = query.where('status', '==', status_filter)
-    docs = query.order_by('created_at', direction=firestore.Query.DESCENDING).stream()
-    results = []
-    for doc in docs:
+    if school_type:
+        query = query.where('school_type', '==', school_type)
+    if country:
+        query = query.where('country', '==', country)
+    if requested_after is not None:
+        query = query.where('created_at', '>=', requested_after)
+    if requested_before is not None:
+        query = query.where('created_at', '<=', requested_before)
+
+    if sort == 'requested_at_desc':
+        query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
+    elif sort == 'requested_at_asc':
+        query = query.order_by('created_at')
+    else:  # 'name'
+        query = query.order_by('school_name')
+    query = query.order_by('__name__').limit(limit)
+
+    if cursor and cursor.get('id'):
+        query = query.start_after(cursor.get('leading_value'), cursor['id'])
+
+    items = []
+    last_doc = None
+    for doc in query.stream():
         data = doc.to_dict() or {}
         data['id'] = doc.id
-        results.append(data)
-    return results
+        items.append(data)
+        last_doc = doc
+
+    next_cursor = None
+    if last_doc is not None and len(items) == limit:
+        last_data = last_doc.to_dict() or {}
+        if sort in ('requested_at_desc', 'requested_at_asc'):
+            leading_value = last_data.get('created_at')
+        else:
+            leading_value = last_data.get('school_name')
+        next_cursor = {'leading_value': leading_value, 'id': last_doc.id}
+
+    return {'items': items, 'next_cursor': next_cursor}
 
 
 def update_school_request(request_id, updates):

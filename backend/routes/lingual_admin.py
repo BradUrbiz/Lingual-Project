@@ -37,6 +37,10 @@ from backend.services.outbox import OutboxTemplate, enqueue_outbox_email
 
 MAX_INTERNAL_NOTE_LEN = 2000
 
+ALLOWED_DECLINE_CATEGORIES = frozenset({
+    'info_missing', 'fraud_risk', 'out_of_scope', 'duplicate', 'other',
+})
+
 
 def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
     bp = Blueprint('lingual_admin', __name__, url_prefix='/api/lingual-admin')
@@ -229,5 +233,95 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
             'membershipId': result.get('membership_id'),
             'preInviteInvitationIds': result.get('pre_invite_invitation_ids') or [],
         }), 200
+
+    @bp.post('/requests/<request_id>/decline')
+    def decline_request(request_id):
+        try:
+            uid = deps.get_current_user_uid()
+            _require_lingual_admin(uid)
+        except PermissionError as exc:
+            return jsonify({'error': str(exc)}), 403
+
+        body = request.get_json(silent=True) or {}
+        reason = (body.get('reason') or '').strip()
+        category = (body.get('category') or '').strip()
+        internal_note = (body.get('internalNote') or '').strip() or None
+        if not reason:
+            return jsonify({'error': 'reason required'}), 400
+        if not category:
+            return jsonify({'error': 'category required'}), 400
+        if category not in ALLOWED_DECLINE_CATEGORIES:
+            return jsonify({'error': 'invalid category'}), 400
+        if internal_note and len(internal_note) > MAX_INTERNAL_NOTE_LEN:
+            return jsonify({'error': 'internalNote too long'}), 400
+
+        # Build the audit doc here (not via AuditLogger.log) so it can be
+        # committed in the same Firestore batch as the request update. The
+        # helper accepts `audit_entry=` and writes it atomically; on failure
+        # both the business write and the audit row are rolled back together.
+        audit_entry = deps.audit_logger.build_audit_doc(
+            actor_uid=uid,
+            action=AuditAction.REQUEST_DECLINED,
+            target_type='school_request',
+            target_id=request_id,
+            target_org_id=None,
+            metadata={
+                'reason': reason,
+                'category': category,
+                'internal_note': internal_note,
+            },
+            ip_hash=_hash_ip(_client_ip()),
+            user_agent=_user_agent(),
+        )
+
+        try:
+            result = deps.db.reject_school_request(
+                request_id=request_id,
+                reviewer_uid=uid,
+                reason=reason,
+                category=category,
+                internal_note=internal_note,
+                audit_entry=audit_entry,
+            )
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+
+        if not result:
+            return jsonify({'error': 'not_found'}), 404
+
+        # Side effects after a successful decline — mirror Plan 3's
+        # `admin_reject_school_request` so Task 24 can retire the legacy
+        # endpoint without losing UX. The decline does NOT change
+        # onboarding_state (Plan 3 leaves the requester at `awaiting_lingual`
+        # so they can re-submit). Best-effort: outbox failures are logged but
+        # do not fail the response (the atomic Firestore write already
+        # succeeded).
+        req_row = deps.db.get_school_request(request_id) or {}
+        requester_email = req_row.get('requester_email') or ''
+        requester_name = req_row.get('requester_name')
+        school_name = req_row.get('school_name')
+
+        if requester_email:
+            try:
+                enqueue_outbox_email(
+                    db=database.get_db(),
+                    recipient_email=requester_email,
+                    recipient_name=requester_name,
+                    template=OutboxTemplate.SCHOOL_REQUEST_DECLINED,
+                    template_data={
+                        'org_name': school_name,
+                        'requester_name': requester_name,
+                        'reason': reason,
+                        'category': category,
+                        'support_url': 'mailto:support@l1ngual.com',
+                    },
+                    related_entity_type='school_request',
+                    related_entity_id=request_id,
+                    created_by_uid=uid,
+                )
+            except Exception as exc:
+                print(f'[outbox] school_request_declined enqueue failed: {exc}')
+
+        return jsonify({'requestId': result.get('request_id')}), 200
 
     return bp

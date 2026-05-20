@@ -3530,6 +3530,93 @@ def approve_school_request(
     return _approve(transaction)
 
 
+def reject_school_request(
+    *,
+    request_id,
+    reviewer_uid,
+    reason,
+    category,
+    internal_note=None,
+    audit_entry=None,
+):
+    """Atomically reject a pending school request.
+
+    Mirrors `approve_school_request`'s atomic-with-audit pattern (Tasks 8/9/14/16):
+    when `audit_entry` is provided, the audit row is committed in the same
+    Firestore transaction as the request-status update. Plan 3 still uses
+    `update_school_request` directly, so this helper is exclusively the
+    Plan 5 surface — `audit_entry=None` is treated as a programmer error
+    (an unaudited reject path would defeat the trust boundary).
+
+    Args:
+        request_id: school request doc id.
+        reviewer_uid: uid of the Lingual admin issuing the decline.
+        reason: free-form rejection reason (required; surfaced in email).
+        category: one of `ALLOWED_REJECTION_CATEGORIES` (required).
+        internal_note: optional admin-only note (not surfaced in email).
+        audit_entry: dict from `AuditLogger.build_audit_doc(...)`. Required;
+            committed in the same transaction so a partial reject can never
+            produce a status change without a matching audit row.
+
+    Returns:
+        `{'request_id': <id>}` on success.
+
+    Raises:
+        ValueError: if the request doesn't exist, is not pending, the reason
+            is empty, the category is invalid, or `audit_entry` is None.
+    """
+    if not reviewer_uid:
+        raise ValueError('reviewer_uid is required')
+    if not reason or not str(reason).strip():
+        raise ValueError('reason is required')
+    if not category:
+        raise ValueError('category is required')
+    if category not in ALLOWED_REJECTION_CATEGORIES:
+        raise ValueError(f'invalid category: {category!r}')
+    if audit_entry is None:
+        raise ValueError('audit_entry is required')
+
+    client = get_db()
+    request_ref = client.collection('school_requests').document(request_id)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _reject(transaction):
+        snap = request_ref.get(transaction=transaction)
+        if not snap.exists:
+            raise ValueError(f'Request {request_id} not found')
+
+        req = snap.to_dict() or {}
+        if req.get('status') != 'pending':
+            raise ValueError(
+                f'Request {request_id} is not pending (status={req.get("status")!r})'
+            )
+
+        request_updates = {
+            'status': 'rejected',
+            'reviewed_by_uid': reviewer_uid,
+            'reviewed_at': firestore.SERVER_TIMESTAMP,
+            'rejection_reason': reason,
+            'rejection_category': category,
+            'updated_at': firestore.SERVER_TIMESTAMP,
+        }
+        if internal_note:
+            request_updates['internal_note'] = internal_note
+
+        transaction.update(request_ref, request_updates)
+
+        audit_doc = dict(audit_entry)
+        audit_doc['created_at'] = firestore.SERVER_TIMESTAMP
+        transaction.set(
+            client.collection(LINGUAL_ADMIN_AUDIT_COLLECTION).document(),
+            audit_doc,
+        )
+
+        return {'request_id': request_id}
+
+    return _reject(transaction)
+
+
 def cancel_school_request(request_id, uid):
     """Mark a pending school request as cancelled.
 

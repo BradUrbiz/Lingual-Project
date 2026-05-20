@@ -289,6 +289,26 @@ ALLOWED_ORG_TYPES = frozenset({
     'school',
 })
 
+# --- Organization status -------------------------------------------------
+ORG_STATUS_ACTIVE = 'active'
+ORG_STATUS_SUSPENDED = 'suspended'
+ORG_STATUS_ARCHIVED = 'archived'
+
+ALLOWED_ORG_STATUSES = frozenset({
+    ORG_STATUS_ACTIVE,
+    ORG_STATUS_SUSPENDED,
+    ORG_STATUS_ARCHIVED,
+})
+
+
+def _validate_org_status(value: str) -> str:
+    """Raise ValueError if value is not a known org status."""
+    if not value or value not in ALLOWED_ORG_STATUSES:
+        raise ValueError(
+            f'Invalid org status {value!r}; allowed: {sorted(ALLOWED_ORG_STATUSES)}'
+        )
+    return value
+
 ALLOWED_SCHOOL_TYPES = frozenset({
     'middle',
     'high',

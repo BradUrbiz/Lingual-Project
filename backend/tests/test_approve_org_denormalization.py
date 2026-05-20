@@ -27,6 +27,25 @@ _PENDING_REQUEST = {
     'requester_uid': 'u-requester',
 }
 
+# A wizard-shaped request matching what Plan 3 actually submits.
+# Mirrors `_build_school_request_payload(enriched=...)` field names.
+_PENDING_WIZARD_REQUEST = {
+    'status': 'pending',
+    'school_name': 'Bravo Elementary',
+    'org_type': 'school',
+    'requester_uid': 'u-wizard',
+    'website_url': 'https://bravo.example.edu',
+    'school_type': 'elementary',
+    'public_private': 'public',        # NOTE: request field name (org uses `public_or_private`)
+    'grade_size': '50-200',
+    'country': 'US',                    # denormalized in #47
+    'location': {
+        'country': 'US',
+        'state': 'CA',
+        'city': 'Bravoville',
+    },
+}
+
 _AUDIT_ENTRY = {
     'actor_uid': 'admin',
     'action': 'request_approved',
@@ -38,8 +57,12 @@ _AUDIT_ENTRY = {
 }
 
 
-def _run_approve(transactional_passthrough: bool = True):
-    """Helper: build mocks, call approve_school_request, return the transaction mock."""
+def _run_approve(transactional_passthrough: bool = True, *, request_doc=None):
+    """Helper: build mocks, call approve_school_request, return the transaction mock.
+
+    Pass ``request_doc`` to override the stub pending request (defaults to
+    ``_PENDING_REQUEST`` for the original denormalization tests).
+    """
     request_ref = MagicMock(name='request_ref')
     org_ref = MagicMock(name='org_ref')
     org_ref.id = 'org-new'
@@ -73,7 +96,7 @@ def _run_approve(transactional_passthrough: bool = True):
 
     snap = MagicMock()
     snap.exists = True
-    snap.to_dict.return_value = dict(_PENDING_REQUEST)
+    snap.to_dict.return_value = dict(request_doc if request_doc is not None else _PENDING_REQUEST)
     request_ref.get.return_value = snap
 
     # Patch `firestore.transactional` to a passthrough so the inner `_approve`
@@ -131,6 +154,62 @@ class ApproveOrgDenormalizationTests(unittest.TestCase):
         self.assertEqual(payload.get('type'), 'school')
         self.assertEqual(payload.get('status'), 'active')
         self.assertEqual(payload.get('pilot_stage'), 'beta')
+
+
+class ApproveOrgWizardPayloadTests(unittest.TestCase):
+    """Round-4 regression: Plan 3 wizard's enriched fields (school_type,
+    country, state, website_url, public_or_private, grade_size) must
+    propagate from the request to the new org so the Plan 5 list/detail
+    surfaces don't render blanks. See LIMITATIONS #49.
+    """
+
+    def _org_payload(self, transaction_mock, org_ref):
+        for call in transaction_mock.set.call_args_list:
+            args, _ = call
+            if args and args[0] is org_ref:
+                return args[1]
+        raise AssertionError('transaction.set(org_ref, ...) was never called')
+
+    def test_wizard_metadata_propagates_to_org(self):
+        transaction, org_ref = _run_approve(request_doc=_PENDING_WIZARD_REQUEST)
+        payload = self._org_payload(transaction, org_ref)
+        self.assertEqual(payload.get('school_type'), 'elementary')
+        self.assertEqual(payload.get('country'), 'US')
+        self.assertEqual(payload.get('state'), 'CA')
+        self.assertEqual(payload.get('website_url'), 'https://bravo.example.edu')
+        self.assertEqual(payload.get('grade_size'), '50-200')
+
+    def test_public_private_remapped_to_public_or_private(self):
+        """Field name maps from request schema (`public_private`) to org
+        schema (`public_or_private`) — `list_organizations` filters on the
+        latter. Without this mapping the publicOrPrivate filter would miss
+        every newly approved wizard org."""
+        transaction, org_ref = _run_approve(request_doc=_PENDING_WIZARD_REQUEST)
+        payload = self._org_payload(transaction, org_ref)
+        self.assertEqual(payload.get('public_or_private'), 'public')
+        # Request-side name must NOT leak to the org doc.
+        self.assertNotIn('public_private', payload)
+
+    def test_country_falls_back_to_location_country(self):
+        """Pre-#47 wizard rows only have `location.country`. Approval must
+        still copy that into the top-level `country` field so the org list
+        country filter works."""
+        legacy_wizard = dict(_PENDING_WIZARD_REQUEST)
+        legacy_wizard.pop('country')  # simulate pre-denormalization row
+        transaction, org_ref = _run_approve(request_doc=legacy_wizard)
+        payload = self._org_payload(transaction, org_ref)
+        self.assertEqual(payload.get('country'), 'US')
+
+    def test_minimal_request_does_not_error(self):
+        """Defensive: requests without any wizard fields (e.g. legacy
+        scripted submissions or smoke tests) still approve cleanly."""
+        transaction, org_ref = _run_approve()  # uses _PENDING_REQUEST (no wizard fields)
+        payload = self._org_payload(transaction, org_ref)
+        # New fields are present but None — the org doc has stable shape.
+        self.assertIn('school_type', payload)
+        self.assertIsNone(payload.get('school_type'))
+        self.assertIsNone(payload.get('public_or_private'))
+        self.assertIsNone(payload.get('state'))
 
 
 if __name__ == '__main__':

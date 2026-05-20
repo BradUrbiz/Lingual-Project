@@ -357,5 +357,98 @@ class TestCanvasCourseContentIndex(FirestoreIndexTestBase):
         self.assertEqual(titles, ["Module 1 Item 1", "Module 1 Item 2", "Module 2 Item 1"])
 
 
+class TestOrganizationIndexes(FirestoreIndexTestBase):
+    """Indexes on the organizations collection (Plan 5 list_organizations filter).
+
+    Each test exercises one equality filter + ``order_by('name_lower')``,
+    matching the shape of `database.list_organizations`. Without the
+    matching composite index in `firestore.indexes.json`, the emulator
+    (and production Firestore) raise `FAILED_PRECONDITION`.
+    """
+
+    def _seed_orgs(self):
+        self._create_doc(
+            "organizations",
+            name="Alpha HS",
+            name_lower="alpha hs",
+            status="active",
+            school_type="high",
+            country="US",
+            public_or_private="public",
+        )
+        self._create_doc(
+            "organizations",
+            name="Bravo Elementary",
+            name_lower="bravo elementary",
+            status="active",
+            school_type="elementary",
+            country="US",
+            public_or_private="charter",
+        )
+        self._create_doc(
+            "organizations",
+            name="Charlie K-12",
+            name_lower="charlie k-12",
+            status="suspended",
+            school_type="k12",
+            country="CA",
+            public_or_private="private",
+        )
+
+    def test_query_orgs_by_status_ordered_by_name_lower(self):
+        """Compound query: status + order_by name_lower
+        (used by list_organizations with status filter; default UI path)."""
+        self._seed_orgs()
+        results = list(
+            self.db.collection("organizations")
+            .where("status", "==", "active")
+            .order_by("name_lower")
+            .stream()
+        )
+        self.assertEqual(len(results), 2)
+        names = [r.to_dict()["name_lower"] for r in results]
+        self.assertEqual(names, ["alpha hs", "bravo elementary"])
+
+    def test_query_orgs_by_school_type_ordered_by_name_lower(self):
+        """Compound query: school_type + order_by name_lower
+        (used by list_organizations with schoolType filter)."""
+        self._seed_orgs()
+        results = list(
+            self.db.collection("organizations")
+            .where("school_type", "==", "elementary")
+            .order_by("name_lower")
+            .stream()
+        )
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].to_dict()["name"], "Bravo Elementary")
+
+    def test_query_orgs_by_country_ordered_by_name_lower(self):
+        """Compound query: country + order_by name_lower
+        (used by list_organizations with country filter)."""
+        self._seed_orgs()
+        results = list(
+            self.db.collection("organizations")
+            .where("country", "==", "US")
+            .order_by("name_lower")
+            .stream()
+        )
+        self.assertEqual(len(results), 2)
+        names = {r.to_dict()["name"] for r in results}
+        self.assertEqual(names, {"Alpha HS", "Bravo Elementary"})
+
+    def test_query_orgs_by_public_or_private_ordered_by_name_lower(self):
+        """Compound query: public_or_private + order_by name_lower
+        (used by list_organizations with publicOrPrivate filter)."""
+        self._seed_orgs()
+        results = list(
+            self.db.collection("organizations")
+            .where("public_or_private", "==", "public")
+            .order_by("name_lower")
+            .stream()
+        )
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].to_dict()["name"], "Alpha HS")
+
+
 if __name__ == "__main__":
     unittest.main()

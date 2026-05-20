@@ -10,8 +10,10 @@ import database
 
 class WizardEnumConstantsTest(unittest.TestCase):
     def test_school_type_values(self):
+        # `elementary` added in Plan 5 round-4 fix (LIMITATIONS #51) so the
+        # LingualOrgsListPage's "Elementary" filter option validates.
         self.assertEqual(database.ALLOWED_SCHOOL_TYPES, frozenset({
-            'middle', 'high', 'k12', 'university',
+            'elementary', 'middle', 'high', 'k12', 'university',
             'language_academy', 'district', 'other',
         }))
 

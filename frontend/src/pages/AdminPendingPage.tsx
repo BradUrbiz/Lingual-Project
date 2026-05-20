@@ -5,6 +5,7 @@ import {
   cancelMySchoolRequest,
 } from '@/api/schoolRequests';
 import { useAuth } from '@/hooks/useAuth';
+import { SCHOOL_ADMIN_HOME_ROUTE } from '@/lib/homeRoutes';
 import type { SchoolRequest } from '@/types/schoolRequest';
 
 const POLL_MS = 30_000;
@@ -28,10 +29,9 @@ export function AdminPendingPage() {
       if (next.status === 'approved') {
         // Refresh the local session FIRST so AppProtectedRoute and the
         // dispatcher see the new school_admin membership + onboarding_state.
-        // Then send the user to the school-admin landing (currently shared
-        // with /app/teacher per the Plan 2 temp convention).
+        // Then send the user to the dedicated school-admin home Plan 5 introduced.
         await refreshUser();
-        navigate('/app/teacher', { replace: true });
+        navigate(SCHOOL_ADMIN_HOME_ROUTE, { replace: true });
         return;
       }
       if (next.status === 'cancelled') {

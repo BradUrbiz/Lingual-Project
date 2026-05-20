@@ -319,6 +319,7 @@ def _validate_org_status(value: str) -> str:
     return value
 
 ALLOWED_SCHOOL_TYPES = frozenset({
+    'elementary',
     'middle',
     'high',
     'k12',
@@ -3471,6 +3472,15 @@ def approve_school_request(
         #   but the membership below is written via `transaction.set(...)`
         #   directly (it has to live inside the transaction) so the
         #   denormalization is inlined here.
+        # - Plan 3 wizard metadata (`school_type`, `country`, `state`,
+        #   `website_url`, `public_or_private`, `grade_size`) is carried over
+        #   from the request so Plan 5's `list_organizations` filters and the
+        #   Org detail page render real data on every org this flow creates.
+        #   Without this copy the Plan 5 panel rendered blanks on its own
+        #   approvals (LIMITATIONS #49). Note name mapping: the request
+        #   schema uses `public_private` while the org schema uses
+        #   `public_or_private` (filter contract on `list_organizations`).
+        loc = req.get('location') if isinstance(req.get('location'), dict) else None
         org_data = {
             'name': req['school_name'],
             'name_lower': (req.get('school_name') or '').strip().lower(),
@@ -3481,6 +3491,12 @@ def approve_school_request(
             'default_retention_policy': 'standard_school',
             'lms_capabilities': [],
             'school_admin_uids': [requester_uid],
+            'school_type': req.get('school_type'),
+            'country': req.get('country') or (loc.get('country') if loc else None),
+            'state': loc.get('state') if loc else None,
+            'website_url': req.get('website_url'),
+            'public_or_private': req.get('public_private'),
+            'grade_size': req.get('grade_size'),
             'created_at': firestore.SERVER_TIMESTAMP,
             'updated_at': firestore.SERVER_TIMESTAMP,
         }

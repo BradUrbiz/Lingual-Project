@@ -71,7 +71,7 @@ describe('AdminPendingPage', () => {
     );
   });
 
-  it('refreshes user then redirects to /app/teacher when status becomes approved', async () => {
+  it('refreshes user then redirects to /app/admin when status becomes approved', async () => {
     vi.useFakeTimers();
     getMineMock
       .mockResolvedValueOnce({ id: 'r1', status: 'pending', schoolName: 'SF Friends' })
@@ -80,7 +80,7 @@ describe('AdminPendingPage', () => {
     // Flush the initial render promise so the component mounts with 'pending'.
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     // Advance past the 30s poll interval — this triggers the second getMySchoolRequest
-    // which returns 'approved', then refreshUser(), then navigate('/app/teacher').
+    // which returns 'approved', then refreshUser(), then navigate(SCHOOL_ADMIN_HOME_ROUTE).
     await act(async () => { vi.advanceTimersByTime(31000); });
     // Flush the async chain (getMySchoolRequest → setReq → refreshUser → navigate).
     await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
@@ -88,15 +88,15 @@ describe('AdminPendingPage', () => {
     vi.useRealTimers();
     await waitFor(() => expect(refreshUserMock).toHaveBeenCalled());
     await waitFor(() =>
-      expect(navigateMock).toHaveBeenCalledWith('/app/teacher', expect.anything()),
+      expect(navigateMock).toHaveBeenCalledWith('/app/admin', expect.anything()),
     );
     // refreshUser must be called before navigate so the protected route sees
     // the new membership and onboarding_state.
     const refreshOrder = refreshUserMock.mock.invocationCallOrder[0];
-    const teacherCall = navigateMock.mock.calls.findIndex(
-      (c) => c[0] === '/app/teacher',
+    const adminCall = navigateMock.mock.calls.findIndex(
+      (c) => c[0] === '/app/admin',
     );
-    const navigateOrder = navigateMock.mock.invocationCallOrder[teacherCall];
+    const navigateOrder = navigateMock.mock.invocationCallOrder[adminCall];
     expect(refreshOrder).toBeLessThan(navigateOrder);
   });
 

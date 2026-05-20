@@ -622,4 +622,76 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
 
         return jsonify({'ok': True, 'orgId': org_id}), 200
 
+    @bp.post('/organizations/<org_id>/restore')
+    def restore_org(org_id):
+        try:
+            uid = deps.get_current_user_uid()
+            _require_lingual_admin(uid)
+        except PermissionError as exc:
+            return jsonify({'error': str(exc)}), 403
+
+        org = deps.db.get_organization(org_id)
+        if not org:
+            return jsonify({'error': 'not_found'}), 404
+
+        # Recipient lookup is best-effort: a missing helper or transient
+        # Firestore failure must not block the restore itself.
+        try:
+            recipients = deps.db.list_school_admin_emails(org_id)
+        except Exception:  # noqa: BLE001
+            recipients = []
+
+        # Build the audit doc here (not via AuditLogger.log) so it can be
+        # committed in the same Firestore batch as the org status update.
+        # The helper accepts `audit_entry=` and writes it atomically; on
+        # failure both the business write and the audit row are rolled
+        # back together.
+        audit_entry = deps.audit_logger.build_audit_doc(
+            actor_uid=uid,
+            action=AuditAction.ORG_RESTORED,
+            target_type='organization',
+            target_id=org_id,
+            target_org_id=org_id,
+            metadata={'recipient_count': len(recipients)},
+            ip_hash=_hash_ip(_client_ip()),
+            user_agent=_user_agent(),
+        )
+
+        try:
+            deps.db.restore_organization(
+                org_id=org_id,
+                actor_uid=uid,
+                audit_entry=audit_entry,
+            )
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+
+        # Fan-out notification email to every active school_admin. Each
+        # enqueue is best-effort: outbox failures are swallowed so a single
+        # bad recipient doesn't fail the response (the atomic Firestore
+        # restore write already succeeded).
+        dashboard_url = f'{_public_base_url()}/app/admin'
+        for rec in recipients:
+            email = (rec or {}).get('email')
+            if not email:
+                continue
+            try:
+                enqueue_outbox_email(
+                    db=database.get_db(),
+                    recipient_email=email,
+                    recipient_name=rec.get('name') or '',
+                    template=OutboxTemplate.ORG_RESTORED,
+                    template_data={
+                        'org_name': org.get('name', ''),
+                        'dashboard_url': dashboard_url,
+                    },
+                    related_entity_type='organization',
+                    related_entity_id=org_id,
+                    created_by_uid=uid,
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(f'[outbox] org_restored enqueue failed for {email}: {exc}')
+
+        return jsonify({'ok': True, 'orgId': org_id}), 200
+
     return bp

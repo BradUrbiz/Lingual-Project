@@ -1093,6 +1093,9 @@ def list_org_memberships(
 
     Students are excluded by default per FERPA. Returns [{ membership_id,
     uid, email, name, roles[], status, joined_at }, ...].
+
+    NOTE: memberships whose user doc has been deleted are silently dropped
+    in v1. v1.5 may surface them as tombstone rows for ops visibility.
     """
     q = (
         get_db()
@@ -1117,7 +1120,7 @@ def list_org_memberships(
             'name': (user.get('profile') or {}).get('display_name') or user.get('name'),
             'roles': member_roles,
             'status': data.get('status'),
-            'joined_at': data.get('joined_at'),
+            'joined_at': data.get('joined_at') or data.get('created_at'),
         })
     return rows
 
@@ -1151,7 +1154,7 @@ def list_org_classes_summary(*, org_id: str) -> list:
             'subject': data.get('subject'),
             'teacher_membership_ids': data.get('teacher_membership_ids') or [],
             'created_at': data.get('created_at'),
-            'last_activity_at': data.get('last_activity_at'),
+            'last_activity_at': data.get('last_activity_at'),  # TODO: populated by future class-activity tracking task; currently always None
         })
     return rows
 

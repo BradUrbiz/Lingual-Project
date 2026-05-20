@@ -10,14 +10,17 @@ class ListOrgMembershipsTests(unittest.TestCase):
         col = MagicMock()
         mock_get_db.return_value.collection.return_value = col
         col.where.return_value = col
+        # Real Firestore membership docs always have ``created_at`` written
+        # by ``create_membership``; ``joined_at`` is not currently populated
+        # so the helper should fall back to ``created_at``.
         col.stream.return_value = [
             MagicMock(id='m1', to_dict=lambda: {
                 'org_id': 'o', 'uid': 'u1', 'roles': ['teacher'], 'status': 'active',
-                'joined_at': None,
+                'joined_at': None, 'created_at': 'CREATED-1',
             }),
             MagicMock(id='m2', to_dict=lambda: {
                 'org_id': 'o', 'uid': 'u2', 'roles': ['school_admin'], 'status': 'active',
-                'joined_at': None,
+                'joined_at': 'JOINED-2', 'created_at': 'CREATED-2',
             }),
         ]
         # User lookups
@@ -30,6 +33,10 @@ class ListOrgMembershipsTests(unittest.TestCase):
         self.assertEqual(out[0]['email'], 'a@x.com')
         self.assertEqual(out[1]['email'], 'b@x.com')
         self.assertEqual(out[0]['membership_id'], 'm1')
+        # joined_at falls back to created_at when None, and prefers joined_at
+        # when populated (future-proofing for v1.5 when we backfill the field).
+        self.assertEqual(out[0]['joined_at'], 'CREATED-1')
+        self.assertEqual(out[1]['joined_at'], 'JOINED-2')
 
     @patch('database.get_db')
     def test_excludes_student_role_by_default(self, mock_get_db):

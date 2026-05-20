@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
+
+from backend.services.audit import AuditLogger
 
 
 @dataclass(frozen=True)
@@ -23,3 +25,7 @@ class RouteDeps:
     allowed_learning_locales: set[str]
     allowed_minigame_types: set[str]
     supported_ui_languages: set[str]
+    # Lingual-admin audit boundary. Blueprints reach the audit logger via
+    # `deps.audit_logger` so tests can swap a FakeAuditLogger without mocking
+    # Firestore. Default-factory keeps existing constructors compatible.
+    audit_logger: AuditLogger = field(default_factory=AuditLogger)

@@ -20,6 +20,30 @@ from flask import Flask, session
 
 from backend.route_deps import RouteDeps
 
+
+class FakeAuditLogger:
+    """Captures audit calls for assertions; never raises.
+
+    Mirrors the public surface of `backend.services.audit.AuditLogger` used by
+    routes: `log(**kwargs)` for fail-soft view audits, and `build_audit_doc`
+    (delegated to the real class) for state-transition writes that batch
+    audit entries with the business write.
+    """
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    def log(self, **kwargs) -> str:
+        self.calls.append(kwargs)
+        return f"audit-{len(self.calls)}"
+
+    @staticmethod
+    def build_audit_doc(**kwargs) -> dict:
+        # Delegate to the real builder so callers get the same shape (and so
+        # tests inspecting batched audit docs see realistic structure).
+        from backend.services.audit import AuditLogger as _RealAuditLogger
+        return _RealAuditLogger.build_audit_doc(**kwargs)
+
 # Test-mode safety guard for the outbox writer. See
 # `backend/services/outbox.py:_OUTBOX_BLOCK_ENV_VAR` for the full rationale.
 # Set at conftest import time so every backend test inherits the protection
@@ -725,12 +749,20 @@ class FakeDbBase:
 def make_test_deps(
     db: FakeDbBase | None = None,
     package: dict | None = None,
+    audit_logger: Any = None,
 ) -> RouteDeps:
-    """Build a RouteDeps suitable for Flask test blueprints."""
+    """Build a RouteDeps suitable for Flask test blueprints.
+
+    `audit_logger` defaults to a `FakeAuditLogger` so route tests can assert
+    on audit calls without a Firestore mock. Pass an explicit instance to
+    pre-seed or inspect captured calls across multiple deps.
+    """
     if db is None:
         db = FakeDbBase()
     if package is None:
         package = SAMPLE_CURRICULUM_PACKAGE
+    if audit_logger is None:
+        audit_logger = FakeAuditLogger()
 
     def get_school_request_context():
         uid = (session.get("user") or {}).get("uid")
@@ -766,6 +798,7 @@ def make_test_deps(
         allowed_learning_locales={"ko-KR", "es-ES", "fr-FR"},
         allowed_minigame_types={"listening_quiz", "grammar_challenge"},
         supported_ui_languages={"en", "ko"},
+        audit_logger=audit_logger,
     )
 
 

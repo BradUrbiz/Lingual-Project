@@ -144,6 +144,7 @@ from scoring import load_assessment_data, compute_results, get_actfl_description
 import database as db
 from backend.avatar_chat import register_avatar_chat_routes
 from backend.route_deps import RouteDeps
+from backend.services.audit import AuditLogger
 from backend.routes.auth import create_auth_blueprint
 from backend.routes.chat import create_chat_blueprint
 from backend.routes.assessment import create_assessment_blueprint
@@ -417,6 +418,7 @@ def register_domain_blueprints():
         allowed_learning_locales=ALLOWED_LEARNING_LOCALES,
         allowed_minigame_types=ALLOWED_MINIGAME_TYPES,
         supported_ui_languages=SUPPORTED_UI_LANGUAGES,
+        audit_logger=AuditLogger(),
     )
 
     app.register_blueprint(create_auth_blueprint(deps))

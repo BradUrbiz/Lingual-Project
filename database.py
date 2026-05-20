@@ -1044,6 +1044,83 @@ def _sync_org_admin_uids(org_id: str, uid: str, *, add: bool) -> None:
     get_organizations_collection().document(org_id).update({'school_admin_uids': op})
 
 
+def suspend_organization(
+    *,
+    org_id: str,
+    actor_uid: str,
+    reason: str,
+    suspended_until,
+    audit_entry: dict,
+) -> None:
+    """Transition an org from active to suspended.
+
+    The org update AND the audit row commit atomically via a Firestore
+    batch — they cannot diverge. ``audit_entry`` must be the dict produced
+    by ``AuditLogger.build_audit_doc(...)``. ``created_at`` is overwritten
+    with ``SERVER_TIMESTAMP`` so callers cannot back-date.
+
+    ``suspended_until`` is an optional ``datetime`` for auto-restore via the
+    Cloud Function scheduler. ``None`` means indefinite.
+    """
+    if audit_entry is None:
+        raise ValueError('audit_entry is required for state transitions')
+    if not (reason or '').strip():
+        raise ValueError('suspend reason is required')
+    org = get_organization(org_id)
+    if not org:
+        raise ValueError(f'organization {org_id} not found')
+    if org.get('status') == ORG_STATUS_SUSPENDED:
+        raise ValueError(f'organization {org_id} is already suspended')
+
+    db = get_db()
+    batch = db.batch()
+    batch.update(get_organization_ref(org_id), {
+        'status': ORG_STATUS_SUSPENDED,
+        'suspended_at': firestore.SERVER_TIMESTAMP,
+        'suspended_by_uid': actor_uid,
+        'suspend_reason': reason.strip(),
+        'suspended_until': suspended_until,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    })
+    audit_doc = dict(audit_entry)
+    audit_doc['created_at'] = firestore.SERVER_TIMESTAMP  # server time, not caller
+    audit_ref = db.collection(LINGUAL_ADMIN_AUDIT_COLLECTION).document()
+    batch.set(audit_ref, audit_doc)
+    batch.commit()
+
+
+def restore_organization(*, org_id: str, actor_uid: str, audit_entry: dict) -> None:
+    """Transition an org from suspended back to active.
+
+    Atomic with audit (see :func:`suspend_organization`). Clears all
+    ``suspended_*`` fields and stamps ``restored_at`` / ``restored_by_uid``.
+    """
+    if audit_entry is None:
+        raise ValueError('audit_entry is required for state transitions')
+    org = get_organization(org_id)
+    if not org:
+        raise ValueError(f'organization {org_id} not found')
+    if org.get('status') != ORG_STATUS_SUSPENDED:
+        raise ValueError(f'organization {org_id} is not suspended')
+
+    db = get_db()
+    batch = db.batch()
+    batch.update(get_organization_ref(org_id), {
+        'status': ORG_STATUS_ACTIVE,
+        'suspended_at': None,
+        'suspended_by_uid': None,
+        'suspend_reason': None,
+        'suspended_until': None,
+        'restored_at': firestore.SERVER_TIMESTAMP,
+        'restored_by_uid': actor_uid,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    })
+    audit_doc = dict(audit_entry)
+    audit_doc['created_at'] = firestore.SERVER_TIMESTAMP
+    batch.set(db.collection(LINGUAL_ADMIN_AUDIT_COLLECTION).document(), audit_doc)
+    batch.commit()
+
+
 def create_membership(
     org_id,
     uid,

@@ -1007,6 +1007,61 @@ def search_organizations(query: str, *, limit: int = 10):
     return results
 
 
+LINGUAL_ADMIN_ORGS_PAGE_SIZE = 25
+
+
+def list_organizations(
+    *,
+    status: str | None = None,
+    school_type: str | None = None,
+    country: str | None = None,
+    public_or_private: str | None = None,
+    created_after=None,
+    created_before=None,
+    cursor: dict | None = None,
+    limit: int = LINGUAL_ADMIN_ORGS_PAGE_SIZE,
+) -> dict:
+    """Paged list of organizations with optional filters.
+
+    Returns ``{ 'items': [...], 'next_cursor': dict | None }``.
+
+    ``cursor`` shape: ``{ 'name_lower': str, 'id': str }`` — the last doc seen.
+    """
+    if status is not None:
+        _validate_org_status(status)
+    query = get_db().collection('organizations')
+    if status:
+        query = query.where('status', '==', status)
+    if school_type:
+        query = query.where('school_type', '==', school_type)
+    if country:
+        query = query.where('country', '==', country)
+    if public_or_private:
+        query = query.where('public_or_private', '==', public_or_private)
+    if created_after is not None:
+        query = query.where('created_at', '>=', created_after)
+    if created_before is not None:
+        query = query.where('created_at', '<=', created_before)
+    query = query.order_by('name_lower').order_by('__name__').limit(limit)
+    if cursor and cursor.get('name_lower') and cursor.get('id'):
+        # Firestore `start_after` takes positional values matching the
+        # order_by chain — NOT a dict. A dict here silently produces a
+        # truncated query that re-reads the same page.
+        query = query.start_after(cursor['name_lower'], cursor['id'])
+    items = []
+    last_doc = None
+    for doc in query.stream():
+        data = doc.to_dict() or {}
+        data['id'] = doc.id
+        items.append(data)
+        last_doc = doc
+    next_cursor = None
+    if last_doc is not None and len(items) == limit:
+        last_data = last_doc.to_dict() or {}
+        next_cursor = {'name_lower': last_data.get('name_lower', ''), 'id': last_doc.id}
+    return {'items': items, 'next_cursor': next_cursor}
+
+
 def list_school_admin_emails(org_id: str):
     """Return [{uid, email, name}] for every active school_admin of the org."""
     membership_docs = (

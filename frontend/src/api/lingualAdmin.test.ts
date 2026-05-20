@@ -33,34 +33,34 @@ beforeEach(() => {
 });
 
 describe('lingualAdmin API client', () => {
-  it('fetchOverview calls GET /api/lingual-admin/overview', async () => {
+  it('fetchOverview calls GET /lingual-admin/overview', async () => {
     mocked.get.mockResolvedValue({ data: { tiles: {}, recentActivity: [] } });
     await fetchOverview();
-    expect(mocked.get).toHaveBeenCalledWith('/api/lingual-admin/overview');
+    expect(mocked.get).toHaveBeenCalledWith('/lingual-admin/overview');
   });
 
   it('fetchRequests passes filters as query params', async () => {
     mocked.get.mockResolvedValue({ data: { items: [], nextCursor: null } });
     await fetchRequests({ status: 'pending', schoolType: 'high', sort: 'name' });
     expect(mocked.get).toHaveBeenCalledWith(
-      '/api/lingual-admin/requests',
+      '/lingual-admin/requests',
       expect.objectContaining({
         params: { status: 'pending', schoolType: 'high', sort: 'name' },
       }),
     );
   });
 
-  it('fetchRequestDetail GETs /api/lingual-admin/requests/:id', async () => {
+  it('fetchRequestDetail GETs /lingual-admin/requests/:id', async () => {
     mocked.get.mockResolvedValue({ data: { id: 'r1' } });
     await fetchRequestDetail('r1');
-    expect(mocked.get).toHaveBeenCalledWith('/api/lingual-admin/requests/r1');
+    expect(mocked.get).toHaveBeenCalledWith('/lingual-admin/requests/r1');
   });
 
   it('approveRequest POSTs with internalNote', async () => {
     mocked.post.mockResolvedValue({ data: {} });
     await approveRequest('r1', { internalNote: 'note' });
     expect(mocked.post).toHaveBeenCalledWith(
-      '/api/lingual-admin/requests/r1/approve',
+      '/lingual-admin/requests/r1/approve',
       { internalNote: 'note' },
     );
   });
@@ -69,7 +69,7 @@ describe('lingualAdmin API client', () => {
     mocked.post.mockResolvedValue({ data: {} });
     await declineRequest('r1', { reason: 'r', category: 'fraud_risk' });
     expect(mocked.post).toHaveBeenCalledWith(
-      '/api/lingual-admin/requests/r1/decline',
+      '/lingual-admin/requests/r1/decline',
       { reason: 'r', category: 'fraud_risk' },
     );
   });
@@ -83,33 +83,33 @@ describe('lingualAdmin API client', () => {
     );
   });
 
-  it('fetchOrgDetail GETs /api/lingual-admin/organizations/:id', async () => {
+  it('fetchOrgDetail GETs /lingual-admin/organizations/:id', async () => {
     mocked.get.mockResolvedValue({ data: { id: 'o1' } });
     await fetchOrgDetail('o1');
-    expect(mocked.get).toHaveBeenCalledWith('/api/lingual-admin/organizations/o1');
+    expect(mocked.get).toHaveBeenCalledWith('/lingual-admin/organizations/o1');
   });
 
-  it('fetchOrgMembers GETs /api/lingual-admin/organizations/:id/members', async () => {
+  it('fetchOrgMembers GETs /lingual-admin/organizations/:id/members', async () => {
     mocked.get.mockResolvedValue({ data: { members: [], studentCount: 0 } });
     await fetchOrgMembers('o1');
     expect(mocked.get).toHaveBeenCalledWith(
-      '/api/lingual-admin/organizations/o1/members',
+      '/lingual-admin/organizations/o1/members',
     );
   });
 
-  it('fetchOrgClasses GETs /api/lingual-admin/organizations/:id/classes', async () => {
+  it('fetchOrgClasses GETs /lingual-admin/organizations/:id/classes', async () => {
     mocked.get.mockResolvedValue({ data: { items: [] } });
     await fetchOrgClasses('o1');
     expect(mocked.get).toHaveBeenCalledWith(
-      '/api/lingual-admin/organizations/o1/classes',
+      '/lingual-admin/organizations/o1/classes',
     );
   });
 
-  it('fetchOrgAudit GETs /api/lingual-admin/organizations/:id/audit with limit', async () => {
+  it('fetchOrgAudit GETs /lingual-admin/organizations/:id/audit with limit', async () => {
     mocked.get.mockResolvedValue({ data: { items: [] } });
     await fetchOrgAudit('o1', 25);
     expect(mocked.get).toHaveBeenCalledWith(
-      '/api/lingual-admin/organizations/o1/audit',
+      '/lingual-admin/organizations/o1/audit',
       { params: { limit: 25 } },
     );
   });
@@ -121,7 +121,7 @@ describe('lingualAdmin API client', () => {
       suspendedUntil: '2026-06-01T00:00:00Z',
     });
     expect(mocked.post).toHaveBeenCalledWith(
-      '/api/lingual-admin/organizations/o1/suspend',
+      '/lingual-admin/organizations/o1/suspend',
       { reason: 'r', suspendedUntil: '2026-06-01T00:00:00Z' },
     );
   });
@@ -130,7 +130,7 @@ describe('lingualAdmin API client', () => {
     mocked.post.mockResolvedValue({ data: { ok: true } });
     await restoreOrg('o1');
     expect(mocked.post).toHaveBeenCalledWith(
-      '/api/lingual-admin/organizations/o1/restore',
+      '/lingual-admin/organizations/o1/restore',
     );
   });
 
@@ -138,7 +138,7 @@ describe('lingualAdmin API client', () => {
     mocked.delete.mockResolvedValue({ data: { ok: true } });
     await removeMember('o1', 'm1', { reason: 'left school' });
     expect(mocked.delete).toHaveBeenCalledWith(
-      '/api/lingual-admin/organizations/o1/members/m1',
+      '/lingual-admin/organizations/o1/members/m1',
       { data: { reason: 'left school' } },
     );
   });

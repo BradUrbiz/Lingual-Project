@@ -300,6 +300,15 @@ ALLOWED_ORG_STATUSES = frozenset({
     ORG_STATUS_ARCHIVED,
 })
 
+# Org suspend/restore field names
+ORG_FIELD_STATUS = 'status'
+ORG_FIELD_SUSPENDED_AT = 'suspended_at'
+ORG_FIELD_SUSPENDED_BY_UID = 'suspended_by_uid'
+ORG_FIELD_SUSPEND_REASON = 'suspend_reason'
+ORG_FIELD_SUSPENDED_UNTIL = 'suspended_until'
+ORG_FIELD_RESTORED_AT = 'restored_at'
+ORG_FIELD_RESTORED_BY_UID = 'restored_by_uid'
+
 
 def _validate_org_status(value: str) -> str:
     """Raise ValueError if value is not a known org status."""
@@ -1061,6 +1070,11 @@ def suspend_organization(
 
     ``suspended_until`` is an optional ``datetime`` for auto-restore via the
     Cloud Function scheduler. ``None`` means indefinite.
+
+    Concurrency note: the status precondition is checked via a read-then-batch
+    sequence, not in a transaction. Two simultaneous suspend calls may both
+    pass the precheck and produce two audit rows; the final state is
+    consistent. Acceptable for low-contention Lingual admin operations.
     """
     if audit_entry is None:
         raise ValueError('audit_entry is required for state transitions')
@@ -1069,17 +1083,17 @@ def suspend_organization(
     org = get_organization(org_id)
     if not org:
         raise ValueError(f'organization {org_id} not found')
-    if org.get('status') == ORG_STATUS_SUSPENDED:
+    if org.get(ORG_FIELD_STATUS) == ORG_STATUS_SUSPENDED:
         raise ValueError(f'organization {org_id} is already suspended')
 
     db = get_db()
     batch = db.batch()
     batch.update(get_organization_ref(org_id), {
-        'status': ORG_STATUS_SUSPENDED,
-        'suspended_at': firestore.SERVER_TIMESTAMP,
-        'suspended_by_uid': actor_uid,
-        'suspend_reason': reason.strip(),
-        'suspended_until': suspended_until,
+        ORG_FIELD_STATUS: ORG_STATUS_SUSPENDED,
+        ORG_FIELD_SUSPENDED_AT: firestore.SERVER_TIMESTAMP,
+        ORG_FIELD_SUSPENDED_BY_UID: actor_uid,
+        ORG_FIELD_SUSPEND_REASON: reason.strip(),
+        ORG_FIELD_SUSPENDED_UNTIL: suspended_until,
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
     audit_doc = dict(audit_entry)
@@ -1094,25 +1108,30 @@ def restore_organization(*, org_id: str, actor_uid: str, audit_entry: dict) -> N
 
     Atomic with audit (see :func:`suspend_organization`). Clears all
     ``suspended_*`` fields and stamps ``restored_at`` / ``restored_by_uid``.
+
+    Concurrency note: the status precondition is checked via a read-then-batch
+    sequence, not in a transaction. Two simultaneous restore calls may both
+    pass the precheck and produce two audit rows; the final state is
+    consistent. Acceptable for low-contention Lingual admin operations.
     """
     if audit_entry is None:
         raise ValueError('audit_entry is required for state transitions')
     org = get_organization(org_id)
     if not org:
         raise ValueError(f'organization {org_id} not found')
-    if org.get('status') != ORG_STATUS_SUSPENDED:
+    if org.get(ORG_FIELD_STATUS) != ORG_STATUS_SUSPENDED:
         raise ValueError(f'organization {org_id} is not suspended')
 
     db = get_db()
     batch = db.batch()
     batch.update(get_organization_ref(org_id), {
-        'status': ORG_STATUS_ACTIVE,
-        'suspended_at': None,
-        'suspended_by_uid': None,
-        'suspend_reason': None,
-        'suspended_until': None,
-        'restored_at': firestore.SERVER_TIMESTAMP,
-        'restored_by_uid': actor_uid,
+        ORG_FIELD_STATUS: ORG_STATUS_ACTIVE,
+        ORG_FIELD_SUSPENDED_AT: None,
+        ORG_FIELD_SUSPENDED_BY_UID: None,
+        ORG_FIELD_SUSPEND_REASON: None,
+        ORG_FIELD_SUSPENDED_UNTIL: None,
+        ORG_FIELD_RESTORED_AT: firestore.SERVER_TIMESTAMP,
+        ORG_FIELD_RESTORED_BY_UID: actor_uid,
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
     audit_doc = dict(audit_entry)

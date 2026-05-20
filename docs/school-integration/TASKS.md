@@ -125,6 +125,7 @@ Owner: Engineering + Product
 - [ ] Wire `school_request_reminder_to_lingual` once the outbox sweep gap (LIMITATIONS #21) is closed.
 - [ ] Delete orphan Firestore composite index `enrollments(status, student_uid, updated_at DESC)` (LIMITATIONS #41) — safe, redundant with the IaC-managed `(student_uid, status, updated_at DESC)` index. Targeted `gcloud firestore indexes composite delete` command in LIMITATIONS #41.
 - [ ] Reminder email for inactive suspended orgs (≥30 days suspended_until in past with auto-restore disabled) — needs product decision before launch.
+- [ ] Backfill top-level `country` from `location.country` for `school_requests` rows submitted before the LIMITATIONS #47 denormalization fix. One-shot script: query `school_requests` where `country` is missing AND `location.country` is non-empty; write `country` to each. Until run, the Requests page country filter (LIMITATIONS #47) matches only post-fix rows.
 
 ## Phase 3: Canvas content and assignment authoring
 

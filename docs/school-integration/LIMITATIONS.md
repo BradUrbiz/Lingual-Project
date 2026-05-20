@@ -349,3 +349,97 @@ business actions complete normally but do not produce those emails.
     firestore indexes file." Cleanup is safe, targeted, and deferred to
     v1.5 so the Plan 5 merge stays focused:
     `gcloud firestore indexes composite delete projects/lingu-480600/databases/\(default\)/collectionGroups/enrollments/indexes/CICAgOjXh4EK`
+
+42. **`approve_school_request` did not denormalize `name_lower` or
+    `school_admin_uids` on the new org.** _RESOLVED post-review._ The
+    transaction wrote `org_data` with only `name`, `type`, `status`, and
+    the policy defaults, and the membership was written via
+    `transaction.set(...)` directly so `create_membership`'s
+    `_sync_org_admin_uids(add=True)` side effect never fired. Result:
+    newly approved orgs were missing from `list_organizations`'s
+    `order_by('name_lower')` page, and `school_admin_uids` stayed empty
+    so the `restore_organization` outbox fan-out and Plan 4
+    teacher-join admin lookup both failed silently. Both denormalizations
+    are now inlined in the same `@firestore.transactional` block,
+    matching the atomic-with-audit invariant `remove_membership` (Plan 4)
+    already enforces. Regression: `backend/tests/test_approve_org_denormalization.py`.
+
+43. **`RequestDetailPanel` dereferenced fields that did not exist on the
+    serialized DTO.** _RESOLVED post-review._ The panel read
+    `request.attestation.ipHash` and `request.county/state/country`, but
+    `backend/routes/school_requests.py:_serialize_request` (shared with
+    Plan 3 requesters viewing their own request) nests these under
+    `adminIdentity.authorizationAttestation` and `location`. The live
+    response triggered
+    `TypeError: Cannot read properties of undefined (reading 'ipHash')`,
+    crashing the panel and blocking the approve and decline controls.
+    The TS type `SchoolRequestDetail` is now aligned with the real wire
+    shape (`LocationDetail`, `AdminIdentityDetail.authorizationAttestation`,
+    canvas-shaped `IntegrationDetail`, Plan 3 `CurriculumDetail`); the
+    component uses optional-chained nested accessors. Regression test in
+    `frontend/src/pages/LingualAdmin/LingualRequestsPage.test.tsx`
+    mounts the real serialized DTO and asserts the panel renders + both
+    action buttons appear.
+
+44. **Audit rows were returned to the FE with snake_case keys.**
+    _RESOLVED post-review._ The dashboard `/overview` and
+    `/organizations/<orgId>/audit` endpoints both serialized raw
+    `lingual_admin_audit` rows. `AuditLogger.build_audit_doc` writes
+    snake_case (`actor_uid`, `created_at`, `target_org_id`, `ip_hash`,
+    `user_agent`) but the FE TS DTO is camelCase. Real audit activity
+    rendered with blank actor and timestamp cells. Both endpoints now
+    transform rows through a single `_camel_audit_row` helper that also
+    converts Firestore datetime objects to ISO 8601 strings. Same
+    "single source of transformation" pattern as the `_camelize_cursor`
+    fix in LIMITATIONS #40.
+
+45. **`LingualAdminRoute` redirected signed-in admins to `/login`
+    during the auth-loading window after the Important #1 fix moved
+    the panel out of `/app`.** _RESOLVED post-review._ The
+    `/lingual-admin/*` move dropped `AppProtectedRoute`'s loading
+    gate. `LingualAdminRoute` then saw `user === null && loading === true`
+    on browser refresh and triggered `<Navigate to="/login">` before
+    `/api/auth/verify` resolved. The guard now renders `LoadingSpinner`
+    while `loading` is true, matching the AppProtectedRoute pattern.
+    Regression: `frontend/src/components/layout/LingualAdminRoute.test.tsx`
+    explicitly tests the spinner-during-load case in addition to the
+    three post-load branches. This regression was introduced by
+    commit `9b4ecc7` (LIMITATIONS #39 fix) and closed by the same
+    commit batch as the rest of the round-3 findings.
+
+46. **`/app/admin` was wrapped in `TeacherRoute`, exposing the
+    school-admin home to teacher-only memberships.** _RESOLVED
+    post-review._ `TeacherRoute` allows both `['teacher', 'school_admin']`
+    so a teacher-only user who manually navigated to `/app/admin` saw
+    `SchoolAdminHomePage` and its admin CTAs. The dispatcher
+    (`getOnboardingDestination`) prioritizes `school_admin` to
+    `/app/admin` so signed-in teachers don't land there on their own,
+    but manual navigation was unguarded. Plan 5 spec §1 calls for a
+    `school_admin` membership specifically. A new
+    `frontend/src/components/layout/SchoolAdminRoute.tsx` guard
+    (`hasAnyRole(['school_admin'])`) now wraps `/app/admin`,
+    `/app/admin/deletion-requests`, and `/app/admin/compliance`. The
+    fall-through for teacher-only members is `/app/teacher` (visible
+    demotion rather than the disorienting `/app/learn`).
+
+47. **Plan 3 wizard submissions stored country only under
+    `location.country`; the Plan 5 country filter queried top-level
+    `country`.** _RESOLVED post-review._ Every wizard-submitted school
+    request was invisible to `list_school_requests(country=...)` and
+    its composite index `(country ASC, created_at DESC)` — the
+    Requests-page country filter never matched a real Plan 3 wizard
+    request in production, even though backend tests passed (the test
+    fixtures happened to write top-level `country` directly).
+    `database._build_school_request_payload` now denormalizes
+    `location.country` to top-level `country` whenever location is
+    present. `_serialize_request` exposes the denormalized field on
+    the row DTO with a fallback to `location.country` so pre-fix rows
+    still render in the list while the backfill runs. New regression
+    in `backend/tests/test_school_request_country_denormalization.py`
+    covers happy path + two defensive cases.
+
+    Backfill obligation: rows submitted before this fix have only
+    `location.country`. They render correctly in the list (via the
+    `_serialize_request` fallback) but DO NOT match the
+    `?country=` filter until backfilled. Tracked in TASKS under the
+    Plan 5 follow-ups.

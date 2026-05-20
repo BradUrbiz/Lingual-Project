@@ -28,6 +28,7 @@ def _validate_required_env() -> None:
     feature = {
         'CANVAS_PAT_ENCRYPTION_KEY': 'Canvas connect returns 503 when a teacher clicks Connect',
         'PUBLIC_BASE_URL': 'Email CTAs ship with relative URLs which break in email clients',
+        'SUPPORT_EMAIL': 'Plan 5 — falls back to help@l1ngual.com if unset; surfaces in org_suspended email footer',
     }
     missing_hard = [
         f'  - {k}: {reason}'

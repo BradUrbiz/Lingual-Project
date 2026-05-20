@@ -555,6 +555,45 @@ Suggested IDs:
 - `assignment:{assignmentId}:week:{YYYY-WW}`
 - `student:{uid}:assignment:{assignmentId}`
 
+### `lingual_admin_audit/{logId}`
+
+| Field | Type | Notes |
+|---|---|---|
+| `actor_uid` | str | The acting Lingual admin's uid |
+| `action` | str | One of `request_approved`, `request_declined`, `org_suspended`, `org_restored`, `org_metadata_edited`, `org_viewed_detail`, `membership_removed` |
+| `target` | map | `{type: 'school_request'|'organization'|'membership', id}` |
+| `target_org_id` | str? | Denormalized for org-scoped queries |
+| `metadata` | map | Action-specific (reason, category, suspended_until, recipient_count, …) |
+| `ip_hash` | str | Salted SHA-256 of `request.remote_addr` |
+| `user_agent` | str | First 255 chars of `User-Agent` header |
+| `created_at` | ts | Server timestamp |
+
+Writes are Admin-SDK only (clients denied). Reads are gated by the backend on `lingual_admin` role; the collection's rule is `allow read, write: if false;` because there is no client-side read path.
+
+### `organizations.status` lifecycle
+
+`active → suspended → active` (cycle) or `active → archived` (terminal, v1.5).
+
+Suspended orgs:
+- `status = 'suspended'`
+- `suspended_at = ts`
+- `suspended_by_uid = lingual_admin_uid`
+- `suspend_reason = string`
+- `suspended_until = ts | null` (null means indefinite)
+
+Restoring (manual via Lingual admin or auto via scheduler) clears all `suspended_*` fields and sets `restored_at`, `restored_by_uid` (the latter may be `'system:auto_restore'`).
+
+### Suspend enforcement points
+
+Every code path below calls `enforce_org_active(org_id)` before mutating org-scoped data or creating billable sessions. SuspendedOrgError → 403 with payload `{error: 'org_suspended', reason, until?}`.
+
+1. `backend.services.assignment_resolver.resolve_assignment_prompt`
+2. `POST /api/realtime/session` (chat blueprint)
+3. `POST /api/practice-sessions` (curriculum_admin)
+4. `POST /api/practice-sessions/<id>/events` (curriculum_admin)
+5. `POST /api/canvas/practice/start` (canvas_practice)
+6. `POST /api/teacher/...` (assignment write endpoints in teacher blueprint)
+
 ### 4.2 Why this model fits the repo
 
 - It preserves the current `users/{uid}` contract for existing learner flows.

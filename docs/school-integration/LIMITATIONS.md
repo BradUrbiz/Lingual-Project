@@ -194,31 +194,16 @@ business actions complete normally but do not produce those emails.
     US schools); revisit when expanding outside the US.
 
 27. **Approved admin pending state auto-navigates instead of showing a
-    dashboard CTA.** Design spec §4 says the pending page should surface a
-    "Continue to dashboard" CTA once Lingual approves the request. The current
-    implementation refreshes the user session and immediately navigates to
-    `/app/teacher` when `/api/school-requests/mine` returns `approved`.
-    Impact: approved admins do land in the correct school-admin experience
-    after the membership is refreshed, but they do not see an intermediate
-    approval confirmation or explicit CTA. Planned follow-up: replace the
-    immediate redirect with an approved-state panel once the dedicated
-    school-admin home route lands.
+    dashboard CTA.** _RESOLVED by Plan 5._ school_admin users now land at
+    the dedicated `/app/admin` home route (see `SchoolAdminHomePage`). The
+    pending page still auto-navigates on approval, but it now lands on a
+    school_admin-specific home rather than the shared `/app/teacher`.
 
 28. **Role grants and changes require a session refresh to take effect.**
-    `AuthContext` only re-fetches the auth payload via `/api/auth/verify`
-    when Firebase Auth state changes (sign-in / sign-out) — not on every
-    navigation. So if a Lingual admin grants someone a new role or flips
-    a flag (e.g. `lingual_admin: true`) on a user whose session is already
-    established, the affected user keeps the stale `user.lingualAdmin`,
-    `memberships`, and `activeRoles` in React state until they sign out
-    and back in (or hard reload). The backend correctly returns the new
-    payload on demand; only the frontend cache is stale. Symptoms include
-    the profile card showing the old role label, the Home button routing
-    to the wrong dashboard, and `LingualAdminRoute` redirecting newly
-    promoted admins back to `/app/learn`. Planned follow-up: have
-    `AuthContext` poll `/api/auth/verify` on long-lived sessions, or
-    surface a "your access changed, refresh" toast when the server's
-    `lingualAdmin` / `activeRoles` differ from the cached payload.
+    _RESOLVED by Plan 5._ `AuthContext` now re-runs `/api/auth/verify`
+    every 5 minutes and updates React state when `lingualAdmin`,
+    `memberships`, or `activeRoles` differ from the cached payload.
+    Worst-case staleness is ≤5 minutes. A signed-out user does not poll.
 
 29. **Backend tests can write to production Firestore without isolation.**
     Route handlers (e.g. `submit_school_request`) call `database.get_db()`
@@ -280,3 +265,43 @@ business actions complete normally but do not produce those emails.
     `/api/teacher-join-requests` flow. Teachers now go through explicit
     school-admin approval. Item #17 is preserved as historical context for
     the pilot shortcut.
+
+### Lingual admin panel (Plan 5)
+
+33. **In-flight realtime voice sessions are not torn down on suspend.**
+    When an org is suspended while a student is mid-conversation, the
+    existing session completes normally. Only new session creation is
+    blocked. Acceptable v1 trade-off (no mid-sentence cutoffs); strict
+    tear-down is v1.5.
+
+34. **Suspend auto-restore accuracy is ±1 hour.** `auto_restore_suspended_orgs`
+    runs every 60 minutes. An org whose `suspended_until` falls between
+    sweep ticks is restored at the next tick. Acceptable for v1; tighten
+    to 5-minute resolution by reusing the existing outbox sweep cadence
+    if product requires.
+
+35. **`PATCH /api/lingual-admin/organizations/<orgId>` is not implemented.**
+    Spec §594 lists the endpoint for org metadata editing; Plan 5 keeps it
+    out of scope. Lingual admins use direct Firestore edits when metadata
+    correction is needed. v1.5 follow-up.
+
+36. **Lingual admin panel UI is English-only.** Wizard labels, table
+    headers, modal copy, audit action labels all ship in English. Match
+    the Plan 3 admin wizard constraint (LIMITATIONS #26).
+
+37. **`org_viewed_detail` audit may produce high write volume.** Every
+    org detail page load writes one row. For a Lingual admin paging
+    through 50 orgs in a session, that's 50 writes per day per admin.
+    Acceptable at current scale; consider sampling or rate-limiting if
+    audit traffic exceeds 10k rows/day.
+
+38. **`backend/tests/test_lingual_admin_*` tests use the `FakeAuditLogger`
+    pattern; Firestore writes from `AuditLogger` itself have no automated
+    integration coverage.** The unit tests on `AuditLogger` (Task 2)
+    exercise the failsoft + payload-shape contract via mocked collection
+    factories, but a true round-trip to Firestore (or the emulator) is
+    not part of CI yet. Acceptable because the write surface is small;
+    revisit if the schema grows. Likewise, the Java-backed emulator
+    rules test for `lingual_admin_audit` (Task 38) was skipped — the
+    deny-all rule is verified by code inspection of `firestore.rules`
+    rather than an automated `firebase-tests/` run.

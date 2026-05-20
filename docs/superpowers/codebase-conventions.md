@@ -207,9 +207,9 @@ After Plan 1 lands, the following is true and consumable:
 feat(scope): short imperative description
 
 Longer body if needed: WHY this change, not WHAT.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 ```
+
+Do **not** append `Co-Authored-By: Claude ...` or any Claude/Anthropic co-author trailer. Plain commit messages only.
 
 Scopes seen so far: `auth`, `onboarding`, `outbox`, `school-requests`, `functions`, `frontend`, `firestore`, `rules`. Pick the most specific.
 
@@ -284,3 +284,36 @@ After Plan 4 lands, the following is true and consumable by downstream plans:
 
 **Forward obligation for Plan 5+:**
 Any membership-removal path MUST call `_sync_org_admin_uids(org_id, uid, add=False)` when the removed role contained `school_admin`. Extend `backend/tests/test_school_admin_uids_invariant.py` with the removal regression. Without this, the `school_admin_uids` array drifts and the rule keeps granting read access to former admins.
+
+---
+
+## 15. Plan 5 contract surface (what later plans build on)
+
+After Plan 5 lands, the following is true and consumable:
+
+**Backend:**
+- `database.ORG_STATUS_ACTIVE`/`SUSPENDED`/`ARCHIVED` + `ALLOWED_ORG_STATUSES` + `_validate_org_status`.
+- `database.suspend_organization(*, org_id, actor_uid, reason, suspended_until)` and `database.restore_organization(*, org_id, actor_uid)` are the only paths that mutate `organizations.status`. **Do not write `status` directly.**
+- `database.remove_membership(*, membership_id, actor_uid)` soft-removes and auto-syncs `school_admin_uids`. **Any future role-removal path MUST go through this helper** (or call `_sync_org_admin_uids(org_id, uid, add=False)` explicitly).
+- `database.list_organizations(...)` / `list_org_memberships(...)` / `list_org_classes(...)` / `list_org_audit_events(...)` / `list_orgs_due_for_auto_restore(...)` / `count_*` helpers.
+- `backend.services.audit.AuditLogger` + `AuditAction` enum. Routes call `deps.audit_logger.log(...)`. Audit writes are fail-soft.
+- `backend.services.suspended_org_guard.enforce_org_active(org_id)` and `is_org_suspended(org_id)`. SuspendedOrgError → 403 payload `{error:'org_suspended', reason, until?}`.
+- `OutboxTemplate.ORG_SUSPENDED` and `OutboxTemplate.ORG_RESTORED`.
+- `LINGUAL_ADMIN_AUDIT_COLLECTION` + `get_lingual_admin_audit_collection()`.
+
+**Cloud Function:**
+- `auto_restore_suspended_orgs` — every 60 min, restores due orgs and queues `org_restored` emails.
+- Both `_send_outbox_email_impl` and `_auto_restore_suspended_orgs_impl` follow the `_impl + decorated wrapper` pattern (see §7).
+
+**Frontend:**
+- `SCHOOL_ADMIN_HOME_ROUTE = '/app/admin'`. `LINGUAL_ADMIN_HOME_ROUTE = '/app/lingual-admin/requests'`.
+- `getOnboardingDestination` order: `lingual_admin` → `school_admin` → `teacher` → `student` → completed → resume by `intended_role` → legacy → role picker.
+- `AuthContext` polls `/api/auth/verify` every 5 min on signed-in users; diff detected → state updated.
+- `frontend/src/api/lingualAdmin.ts` exports a typed client for all 12 endpoints.
+- `LingualAdminShell` + child pages live under `frontend/src/pages/LingualAdmin/`.
+
+**Forward obligation for Plan 6+:**
+1. `LegacyRoleMigrationModal` (Plan 6) must mount BEFORE the dispatcher routes a user away. Mount it at the `AuthProvider` level on `requires_legacy_role_pick === true`, and gate `getOnboardingDestination` from running until the modal resolves.
+2. Any new role-removal code path MUST go through `database.remove_membership(...)` so `school_admin_uids` stays in sync. Plan 5 added the helper and its invariant test (`backend/tests/test_school_admin_uids_invariant.py::RemoveMembershipInvariantTests`); extend the test if you add a new removal path.
+3. Any new code that mutates `organizations.status` MUST go through `database.suspend_organization` / `restore_organization`. Adding a third status (`archived`) is allowed; reuse the validator.
+4. When wiring a future reminder template, close the outbox sweep gap first (LIMITATIONS #21) — Plan 5 does NOT close it because no reminder template ships in this plan.

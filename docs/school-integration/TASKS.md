@@ -66,7 +66,7 @@ Owner: Engineering + Product
 - [x] PendingTeacherRequestsSection on TeacherDashboardPage (Plan 4)
 - [ ] Backfill `organizations.school_admin_uids` for orgs created before Plan 4 — run `scripts/backfill_school_admin_uids.py`
 - [ ] Backfill `organizations.name_lower` for orgs created before Plan 4 — run `scripts/backfill_org_name_lower.py`
-- [ ] **(Plan 5 acceptance)** Any membership-removal path MUST call `_sync_org_admin_uids(org_id, uid, add=False)` when removing `school_admin`. Extend `backend/tests/test_school_admin_uids_invariant.py` with the removal regression.
+- [x] **(Plan 5 acceptance)** Any membership-removal path MUST call `_sync_org_admin_uids(org_id, uid, add=False)` when removing `school_admin`. Extended `backend/tests/test_school_admin_uids_invariant.py` with the removal regression (Plan 5 Task 7).
 - [ ] Replace in-memory org search rate limiter with a shared store (Redis / Firestore counter) when scaling to multi-replica.
 - [ ] 7-day reminder email for stale pending teacher join requests (v1.5). **Product decision needed before launch.**
 - [ ] Realtime status listener on `/signup/teacher/pending` (replace 30s polling, v1.5).
@@ -102,6 +102,28 @@ Owner: Engineering + Product
   code or LTI deep-link launch. Deferred: manual "link to Canvas roster
   entry" UI for the email-mismatch case (see `LIMITATIONS.md` item 20).
 - [ ] Add manual CSV fallback if LMS setup is delayed.
+
+### Lingual admin panel (Plan 5)
+
+- [x] Routes mounted at `/app/lingual-admin/*` (dashboard, requests, organizations, org detail).
+- [x] `lingual_admin_audit` collection with `AuditLogger` service.
+- [x] 12 endpoints under `backend/routes/lingual_admin.py`.
+- [x] Org suspend/restore with email fan-out via outbox.
+- [x] Auto-restore hourly Cloud Function scheduler.
+- [x] Suspended-org enforcement at 5 points (assignment_resolver, realtime mint, practice mutations, canvas_practice, teacher writes).
+- [x] Member removal UI with `_sync_org_admin_uids(add=False)` invariant test (Plan 4 forward obligation).
+- [x] `org_suspended` + `org_restored` email templates.
+- [x] `/app/admin` school_admin home route (separated from `/app/teacher`).
+- [x] AuthContext 5-min `/api/auth/verify` polling.
+- [x] Legacy `/api/admin/school-requests/*` endpoints return 410 Gone.
+- [x] Legacy `/app/admin/school-requests` route redirects to `/app/lingual-admin/requests`.
+
+- [ ] `PATCH /api/lingual-admin/organizations/<orgId>` (org metadata editing) — v1.5.
+- [ ] Realtime listener for org-detail audit feed (replace pagination, v1.5).
+- [ ] Bulk export of org audit feed as CSV — v1.5.
+- [ ] Internationalize Lingual admin panel UI (en-only in v1).
+- [ ] Wire `school_request_reminder_to_lingual` once the outbox sweep gap (LIMITATIONS #21) is closed.
+- [ ] Reminder email for inactive suspended orgs (≥30 days suspended_until in past with auto-restore disabled) — needs product decision before launch.
 
 ## Phase 3: Canvas content and assignment authoring
 

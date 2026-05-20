@@ -218,6 +218,77 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
             ],
         }), 200
 
+    @bp.get('/organizations/<org_id>/members')
+    def get_org_members(org_id):
+        try:
+            uid = deps.get_current_user_uid()
+            _require_lingual_admin(uid)
+        except PermissionError as exc:
+            return jsonify({'error': str(exc)}), 403
+
+        org = deps.db.get_organization(org_id)
+        if not org:
+            return jsonify({'error': 'not_found'}), 404
+
+        members = deps.db.list_org_memberships(
+            org_id=org_id, roles=('school_admin', 'teacher'),
+        )
+        student_count = deps.db.count_org_students(org_id=org_id)
+        return jsonify({
+            'members': [
+                {'membershipId': m['membership_id'], 'uid': m['uid'],
+                 'email': m['email'], 'name': m.get('name'),
+                 'roles': m['roles'], 'status': m['status'],
+                 'joinedAt': m.get('joined_at')}
+                for m in members
+            ],
+            'studentCount': student_count,
+        }), 200
+
+    @bp.get('/organizations/<org_id>/classes')
+    def get_org_classes(org_id):
+        try:
+            uid = deps.get_current_user_uid()
+            _require_lingual_admin(uid)
+        except PermissionError as exc:
+            return jsonify({'error': str(exc)}), 403
+
+        org = deps.db.get_organization(org_id)
+        if not org:
+            return jsonify({'error': 'not_found'}), 404
+
+        # Use list_org_classes_summary (Task 6 metadata helper) not
+        # list_org_classes — the latter is a pre-existing function with a
+        # different shape used by admin/lti/schools routes. The metadata
+        # variant returns the curated summary needed for the admin panel.
+        classes = deps.db.list_org_classes_summary(org_id=org_id)
+        return jsonify({
+            'items': [
+                {'id': c['id'], 'name': c.get('name'), 'term': c.get('term'),
+                 'subject': c.get('subject'),
+                 'teacherMembershipIds': c.get('teacher_membership_ids') or [],
+                 'createdAt': c.get('created_at'),
+                 'lastActivityAt': c.get('last_activity_at')}
+                for c in classes
+            ],
+        }), 200
+
+    @bp.get('/organizations/<org_id>/audit')
+    def get_org_audit(org_id):
+        try:
+            uid = deps.get_current_user_uid()
+            _require_lingual_admin(uid)
+        except PermissionError as exc:
+            return jsonify({'error': str(exc)}), 403
+
+        org = deps.db.get_organization(org_id)
+        if not org:
+            return jsonify({'error': 'not_found'}), 404
+
+        limit = min(int(request.args.get('limit', 50)), 200)
+        items = deps.db.list_org_audit_events(org_id=org_id, limit=limit)
+        return jsonify({'items': items}), 200
+
     @bp.get('/requests/<request_id>')
     def get_request_detail(request_id):
         try:

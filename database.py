@@ -1159,6 +1159,36 @@ def list_org_classes_summary(*, org_id: str) -> list:
     return rows
 
 
+def count_org_students(*, org_id: str) -> int:
+    """Aggregate active student count for an org.
+
+    Counts via enrollments × classes intersection (enrollments don't carry
+    org_id directly). Chunks class ids to respect Firestore's 30-item ``in``
+    limit. Returns 0 when the org has no classes.
+    """
+    class_ids = [
+        c.id for c in get_db()
+        .collection('classes')
+        .where('org_id', '==', org_id)
+        .stream()
+    ]
+    if not class_ids:
+        return 0
+    total = 0
+    for i in range(0, len(class_ids), 30):
+        chunk = class_ids[i:i + 30]
+        snap = (
+            get_db()
+            .collection('enrollments')
+            .where('class_id', 'in', chunk)
+            .where('status', '==', 'active')
+            .count()
+            .get()
+        )
+        total += snap[0][0].value if snap else 0
+    return total
+
+
 def list_org_audit_events(*, org_id: str, limit: int = 50) -> list:
     """Audit rows scoped to this org, newest first."""
     q = (

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import datetime
 
+import database
 from flask import Blueprint, jsonify, request
 
 from backend.route_deps import RouteDeps
@@ -32,6 +33,7 @@ from backend.services.audit_utils import (  # noqa: F401  -- re-export
     public_base_url as _public_base_url,
     user_agent as _user_agent,
 )
+from backend.services.outbox import OutboxTemplate, enqueue_outbox_email
 
 MAX_INTERNAL_NOTE_LEN = 2000
 
@@ -154,6 +156,72 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
 
         if not result:
             return jsonify({'error': 'not_found'}), 404
+
+        # Side effects after successful approval — mirror Plan 3 behavior so
+        # Task 24 can safely retire the legacy endpoint without losing UX.
+        # All are best-effort: exceptions are logged but do not fail the
+        # response (the atomic Firestore write already succeeded).
+        req_row = deps.db.get_school_request(request_id) or {}
+        requester_uid = req_row.get('requester_uid')
+        requester_email = req_row.get('requester_email') or ''
+        requester_name = req_row.get('requester_name')
+        school_name = req_row.get('school_name')
+        pre_invited = req_row.get('pre_invited_teachers') or []
+        base = _public_base_url()
+
+        # Advance requester onboarding to 'complete'.
+        if requester_uid:
+            try:
+                deps.db.update_user_profile(requester_uid, onboarding_state='complete')
+            except Exception as exc:
+                print(f'[onboarding] state update failed on approval: {exc}')
+
+        # Approval email to requester.
+        if requester_email:
+            try:
+                enqueue_outbox_email(
+                    db=database.get_db(),
+                    recipient_email=requester_email,
+                    recipient_name=requester_name,
+                    template=OutboxTemplate.SCHOOL_REQUEST_APPROVED,
+                    template_data={
+                        'org_name': school_name,
+                        'requester_name': requester_name,
+                        'login_url': f'{base}/login',
+                    },
+                    related_entity_type='school_request',
+                    related_entity_id=request_id,
+                    created_by_uid=uid,
+                )
+            except Exception as exc:
+                print(f'[outbox] school_request_approved enqueue failed: {exc}')
+
+        # Teacher invitation emails (one per pre-invited teacher).
+        inviter_name = (
+            (req_row.get('admin_identity') or {}).get('full_name')
+            or requester_name
+            or 'A school administrator'
+        )
+        for teacher_email in pre_invited:
+            if not teacher_email:
+                continue
+            try:
+                enqueue_outbox_email(
+                    db=database.get_db(),
+                    recipient_email=teacher_email,
+                    recipient_name=None,
+                    template=OutboxTemplate.TEACHER_INVITATION,
+                    template_data={
+                        'org_name': school_name,
+                        'inviter_name': inviter_name,
+                        'signup_url': f'{base}/signup?role=teacher',
+                    },
+                    related_entity_type='school_request',
+                    related_entity_id=request_id,
+                    created_by_uid=uid,
+                )
+            except Exception as exc:
+                print(f'[outbox] teacher_invitation enqueue failed for {teacher_email}: {exc}')
 
         return jsonify({
             'requestId': result.get('request_id'),

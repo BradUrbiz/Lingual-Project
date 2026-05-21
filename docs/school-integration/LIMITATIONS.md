@@ -512,3 +512,35 @@ business actions complete normally but do not produce those emails.
     pin the new value. Longer-term: share the school-type enum
     between FE and BE so this drift class doesn't recur — tracked as
     a v1.5 TASK.
+
+52. **Firestore cursor calls passed multiple positional values to
+    `start_after`.** _RESOLVED post-review._ Both
+    `list_organizations` and `list_school_requests` order by a business
+    field and then `__name__`, but the Python Firestore SDK accepts one
+    cursor object, not multiple positional cursor values. The helpers now
+    pass ordered cursor lists (`[name_lower, id]` and
+    `[leading_value, id]`) so second-page requests do not raise
+    `TypeError: BaseQuery.start_after() takes 2 positional arguments but
+    3 were given`. Regressions: `backend/tests/test_list_organizations.py`
+    and `backend/tests/test_list_school_requests.py`.
+
+53. **`GET /api/lingual-admin/requests` returned `nextCursor` but ignored
+    incoming cursor params.** _RESOLVED post-review._ The FE API client
+    already serialized `cursor` as JSON, and the route returned a
+    `nextCursor`, but the endpoint never parsed the incoming query param
+    or forwarded it to `list_school_requests`. The route now shares the
+    org-list cursor parsing path, snake-cases `leadingValue`, validates
+    malformed cursor JSON with 400, and converts datetime leading values
+    to ISO strings on the wire and back to `datetime` before hitting the
+    DB helper. Regression:
+    `backend/tests/test_lingual_admin_requests_list_route.py`.
+
+54. **`RequestDetailPanel` omitted key Plan 3 wizard payload before
+    approval.** _RESOLVED post-review._ The detail drawer showed
+    requester, website, location, org type, pre-invites, and attestation,
+    but did not show admin identity details, official domains,
+    public/private, grade size, integration, or curriculum data even
+    though `_serialize_request` already returned those fields. Lingual
+    admins now review the full onboarding payload before approving or
+    declining. Regression:
+    `frontend/src/pages/LingualAdmin/LingualRequestsPage.test.tsx`.

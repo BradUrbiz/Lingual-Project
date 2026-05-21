@@ -813,6 +813,34 @@ def update_user_profile(uid, display_name=None, age=None, gender=None,
     user_ref.update(updates)
 
 
+_LEGACY_PICK_STATE_BY_ROLE = {
+    INTENDED_ROLE_STUDENT: ONBOARDING_STATE_COMPLETE,
+    INTENDED_ROLE_TEACHER: ONBOARDING_STATE_ROLE_SELECTED,
+    INTENDED_ROLE_ADMIN: ONBOARDING_STATE_ROLE_SELECTED,
+}
+
+
+def mark_user_legacy_role_picked(*, uid: str, role: str) -> None:
+    """Apply the role pick from the LegacyRoleMigrationModal.
+
+    Per spec §638–640:
+    - student → complete (drop into their existing learner flow).
+    - teacher → role_selected (resume into teacher join-org).
+    - admin → role_selected (resume into admin wizard).
+    """
+    if not uid:
+        raise ValueError('uid is required')
+    if role not in _LEGACY_PICK_STATE_BY_ROLE:
+        raise ValueError(
+            f'Invalid role {role!r}; allowed: {sorted(_LEGACY_PICK_STATE_BY_ROLE)}'
+        )
+    update_user_profile(
+        uid=uid,
+        intended_role=role,
+        onboarding_state=_LEGACY_PICK_STATE_BY_ROLE[role],
+    )
+
+
 def update_assessment_response(uid, item_id, response, current_index):
     """Update a single assessment response."""
     user_ref = get_user_ref(uid)

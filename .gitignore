@@ -26,6 +26,13 @@ frontend/.omc/
 .claude/
 .agents/
 
+# Sales outreach working data — contains real teacher contacts.
+# Schema reference lives in docs/sales/*.example.csv (tracked).
+docs/sales/teacher_dmv.csv
+docs/sales/raw/
+docs/sales/extracted/
+docs/sales/enrichment/
+
 # Playwright accessibility snapshot dumps from local QA sessions
 /after-*.yml
 /auth-*.yml

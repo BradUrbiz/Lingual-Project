@@ -292,4 +292,43 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
             'assessmentPreference': assessment_preference,
         })
 
+    ALLOWED_MIGRATE_ROLES = frozenset({'student', 'teacher', 'admin'})
+
+    @bp.post('/api/auth/migrate-role')
+    def migrate_role():
+        """Legacy user role pick — idempotent. Non-legacy users are a no-op 200."""
+        try:
+            uid = deps.get_current_user_uid()
+        except Exception:
+            return jsonify({'error': 'unauthenticated'}), 401
+        if not uid:
+            return jsonify({'error': 'unauthenticated'}), 401
+
+        body = request.get_json(silent=True) or {}
+        role = (body.get('role') or '').strip()
+        if not role:
+            return jsonify({'error': 'role is required'}), 400
+        if role not in ALLOWED_MIGRATE_ROLES:
+            return jsonify({'error': f'invalid role {role!r}'}), 400
+
+        user_doc = deps.db.get_user(uid)
+        memberships = deps.db.get_user_memberships(uid)
+
+        # `is_legacy_user_needing_role_pick` is a pure function (Plan 1) — import
+        # directly so the route does not rely on a fake method existing on
+        # `deps.db`. State-changing helpers still live behind `deps.db`.
+        from database import is_legacy_user_needing_role_pick
+        if is_legacy_user_needing_role_pick(user_doc, memberships):
+            try:
+                deps.db.mark_user_legacy_role_picked(uid=uid, role=role)
+            except ValueError as exc:
+                return jsonify({'error': str(exc)}), 400
+            user_doc = deps.db.get_user(uid) or {}
+
+        profile = (user_doc or {}).get('profile') or {}
+        return jsonify({
+            'intendedRole': profile.get('intended_role'),
+            'onboardingState': profile.get('onboarding_state'),
+        }), 200
+
     return bp

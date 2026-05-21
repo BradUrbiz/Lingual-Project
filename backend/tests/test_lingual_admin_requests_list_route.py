@@ -67,13 +67,14 @@ def _full_row_fixture():
 
 
 class FakeRequestsDb(FakeDbBase):
-    def __init__(self, *, rows=None):
+    def __init__(self, *, rows=None, next_cursor=None):
         super().__init__()
         # Default to the original minimal row so existing tests pass; the
         # full-row test injects its own rows via the constructor.
         self._rows = rows if rows is not None else [
             {'id': 'r1', 'school_name': 'Sunset', 'status': 'pending'},
         ]
+        self._next_cursor = next_cursor
 
     def resolve_user_school_context(self, uid, preferred_active_membership_id=None):
         return {'lingual_admin': uid == 'admin-uid'}
@@ -93,7 +94,7 @@ class FakeRequestsDb(FakeDbBase):
             requested_before=requested_before, sort=sort,
             limit=limit, cursor=cursor,
         )
-        return {'items': [dict(r) for r in self._rows], 'next_cursor': None}
+        return {'items': [dict(r) for r in self._rows], 'next_cursor': self._next_cursor}
 
 
 class RequestsListRouteTests(unittest.TestCase):
@@ -126,6 +127,51 @@ class RequestsListRouteTests(unittest.TestCase):
         self.assertEqual(self.db.last_kwargs['school_type'], 'high')
         self.assertEqual(self.db.last_kwargs['country'], 'US')
         self.assertEqual(self.db.last_kwargs['sort'], 'name')
+
+    def test_cursor_input_is_snakeized_and_forwarded_to_db(self):
+        import json
+
+        cursor_param = json.dumps({
+            'leadingValue': _FULL_ROW_CREATED_AT.isoformat(),
+            'id': 'r100',
+        })
+        resp = self.client.get(
+            '/api/lingual-admin/requests',
+            query_string={'cursor': cursor_param},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            self.db.last_kwargs['cursor'],
+            {'leading_value': _FULL_ROW_CREATED_AT, 'id': 'r100'},
+        )
+
+    def test_invalid_cursor_400(self):
+        resp = self.client.get('/api/lingual-admin/requests?cursor=not-json')
+        self.assertEqual(resp.status_code, 400)
+
+    def test_next_cursor_is_camelcased_and_iso_serialized(self):
+        from backend.routes.lingual_admin import create_lingual_admin_blueprint
+
+        db = FakeRequestsDb(
+            next_cursor={'leading_value': _FULL_ROW_CREATED_AT, 'id': 'r100'},
+        )
+        deps = make_test_deps(db=db)
+        app = make_test_app(
+            deps,
+            extra_blueprints=[create_lingual_admin_blueprint(deps)],
+        )
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {'uid': 'admin-uid'}
+
+        resp = client.get('/api/lingual-admin/requests')
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json()['nextCursor'], {
+            'leadingValue': _FULL_ROW_CREATED_AT.isoformat(),
+            'id': 'r100',
+        })
 
     def test_invalid_sort_rejected(self):
         resp = self.client.get('/api/lingual-admin/requests?sort=banana')

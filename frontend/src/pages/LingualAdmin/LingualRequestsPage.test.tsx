@@ -103,6 +103,54 @@ describe('LingualRequestsPage', () => {
     expect(screen.getByRole('button', { name: /decline/i })).toBeInTheDocument();
   });
 
+  it('shows the full wizard payload before approval', async () => {
+    vi.mocked(api.fetchRequests).mockResolvedValue({
+      items: [{ id: 'r1', schoolName: 'Sunset HS', status: 'pending' }],
+      nextCursor: null,
+    });
+    vi.mocked(api.fetchRequestDetail).mockResolvedValue(makeDetail({
+      orgType: 'school',
+      schoolType: 'high',
+      publicPrivate: 'public',
+      gradeSize: '200-500' as never,
+      officialEmailDomains: ['sunset.edu', 'students.sunset.edu'],
+      adminIdentity: {
+        fullName: 'Admin R',
+        schoolEmail: 'admin@sunset.edu',
+        roleTitle: 'Principal',
+        authorizationAttestation: {
+          confirmedAt: '2026-05-01T00:00:00Z',
+          ipHash: 'abc123',
+          userAgent: 'Mozilla/5.0 (Macintosh)',
+        },
+      },
+      integration: {
+        canvasUrl: 'https://canvas.sunset.edu',
+        canvasIntegrationTypes: ['lti13', 'roster_sync'],
+      },
+      curriculum: {
+        gradeRanges: ['g9_12'],
+        languagesTaught: ['es', 'fr'],
+        courseFrameworks: ['ap'],
+      },
+    }));
+    render(<LingualRequestsPage />);
+    await waitFor(() => screen.getByText('Sunset HS'));
+    fireEvent.click(screen.getByText('Sunset HS'));
+
+    await waitFor(() => screen.getByText('Admin R'));
+    expect(screen.getByText('admin@sunset.edu')).toBeInTheDocument();
+    expect(screen.getByText('Principal')).toBeInTheDocument();
+    expect(screen.getByText('public')).toBeInTheDocument();
+    expect(screen.getByText('200-500')).toBeInTheDocument();
+    expect(screen.getByText('sunset.edu, students.sunset.edu')).toBeInTheDocument();
+    expect(screen.getByText('https://canvas.sunset.edu')).toBeInTheDocument();
+    expect(screen.getByText('lti13, roster_sync')).toBeInTheDocument();
+    expect(screen.getByText('g9_12')).toBeInTheDocument();
+    expect(screen.getByText('es, fr')).toBeInTheDocument();
+    expect(screen.getByText('ap')).toBeInTheDocument();
+  });
+
   it('renders gracefully when nested fields missing', async () => {
     // Defensive: a request submitted by a legacy path may have no
     // adminIdentity / no location. Panel should still render with em-dashes.

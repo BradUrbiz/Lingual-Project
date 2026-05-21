@@ -20,6 +20,7 @@ location, pre_invited_teachers).
 from __future__ import annotations
 
 import datetime
+import json
 import os
 
 import database
@@ -58,7 +59,12 @@ def _camelize_cursor(cursor):
     """Transform a cursor dict's known snake_case keys to camelCase for the wire."""
     if not cursor:
         return cursor
-    return {_CURSOR_KEY_TO_CAMEL.get(k, k): v for k, v in cursor.items()}
+    out = {}
+    for k, v in cursor.items():
+        if k == 'leading_value' and v is not None and hasattr(v, 'isoformat'):
+            v = v.isoformat()
+        out[_CURSOR_KEY_TO_CAMEL.get(k, k)] = v
+    return out
 
 
 def _snakeize_cursor(cursor):
@@ -66,6 +72,29 @@ def _snakeize_cursor(cursor):
     if not cursor:
         return cursor
     return {_CURSOR_KEY_TO_SNAKE.get(k, k): v for k, v in cursor.items()}
+
+
+def _parse_json_cursor_arg(cursor_arg):
+    if not cursor_arg:
+        return None
+    try:
+        cursor = json.loads(cursor_arg)
+    except Exception as exc:
+        raise ValueError('invalid cursor') from exc
+    if not isinstance(cursor, dict):
+        raise ValueError('invalid cursor')
+    return _snakeize_cursor(cursor)
+
+
+def _parse_request_cursor_arg(cursor_arg, *, sort):
+    cursor = _parse_json_cursor_arg(cursor_arg)
+    if cursor is None:
+        return None
+    if not cursor.get('id') or 'leading_value' not in cursor:
+        raise ValueError('invalid cursor')
+    if sort in ('requested_at_desc', 'requested_at_asc'):
+        cursor['leading_value'] = _parse_iso8601(cursor.get('leading_value'))
+    return cursor
 
 
 def _parse_iso8601(value):
@@ -191,6 +220,10 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
         school_type = request.args.get('schoolType') or None
         country = request.args.get('country') or None
         sort = request.args.get('sort', 'requested_at_desc')
+        try:
+            cursor = _parse_request_cursor_arg(request.args.get('cursor'), sort=sort)
+        except ValueError:
+            return jsonify({'error': 'invalid cursor'}), 400
 
         try:
             result = deps.db.list_school_requests(
@@ -198,6 +231,7 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 school_type=school_type,
                 country=country,
                 sort=sort,
+                cursor=cursor,
             )
         except ValueError as exc:
             return jsonify({'error': str(exc)}), 400
@@ -224,9 +258,8 @@ def create_lingual_admin_blueprint(deps: RouteDeps) -> Blueprint:
             # names. Reject malformed input with 400 rather than letting
             # Firestore silently return a wrong page.
             try:
-                import json
-                cursor = _snakeize_cursor(json.loads(cursor_arg))
-            except Exception:
+                cursor = _parse_json_cursor_arg(cursor_arg)
+            except ValueError:
                 return jsonify({'error': 'invalid cursor'}), 400
 
         try:

@@ -24,7 +24,7 @@ export interface RequestsFilters {
   schoolType?: string;
   country?: string;
   sort?: 'requested_at_desc' | 'requested_at_asc' | 'name';
-  cursor?: { id: string };
+  cursor?: { leadingValue: string | null; id: string };
 }
 
 export async function fetchRequests(

@@ -50,6 +50,17 @@ describe('lingualAdmin API client', () => {
     );
   });
 
+  it('fetchRequests serializes cursor as JSON', async () => {
+    mocked.get.mockResolvedValue({ data: { items: [], nextCursor: null } });
+    await fetchRequests({
+      cursor: { leadingValue: '2026-05-01T12:00:00+00:00', id: 'r1' },
+    });
+    const call = mocked.get.mock.calls[0];
+    expect(call[1].params.cursor).toBe(
+      JSON.stringify({ leadingValue: '2026-05-01T12:00:00+00:00', id: 'r1' }),
+    );
+  });
+
   it('fetchRequestDetail GETs /lingual-admin/requests/:id', async () => {
     mocked.get.mockResolvedValue({ data: { id: 'r1' } });
     await fetchRequestDetail('r1');

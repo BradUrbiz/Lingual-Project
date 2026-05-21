@@ -1067,10 +1067,9 @@ def list_organizations(
         query = query.where('created_at', '<=', created_before)
     query = query.order_by('name_lower').order_by('__name__').limit(limit)
     if cursor and cursor.get('name_lower') and cursor.get('id'):
-        # Firestore `start_after` takes positional values matching the
-        # order_by chain — NOT a dict. A dict here silently produces a
-        # truncated query that re-reads the same page.
-        query = query.start_after(cursor['name_lower'], cursor['id'])
+        # Firestore `start_after` takes a single cursor object. The list
+        # values match the order_by chain: name_lower, then __name__.
+        query = query.start_after([cursor['name_lower'], cursor['id']])
     items = []
     last_doc = None
     for doc in query.stream():
@@ -3372,8 +3371,8 @@ def list_school_requests(
         query = query.order_by('school_name')
     query = query.order_by('__name__').limit(limit)
 
-    if cursor and cursor.get('id'):
-        query = query.start_after(cursor.get('leading_value'), cursor['id'])
+    if cursor and cursor.get('id') and 'leading_value' in cursor:
+        query = query.start_after([cursor.get('leading_value'), cursor['id']])
 
     items = []
     last_doc = None

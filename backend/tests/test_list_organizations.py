@@ -56,9 +56,9 @@ class ListOrganizationsTests(unittest.TestCase):
         self.assertTrue(any('school_type' in c for c in calls))
 
     @patch('database.get_db')
-    def test_cursor_advances_query_with_positional_args(self, mock_get_db):
-        """Firestore `start_after` takes positional values matching the
-        order_by chain (name_lower, __name__). NOT a dict."""
+    def test_cursor_advances_query_with_single_ordered_cursor(self, mock_get_db):
+        """Firestore `start_after` takes one cursor object whose values match
+        the order_by chain (name_lower, __name__)."""
         col = MagicMock()
         mock_get_db.return_value.collection.return_value = col
         col.where.return_value = col
@@ -67,7 +67,7 @@ class ListOrganizationsTests(unittest.TestCase):
         col.start_after.return_value = col
         col.stream.return_value = []
         database.list_organizations(cursor={'name_lower': 'lincoln high', 'id': 'o100'})
-        col.start_after.assert_called_once_with('lincoln high', 'o100')
+        col.start_after.assert_called_once_with(['lincoln high', 'o100'])
 
     @patch('database.get_db')
     def test_invalid_status_rejected(self, mock_get_db):

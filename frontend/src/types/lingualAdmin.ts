@@ -62,21 +62,21 @@ export interface LocationDetail {
 }
 
 export interface AuthorizationAttestation {
-  confirmedAt: string | null;
-  ipHash: string;
-  userAgent: string;
+  confirmedAt?: string | null;
+  ipHash?: string | null;
+  userAgent?: string | null;
 }
 
 export interface AdminIdentityDetail {
   fullName?: string;
   schoolEmail?: string;
   roleTitle?: string;
-  authorizationAttestation: AuthorizationAttestation;
+  authorizationAttestation?: AuthorizationAttestation | null;
 }
 
 export interface IntegrationDetail {
-  canvasUrl: string | null;
-  canvasIntegrationTypes: string[];
+  canvasUrl?: string | null;
+  canvasIntegrationTypes?: string[];
 }
 
 export interface CurriculumDetail {
@@ -91,7 +91,7 @@ export interface SchoolRequestDetail extends SchoolRequestRow {
   canvasInstanceUrl?: string;
   location?: LocationDetail;
   publicPrivate?: string;
-  gradeSize?: number;
+  gradeSize?: string | number | null;
   officialEmailDomains?: string[];
   preInvitedTeachers: string[];
   adminIdentity?: AdminIdentityDetail;

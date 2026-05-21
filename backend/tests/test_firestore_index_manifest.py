@@ -75,6 +75,44 @@ class TestFirestoreIndexManifest(unittest.TestCase):
             "for org_id ASC + status ASC + requested_at DESC"
         )
 
+    def test_lingual_admin_school_request_list_indexes_exist(self):
+        """Plan 5 request list needs cursor-compatible composite indexes.
+
+        `database.list_school_requests` always orders by the selected leading
+        field and then `__name__` for stable pagination. Firestore's single
+        field indexes cover the unfiltered list, so these composite manifest
+        entries cover the visible Lingual admin request-list filters:
+        status, schoolType, and status+schoolType.
+        """
+        sort_tails = {
+            "requested_at_desc": [
+                ("created_at", "DESCENDING")
+            ],
+            "requested_at_asc": [
+                ("created_at", "ASCENDING")
+            ],
+            "name": [
+                ("school_name", "ASCENDING")
+            ],
+        }
+        filter_prefixes = {
+            "status": [("status", "ASCENDING")],
+            "school_type": [("school_type", "ASCENDING")],
+            "status_school_type": [
+                ("status", "ASCENDING"),
+                ("school_type", "ASCENDING"),
+            ],
+        }
+
+        for filter_label, prefix in filter_prefixes.items():
+            for sort_label, tail in sort_tails.items():
+                with self.subTest(filter=filter_label, sort=sort_label):
+                    self.assertTrue(
+                        self._has_index("school_requests", prefix + tail),
+                        "firestore.indexes.json is missing school_requests "
+                        f"index for {filter_label} + {sort_label}",
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

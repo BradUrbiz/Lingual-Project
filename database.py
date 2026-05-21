@@ -3365,11 +3365,14 @@ def list_school_requests(
 
     if sort == 'requested_at_desc':
         query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
+        document_id_direction = firestore.Query.DESCENDING
     elif sort == 'requested_at_asc':
         query = query.order_by('created_at')
+        document_id_direction = firestore.Query.ASCENDING
     else:  # 'name'
         query = query.order_by('school_name')
-    query = query.order_by('__name__').limit(limit)
+        document_id_direction = firestore.Query.ASCENDING
+    query = query.order_by('__name__', direction=document_id_direction).limit(limit)
 
     if cursor and cursor.get('id') and 'leading_value' in cursor:
         query = query.start_after([cursor.get('leading_value'), cursor['id']])

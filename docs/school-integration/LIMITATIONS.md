@@ -544,3 +544,21 @@ business actions complete normally but do not produce those emails.
     admins now review the full onboarding payload before approving or
     declining. Regression:
     `frontend/src/pages/LingualAdmin/LingualRequestsPage.test.tsx`.
+
+55. **`/api/lingual-admin/requests` used the wrong Firestore cursor
+    direction for newest-first and missed filtered request indexes.**
+    _RESOLVED post-review._ Plan 5 made `list_school_requests`
+    deterministic by ordering every request-list query by the selected
+    leading field and then `__name__`. For the default newest-first page,
+    the code used `created_at DESC` but left `__name__` at its default
+    ASC direction. Real Firestore rejected that mixed-direction unfiltered
+    query with `FAILED_PRECONDITION: The query requires an index`,
+    producing a 500 in `/lingual-admin/requests`; the Firebase deploy API
+    also rejects that single-field + `__name__ ASC` composite as
+    unnecessary, so the source fix is to use `__name__ DESC` whenever
+    `created_at` is DESC. `firestore.indexes.json` now also declares the
+    visible filtered request-list combinations: status, schoolType, and
+    status+schoolType across newest, oldest, and name sorts. Regressions:
+    `backend/tests/test_list_school_requests.py` and
+    `backend/tests/test_firestore_index_manifest.py`
+    (`test_lingual_admin_school_request_list_indexes_exist`).

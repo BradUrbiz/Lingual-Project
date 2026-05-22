@@ -26,3 +26,13 @@ export const verifyToken = async (
 export const logout = async (): Promise<void> => {
   await api.get('/logout');
 };
+
+export interface MigrateRoleResponse {
+  intendedRole: IntendedRole | null;
+  onboardingState: string | null;
+}
+
+export const migrateRole = async (role: IntendedRole): Promise<MigrateRoleResponse> => {
+  const response = await api.post<MigrateRoleResponse>('/auth/migrate-role', { role });
+  return response.data;
+};

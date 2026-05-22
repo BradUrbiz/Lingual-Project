@@ -53,4 +53,13 @@ describe('LegacyRoleMigrationModal', () => {
     expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/close/i)).not.toBeInTheDocument();
   });
+
+  it('exposes role descriptions to screen readers via aria-describedby', () => {
+    render(<LegacyRoleMigrationModal onPicked={vi.fn()} />);
+    const studentBtn = screen.getByRole('button', { name: /^student$/i });
+    const descId = studentBtn.getAttribute('aria-describedby');
+    expect(descId).toBeTruthy();
+    const descEl = document.getElementById(descId!);
+    expect(descEl?.textContent).toMatch(/continue learning/i);
+  });
 });

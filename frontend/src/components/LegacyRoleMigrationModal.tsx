@@ -50,18 +50,22 @@ export function LegacyRoleMigrationModal({ onPicked }: LegacyRoleMigrationModalP
         </p>
 
         <div className="mt-4 grid gap-2">
-          {ROLES.map(r => (
-            <button
-              key={r.value}
-              aria-label={r.label}
-              onClick={() => pick(r.value)}
-              disabled={busy !== null}
-              className="rounded-md border border-neutral-300 px-4 py-3 text-left transition hover:border-neutral-900 hover:bg-neutral-50 disabled:opacity-50"
-            >
-              <div className="font-medium" aria-hidden="true">{r.label}</div>
-              <div className="text-xs text-neutral-600">{r.description}</div>
-            </button>
-          ))}
+          {ROLES.map(r => {
+            const descId = `legacy-role-desc-${r.value}`;
+            return (
+              <button
+                key={r.value}
+                onClick={() => pick(r.value)}
+                disabled={busy !== null}
+                aria-label={r.label}
+                aria-describedby={descId}
+                className="rounded-md border border-neutral-300 px-4 py-3 text-left transition hover:border-neutral-900 hover:bg-neutral-50 disabled:opacity-50"
+              >
+                <div className="font-medium">{r.label}</div>
+                <div id={descId} className="text-xs text-neutral-600">{r.description}</div>
+              </button>
+            );
+          })}
         </div>
 
         {error && (

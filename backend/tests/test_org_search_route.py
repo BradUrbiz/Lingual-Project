@@ -20,6 +20,15 @@ class FakeOrgSearchDb(FakeDbBase):
 
 
 class OrgSearchRouteTest(unittest.TestCase):
+    def setUp(self):
+        # Rate-limit bucket is module-level state. Tests below patch time.monotonic
+        # to a fixed future value (1000.0). The eviction check (bucket[0] < now - 1.0)
+        # won't evict those entries when subsequent tests use the real monotonic clock
+        # (which on fresh CI containers is ~5.0 seconds since process start), so a
+        # bucket left full by a prior test will 429 the next test. Clear per-test.
+        from backend.routes import teacher_requests as tr_module
+        tr_module._RATE_LIMIT_PER_UID.clear()
+
     def _client(self):
         db = FakeOrgSearchDb()
         db.orgs_index = [

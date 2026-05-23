@@ -3,7 +3,7 @@ import os
 from typing import Any
 
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from openai import APIStatusError, RateLimitError
 
 from backend.route_deps import RouteDeps
@@ -68,7 +68,7 @@ AVATAR_REACTION_INTENTS = [
     'tap_chest_reassure',
 ]
 
-REALTIME_MODEL = 'gpt-realtime-2'
+REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15'
 REALTIME_CLIENT_SECRET_TTL_SECONDS = 600
 REALTIME_INPUT_AUDIO_TRANSCRIPTION_MODEL = 'gpt-4o-mini-transcribe-2025-12-15'
 REALTIME_TRANSCRIPTION_LANGUAGE_HINTS = {
@@ -249,8 +249,7 @@ def build_realtime_transcription_prompt(expected_language_name: str) -> str:
 def build_realtime_safety_identifier(uid: Any) -> str | None:
     if not isinstance(uid, str) or not uid.strip():
         return None
-    digest = hashlib.sha256(f'lingual-user:{uid.strip()}'.encode('utf-8')).hexdigest()
-    return f'lingual-user-{digest}'
+    return hashlib.sha256(f'lingual-user:{uid.strip()}'.encode('utf-8')).hexdigest()
 
 
 def build_realtime_session_request(
@@ -276,7 +275,6 @@ def build_realtime_session_request(
         'type': 'realtime',
         'model': REALTIME_MODEL,
         'instructions': guarded_instructions,
-        'reasoning': {'effort': 'low'},
         'output_modalities': ['audio'],
         'audio': {
             'input': {
@@ -495,10 +493,15 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
             )
 
             if response.status_code != 200:
+                current_app.logger.error(
+                    'Realtime client_secret mint failed: status=%s body=%s',
+                    response.status_code,
+                    response.text[:1000],
+                )
                 return jsonify({
-                    'error': f'Failed to create session: {response.text}',
+                    'error': 'Unable to start the voice session right now. Please try again.',
                     'success': False,
-                }), response.status_code
+                }), 502
 
             data = response.json()
             return jsonify({
@@ -515,8 +518,12 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
         except ValueError as e:
             error = str(e)
             status_code = 404 if 'not found' in error.lower() else 400
+            current_app.logger.warning(
+                'Realtime session ValueError (-> %s): %s', status_code, error
+            )
             return jsonify({'error': error, 'success': False}), status_code
         except Exception as e:
+            current_app.logger.exception('Realtime session unexpected error')
             return jsonify({'error': str(e), 'success': False}), 500
 
     @bp.route('/api/realtime/connect', methods=['POST'])

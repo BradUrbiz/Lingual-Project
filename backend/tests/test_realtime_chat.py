@@ -11,6 +11,7 @@ from backend.routes.chat import (
     AVATAR_REACTION_INTENTS,
     build_avatar_context_payload,
     build_avatar_directive_tool,
+    build_realtime_safety_identifier,
     build_realtime_session_request,
     create_chat_blueprint,
     realtime_avatar_directives_requested,
@@ -552,6 +553,13 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
         self.assertIn('module M1', body_context['systemMessage'])
         self.assertIn('situation S2', body_context['systemMessage'])
 
+    def test_realtime_safety_identifier_is_hashed_and_within_openai_limit(self):
+        identifier = build_realtime_safety_identifier('student-1')
+
+        self.assertIsNotNone(identifier)
+        self.assertEqual(len(identifier), 64)
+        self.assertNotIn('student-1', identifier)
+
     def test_realtime_session_request_skips_avatar_tools_by_default(self):
         with patch.dict('os.environ', {}, clear=False):
             payload = build_realtime_session_request('Base instructions')
@@ -561,8 +569,8 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
 
         self.assertEqual(payload['expires_after'], {'anchor': 'created_at', 'seconds': 600})
         self.assertEqual(session_payload['type'], 'realtime')
-        self.assertEqual(session_payload['model'], 'gpt-realtime-2')
-        self.assertEqual(session_payload['reasoning'], {'effort': 'low'})
+        self.assertEqual(session_payload['model'], 'gpt-realtime-mini-2025-12-15')
+        self.assertNotIn('reasoning', session_payload)
         self.assertEqual(session_payload['output_modalities'], ['audio'])
         self.assertIn('Base instructions', session_payload['instructions'])
         self.assertIn('Ignore accidental noise', session_payload['instructions'])
@@ -791,6 +799,7 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         )
         request_headers = mocked_post.call_args.kwargs['headers']
         self.assertIn('OpenAI-Safety-Identifier', request_headers)
+        self.assertLessEqual(len(request_headers['OpenAI-Safety-Identifier']), 64)
         self.assertNotIn('student-1', request_headers['OpenAI-Safety-Identifier'])
 
         request_payload = mocked_post.call_args.kwargs['json']

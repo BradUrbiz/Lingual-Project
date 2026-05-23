@@ -317,3 +317,21 @@ After Plan 5 lands, the following is true and consumable:
 2. Any new role-removal code path MUST go through `database.remove_membership(...)` so `school_admin_uids` stays in sync. Plan 5 added the helper and its invariant test (`backend/tests/test_school_admin_uids_invariant.py::RemoveMembershipInvariantTests`); extend the test if you add a new removal path.
 3. Any new code that mutates `organizations.status` MUST go through `database.suspend_organization` / `restore_organization`. Adding a third status (`archived`) is allowed; reuse the validator.
 4. When wiring a future reminder template, close the outbox sweep gap first (LIMITATIONS #21) — Plan 5 does NOT close it because no reminder template ships in this plan.
+
+---
+
+## 16. Plan 6 contract surface (what's true after Plan 6 lands)
+
+**Backend:**
+- `database.mark_user_legacy_role_picked(*, uid, role)` is the canonical writer for legacy-pick transitions; it dispatches to `update_user_profile` with the right `onboarding_state` per role (student → complete; teacher/admin → role_selected).
+- `POST /api/auth/migrate-role { role }` is the only client-facing entry point. Server re-verifies legacy status via `is_legacy_user_needing_role_pick` before writing — never trust the client's claim. Idempotent: returns 200 for non-legacy users with no write.
+- `is_legacy_user_needing_role_pick(user_doc, memberships)` is a pure function imported directly inside the route to allow `FakeDb` fixtures to omit it.
+
+**Frontend:**
+- `LegacyRoleMigrationModal` is mounted globally in `AuthProvider` and gated on `user.requiresLegacyRolePick`. The modal is intentionally blocking; do not add Esc/click-outside dismissal.
+- `getOnboardingDestination(user)` and `getPrivilegedHomeRoute(user)` BOTH return `null` while `requiresLegacyRolePick` is true. **Every caller must treat `null` as "do not navigate."** Callers that unconditionally redirect (e.g., `navigate(dest!)` or `dest ?? FALLBACK_ROUTE`) will break the modal — except for AppLayout's home-logo link, which is benign because the modal at `z-50` overlays the header at `z-30`.
+- The modal calls `migrateRole(role)` then triggers `refreshUser()` so `requiresLegacyRolePick` flips to false and React state updates — at which point the modal unmounts and the dispatcher routes the user normally.
+
+**Operations:**
+- `scripts/backfill_legacy_user_roles.py` is one-shot, idempotent, and supports `--dry-run`. Run dry then real on staging, then production. Stats include `would_set_*` (dry counts) and `written` (real counts).
+- Rollout order is non-negotiable: backend endpoint must land before backfill runs; backfill must run before the frontend modal lands. The modal is non-functional without the endpoint, but the endpoint is invisible without the modal — so the only safe order is endpoint → backfill → modal. Plan 6's task order matches; deployment phases are in `docs/school-integration/PLAN_6_ROLLOUT.md` (Task 9).

@@ -461,13 +461,13 @@ business actions complete normally but do not produce those emails.
     creating the new org.** _RESOLVED post-review._ The transactional
     `org_data` dict (extended in #42 with `name_lower` +
     `school_admin_uids`) still only copied the legacy slim fields. The
-    Plan 3 wizard captures `school_type`, `location.{country,state}`,
+    Plan 3 wizard captures `school_type`, `location.{country,state,county}`,
     `website_url`, `public_private`, and `grade_size` on
     `school_requests`, but none of these reached the resulting
     `organizations` doc. Self-defeating loop: Plan 5's
     `list_organizations` filters and Org detail page surface render the
     very fields that were missing on the very orgs they just created
-    via the wizard. `approve_school_request` now copies all six wizard
+    via the wizard. `approve_school_request` now copies the wizard
     fields inside the same `@firestore.transactional` block, with two
     name remaps required by the schema: the request schema uses
     `public_private` while the org schema uses `public_or_private` (the
@@ -562,3 +562,47 @@ business actions complete normally but do not produce those emails.
     `backend/tests/test_list_school_requests.py` and
     `backend/tests/test_firestore_index_manifest.py`
     (`test_lingual_admin_school_request_list_indexes_exist`).
+
+### Legacy migration (Plan 6)
+
+56. **Legacy migration modal is English-only.** Spec §628 prescribes
+    exact copy; `LanguageProvider` (en/ko) is not threaded through. Per
+    Plan 6 brainstorming, acceptable for v1; revisit when ko learner
+    population becomes a meaningful share.
+
+57. **`POST /api/auth/migrate-role` is idempotent for already-migrated
+    users.** Calling with `role: 'admin'` on a user whose
+    `intended_role` is already `'student'` returns 200 with the existing
+    state (does NOT overwrite). Defense-in-depth — prevents a user with
+    a devtools console from re-picking their own role after being
+    migrated, even though the modal would not mount.
+
+58. **Backfill writes are not transactional across users.** The script
+    iterates one user at a time and updates each in a separate Firestore
+    write. A mid-run failure leaves the partially-processed users with
+    `profile.intended_role` set (correct) and the unprocessed users in
+    their legacy state (also correct — the modal handles them). Idempotent
+    on re-run: users with `intended_role` already set are skipped.
+
+59. **Backfill has no per-user try/except on writes.** A transient
+    Firestore write error for one user will abort the run with no
+    partial stats printed. Operator should re-run the script (it's
+    idempotent on already-migrated users) and watch logs for the
+    failing uid. Acceptable for a one-shot operator-supervised migration;
+    if this script is ever re-purposed for routine maintenance, wrap
+    the update call in try/except and add a `write_errors` counter.
+
+60. **Backfill telemetry is stdout-only.** Each transition logs one line
+    (`[backfill] uid=… transition=… dry_run=…`). No Firestore audit doc
+    is written. Acceptable because the script is one-shot and operator-
+    run; the log is captured by Cloud Logging when the script runs in
+    GCP.
+
+61. **`AppLayout.tsx` retains a `?? LEARNER_HOME_ROUTE` fallback** on
+    the home-logo link (`getPrivilegedHomeRoute(user) ?? LEARNER_HOME_ROUTE`).
+    For a legacy user awaiting the modal, `getPrivilegedHomeRoute` now
+    returns null but the fallback still resolves to `/app/learn`. The
+    modal at `z-50` fully covers the AppLayout header at `z-30`, so the
+    home-logo click is blocked in practice. Convert the home link to a
+    no-op or `href="#"` when null after the backfill removes legacy
+    users from the active population.

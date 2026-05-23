@@ -1142,3 +1142,41 @@ to cover the removal path.
 - `teacher_join_approved` (on approve → teacher)
 - `teacher_join_declined` (on decline → teacher)
 - ~~Which LMS gets the first real integration path: Google Classroom or Canvas?~~ **Resolved: Canvas LMS first. Implemented with PAT-based auth, per-class connections stored in `canvas_connections` (encrypted PAT via AES-256-GCM), roster visibility via `canvas_roster_entries/` (Canvas-truth view only; does not create enrollments — see the 2026-04-21 roster-decouple invariant in §4.1), and `canvas_course_content` for student module view. See `backend/services/canvas/` and `backend/routes/integrations.py`. Enrollments are created only by join code (student action) or LTI launch (consent-by-click), never by PAT sync.**
+
+## 14. Legacy User Migration (Plan 6)
+
+Users created before Plans 1–5 have `users/{uid}/profile.intended_role = null`
+and `onboarding_state = null`. Two paths handle them:
+
+1. **Backfill (`scripts/backfill_legacy_user_roles.py`)** — pre-resolves
+   any user with active memberships or enrollments by setting
+   `intended_role` and `onboarding_state='complete'`.
+
+   Priority order (highest to lowest):
+   - Any active membership with `school_admin` role → `admin`.
+   - Any active membership with `teacher` role → `teacher`.
+   - Any active enrollment → `student`.
+   - Otherwise: leave untouched.
+
+2. **`LegacyRoleMigrationModal`** — for users the backfill couldn't
+   resolve, a blocking modal mounts on next sign-in. The modal
+   `POST`s to `/api/auth/migrate-role { role }` which writes
+   `intended_role` and `onboarding_state` per spec §638–640:
+   - student → `onboarding_state='complete'` (lands on `/app/learn`).
+   - teacher → `onboarding_state='role_selected'` (lands on `/signup/teacher/join-org`).
+   - admin → `onboarding_state='role_selected'` (lands on `/signup/admin/org-wizard`).
+
+   The endpoint is idempotent — non-legacy users receive 200 with no
+   write. The dispatcher (`getOnboardingDestination`) returns `null`
+   while `requiresLegacyRolePick` is true so the modal never races
+   navigation.
+
+### Endpoint: `POST /api/auth/migrate-role`
+
+| | |
+|---|---|
+| Auth | Authenticated user (`@deps.login_required`) |
+| Body | `{ role: 'student' \| 'teacher' \| 'admin' }` |
+| Response | `{ intendedRole, onboardingState }` (camelCase) |
+| Idempotent | Yes — re-call with same/different role on a migrated user is a no-op 200 |
+| Defense-in-depth | Server re-verifies `is_legacy_user_needing_role_pick(...)`; writes only when true |

@@ -36,7 +36,7 @@ Owner: Engineering + Product
 - [x] Add Firestore collections for `organizations`, `memberships`, `classes`, and `enrollments`.
 - [x] Define indexes needed for teacher class queries and student enrollment lookups.
 - [x] Add secure Firestore rules for org/class-scoped reads and writes.
-- [ ] Define data migration plan for existing users who only have `profile.school_name`.
+- [x] Define data migration plan for existing users who only have `profile.school_name`. Implemented by Plan 6: `scripts/backfill_legacy_user_roles.py` infers roles from active memberships/enrollments; the `LegacyRoleMigrationModal` handles unresolved users at next sign-in.
 
 ### UI shell
 
@@ -64,8 +64,8 @@ Owner: Engineering + Product
 - [x] Removed auto-approve from /api/schools/join-as-teacher (Plan 4)
 - [x] organizations.school_admin_uids denormalization for rules (Plan 4)
 - [x] PendingTeacherRequestsSection on TeacherDashboardPage (Plan 4)
-- [ ] Backfill `organizations.school_admin_uids` for orgs created before Plan 4 — run `scripts/backfill_school_admin_uids.py`
-- [ ] Backfill `organizations.name_lower` for orgs created before Plan 4 — run `scripts/backfill_org_name_lower.py`
+- [x] Backfill `organizations.school_admin_uids` for orgs created before Plan 4 — ran `scripts/backfill_school_admin_uids.py` against `lingu-480600` on 2026-05-21.
+- [x] Backfill `organizations.name_lower` for orgs created before Plan 4 — ran `scripts/backfill_org_name_lower.py` against `lingu-480600` on 2026-05-21.
 - [x] **(Plan 5 acceptance)** Any membership-removal path MUST call `_sync_org_admin_uids(org_id, uid, add=False)` when removing `school_admin`. Extended `backend/tests/test_school_admin_uids_invariant.py` with the removal regression (Plan 5 Task 7).
 - [ ] Replace in-memory org search rate limiter with a shared store (Redis / Firestore counter) when scaling to multi-replica.
 - [ ] 7-day reminder email for stale pending teacher join requests (v1.5). **Product decision needed before launch.**
@@ -126,9 +126,25 @@ Owner: Engineering + Product
 - [ ] Delete orphan Firestore composite index `enrollments(status, student_uid, updated_at DESC)` (LIMITATIONS #41) — safe, redundant with the IaC-managed `(student_uid, status, updated_at DESC)` index. Targeted `gcloud firestore indexes composite delete` command in LIMITATIONS #41.
 - [ ] Reminder email for inactive suspended orgs (≥30 days suspended_until in past with auto-restore disabled) — needs product decision before launch.
 - [ ] Backfill top-level `country` from `location.country` for `school_requests` rows submitted before the LIMITATIONS #47 denormalization fix. One-shot script: query `school_requests` where `country` is missing AND `location.country` is non-empty; write `country` to each. Until run, the Requests page country filter (LIMITATIONS #47) matches only post-fix rows.
-- [ ] Backfill org metadata (`school_type`, `country`, `state`, `website_url`, `public_or_private`, `grade_size`) on `organizations/` rows created before the LIMITATIONS #49 approval-time copy fix. One-shot script: for each org, look up the originating `school_requests` doc via `created_org_id` reverse lookup; copy missing fields. Until run, those pre-fix orgs render blanks in the Plan 5 detail page and are excluded from filtered org-list queries.
+- [x] Backfill org metadata (`school_type`, `country`, `state`, `county`, `website_url`, `public_or_private`, `grade_size`) on `organizations/` rows created before the LIMITATIONS #49 approval-time copy fix — ran `scripts/backfill_org_metadata_from_requests.py` against `lingu-480600` on 2026-05-21. The script looks up originating `school_requests` rows via `created_org_id` reverse lookup and copies missing fields.
 - [ ] Wire `make test-emulator` into CI so a missing composite index trips before deploy. Infrastructure exists (`backend/tests/test_firestore_indexes.py` + Makefile target) but Plan 5 round-4 surfaced a class of index-shaped findings (LIMITATIONS #50) that FakeDb-only test suites cannot catch. Requires Java runtime on CI agents + Firebase CLI; add as a separate job that runs alongside `make test-backend`.
 - [ ] Share the school-type enum between FE and BE (LIMITATIONS #51 root cause). Today both sides hand-code overlapping lists in TS and Python, and the round-4 drift (`elementary` in TS, not in BE's `ALLOWED_SCHOOL_TYPES`) was caught by Codex review rather than the type system. Either (a) emit the Python enum as a generated TS const at build time, or (b) move both to a single JSON/YAML source-of-truth that both layers read.
+
+### Legacy migration (Plan 6)
+
+- [x] `scripts/backfill_legacy_user_roles.py` with `--dry-run` and idempotent skip-already-migrated.
+- [x] `database.mark_user_legacy_role_picked(uid, role)` helper.
+- [x] `POST /api/auth/migrate-role` (idempotent, defense-in-depth).
+- [x] `LegacyRoleMigrationModal` blocking modal (en-only, spec §628 copy).
+- [x] `AuthProvider` mounts modal on `requiresLegacyRolePick`.
+- [x] Dispatcher (`getOnboardingDestination` + `getPrivilegedHomeRoute`) returns `null` while modal is pending so it never races route changes.
+
+- [ ] Run backfill `--dry-run` on staging.
+- [ ] Run backfill on staging (writes).
+- [ ] Run backfill on production.
+- [ ] Monitor `[backfill]` and `legacy_role_pick` log volume for 1 week post-launch.
+- [ ] "Switch to learning mode" for teacher/admin-migrated users who want to learn — v1.5.
+- [ ] Localize the modal copy (en + ko) — v1.5.
 
 ## Phase 3: Canvas content and assignment authoring
 

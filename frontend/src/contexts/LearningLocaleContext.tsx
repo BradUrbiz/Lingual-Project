@@ -12,6 +12,8 @@ interface LearningLocaleContextType {
 
 const LearningLocaleContext = createContext<LearningLocaleContextType | null>(null);
 
+const RTL_LEARNING_LOCALES: ReadonlySet<LearningLocale> = new Set<LearningLocale>(['he-IL']);
+
 export function LearningLocaleProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [learningLocale, setLearningLocale] = useState<LearningLocale>(DEFAULT_LEARNING_LOCALE);
@@ -34,6 +36,20 @@ export function LearningLocaleProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const effectiveLocale = user ? learningLocale : DEFAULT_LEARNING_LOCALE;
+
+  // Sync document direction with the active learning locale so RTL scripts
+  // (currently Hebrew) render correctly without per-component `dir` props.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const dir = RTL_LEARNING_LOCALES.has(effectiveLocale) ? 'rtl' : 'ltr';
+    root.setAttribute('dir', dir);
+    root.setAttribute('lang', effectiveLocale);
+    return () => {
+      // Reset to LTR + app UI language on unmount/teardown.
+      root.setAttribute('dir', 'ltr');
+    };
+  }, [effectiveLocale]);
 
   return (
     <LearningLocaleContext.Provider value={{ learningLocale: effectiveLocale, setLearningLocale }}>

@@ -641,7 +641,13 @@ export function ChatPage() {
                   {/* Voice Button */}
                   <button
                     type="button"
-                    onClick={isConnected ? disconnect : connect}
+                    onClick={() => {
+                      if (isConnected) {
+                        disconnect();
+                      } else {
+                        void connect();
+                      }
+                    }}
                     className={`relative w-20 h-20 rounded-full transition-all duration-300 ${
                       isConnected
                         ? isSpeaking

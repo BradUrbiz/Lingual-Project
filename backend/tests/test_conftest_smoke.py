@@ -12,7 +12,6 @@ from backend.tests.conftest import (
     make_class,
     make_compliance_record,
     make_enrollment,
-    make_mapping,
     make_organization,
     make_membership,
     make_practice_session,
@@ -62,11 +61,6 @@ class TestFactories(unittest.TestCase):
         self.assertEqual(a["id"], "a-1")
         self.assertEqual(a["task_type"], "information_gap")
 
-    def test_make_mapping(self):
-        m = make_mapping(mapping_id="m-1")
-        self.assertEqual(m["package_id"], "ap-french-sample")
-        self.assertEqual(m["module_id"], "mod-1")
-
     def test_make_compliance_record(self):
         r = make_compliance_record(is_minor=True, voice_consent_status="granted")
         self.assertTrue(r["is_minor"])
@@ -101,15 +95,14 @@ class TestFakeDbBase(unittest.TestCase):
         self.assertEqual(ctx["active_roles"], ["teacher"])
         self.assertEqual(ctx["active_organization_id"], org_id)
 
+    def test_optional_plan3_side_effect_stubs_are_safe_noops(self):
+        self.db.update_user_profile("u-1", onboarding_state="awaiting_lingual")
+        self.db.delete_school_creation_draft("u-1")
+
     def test_crud_assignment(self):
-        aid = self.db.create_assignment(org_id="o", class_id="c", mapping_id="m", title="Test", status="published", task_type="information_gap")
+        aid = self.db.create_assignment(org_id="o", class_id="c", title="Test", status="published", task_type="information_gap")
         self.assertIsNotNone(self.db.get_assignment(aid))
         self.assertEqual(len(self.db.list_class_assignments("c")), 1)
-
-    def test_crud_mapping(self):
-        mid = self.db.create_curriculum_mapping(org_id="o", class_id="c", package_id="p", module_id="m")
-        self.assertIsNotNone(self.db.get_curriculum_mapping(mid))
-        self.assertEqual(len(self.db.list_class_curriculum_mappings("c")), 1)
 
     def test_crud_practice_session(self):
         sid = self.db.create_practice_session({"org_id": "o", "class_id": "c", "assignment_id": "a", "student_uid": "s", "status": "active"})
@@ -184,11 +177,11 @@ class TestMakeTestDepsAndApp(unittest.TestCase):
         with app.test_client() as client:
             with client.session_transaction() as sess:
                 sess["user"] = {"uid": "teacher-1"}
-            resp = client.get(f"/api/teacher/classes/{cls_id}/curriculum/packages")
+            resp = client.get(f"/api/teacher/classes/{cls_id}/assignments")
             self.assertEqual(resp.status_code, 200)
             data = resp.get_json()
             self.assertTrue(data["success"])
-            self.assertEqual(len(data["packages"]), 1)
+            self.assertEqual(data["assignments"], [])
 
 
 if __name__ == "__main__":

@@ -1,0 +1,227 @@
+{
+  "curriculum_id": "es-core-v1",
+  "locale": "es-ES",
+  "title": "Spanish Core Speaking (Example)",
+  "levels": [
+    {
+      "id": "L1",
+      "name": "Survival Basics",
+      "description": "Greetings, simple requests, and everyday phrases."
+    },
+    {
+      "id": "L2",
+      "name": "Everyday Interactions",
+      "description": "Ordering, directions, and common small talk."
+    }
+  ],
+  "objectives": [
+    {
+      "id": "OBJ-GREET-ES-01",
+      "level_id": "L1",
+      "title": "Basic greetings and introductions",
+      "skills": ["greeting", "self-introduction", "politeness"]
+    },
+    {
+      "id": "OBJ-ORDER-ES-01",
+      "level_id": "L2",
+      "title": "Order food and drinks politely",
+      "skills": ["ordering", "politeness", "numbers"]
+    },
+    {
+      "id": "OBJ-DIR-ES-01",
+      "level_id": "L2",
+      "title": "Ask for and confirm directions",
+      "skills": ["directions", "locations", "clarifying"]
+    }
+  ],
+  "practice_scenarios": [
+    {
+      "id": "SCN-GREET-ES-01",
+      "objective_id": "OBJ-GREET-ES-01",
+      "title": "Meeting a classmate before class",
+      "setting": "School hallway",
+      "roles": ["student", "classmate"],
+      "difficulty": "easy",
+      "target_phrases": [
+        "Hola, me llamo Sofía.",
+        "Mucho gusto.",
+        "Soy estudiante de intercambio."
+      ],
+      "success_criteria": [
+        "Use a friendly greeting",
+        "Introduce yourself clearly",
+        "Respond politely to a new classmate"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-GREET-ES-01",
+          "sentence": "Hola, me llamo Sofía.",
+          "masked_sentence": "Hola, me (__) Sofía.",
+          "answer": "llamo",
+          "choices": ["llamo", "llamas", "llaman", "llamamos"],
+          "explanation": "Use the first-person singular form when you say your own name."
+        },
+        {
+          "id": "GRAM-GREET-ES-02",
+          "sentence": "Soy estudiante de intercambio.",
+          "masked_sentence": "(__) estudiante de intercambio.",
+          "answer": "Soy",
+          "choices": ["Soy", "Estoy", "Tiene", "Hay"],
+          "explanation": "Use 'soy' to identify who you are."
+        },
+        {
+          "id": "GRAM-GREET-ES-03",
+          "sentence": "Mucho gusto.",
+          "masked_sentence": "Mucho (__).",
+          "answer": "gusto",
+          "choices": ["gusto", "nombre", "gracias", "clase"],
+          "explanation": "This fixed phrase means 'nice to meet you.'"
+        },
+        {
+          "id": "GRAM-GREET-ES-04",
+          "sentence": "Estudio en la universidad.",
+          "masked_sentence": "Estudio (__) la universidad.",
+          "answer": "en",
+          "choices": ["en", "de", "con", "sin"],
+          "explanation": "Use 'en' to describe where you study."
+        }
+      ]
+    },
+    {
+      "id": "SCN-ORDER-ES-01",
+      "objective_id": "OBJ-ORDER-ES-01",
+      "title": "Ordering at a neighborhood café",
+      "setting": "Coffee shop",
+      "roles": ["customer", "barista"],
+      "difficulty": "medium",
+      "target_phrases": [
+        "Quiero un café con leche, por favor.",
+        "Para llevar, por favor.",
+        "¿Cuánto cuesta?"
+      ],
+      "success_criteria": [
+        "Order a drink clearly",
+        "Say whether it is to go",
+        "Ask about the price politely"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-ORDER-ES-01",
+          "sentence": "Quiero un café con leche, por favor.",
+          "masked_sentence": "Quiero (__) café con leche, por favor.",
+          "answer": "un",
+          "choices": ["un", "una", "unos", "unas"],
+          "explanation": "Use the masculine singular article with 'café.'"
+        },
+        {
+          "id": "GRAM-ORDER-ES-02",
+          "sentence": "Para llevar, por favor.",
+          "masked_sentence": "(__) llevar, por favor.",
+          "answer": "Para",
+          "choices": ["Para", "Desde", "Sobre", "Contra"],
+          "explanation": "Use 'para llevar' to say you want it to go."
+        },
+        {
+          "id": "GRAM-ORDER-ES-03",
+          "sentence": "¿Cuánto cuesta?",
+          "masked_sentence": "¿Cuánto (__) ?",
+          "answer": "cuesta",
+          "choices": ["cuesta", "cuestan", "cuesto", "costar"],
+          "explanation": "Use the third-person singular form to ask the price."
+        },
+        {
+          "id": "GRAM-ORDER-ES-04",
+          "sentence": "Un café con leche, por favor.",
+          "masked_sentence": "Un café (__) leche, por favor.",
+          "answer": "con",
+          "choices": ["con", "sin", "para", "sobre"],
+          "explanation": "Use 'con' to say what the coffee comes with."
+        }
+      ]
+    },
+    {
+      "id": "SCN-DIR-ES-01",
+      "objective_id": "OBJ-DIR-ES-01",
+      "title": "Finding the metro station",
+      "setting": "City street",
+      "roles": ["pedestrian", "local"],
+      "difficulty": "medium",
+      "target_phrases": [
+        "¿Dónde está la estación de metro?",
+        "¿Está lejos de aquí?",
+        "¿Tengo que doblar a la izquierda?"
+      ],
+      "success_criteria": [
+        "Ask where a place is",
+        "Check distance",
+        "Confirm the direction"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-DIR-ES-01",
+          "sentence": "¿Dónde está la estación de metro?",
+          "masked_sentence": "¿Dónde (__) la estación de metro?",
+          "answer": "está",
+          "choices": ["está", "están", "soy", "tengo"],
+          "explanation": "Use 'está' when asking where a singular place is."
+        },
+        {
+          "id": "GRAM-DIR-ES-02",
+          "sentence": "¿Está lejos de aquí?",
+          "masked_sentence": "¿Está lejos (__) aquí?",
+          "answer": "de",
+          "choices": ["de", "a", "con", "para"],
+          "explanation": "Use 'de aquí' to mean 'from here.'"
+        },
+        {
+          "id": "GRAM-DIR-ES-03",
+          "sentence": "¿Tengo que doblar a la izquierda?",
+          "masked_sentence": "¿Tengo que doblar (__) la izquierda?",
+          "answer": "a",
+          "choices": ["a", "en", "de", "por"],
+          "explanation": "Use 'a la izquierda' to indicate the direction."
+        },
+        {
+          "id": "GRAM-DIR-ES-04",
+          "sentence": "La estación está cerca de la plaza.",
+          "masked_sentence": "La estación está (__) la plaza.",
+          "answer": "cerca de",
+          "choices": ["cerca de", "lejos de", "durante", "sin"],
+          "explanation": "Use 'cerca de' to say something is near another place."
+        }
+      ]
+    }
+  ],
+  "pronunciation_prompts": [
+    {
+      "id": "PRON-GREET-ES-01",
+      "objective_id": "OBJ-GREET-ES-01",
+      "text": "Hola, me llamo Sofía."
+    },
+    {
+      "id": "PRON-GREET-ES-02",
+      "objective_id": "OBJ-GREET-ES-01",
+      "text": "Mucho gusto."
+    },
+    {
+      "id": "PRON-ORDER-ES-01",
+      "objective_id": "OBJ-ORDER-ES-01",
+      "text": "Quiero un café con leche, por favor."
+    },
+    {
+      "id": "PRON-ORDER-ES-02",
+      "objective_id": "OBJ-ORDER-ES-01",
+      "text": "Para llevar, por favor."
+    },
+    {
+      "id": "PRON-DIR-ES-01",
+      "objective_id": "OBJ-DIR-ES-01",
+      "text": "¿Dónde está la estación de metro?"
+    },
+    {
+      "id": "PRON-DIR-ES-02",
+      "objective_id": "OBJ-DIR-ES-01",
+      "text": "¿Está lejos de aquí?"
+    }
+  ]
+}

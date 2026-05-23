@@ -1,6 +1,9 @@
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request, session
 
 from backend.route_deps import RouteDeps
+from database import ALLOWED_INTENDED_ROLES
+
+ALLOWED_MIGRATE_ROLES = frozenset({'student', 'teacher', 'admin'})
 
 
 def build_auth_user_payload(uid, email, name, school_context):
@@ -13,6 +16,10 @@ def build_auth_user_payload(uid, email, name, school_context):
         'activeMembershipId': school_context.get('active_membership_id'),
         'activeOrganizationId': school_context.get('active_organization_id'),
         'activeRoles': school_context.get('active_roles', []),
+        'intendedRole': school_context.get('intended_role'),
+        'onboardingState': school_context.get('onboarding_state'),
+        'requiresLegacyRolePick': bool(school_context.get('requires_legacy_role_pick')),
+        'lingualAdmin': bool(school_context.get('lingual_admin')),
     }
 
 
@@ -35,6 +42,10 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
             if not id_token:
                 return jsonify({'success': False, 'error': 'No token provided'}), 400
 
+            intended_role = data.get('intended_role')
+            if intended_role and intended_role not in ALLOWED_INTENDED_ROLES:
+                return jsonify({'success': False, 'error': 'Invalid intended_role'}), 400
+
             decoded_token = deps.firebase_auth.verify_id_token(id_token)
             uid = decoded_token['uid']
             email = decoded_token.get('email', '')
@@ -42,31 +53,18 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
 
             deps.db.get_or_create_user(uid, email, name)
 
-            # Activate any pending Canvas enrollments matching this user's email.
-            if email and hasattr(deps.db, 'list_pending_canvas_enrollments_by_email'):
-                pending = deps.db.list_pending_canvas_enrollments_by_email(email)
-                for enrollment in pending:
-                    enrollment_id = enrollment.get('id', '')
-                    class_record = deps.db.get_class(enrollment.get('class_id', ''))
-                    if not class_record:
-                        continue
-                    org_id = class_record.get('org_id', '')
-                    membership_id = f'{org_id}_{uid}'
-                    if not deps.db.get_membership(membership_id):
-                        deps.db.create_membership(
-                            org_id=org_id,
-                            uid=uid,
-                            roles=['student'],
-                            primary_class_ids=[enrollment.get('class_id', '')],
-                            membership_id=membership_id,
-                        )
-                    else:
-                        if hasattr(deps.db, 'add_primary_class_to_membership'):
-                            deps.db.add_primary_class_to_membership(
-                                membership_id, enrollment.get('class_id', ''),
-                            )
-                    deps.db.activate_pending_canvas_enrollment(
-                        enrollment_id, uid, membership_id,
+            if intended_role:
+                # Persist only on first-time users — existing memberships always win.
+                existing_context = deps.db.resolve_user_school_context(uid)
+                has_active_membership = any(
+                    (m or {}).get('status') == 'active'
+                    for m in (existing_context.get('memberships') or [])
+                )
+                if not has_active_membership:
+                    deps.db.update_user_profile(
+                        uid,
+                        intended_role=intended_role,
+                        onboarding_state='role_selected',
                     )
 
             preferred_active_membership_id = (session.get('user') or {}).get('active_membership_id')
@@ -295,5 +293,46 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
             'learningLocale': learning_locale,
             'assessmentPreference': assessment_preference,
         })
+
+    @bp.post('/api/auth/migrate-role')
+    @deps.login_required
+    def migrate_role():
+        """Legacy user role pick — idempotent. Non-legacy users are a no-op 200."""
+        uid = deps.get_current_user_uid()
+        if not uid:
+            return jsonify({'error': 'unauthenticated'}), 401
+
+        body = request.get_json(silent=True) or {}
+        raw_role = body.get('role')
+        if raw_role is None:
+            return jsonify({'error': 'role is required'}), 400
+        if not isinstance(raw_role, str):
+            return jsonify({'error': 'role must be a string'}), 400
+        role = raw_role.strip()
+        if not role:
+            return jsonify({'error': 'role is required'}), 400
+        if role not in ALLOWED_MIGRATE_ROLES:
+            return jsonify({'error': f'invalid role {role!r}'}), 400
+
+        user_doc = deps.db.get_user(uid)
+        memberships = deps.db.get_user_memberships(uid)
+
+        # `is_legacy_user_needing_role_pick` is a pure function (Plan 1) — import
+        # directly so the route does not rely on a fake method existing on
+        # `deps.db`. State-changing helpers still live behind `deps.db`.
+        from database import is_legacy_user_needing_role_pick
+        if is_legacy_user_needing_role_pick(user_doc, memberships):
+            try:
+                deps.db.mark_user_legacy_role_picked(uid=uid, role=role)
+            except ValueError as exc:
+                return jsonify({'error': str(exc)}), 400
+            current_app.logger.info('[legacy_role_pick] uid=%s role=%s', uid, role)
+            user_doc = deps.db.get_user(uid) or {}
+
+        profile = (user_doc or {}).get('profile') or {}
+        return jsonify({
+            'intendedRole': profile.get('intended_role'),
+            'onboardingState': profile.get('onboarding_state'),
+        }), 200
 
     return bp

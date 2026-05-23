@@ -13,7 +13,13 @@ frontend/dist/
 __pycache__/
 *.py[cod]
 .venv/
+.venv312/
 venv/
+
+# Test / coverage artifacts
+.pytest_cache/
+.coverage
+coverage_html/
 
 # Environment files
 .env
@@ -33,6 +39,16 @@ service-account.json
 
 # Local static/react build
 static/react/
+
+# Dev tooling state (Claude Code, Codex, oh-my-claudecode, gstack, playwright)
+.claude/
+.codex/
+.omc/
+.gstack/
+.playwright-cli/
+
+# Local git worktrees (used during branch work, not part of the deploy)
+.worktrees/
 
 # Misc
 *.log

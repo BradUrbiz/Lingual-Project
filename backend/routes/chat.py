@@ -1,16 +1,21 @@
+import hashlib
 import os
 from typing import Any
 
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from openai import APIStatusError, RateLimitError
 
 from backend.route_deps import RouteDeps
 from backend.services.assignment_resolver import (
+    build_assignment_prompt_bootstrap_from_practice_session,
     build_assignment_system_prompt,
+    load_assignment_bundle,
     resolve_assignment_bootstrap_for_user,
+    user_can_access_assignment,
 )
-from backend.services.compliance import create_consent_event
+from backend.services.compliance import create_consent_event, resolve_assignment_launch
+from backend.services.suspended_org_guard import SuspendedOrgError, enforce_org_active
 
 
 AVATAR_EMOTION_KEYS = [
@@ -63,7 +68,19 @@ AVATAR_REACTION_INTENTS = [
     'tap_chest_reassure',
 ]
 
-REALTIME_MODEL = 'gpt-realtime-mini'
+REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15'
+REALTIME_CLIENT_SECRET_TTL_SECONDS = 600
+REALTIME_INPUT_AUDIO_TRANSCRIPTION_MODEL = 'gpt-4o-mini-transcribe-2025-12-15'
+REALTIME_TRANSCRIPTION_LANGUAGE_HINTS = {
+    'ko-KR': ('ko', 'Korean'),
+    'es-ES': ('es', 'Spanish'),
+    'fr-FR': ('fr', 'French'),
+    'ru-RU': ('ru', 'Russian'),
+    'he-IL': ('he', 'Hebrew'),
+    'en': ('en', 'English'),
+    'en-US': ('en', 'English'),
+    'en-GB': ('en', 'English'),
+}
 
 
 def build_avatar_directive_tool() -> dict[str, Any]:
@@ -173,7 +190,18 @@ def build_avatar_context_payload(area: str, mode: str, practice: Any = None) -> 
     }
 
 
+def pilot_avatar_enabled() -> bool:
+    return os.environ.get('ENABLE_PILOT_AVATAR', '').strip().lower() in {
+        '1',
+        'true',
+        'yes',
+        'on',
+    }
+
+
 def realtime_avatar_directives_enabled() -> bool:
+    if not pilot_avatar_enabled():
+        return False
     return os.environ.get('ENABLE_REALTIME_AVATAR_DIRECTIVES', '').strip().lower() in {
         '1',
         'true',
@@ -183,6 +211,9 @@ def realtime_avatar_directives_enabled() -> bool:
 
 
 def realtime_avatar_directives_requested(payload: dict[str, Any] | None = None) -> bool:
+    if not pilot_avatar_enabled():
+        return False
+
     if realtime_avatar_directives_enabled():
         return True
 
@@ -192,34 +223,103 @@ def realtime_avatar_directives_requested(payload: dict[str, Any] | None = None) 
     return is_development and request_opt_in
 
 
+def resolve_realtime_transcription_language_hint(learning_locale: Any) -> tuple[str, str]:
+    if isinstance(learning_locale, str):
+        normalized = learning_locale.strip()
+        if normalized in REALTIME_TRANSCRIPTION_LANGUAGE_HINTS:
+            return REALTIME_TRANSCRIPTION_LANGUAGE_HINTS[normalized]
+
+        primary_language = normalized.split('-', 1)[0].lower()
+        for locale_key, hint in REALTIME_TRANSCRIPTION_LANGUAGE_HINTS.items():
+            if locale_key.split('-', 1)[0].lower() == primary_language:
+                return hint
+
+    return ('en', 'English')
+
+
+def build_realtime_transcription_prompt(expected_language_name: str) -> str:
+    return (
+        f'Primary expected language is {expected_language_name}. English may also appear. '
+        'Transcribe verbatim exactly as spoken. Never translate. Preserve code-switching exactly as spoken. '
+        'Keep English words in English and keep non-English words in the language they were spoken. '
+        'Do not rewrite the utterance into a single language, and do not replace it with a translated version.'
+    )
+
+
+def build_realtime_safety_identifier(uid: Any) -> str | None:
+    if not isinstance(uid, str) or not uid.strip():
+        return None
+    return hashlib.sha256(f'lingual-user:{uid.strip()}'.encode('utf-8')).hexdigest()
+
+
 def build_realtime_session_request(
     system_instructions: str,
     *,
+    transcription_language: str = 'en',
+    transcription_prompt: str | None = None,
     enable_avatar_directives: bool | None = None,
 ) -> dict[str, Any]:
-    request_payload: dict[str, Any] = {
+    guarded_instructions = (
+        f'{system_instructions}\n\n'
+        'Voice-input guardrail: Ignore accidental noise, background conversations, and speech not directed at you. '
+        'Only respond when the learner is clearly addressing you.'
+    )
+    input_audio_transcription: dict[str, Any] = {
+        'model': REALTIME_INPUT_AUDIO_TRANSCRIPTION_MODEL,
+        'language': transcription_language,
+    }
+    if isinstance(transcription_prompt, str) and transcription_prompt.strip():
+        input_audio_transcription['prompt'] = transcription_prompt.strip()
+
+    session_payload: dict[str, Any] = {
+        'type': 'realtime',
         'model': REALTIME_MODEL,
-        'voice': 'coral',
-        'instructions': system_instructions,
-        'input_audio_transcription': {'model': 'whisper-1'},
-        'turn_detection': {
-            'type': 'server_vad',
-            'threshold': 0.7,
-            'prefix_padding_ms': 300,
-            'silence_duration_ms': 350,
-            'interrupt_response': True,
+        'instructions': guarded_instructions,
+        'output_modalities': ['audio'],
+        'audio': {
+            'input': {
+                'format': {
+                    'type': 'audio/pcm',
+                    'rate': 24000,
+                },
+                'transcription': input_audio_transcription,
+                'turn_detection': {
+                    'type': 'server_vad',
+                    'threshold': 0.7,
+                    'prefix_padding_ms': 300,
+                    'silence_duration_ms': 320,
+                    'create_response': False,
+                    'interrupt_response': True,
+                },
+            },
+            'output': {
+                'format': {
+                    'type': 'audio/pcm',
+                    'rate': 24000,
+                },
+                'voice': 'coral',
+            },
         },
     }
+    request_payload: dict[str, Any] = {
+        'expires_after': {
+            'anchor': 'created_at',
+            'seconds': REALTIME_CLIENT_SECRET_TTL_SECONDS,
+        },
+        'session': session_payload,
+    }
 
-    if enable_avatar_directives is None:
+    if not pilot_avatar_enabled():
+        enable_avatar_directives = False
+    elif enable_avatar_directives is None:
         enable_avatar_directives = realtime_avatar_directives_enabled()
 
     if enable_avatar_directives:
-        request_payload['instructions'] = (
-            f'{system_instructions}\n\n{build_avatar_realtime_instructions()}'
+        session_payload['instructions'] = (
+            f'{guarded_instructions}\n\n{build_avatar_realtime_instructions()}'
         )
-        request_payload['tool_choice'] = 'auto'
-        request_payload['tools'] = [build_avatar_directive_tool()]
+        session_payload['tool_choice'] = 'auto'
+        session_payload['tools'] = [build_avatar_directive_tool()]
 
     return request_payload
 
@@ -237,18 +337,17 @@ def _extract_assignment_id(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _extract_practice_session_id(payload: dict[str, Any]) -> str | None:
+    practice = payload.get('practice')
+    if isinstance(practice, dict):
+        practice_session_id = practice.get('practiceSessionId')
+        if isinstance(practice_session_id, str) and practice_session_id.strip():
+            return practice_session_id.strip()
+    return None
+
+
 def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
     bp = Blueprint('chat_routes', __name__)
-
-    @bp.route('/api/curriculum/sample', methods=['GET'])
-    @deps.login_required
-    def api_get_sample_curriculum():
-        """Serve the sample AP French curriculum package."""
-        try:
-            package = deps.load_sample_curriculum_package()
-            return jsonify({'success': True, 'package': package})
-        except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
 
     @bp.route('/api/realtime/session', methods=['POST'])
     @deps.login_required
@@ -264,22 +363,75 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
             if ui_language not in deps.supported_ui_languages:
                 ui_language = 'en'
 
+            uid = deps.get_current_user_uid()
             assignment_id = _extract_assignment_id(payload)
+            learning_locale = 'en'
             if assignment_id:
-                uid = deps.get_current_user_uid()
                 context = deps.get_school_request_context()
-                bootstrap = resolve_assignment_bootstrap_for_user(
-                    deps,
-                    uid=uid,
-                    context=context,
-                    assignment_id=assignment_id,
-                    ui_language=ui_language,
-                )
+                practice_session_id = _extract_practice_session_id(payload)
+                bootstrap = None
+                class_record = None
+
+                if practice_session_id:
+                    practice_session = deps.db.get_practice_session(practice_session_id)
+                    if not practice_session:
+                        return jsonify({'success': False, 'error': 'Practice session not found.'}), 404
+                    if practice_session.get('student_uid') != uid or practice_session.get('assignment_id') != assignment_id:
+                        return jsonify({'success': False, 'error': 'Practice session is not available for this user.'}), 403
+                    if practice_session.get('status') != 'active':
+                        return jsonify({'success': False, 'error': 'Practice session is no longer active.'}), 409
+
+                    assignment, _mapping, class_record = load_assignment_bundle(deps, assignment_id)
+                    # Suspended-org gate: block new realtime sessions on an
+                    # org that's been suspended since the practice session
+                    # was created. The in-flight grace is handled when
+                    # ``/api/practice-sessions/<id>/events`` is called.
+                    try:
+                        enforce_org_active(
+                            (class_record or {}).get('org_id'),
+                            db=deps.db,
+                        )
+                    except SuspendedOrgError as exc:
+                        return jsonify(exc.to_payload()), 403
+                    allowed, teacher_preview = user_can_access_assignment(
+                        deps,
+                        uid=uid,
+                        context=context,
+                        assignment=assignment,
+                        class_record=class_record,
+                    )
+                    if not allowed:
+                        raise PermissionError('Assignment is not available for the current user.')
+
+                    launch_policy, _compliance_record = resolve_assignment_launch(
+                        deps,
+                        org_id=class_record.get('org_id', ''),
+                        student_uid=uid,
+                        modality_policy=assignment.get('modality_override'),
+                        teacher_preview=teacher_preview,
+                    )
+                    bootstrap = build_assignment_prompt_bootstrap_from_practice_session(
+                        practice_session,
+                        class_record=class_record,
+                        launch_policy=launch_policy,
+                        teacher_preview=teacher_preview,
+                    )
+
+                if bootstrap is None:
+                    bootstrap = resolve_assignment_bootstrap_for_user(
+                        deps,
+                        uid=uid,
+                        context=context,
+                        assignment_id=assignment_id,
+                        ui_language=ui_language,
+                    )
+                    class_record = None
+
                 if not (bootstrap.get('launch') or {}).get('voiceAllowed'):
                     blocked_reasons = (bootstrap.get('launch') or {}).get('blockedReasons') or []
                     create_consent_event(
                         deps,
-                        org_id=(bootstrap.get('class') or {}).get('orgId', ''),
+                        org_id=(class_record or {}).get('org_id') or (bootstrap.get('class') or {}).get('orgId', ''),
                         student_uid=uid or '',
                         event_type='voice.blocked.realtime_session',
                         actor_type='student',
@@ -293,78 +445,85 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                         'blockedReasons': blocked_reasons,
                     }), 403
                 system_instructions = build_assignment_system_prompt(bootstrap)
+                learning_locale = (
+                    (class_record or {}).get('learning_locale')
+                    or (bootstrap.get('class') or {}).get('learningLocale')
+                    or 'en'
+                )
             else:
-                practice = payload.get('practice')
-                if isinstance(practice, dict) and practice.get('type') == 'curriculum_module':
-                    curriculum_id = practice.get('curriculumId')
-                    module_id = practice.get('moduleId')
-                    situation_id = practice.get('situationId')
+                proficiency_context = deps.get_user_proficiency_context()
+                profile_context = deps.db.get_user_profile_context(uid) or {}
+                learning_locale = profile_context.get('learning_locale', 'ko-KR')
+                chat_id = payload.get('chatId')
+                chat = (
+                    deps.db.get_chat_session(uid, chat_id.strip())
+                    if isinstance(chat_id, str) and chat_id.strip()
+                    else None
+                )
+                language_mix_level = (chat or {}).get('language_mix_level', 'balanced')
+                system_instructions = deps.build_system_prompt(
+                    proficiency_context,
+                    learning_locale,
+                    language_mix_level,
+                )
+            transcription_language, transcription_language_name = (
+                resolve_realtime_transcription_language_hint(learning_locale)
+            )
+            transcription_prompt = build_realtime_transcription_prompt(
+                transcription_language_name,
+            )
 
-                    if not module_id or not situation_id:
-                        return jsonify({
-                            'success': False,
-                            'error': 'moduleId and situationId are required for curriculum practice.',
-                        }), 400
-
-                    package = deps.load_sample_curriculum_package()
-                    sample_curriculum_id = package.get('curriculum', {}).get('id')
-                    if curriculum_id and curriculum_id != sample_curriculum_id:
-                        return jsonify({'success': False, 'error': 'Unsupported curriculumId.'}), 400
-
-                    try:
-                        package, unit, module, situation, mode, objectives = deps.get_curriculum_practice_context(
-                            module_id=module_id,
-                            situation_id=situation_id,
-                        )
-                    except ValueError as e:
-                        return jsonify({'success': False, 'error': str(e)}), 400
-
-                    system_instructions = deps.build_curriculum_system_prompt(
-                        package=package,
-                        unit=unit,
-                        module=module,
-                        situation=situation,
-                        mode=mode,
-                        objectives=objectives,
-                        ui_language=ui_language,
-                    )
-                else:
-                    proficiency_context = deps.get_user_proficiency_context()
-                    system_instructions = deps.build_system_prompt(proficiency_context)
+            request_headers = {
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json',
+            }
+            safety_identifier = build_realtime_safety_identifier(uid)
+            if safety_identifier:
+                request_headers['OpenAI-Safety-Identifier'] = safety_identifier
 
             response = requests.post(
-                'https://api.openai.com/v1/realtime/sessions',
-                headers={
-                    'Authorization': f'Bearer {api_key}',
-                    'Content-Type': 'application/json',
-                },
+                'https://api.openai.com/v1/realtime/client_secrets',
+                headers=request_headers,
                 json=build_realtime_session_request(
                     system_instructions,
+                    transcription_language=transcription_language,
+                    transcription_prompt=transcription_prompt,
                     enable_avatar_directives=realtime_avatar_directives_requested(payload),
                 ),
             )
 
             if response.status_code != 200:
+                current_app.logger.error(
+                    'Realtime client_secret mint failed: status=%s body=%s',
+                    response.status_code,
+                    response.text[:1000],
+                )
                 return jsonify({
-                    'error': f'Failed to create session: {response.text}',
+                    'error': 'Unable to start the voice session right now. Please try again.',
                     'success': False,
-                }), response.status_code
+                }), 502
 
             data = response.json()
             return jsonify({
                 'success': True,
-                'client_secret': data.get('client_secret', {}).get('value'),
-                'session_id': data.get('id'),
-                'expires_at': data.get('client_secret', {}).get('expires_at'),
+                'client_secret': data.get('value'),
+                'session_id': (data.get('session') or {}).get('id'),
+                'expires_at': data.get('expires_at'),
             })
 
+        except SuspendedOrgError as exc:
+            return jsonify(exc.to_payload()), 403
         except PermissionError as e:
             return jsonify({'error': str(e), 'success': False}), 403
         except ValueError as e:
             error = str(e)
             status_code = 404 if 'not found' in error.lower() else 400
+            current_app.logger.warning(
+                'Realtime session ValueError (-> %s): %s', status_code, error
+            )
             return jsonify({'error': error, 'success': False}), status_code
         except Exception as e:
+            current_app.logger.exception('Realtime session unexpected error')
             return jsonify({'error': str(e), 'success': False}), 500
 
     @bp.route('/api/realtime/connect', methods=['POST'])
@@ -375,7 +534,6 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
             payload = request.get_json(silent=True) or {}
             offer_sdp = payload.get('offerSdp')
             client_secret = payload.get('clientSecret')
-            model = payload.get('model')
 
             if not isinstance(offer_sdp, str) or not offer_sdp.strip():
                 return jsonify({'success': False, 'error': 'offerSdp is required'}), 400
@@ -383,13 +541,8 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
             if not isinstance(client_secret, str) or not client_secret.strip():
                 return jsonify({'success': False, 'error': 'clientSecret is required'}), 400
 
-            normalized_model = REALTIME_MODEL
-            if isinstance(model, str) and model.strip():
-                normalized_model = model.strip()
-
             response = requests.post(
-                'https://api.openai.com/v1/realtime',
-                params={'model': normalized_model},
+                'https://api.openai.com/v1/realtime/calls',
                 headers={
                     'Authorization': f'Bearer {client_secret}',
                     'Content-Type': 'application/sdp',
@@ -492,6 +645,28 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
         try:
             deps.db.update_chat_title(uid, chat_id, title)
             return jsonify({'success': True, 'title': title})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @bp.route('/api/chats/<chat_id>/settings', methods=['PATCH'])
+    @deps.login_required
+    def api_update_chat_settings(chat_id):
+        """Update chat-level settings."""
+        uid = deps.get_current_user_uid()
+        data = request.get_json() or {}
+
+        try:
+            chat = deps.db.get_chat_session(uid, chat_id)
+            if not chat:
+                return jsonify({'success': False, 'error': 'Chat not found'}), 404
+
+            deps.db.update_chat_settings(
+                uid,
+                chat_id,
+                language_mix_level=data.get('languageMixLevel'),
+            )
+            updated_chat = deps.db.get_chat_session(uid, chat_id)
+            return jsonify({'success': True, 'chat': updated_chat})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -638,10 +813,17 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 system_prompt = build_assignment_system_prompt(bootstrap)
             else:
                 proficiency_context = deps.get_user_proficiency_context()
-                system_prompt = deps.build_system_prompt(proficiency_context)
+                profile_context = deps.db.get_user_profile_context(uid) or {}
+                learning_locale = profile_context.get('learning_locale', 'ko-KR')
+                language_mix_level = chat.get('language_mix_level', 'balanced')
+                system_prompt = deps.build_system_prompt(
+                    proficiency_context,
+                    learning_locale,
+                    language_mix_level,
+                )
 
             messages = [{'role': 'system', 'content': system_prompt}]
-            for msg in chat_messages[-10:]:
+            for msg in chat_messages:
                 messages.append({'role': msg['role'], 'content': msg['content']})
             messages.append({'role': 'user', 'content': user_message})
 
@@ -700,6 +882,8 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 'title': resolved_title,
             })
 
+        except SuspendedOrgError as exc:
+            return jsonify(exc.to_payload()), 403
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 

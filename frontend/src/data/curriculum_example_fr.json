@@ -1,0 +1,227 @@
+{
+  "curriculum_id": "fr-core-v1",
+  "locale": "fr-FR",
+  "title": "French Core Speaking (Example)",
+  "levels": [
+    {
+      "id": "L1",
+      "name": "Survival Basics",
+      "description": "Greetings, simple requests, and everyday phrases."
+    },
+    {
+      "id": "L2",
+      "name": "Everyday Interactions",
+      "description": "Ordering, directions, and common small talk."
+    }
+  ],
+  "objectives": [
+    {
+      "id": "OBJ-GREET-FR-01",
+      "level_id": "L1",
+      "title": "Basic greetings and introductions",
+      "skills": ["greeting", "self-introduction", "politeness"]
+    },
+    {
+      "id": "OBJ-ORDER-FR-01",
+      "level_id": "L2",
+      "title": "Order food and drinks politely",
+      "skills": ["ordering", "politeness", "numbers"]
+    },
+    {
+      "id": "OBJ-DIR-FR-01",
+      "level_id": "L2",
+      "title": "Ask for and confirm directions",
+      "skills": ["directions", "locations", "clarifying"]
+    }
+  ],
+  "practice_scenarios": [
+    {
+      "id": "SCN-GREET-FR-01",
+      "objective_id": "OBJ-GREET-FR-01",
+      "title": "Meeting a host student",
+      "setting": "School entrance",
+      "roles": ["student", "host student"],
+      "difficulty": "easy",
+      "target_phrases": [
+        "Bonjour, je m'appelle Camille.",
+        "Enchanté.",
+        "Je suis étudiant."
+      ],
+      "success_criteria": [
+        "Start with a polite greeting",
+        "Introduce yourself clearly",
+        "Respond naturally to a new person"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-GREET-FR-01",
+          "sentence": "Bonjour, je m'appelle Camille.",
+          "masked_sentence": "Bonjour, je (__) Camille.",
+          "answer": "m'appelle",
+          "choices": ["m'appelle", "t'appelles", "appelle", "appelons"],
+          "explanation": "Use 'je m'appelle' to introduce your own name."
+        },
+        {
+          "id": "GRAM-GREET-FR-02",
+          "sentence": "Je suis étudiant.",
+          "masked_sentence": "Je (__) étudiant.",
+          "answer": "suis",
+          "choices": ["suis", "es", "sommes", "êtes"],
+          "explanation": "Use the first-person form 'suis' with 'je.'"
+        },
+        {
+          "id": "GRAM-GREET-FR-03",
+          "sentence": "Je suis ravi de te rencontrer.",
+          "masked_sentence": "Je suis (__) de te rencontrer.",
+          "answer": "ravi",
+          "choices": ["ravi", "ici", "demain", "classe"],
+          "explanation": "Use 'ravi' to say you are pleased to meet someone."
+        },
+        {
+          "id": "GRAM-GREET-FR-04",
+          "sentence": "Et toi, tu t'appelles comment ?",
+          "masked_sentence": "Et toi, tu (__) comment ?",
+          "answer": "t'appelles",
+          "choices": ["t'appelles", "m'appelle", "appellent", "appelez"],
+          "explanation": "Use the second-person singular form when asking someone's name."
+        }
+      ]
+    },
+    {
+      "id": "SCN-ORDER-FR-01",
+      "objective_id": "OBJ-ORDER-FR-01",
+      "title": "Ordering at a boulangerie",
+      "setting": "Bakery counter",
+      "roles": ["customer", "server"],
+      "difficulty": "medium",
+      "target_phrases": [
+        "Je voudrais un café, s'il vous plaît.",
+        "Sur place, s'il vous plaît.",
+        "C'est combien ?"
+      ],
+      "success_criteria": [
+        "Order politely",
+        "Say whether you are staying",
+        "Ask how much it costs"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-ORDER-FR-01",
+          "sentence": "Je voudrais un café, s'il vous plaît.",
+          "masked_sentence": "Je (__) un café, s'il vous plaît.",
+          "answer": "voudrais",
+          "choices": ["voudrais", "veux", "voudront", "voulons"],
+          "explanation": "Use 'voudrais' for a polite request."
+        },
+        {
+          "id": "GRAM-ORDER-FR-02",
+          "sentence": "Sur place, s'il vous plaît.",
+          "masked_sentence": "(__) place, s'il vous plaît.",
+          "answer": "Sur",
+          "choices": ["Sur", "Sous", "Avec", "Chez"],
+          "explanation": "Use 'sur place' to say you will stay there."
+        },
+        {
+          "id": "GRAM-ORDER-FR-03",
+          "sentence": "C'est combien ?",
+          "masked_sentence": "C'(__) combien ?",
+          "answer": "est",
+          "choices": ["est", "ai", "ont", "sommes"],
+          "explanation": "Use 'c'est' to ask 'how much is it?'"
+        },
+        {
+          "id": "GRAM-ORDER-FR-04",
+          "sentence": "Un café au lait, s'il vous plaît.",
+          "masked_sentence": "Un café (__) lait, s'il vous plaît.",
+          "answer": "au",
+          "choices": ["au", "à", "de", "sur"],
+          "explanation": "Use 'au lait' for coffee with milk."
+        }
+      ]
+    },
+    {
+      "id": "SCN-DIR-FR-01",
+      "objective_id": "OBJ-DIR-FR-01",
+      "title": "Finding the metro station",
+      "setting": "City street",
+      "roles": ["pedestrian", "local"],
+      "difficulty": "medium",
+      "target_phrases": [
+        "Où est la station de métro ?",
+        "C'est loin d'ici ?",
+        "Je tourne à gauche ?"
+      ],
+      "success_criteria": [
+        "Ask where a place is",
+        "Check the distance",
+        "Confirm which way to turn"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-DIR-FR-01",
+          "sentence": "Où est la station de métro ?",
+          "masked_sentence": "Où (__) la station de métro ?",
+          "answer": "est",
+          "choices": ["est", "sont", "vais", "avez"],
+          "explanation": "Use 'est' with a singular location."
+        },
+        {
+          "id": "GRAM-DIR-FR-02",
+          "sentence": "C'est loin d'ici ?",
+          "masked_sentence": "C'est loin (__)ici ?",
+          "answer": "d'",
+          "choices": ["d'", "de", "à", "sur"],
+          "explanation": "Use elision before the vowel in 'ici.'"
+        },
+        {
+          "id": "GRAM-DIR-FR-03",
+          "sentence": "Je tourne à gauche ?",
+          "masked_sentence": "Je tourne (__) gauche ?",
+          "answer": "à",
+          "choices": ["à", "de", "en", "par"],
+          "explanation": "Use 'à gauche' to indicate the direction."
+        },
+        {
+          "id": "GRAM-DIR-FR-04",
+          "sentence": "Le musée est dans la rue suivante.",
+          "masked_sentence": "Le musée est (__) la rue suivante.",
+          "answer": "dans",
+          "choices": ["dans", "chez", "sous", "contre"],
+          "explanation": "Use 'dans' here to place the museum in the next street."
+        }
+      ]
+    }
+  ],
+  "pronunciation_prompts": [
+    {
+      "id": "PRON-GREET-FR-01",
+      "objective_id": "OBJ-GREET-FR-01",
+      "text": "Bonjour, je m'appelle Camille."
+    },
+    {
+      "id": "PRON-GREET-FR-02",
+      "objective_id": "OBJ-GREET-FR-01",
+      "text": "Enchanté."
+    },
+    {
+      "id": "PRON-ORDER-FR-01",
+      "objective_id": "OBJ-ORDER-FR-01",
+      "text": "Je voudrais un café, s'il vous plaît."
+    },
+    {
+      "id": "PRON-ORDER-FR-02",
+      "objective_id": "OBJ-ORDER-FR-01",
+      "text": "Sur place, s'il vous plaît."
+    },
+    {
+      "id": "PRON-DIR-FR-01",
+      "objective_id": "OBJ-DIR-FR-01",
+      "text": "Où est la station de métro ?"
+    },
+    {
+      "id": "PRON-DIR-FR-02",
+      "objective_id": "OBJ-DIR-FR-01",
+      "text": "C'est loin d'ici ?"
+    }
+  ]
+}

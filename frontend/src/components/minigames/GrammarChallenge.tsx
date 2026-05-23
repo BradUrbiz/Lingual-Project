@@ -136,7 +136,7 @@ export function GrammarChallenge({
             </div>
 
             <div className="rounded-xl border-2 border-border bg-secondary p-5 mb-5">
-              <p className="text-sm text-muted-foreground mb-2">Fill the blank with the best grammar particle:</p>
+              <p className="text-sm text-muted-foreground mb-2">Fill the blank with the best word or phrase:</p>
               <p className="text-2xl font-display font-bold text-foreground">
                 {currentQuestion.maskedSentence}
               </p>

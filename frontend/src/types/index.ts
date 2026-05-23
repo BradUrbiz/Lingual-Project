@@ -5,10 +5,14 @@ export interface User {
   uid: string;
   email: string;
   name: string;
+  lingualAdmin?: boolean;
   memberships?: MembershipSummary[];
   activeMembershipId?: string | null;
   activeOrganizationId?: string | null;
   activeRoles?: SchoolRole[];
+  intendedRole?: 'student' | 'teacher' | 'admin' | null;
+  onboardingState?: string | null;
+  requiresLegacyRolePick?: boolean;
 }
 
 // Profile form data for GeneralPage
@@ -124,6 +128,13 @@ export interface AssessmentResults {
 }
 
 // Chat Types
+export type LanguageMixLevel =
+  | 'english_first'
+  | 'english_led'
+  | 'balanced'
+  | 'target_led'
+  | 'target_only';
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -145,6 +156,7 @@ export interface ChatSession {
   updated_at: string;
   message_count: number;
   last_message?: string;
+  languageMixLevel?: LanguageMixLevel;
 }
 
 export interface ChatSessionDetail {
@@ -153,6 +165,7 @@ export interface ChatSessionDetail {
   created_at: string;
   updated_at: string;
   messages: RawChatMessage[];
+  languageMixLevel?: LanguageMixLevel;
 }
 
 // Pronunciation Types
@@ -230,6 +243,8 @@ export interface MinigameSummary {
   bestScore: number;
   totalQuestions: number;
   totalCorrectAnswers: number;
+  totalDurationSeconds?: number;
+  durationSecondsByLocale?: Partial<Record<LearningLocale, number>>;
   byGame: Record<string, MinigameSummaryByGame>;
   recentAttempts: MinigameAttempt[];
 }
@@ -243,7 +258,7 @@ export interface ApiResponse<T = unknown> {
 
 // Language Type
 export type Language = 'en' | 'ko';
-export type LearningLocale = 'ko-KR' | 'es-ES' | 'fr-FR';
+export type LearningLocale = 'ko-KR' | 'es-ES' | 'fr-FR' | 'ru-RU' | 'he-IL';
 
 // Curriculum Types
 export type {
@@ -275,6 +290,9 @@ export type {
   UpdateStudentCompliancePayload,
   ClassJoinCodeData,
   ClassRosterStudent,
+  CanvasRosterGapEntry,
+  CanvasRosterGapSummary,
+  CanvasRosterGapResponse,
   JoinClassResult,
   MembershipStatus,
   SchoolRole,
@@ -289,23 +307,41 @@ export type {
   OrgComplianceStudentEntry,
   OrgComplianceRosterData,
   OrgGuardianPacketsData,
-  SchoolRequest,
   TeacherInvitation,
 } from './school';
 
 export type {
+  CanvasIntegrationType,
+  CourseFramework,
+  GradeRange,
+  GradeSize,
+  PublicPrivate,
+  RejectionCategory,
+  SchoolRequest,
+  SchoolType,
+  WizardAdminIdentityInput,
+  WizardAdminIdentityStored,
+  WizardCurriculum,
+  WizardDraft,
+  WizardIntegration,
+  WizardLocation,
+  WizardSubmitPayload,
+} from './schoolRequest';
+
+export type {
   AssignmentAnalyticsData,
   AssignmentBootstrapData,
+  AssignmentWorkspaceData,
+  AssignmentWorkspaceThread,
   AssignmentDto,
   AssignmentStatus,
   AssignmentTaskType,
+  BootstrapMappingDto,
   ClassAnalyticsAssignmentCard,
   ClassAnalyticsData,
   ClassAnalyticsStudentCard,
   CreateAssignmentPayload,
-  CreateCurriculumMappingPayload,
   CreatePracticeSessionPayload,
-  CurriculumMappingDto,
   FeedbackPolicy,
   ModalityMode,
   ModalityPolicy,
@@ -319,26 +355,15 @@ export type {
   StudentDrillDownAssignmentCard,
   StudentDrillDownData,
   StudentDrillDownRepeatedError,
+  TargetLanguageIntensity,
   TeacherCurriculumPackageSummary,
 } from './assignment';
 
 export type {
   I18nText,
   CurriculumMode,
-  SupportDomain,
-  SourceRef,
-  Unit,
-  SituationSeedConstraints,
-  SituationSeed,
-  Situation,
-  SupportTarget,
-  ModuleSupportTargets,
-  Capstone,
-  Module,
-  Objective,
   ActivityTemplateDefinition,
-  CurriculumPackageV1,
-} from './curriculum';
+} from './assignment';
 
 export type {
   CanvasConnectResult,

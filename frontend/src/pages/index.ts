@@ -1,15 +1,11 @@
 export { LandingPage } from './LandingPage';
-export { AuthPage } from './AuthPage';
 export { GeneralPage } from './GeneralPage';
 export { InitialOnboardingPage } from './InitialOnboardingPage';
-export { SchoolOnboardingPage } from './SchoolOnboardingPage';
 export { AssessmentPage } from './AssessmentPage';
 export { CategoriesPage } from './CategoriesPage';
 export { ChatPage } from './ChatPage';
 export { ProfilePage } from './ProfilePage';
 export { AppLearningPage } from './AppLearningPage';
-export { AppCurriculumPage } from './AppCurriculumPage';
-export { AppCurriculumModulePage } from './AppCurriculumModulePage';
 export { AppChatPage } from './AppChatPage';
 export { AppGamesPage } from './AppGamesPage';
 export { AppProgressPage } from './AppProgressPage';

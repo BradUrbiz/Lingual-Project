@@ -20,7 +20,10 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@cubism/*": ["../CubismSdkForWeb-5-r.4/Framework/dist/*"]
+      "@cubism/*": [
+        "../CubismSdkForWeb-5-r.4/Framework/dist/*",
+        "./src/stubs/cubism/*"
+      ]
     },
 
     /* Linting */

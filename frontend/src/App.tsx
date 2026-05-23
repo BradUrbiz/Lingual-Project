@@ -8,25 +8,31 @@ import { LearningLocaleProvider } from './contexts/LearningLocaleContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AppProtectedRoute } from './components/layout/AppProtectedRoute';
 import { TeacherRoute } from './components/layout/TeacherRoute';
+import { SchoolAdminRoute } from './components/layout/SchoolAdminRoute';
 import { LingualAdminRoute } from './components/layout/LingualAdminRoute';
 import { LoadingSpinner } from './components/common';
+import { useAuth } from './hooks/useAuth';
+import { getOnboardingDestination } from './lib/homeRoutes';
 
 const LandingPage = lazy(() => import('./pages/LandingPage').then((module) => ({ default: module.LandingPage })));
-const AuthPage = lazy(() => import('./pages/AuthPage').then((module) => ({ default: module.AuthPage })));
+const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
+const SignupPage = lazy(() => import('./pages/SignupPage').then((module) => ({ default: module.SignupPage })));
+const TeacherJoinOrgPage = lazy(() =>
+  import('./pages/TeacherJoinOrgPage').then(m => ({ default: m.TeacherJoinOrgPage }))
+);
+const TeacherJoinPendingPage = lazy(() =>
+  import('./pages/TeacherJoinPendingPage').then(m => ({ default: m.TeacherJoinPendingPage }))
+);
+const AdminOrgWizardPage = lazy(() => import('./pages/AdminOrgWizard/AdminOrgWizardPage').then((module) => ({ default: module.AdminOrgWizardPage })));
+const AdminPendingPage = lazy(() => import('./pages/AdminPendingPage').then((module) => ({ default: module.AdminPendingPage })));
 const GeneralPage = lazy(() => import('./pages/GeneralPage').then((module) => ({ default: module.GeneralPage })));
 const InitialOnboardingPage = lazy(() => import('./pages/InitialOnboardingPage').then((module) => ({ default: module.InitialOnboardingPage })));
-const SchoolOnboardingPage = lazy(() => import('./pages/SchoolOnboardingPage').then((module) => ({ default: module.SchoolOnboardingPage })));
-const SchoolRequestPage = lazy(() => import('./pages/SchoolRequestPage').then((module) => ({ default: module.SchoolRequestPage })));
-const LingualSchoolRequestsPage = lazy(() => import('./pages/LingualSchoolRequestsPage').then((module) => ({ default: module.LingualSchoolRequestsPage })));
 const AssessmentPage = lazy(() => import('./pages/AssessmentPage').then((module) => ({ default: module.AssessmentPage })));
 const CategoriesPage = lazy(() => import('./pages/CategoriesPage').then((module) => ({ default: module.CategoriesPage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
 const AppLearningPage = lazy(() => import('./pages/AppLearningPage').then((module) => ({ default: module.AppLearningPage })));
-const AppCurriculumPage = lazy(() => import('./pages/AppCurriculumPage').then((module) => ({ default: module.AppCurriculumPage })));
-const AppCurriculumModulePage = lazy(() => import('./pages/AppCurriculumModulePage').then((module) => ({ default: module.AppCurriculumModulePage })));
 const AppChatPage = lazy(() => import('./pages/AppChatPage').then((module) => ({ default: module.AppChatPage })));
 const AppGamesPage = lazy(() => import('./pages/AppGamesPage').then((module) => ({ default: module.AppGamesPage })));
-const AppProgressPage = lazy(() => import('./pages/AppProgressPage').then((module) => ({ default: module.AppProgressPage })));
 const PronunciationPracticePage = lazy(() => import('./pages/PronunciationPracticePage').then((module) => ({ default: module.PronunciationPracticePage })));
 const AppProfilePage = lazy(() => import('./pages/AppProfilePage').then((module) => ({ default: module.AppProfilePage })));
 const AppSettingsPage = lazy(() => import('./pages/AppSettingsPage').then((module) => ({ default: module.AppSettingsPage })));
@@ -38,13 +44,34 @@ const TeacherClassCompliancePage = lazy(() => import('./pages/TeacherClassCompli
 const TeacherStudentDrillDownPage = lazy(() => import('./pages/TeacherStudentDrillDownPage').then((module) => ({ default: module.TeacherStudentDrillDownPage })));
 const CanvasConnectPage = lazy(() => import('./pages/CanvasConnectPage').then((module) => ({ default: module.CanvasConnectPage })));
 const StudentJoinClassPage = lazy(() => import('./pages/StudentJoinClassPage').then((module) => ({ default: module.StudentJoinClassPage })));
-const TeacherJoinSchoolPage = lazy(() => import('./pages/TeacherJoinSchoolPage').then((module) => ({ default: module.TeacherJoinSchoolPage })));
 const AssignmentLaunchPage = lazy(() => import('./pages/AssignmentLaunchPage').then((module) => ({ default: module.AssignmentLaunchPage })));
+const VoiceConsentPage = lazy(() => import('./pages/VoiceConsentPage').then((module) => ({ default: module.VoiceConsentPage })));
 const GuardianConsentPage = lazy(() => import('./pages/GuardianConsentPage').then((module) => ({ default: module.GuardianConsentPage })));
 const AdminDeletionRequestsPage = lazy(() => import('./pages/AdminDeletionRequestsPage').then((module) => ({ default: module.AdminDeletionRequestsPage })));
 const AdminCompliancePage = lazy(() => import('./pages/AdminCompliancePage').then((module) => ({ default: module.AdminCompliancePage })));
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));
-const CanvasPracticeBuilderPage = lazy(() => import('./pages/CanvasPracticeBuilderPage').then((module) => ({ default: module.CanvasPracticeBuilderPage })));
+const LtiLinkAccountPage = lazy(() => import('./pages/LtiLinkAccountPage').then((m) => ({ default: m.LtiLinkAccountPage })));
+const LtiAssignmentPickerPage = lazy(() => import('./pages/LtiAssignmentPickerPage').then((m) => ({ default: m.LtiAssignmentPickerPage })));
+const SchoolAdminHomePage = lazy(() =>
+  import('./pages/SchoolAdminHomePage').then((m) => ({ default: m.SchoolAdminHomePage })),
+);
+const LingualAdminShell = lazy(() =>
+  import('./pages/LingualAdmin/LingualAdminShell').then((m) => ({ default: m.LingualAdminShell })),
+);
+const LingualAdminDashboardPage = lazy(() =>
+  import('./pages/LingualAdmin/LingualAdminDashboardPage').then((m) => ({
+    default: m.LingualAdminDashboardPage,
+  })),
+);
+const LingualRequestsPage = lazy(() =>
+  import('./pages/LingualAdmin/LingualRequestsPage').then((m) => ({ default: m.LingualRequestsPage })),
+);
+const LingualOrgsListPage = lazy(() =>
+  import('./pages/LingualAdmin/LingualOrgsListPage').then((m) => ({ default: m.LingualOrgsListPage })),
+);
+const LingualOrgDetailPage = lazy(() =>
+  import('./pages/LingualAdmin/LingualOrgDetailPage').then((m) => ({ default: m.LingualOrgDetailPage })),
+);
 
 function RouteLoadingScreen() {
   return (
@@ -58,6 +85,16 @@ function withRouteSuspense(element: ReactNode) {
   return <Suspense fallback={<RouteLoadingScreen />}>{element}</Suspense>;
 }
 
+function AppIndexRedirect() {
+  const { user } = useAuth();
+  const dest = getOnboardingDestination(user);
+  // Plan 6: when dest is null (legacy user awaiting modal), render nothing.
+  // AuthProvider's `LegacyRoleMigrationModal` is already mounted and will
+  // overlay this empty render until the user picks a role.
+  if (!dest) return null;
+  return <Navigate to={dest} replace />;
+}
+
 function AnimatedRoutes() {
   const location = useLocation();
 
@@ -66,15 +103,24 @@ function AnimatedRoutes() {
       <Routes location={location} key={location.pathname}>
         {/* Public Routes */}
         <Route path="/" element={withRouteSuspense(<LandingPage />)} />
-        <Route path="/auth" element={withRouteSuspense(<AuthPage />)} />
+        <Route path="/login" element={withRouteSuspense(<LoginPage />)} />
+        <Route path="/signup" element={withRouteSuspense(<SignupPage />)} />
+        <Route path="/auth" element={<Navigate to="/login" replace />} />
         <Route path="/guardian/consent/:token" element={withRouteSuspense(<GuardianConsentPage />)} />
         <Route path="/compliance" element={withRouteSuspense(<CompliancePage />)} />
+        <Route path="/lti/link-account" element={withRouteSuspense(<LtiLinkAccountPage />)} />
+        <Route path="/lti/assignment-picker" element={withRouteSuspense(<LtiAssignmentPickerPage />)} />
 
         {/* Protected Routes */}
         <Route element={<ProtectedRoute />}>
           <Route path="/general" element={withRouteSuspense(<GeneralPage />)} />
+          <Route path="/signup/student/setup" element={withRouteSuspense(<GeneralPage />)} />
+          <Route path="/signup/teacher/join-org" element={withRouteSuspense(<TeacherJoinOrgPage />)} />
+          <Route path="/signup/teacher/pending" element={withRouteSuspense(<TeacherJoinPendingPage />)} />
+          <Route path="/signup/admin/org-wizard" element={withRouteSuspense(<AdminOrgWizardPage />)} />
+          <Route path="/signup/admin/pending" element={withRouteSuspense(<AdminPendingPage />)} />
           <Route path="/onboarding" element={withRouteSuspense(<InitialOnboardingPage />)} />
-          <Route path="/school/setup" element={withRouteSuspense(<SchoolRequestPage />)} />
+          <Route path="/school/setup" element={<Navigate to="/signup/admin/org-wizard" replace />} />
           <Route path="/assessment" element={withRouteSuspense(<AssessmentPage />)} />
           <Route path="/categories" element={withRouteSuspense(<CategoriesPage />)} />
           <Route path="/chat" element={<Navigate to="/app/chat" replace />} />
@@ -83,19 +129,17 @@ function AnimatedRoutes() {
 
         {/* App Shell Routes */}
         <Route path="/app" element={<AppProtectedRoute />}>
-          <Route index element={<Navigate to="learn" replace />} />
+          <Route index element={<AppIndexRedirect />} />
           <Route path="learn" element={withRouteSuspense(<AppLearningPage />)} />
-          <Route path="curriculum" element={withRouteSuspense(<AppCurriculumPage />)} />
-          <Route path="curriculum/:moduleId" element={withRouteSuspense(<AppCurriculumModulePage />)} />
           <Route path="chat" element={withRouteSuspense(<AppChatPage />)} />
           <Route path="games" element={withRouteSuspense(<AppGamesPage />)} />
-          <Route path="progress" element={withRouteSuspense(<AppProgressPage />)} />
+          <Route path="progress" element={<Navigate to="/app/learn" replace />} />
           <Route path="practice" element={withRouteSuspense(<PronunciationPracticePage />)} />
           <Route path="join" element={withRouteSuspense(<StudentJoinClassPage />)} />
           <Route path="assignments/:assignmentId" element={withRouteSuspense(<AssignmentLaunchPage />)} />
+          <Route path="consent/voice" element={withRouteSuspense(<VoiceConsentPage />)} />
           <Route path="profile" element={withRouteSuspense(<AppProfilePage />)} />
           <Route path="settings" element={withRouteSuspense(<AppSettingsPage />)} />
-          <Route path="teacher/join" element={withRouteSuspense(<TeacherJoinSchoolPage />)} />
           <Route
             path="teacher"
             element={withRouteSuspense(
@@ -145,14 +189,6 @@ function AnimatedRoutes() {
             )}
           />
           <Route
-            path="teacher/classes/:classId/canvas-practice/:canvasContentId"
-            element={withRouteSuspense(
-              <TeacherRoute>
-                <CanvasPracticeBuilderPage />
-              </TeacherRoute>
-            )}
-          />
-          <Route
             path="teacher/canvas/connect"
             element={withRouteSuspense(
               <TeacherRoute>
@@ -168,29 +204,68 @@ function AnimatedRoutes() {
               </TeacherRoute>
             )}
           />
+          {/*
+            /app/admin/* requires a school_admin membership specifically.
+            TeacherRoute allows both teacher and school_admin (P2 #5 fix);
+            SchoolAdminRoute narrows to school_admin so a teacher-only user
+            who manually navigates here is redirected to /app/teacher.
+          */}
+          <Route
+            path="admin"
+            element={withRouteSuspense(
+              <SchoolAdminRoute>
+                <SchoolAdminHomePage />
+              </SchoolAdminRoute>
+            )}
+          />
           <Route
             path="admin/deletion-requests"
             element={withRouteSuspense(
-              <TeacherRoute>
+              <SchoolAdminRoute>
                 <AdminDeletionRequestsPage />
-              </TeacherRoute>
+              </SchoolAdminRoute>
             )}
           />
           <Route
             path="admin/compliance"
             element={withRouteSuspense(
-              <TeacherRoute>
+              <SchoolAdminRoute>
                 <AdminCompliancePage />
-              </TeacherRoute>
+              </SchoolAdminRoute>
             )}
           />
+          {/*
+            Legacy redirect: Plan 5 (Task 30) retires the in-app-shell mount
+            of LingualSchoolRequestsPage at /app/admin/school-requests. The
+            Lingual admin surface now lives at /lingual-admin (top-level).
+          */}
           <Route
             path="admin/school-requests"
-            element={withRouteSuspense(
-              <LingualAdminRoute>
-                <LingualSchoolRequestsPage />
-              </LingualAdminRoute>
-            )}
+            element={<Navigate to="/lingual-admin/requests" replace />}
+          />
+        </Route>
+
+        {/*
+          Lingual admin panel — mounted at the top level (outside /app) so its
+          own LingualAdminShell chrome does not double-nest inside AppLayout.
+          `LingualAdminRoute` enforces both auth (redirect to /login when
+          signed-out) and the lingual_admin role.
+        */}
+        <Route
+          path="/lingual-admin"
+          element={withRouteSuspense(
+            <LingualAdminRoute>
+              <LingualAdminShell />
+            </LingualAdminRoute>
+          )}
+        >
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={withRouteSuspense(<LingualAdminDashboardPage />)} />
+          <Route path="requests" element={withRouteSuspense(<LingualRequestsPage />)} />
+          <Route path="organizations" element={withRouteSuspense(<LingualOrgsListPage />)} />
+          <Route
+            path="organizations/:orgId"
+            element={withRouteSuspense(<LingualOrgDetailPage />)}
           />
         </Route>
       </Routes>

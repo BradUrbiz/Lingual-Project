@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { MembershipProvider } from '@/contexts/MembershipContext';
 import { TeacherDashboardPage } from '@/pages/TeacherDashboardPage';
@@ -6,6 +6,8 @@ import type { TeacherDashboardData } from '@/types';
 
 const navigateMock = vi.fn();
 const getTeacherDashboardMock = vi.fn();
+const getClassRosterMock = vi.fn();
+const getClassCanvasRosterGapMock = vi.fn();
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -21,11 +23,30 @@ vi.mock('@/api/teacher', () => ({
   generateClassJoinCode: vi.fn(),
   getClassJoinCode: vi.fn(),
   deactivateClassJoinCode: vi.fn(),
-  getClassRoster: vi.fn(),
+  getClassRoster: (...args: unknown[]) => getClassRosterMock(...args),
   removeStudentFromClass: vi.fn(),
+  getClassCanvasRosterGap: (...args: unknown[]) => getClassCanvasRosterGapMock(...args),
 }));
 
 vi.mock('@/api/schools', () => ({}));
+
+vi.mock('@/api/schoolRequests', () => ({
+  generateTeacherInviteCode: vi.fn(),
+  getTeacherInviteCode: vi.fn().mockResolvedValue(null),
+  deactivateTeacherInviteCode: vi.fn(),
+}));
+
+vi.mock('@/api/teacherRequests', () => ({
+  listPendingTeacherRequests: vi.fn().mockResolvedValue([]),
+  approveTeacherJoinRequest: vi.fn(),
+  declineTeacherJoinRequest: vi.fn(),
+}));
+
+vi.mock('@/api/lti', () => ({
+  getLtiPlatform: vi.fn().mockResolvedValue(null),
+  registerLtiPlatform: vi.fn(),
+  deleteLtiPlatform: vi.fn(),
+}));
 
 const authState: {
   user: {
@@ -129,6 +150,8 @@ describe('TeacherDashboardPage', () => {
   beforeEach(() => {
     navigateMock.mockReset();
     getTeacherDashboardMock.mockReset();
+    getClassRosterMock.mockReset();
+    getClassCanvasRosterGapMock.mockReset();
 
     authState.user = {
       uid: 'teacher-1',
@@ -225,5 +248,136 @@ describe('TeacherDashboardPage', () => {
     expect(screen.getByText('Create first class')).toBeInTheDocument();
     expect(screen.getByText('Enroll first student')).toBeInTheDocument();
     expect(screen.getByText('A student joins via join code.')).toBeInTheDocument();
+  });
+
+  describe('canvas roster badges and gap section', () => {
+    // Single-class dashboard so there's exactly one "Roster" button.
+    const SINGLE_CLASS_DASHBOARD: TeacherDashboardData = {
+      organizationName: 'Lingual Academy',
+      summary: {
+        classCount: 1,
+        studentCount: 1,
+        speakingMinutes: 0,
+        assignmentCount: 0,
+      },
+      classes: [
+        {
+          id: 'class-1',
+          name: 'French 2',
+          subject: 'French',
+          term: 'Spring 2026',
+          learningLocale: 'fr-FR',
+          gradeBand: '10-11',
+          status: 'active',
+          studentCount: 1,
+          assignmentCount: 0,
+        },
+      ],
+      setupChecklist: [],
+      alerts: [],
+    };
+
+    const openRosterForFirstClass = async () => {
+      // The dashboard renders a "Roster" trigger button per class card that
+      // calls openRosterDialog(classId) (see TeacherDashboardPage.tsx ~L673).
+      // The button text is "Roster" so findByRole with /^roster$/i matches it.
+      const rosterButton = await screen.findByRole('button', {
+        name: /^roster$/i,
+      });
+      fireEvent.click(rosterButton);
+    };
+
+    beforeEach(() => {
+      getTeacherDashboardMock.mockResolvedValue(SINGLE_CLASS_DASHBOARD);
+    });
+
+    it('renders an "On Canvas roster" badge for matched students', async () => {
+      getClassRosterMock.mockResolvedValue([
+        {
+          uid: 'alice-uid',
+          displayName: 'Alice',
+          status: 'active',
+          joinSource: 'join_code',
+          isOnCanvasRoster: true,
+        },
+      ]);
+      getClassCanvasRosterGapMock.mockResolvedValue({
+        gap: [],
+        summary: { canvas_total: 1, joined: 1, not_joined: 0 },
+      });
+
+      renderWithProviders();
+      await openRosterForFirstClass();
+
+      expect(await screen.findByText(/On Canvas roster/i)).toBeInTheDocument();
+    });
+
+    it('renders a "Not on Canvas roster" badge for unmatched students', async () => {
+      getClassRosterMock.mockResolvedValue([
+        {
+          uid: 'bob-uid',
+          displayName: 'Bob',
+          status: 'active',
+          joinSource: 'join_code',
+          isOnCanvasRoster: false,
+        },
+      ]);
+      getClassCanvasRosterGapMock.mockResolvedValue({
+        gap: [],
+        summary: { canvas_total: 0, joined: 0, not_joined: 0 },
+      });
+
+      renderWithProviders();
+      await openRosterForFirstClass();
+
+      expect(await screen.findByText(/Not on Canvas roster/i)).toBeInTheDocument();
+    });
+
+    it('hides the gap section when class has no Canvas connection', async () => {
+      getClassRosterMock.mockResolvedValue([
+        {
+          uid: 'carol-uid',
+          displayName: 'Carol',
+          status: 'active',
+          joinSource: 'join_code',
+        },
+      ]);
+      getClassCanvasRosterGapMock.mockResolvedValue({ gap: [], summary: null });
+
+      renderWithProviders();
+      await openRosterForFirstClass();
+
+      // Wait for the dialog content to render by finding the student's name,
+      // so the absence assertion below is not a false positive from the dialog
+      // simply not being open yet.
+      await screen.findByText('Carol');
+      expect(
+        screen.queryByText(/Canvas roster — not yet joined/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it('shows gap entries with summary line', async () => {
+      getClassRosterMock.mockResolvedValue([
+        {
+          uid: 'alice-uid',
+          displayName: 'Alice',
+          status: 'active',
+          joinSource: 'join_code',
+          isOnCanvasRoster: true,
+        },
+      ]);
+      getClassCanvasRosterGapMock.mockResolvedValue({
+        gap: [{ canvas_name: 'Bob', canvas_email: 'bob@school.edu' }],
+        summary: { canvas_total: 2, joined: 1, not_joined: 1 },
+      });
+
+      renderWithProviders();
+      await openRosterForFirstClass();
+
+      expect(
+        await screen.findByText(/1 of 2 Canvas students joined/),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Bob')).toBeInTheDocument();
+    });
   });
 });

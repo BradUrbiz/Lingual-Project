@@ -129,12 +129,10 @@ class FakeCurriculumDb:
         self.consent_events = []
         self.user_active_memberships = {}
 
-        self.curriculum_mappings = {}
         self.assignments = {}
         self.practice_sessions = {}
         self.learning_events = {}
 
-        self._mapping_counter = 0
         self._assignment_counter = 0
         self._session_counter = 0
         self._event_counter = 0
@@ -211,30 +209,6 @@ class FakeCurriculumDb:
     def create_consent_event(self, **payload):
         self.consent_events.append(dict(payload))
         return f'event-{len(self.consent_events)}'
-
-    # ---- curriculum mappings -----------------------------------------------
-
-    def list_class_curriculum_mappings(self, class_id):
-        return [
-            dict(m) for m in self.curriculum_mappings.values()
-            if m.get('class_id') == class_id
-        ]
-
-    def create_curriculum_mapping(self, **kwargs):
-        self._mapping_counter += 1
-        mapping_id = f'mapping-{self._mapping_counter}'
-        now = datetime.now(UTC)
-        self.curriculum_mappings[mapping_id] = {
-            'id': mapping_id,
-            **kwargs,
-            'created_at': now,
-            'updated_at': now,
-        }
-        return mapping_id
-
-    def get_curriculum_mapping(self, mapping_id):
-        mapping = self.curriculum_mappings.get(mapping_id)
-        return dict(mapping) if mapping else None
 
     # ---- assignments -------------------------------------------------------
 
@@ -367,11 +341,6 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
             login_required=passthrough_login_required,
             get_user_proficiency_context=lambda: '',
             build_system_prompt=lambda _context: '',
-            load_sample_curriculum_package=lambda: SAMPLE_PACKAGE,
-            get_curriculum_practice_context=lambda **kwargs: _find_module_and_situation(
-                SAMPLE_PACKAGE, kwargs.get('module_id'), kwargs.get('situation_id'),
-            ),
-            build_curriculum_system_prompt=lambda **_kwargs: 'You are a helpful French tutor.',
             get_school_request_context=get_school_request_context,
             set_active_school_membership=set_active_school_membership,
             allowed_learning_locales={'ko-KR', 'es-ES', 'fr-FR'},
@@ -467,30 +436,11 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
                 'active_membership_id': active_membership_id,
             }
 
-    def _seed_mapping_and_assignment(self, status='published'):
-        """Insert a mapping and assignment directly into the fake DB and return their ids."""
-        mapping_id = self.fake_db.create_curriculum_mapping(
+    def _seed_assignment(self, status='published'):
+        """Insert a direct-scenario assignment into the fake DB and return its id."""
+        return self.fake_db.create_assignment(
             org_id='org-1',
             class_id='class-1',
-            package_id='ap-french-sample',
-            module_id='mod-1',
-            objective_ids=['obj-1'],
-            situation_ids=['sit-1'],
-            target_expressions=[],
-            focus_grammar=[],
-            allowed_context_tags=[],
-            feedback_policy={},
-            scaffold_policy={},
-            output_policy={},
-            modality_policy={},
-            rubric_focus=[],
-            teacher_notes='',
-            created_by_uid='teacher-1',
-        )
-        assignment_id = self.fake_db.create_assignment(
-            org_id='org-1',
-            class_id='class-1',
-            mapping_id=mapping_id,
             title='Family Discussion',
             description='Practice discussing family roles.',
             status=status,
@@ -501,66 +451,18 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
             task_type='decision_making',
             success_criteria=[],
             created_by_uid='teacher-1',
+            instructions='Discuss your family.',
+            generated_scenario='You meet a new friend and discuss your family.',
         )
-        return mapping_id, assignment_id
 
     # -----------------------------------------------------------------------
     # 1. GET /api/teacher/classes/<id>/curriculum/packages
     # -----------------------------------------------------------------------
 
-    def test_get_curriculum_packages_returns_sample_package(self):
+    def test_get_curriculum_packages_route_is_removed(self):
         self._set_session_user('teacher-1', 'mem-teacher')
         response = self.client.get('/api/teacher/classes/class-1/curriculum/packages')
-        self.assertEqual(response.status_code, 200)
-        payload = response.get_json()
-        self.assertTrue(payload['success'])
-        packages = payload['packages']
-        self.assertEqual(len(packages), 1)
-        self.assertEqual(packages[0]['id'], 'ap-french-sample')
-        self.assertEqual(packages[0]['learningLocale'], 'fr-FR')
-
-    # -----------------------------------------------------------------------
-    # 2. POST /api/teacher/classes/<id>/curriculum/mappings — happy path
-    # -----------------------------------------------------------------------
-
-    def test_create_curriculum_mapping_happy_path(self):
-        self._set_session_user('teacher-1', 'mem-teacher')
-        response = self.client.post(
-            '/api/teacher/classes/class-1/curriculum/mappings',
-            json={
-                'packageId': 'ap-french-sample',
-                'moduleId': 'mod-1',
-                'situationIds': ['sit-1'],
-                'objectiveIds': ['obj-1'],
-            },
-        )
-        self.assertEqual(response.status_code, 201)
-        payload = response.get_json()
-        self.assertTrue(payload['success'])
-        mapping = payload['mapping']
-        self.assertEqual(mapping['packageId'], 'ap-french-sample')
-        self.assertEqual(mapping['moduleId'], 'mod-1')
-        self.assertIn('sit-1', mapping['situationIds'])
-        self.assertIn('obj-1', mapping['objectiveIds'])
-        self.assertIsNotNone(mapping['id'])
-
-    # -----------------------------------------------------------------------
-    # 3. POST /api/teacher/classes/<id>/curriculum/mappings — missing packageId
-    # -----------------------------------------------------------------------
-
-    def test_create_curriculum_mapping_rejects_missing_package_id(self):
-        self._set_session_user('teacher-1', 'mem-teacher')
-        response = self.client.post(
-            '/api/teacher/classes/class-1/curriculum/mappings',
-            json={
-                'moduleId': 'mod-1',
-                'situationIds': ['sit-1'],
-            },
-        )
-        self.assertEqual(response.status_code, 400)
-        payload = response.get_json()
-        self.assertFalse(payload['success'])
-        self.assertIn('packageId', payload['error'])
+        self.assertEqual(response.status_code, 404)
 
     # -----------------------------------------------------------------------
     # 4. GET /api/teacher/classes/<id>/assignments — list
@@ -568,7 +470,7 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
 
     def test_list_class_assignments(self):
         self._set_session_user('teacher-1', 'mem-teacher')
-        self._seed_mapping_and_assignment(status='published')
+        self._seed_assignment(status='published')
 
         response = self.client.get('/api/teacher/classes/class-1/assignments')
         self.assertEqual(response.status_code, 200)
@@ -583,15 +485,14 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
 
     def test_create_assignment_happy_path(self):
         self._set_session_user('teacher-1', 'mem-teacher')
-        mapping_id, _ = self._seed_mapping_and_assignment()
 
         response = self.client.post(
             '/api/teacher/classes/class-1/assignments',
             json={
-                'mappingId': mapping_id,
                 'title': 'New Assignment',
                 'status': 'draft',
-                'taskType': 'decision_making',
+                'instructions': 'Introduce yourself to a classmate.',
+                'generatedScenario': 'You meet a new student at a welcome event.',
             },
         )
         self.assertEqual(response.status_code, 201)
@@ -599,7 +500,7 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
         self.assertTrue(payload['success'])
         assignment = payload['assignment']
         self.assertEqual(assignment['title'], 'New Assignment')
-        self.assertEqual(assignment['mappingId'], mapping_id)
+        self.assertNotIn('mappingId', assignment)
         self.assertEqual(assignment['status'], 'draft')
 
     # -----------------------------------------------------------------------
@@ -608,13 +509,13 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
 
     def test_create_assignment_rejects_missing_title(self):
         self._set_session_user('teacher-1', 'mem-teacher')
-        mapping_id, _ = self._seed_mapping_and_assignment()
 
         response = self.client.post(
             '/api/teacher/classes/class-1/assignments',
             json={
-                'mappingId': mapping_id,
                 'status': 'draft',
+                'instructions': 'Try this.',
+                'generatedScenario': 'Roleplay.',
             },
         )
         self.assertEqual(response.status_code, 400)
@@ -623,63 +524,12 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
         self.assertIn('title', payload['error'])
 
     # -----------------------------------------------------------------------
-    # 7. POST /api/teacher/classes/<id>/assignments — wrong mapping class
-    # -----------------------------------------------------------------------
-
-    def test_create_assignment_rejects_wrong_mapping_class(self):
-        self._set_session_user('teacher-1', 'mem-teacher')
-
-        # Create a mapping under a *different* class that the teacher also owns
-        self.fake_db.classes['class-other'] = {
-            'id': 'class-other',
-            'org_id': 'org-1',
-            'name': 'Other Class',
-            'learning_locale': 'fr-FR',
-            'term': '',
-            'subject': '',
-            'teacher_membership_ids': ['mem-teacher'],
-            'grade_band': '',
-            'status': 'active',
-        }
-        other_mapping_id = self.fake_db.create_curriculum_mapping(
-            org_id='org-1',
-            class_id='class-other',
-            package_id='ap-french-sample',
-            module_id='mod-1',
-            objective_ids=['obj-1'],
-            situation_ids=['sit-1'],
-            target_expressions=[],
-            focus_grammar=[],
-            allowed_context_tags=[],
-            feedback_policy={},
-            scaffold_policy={},
-            output_policy={},
-            modality_policy={},
-            rubric_focus=[],
-            teacher_notes='',
-            created_by_uid='teacher-1',
-        )
-
-        response = self.client.post(
-            '/api/teacher/classes/class-1/assignments',
-            json={
-                'mappingId': other_mapping_id,
-                'title': 'Bad Mapping Assignment',
-                'status': 'draft',
-            },
-        )
-        self.assertEqual(response.status_code, 404)
-        payload = response.get_json()
-        self.assertFalse(payload['success'])
-        self.assertIn('Mapping not found', payload['error'])
-
-    # -----------------------------------------------------------------------
     # 8. GET /api/student/assignments — list published for student
     # -----------------------------------------------------------------------
 
     def test_list_student_assignments(self):
         self._set_session_user('student-1', 'mem-student')
-        self._seed_mapping_and_assignment(status='published')
+        self._seed_assignment(status='published')
 
         response = self.client.get('/api/student/assignments')
         self.assertEqual(response.status_code, 200)
@@ -694,7 +544,7 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
 
     def test_create_practice_session_happy_path(self):
         self._set_session_user('student-1', 'mem-student')
-        _mapping_id, assignment_id = self._seed_mapping_and_assignment(status='published')
+        assignment_id = self._seed_assignment(status='published')
 
         response = self.client.post(
             f'/api/student/assignments/{assignment_id}/practice-sessions',
@@ -716,7 +566,7 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
 
     def test_report_practice_session_event(self):
         self._set_session_user('student-1', 'mem-student')
-        _mapping_id, assignment_id = self._seed_mapping_and_assignment(status='published')
+        assignment_id = self._seed_assignment(status='published')
 
         # Create a session first
         create_response = self.client.post(
@@ -744,7 +594,7 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
 
     def test_report_event_rejects_unsupported_event_type(self):
         self._set_session_user('student-1', 'mem-student')
-        _mapping_id, assignment_id = self._seed_mapping_and_assignment(status='published')
+        assignment_id = self._seed_assignment(status='published')
 
         create_response = self.client.post(
             f'/api/student/assignments/{assignment_id}/practice-sessions',
@@ -772,7 +622,7 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
     def test_report_event_rejects_wrong_user(self):
         # Create session as student-1
         self._set_session_user('student-1', 'mem-student')
-        _mapping_id, assignment_id = self._seed_mapping_and_assignment(status='published')
+        assignment_id = self._seed_assignment(status='published')
 
         create_response = self.client.post(
             f'/api/student/assignments/{assignment_id}/practice-sessions',
@@ -811,15 +661,13 @@ class CurriculumAdminApiTestCase(unittest.TestCase):
         self.assertFalse(payload['success'])
 
     # -----------------------------------------------------------------------
-    # 13. GET /api/teacher/classes/<id>/curriculum/packages — student role 403
+    # 13. GET /api/teacher/classes/<id>/curriculum/packages — route removed
     # -----------------------------------------------------------------------
 
-    def test_get_curriculum_packages_rejects_student_role(self):
+    def test_get_curriculum_packages_route_is_removed_for_student_too(self):
         self._set_session_user('student-1', 'mem-student')
         response = self.client.get('/api/teacher/classes/class-1/curriculum/packages')
-        self.assertEqual(response.status_code, 403)
-        payload = response.get_json()
-        self.assertFalse(payload['success'])
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == '__main__':

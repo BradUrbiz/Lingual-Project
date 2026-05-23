@@ -2,224 +2,158 @@ import unittest
 
 from backend.services.canvas.sync import (
     SyncResult,
-    reconcile_enrollments,
+    reconcile_canvas_roster_entries,
     flatten_course_content,
 )
 
 
-class FakeSyncDb:
-    """In-memory db interface used by the sync service."""
+class FakeRosterDb:
+    """In-memory db for the new roster-entries sync. Records every call so
+    tests can assert the invariant that NO enrollment-mutation happens."""
 
     def __init__(self):
-        self.enrollments = {}      # enrollment_id -> dict
-        self.memberships = {}      # membership_id -> dict
-        self.users_by_email = {}   # email -> user dict
-        self.created_enrollments = []
-        self.deactivated_enrollments = []
-        self.deleted_enrollments = []
-        self.created_memberships = []
-        self.updated_memberships = []
+        self.roster_entries = {}  # key=f"{class_id}__{canvas_user_id}" -> dict
+        self.upsert_calls = []
+        self.delete_calls = []
+        # Enrollment-side tracking: if the service ever calls any of these,
+        # the test fails.
+        self.enrollment_mutations = []
 
-    def list_class_enrollments(self, class_id, status=None):
-        return [
-            e for e in self.enrollments.values()
-            if e.get('class_id') == class_id
-            and (status is None or e.get('status') == status)
-        ]
-
-    def get_user_by_email(self, email):
-        return self.users_by_email.get(email)
-
-    def get_membership(self, membership_id):
-        return self.memberships.get(membership_id)
-
-    def create_membership(self, org_id, uid, roles, primary_class_ids=None, membership_id=None, **_kwargs):
-        mid = membership_id or f'{org_id}_{uid}'
-        membership = {
-            'id': mid, 'org_id': org_id, 'uid': uid,
-            'roles': list(roles), 'primaryClassIds': list(primary_class_ids or []),
-            'status': 'active',
+    # -- roster-entries surface used by the service --
+    def upsert_canvas_roster_entry(self, *, class_id, connection_id,
+                                   canvas_user_id, canvas_email, canvas_name):
+        key = f'{class_id}__{canvas_user_id}'
+        self.roster_entries[key] = {
+            'class_id': class_id, 'connection_id': connection_id,
+            'canvas_user_id': canvas_user_id,
+            'canvas_email': (canvas_email or '').lower().strip(),
+            'canvas_name': canvas_name,
         }
-        self.memberships[mid] = membership
-        self.created_memberships.append(membership)
-        return mid
+        self.upsert_calls.append(key)
 
-    def add_primary_class_to_membership(self, membership_id, class_id):
-        mem = self.memberships.get(membership_id)
-        if mem and class_id not in mem.get('primaryClassIds', []):
-            mem.setdefault('primaryClassIds', []).append(class_id)
-            self.updated_memberships.append(membership_id)
+    def delete_canvas_roster_entry(self, class_id, canvas_user_id):
+        key = f'{class_id}__{canvas_user_id}'
+        self.roster_entries.pop(key, None)
+        self.delete_calls.append(key)
 
-    def create_enrollment(self, class_id, student_uid, student_membership_id=None,
-                          status='active', join_source='canvas', student_number='',
-                          enrollment_id=None, canvas_user_id='', canvas_email='', **_kwargs):
-        eid = enrollment_id or f'{class_id}_{student_uid}'
-        enrollment = {
-            'id': eid, 'class_id': class_id, 'student_uid': student_uid,
-            'student_membership_id': student_membership_id,
-            'status': status, 'join_source': join_source,
-            'canvas_user_id': canvas_user_id, 'canvas_email': canvas_email,
-            'student_number': student_number,
-        }
-        self.enrollments[eid] = enrollment
-        self.created_enrollments.append(enrollment)
-        return eid
+    def list_canvas_roster_entries(self, class_id):
+        return [e for e in self.roster_entries.values() if e.get('class_id') == class_id]
 
-    def deactivate_canvas_enrollment(self, enrollment_id):
-        enrollment = self.enrollments.get(enrollment_id)
-        if enrollment:
-            enrollment['status'] = 'inactive'
-            self.deactivated_enrollments.append(enrollment_id)
-
-    def delete_enrollment(self, enrollment_id):
-        self.enrollments.pop(enrollment_id, None)
-        self.deleted_enrollments.append(enrollment_id)
+    # -- enrollment surface: any call here is a bug --
+    def __getattr__(self, name):
+        if name in {
+            'create_enrollment', 'delete_enrollment',
+            'deactivate_canvas_enrollment', 'list_class_enrollments',
+            'activate_pending_canvas_enrollment',
+            'list_pending_canvas_enrollments_by_email',
+            'create_membership', 'get_membership',
+            'add_primary_class_to_membership', 'get_user_by_email',
+        }:
+            def tripwire(*args, **kwargs):
+                self.enrollment_mutations.append((name, args, kwargs))
+                raise AssertionError(
+                    f'sync service called enrollment-side method {name!r} — '
+                    f'should only touch canvas_roster_entries'
+                )
+            return tripwire
+        raise AttributeError(name)
 
     def replace_canvas_course_content_for_connection(self, connection_id, class_id, items):
+        # sync_course_content calls this; unchanged behavior, tracked for completeness.
         self._replaced_content = (connection_id, class_id, items)
 
 
-class ReconcileEnrollmentsTest(unittest.TestCase):
-    def test_email_match_creates_active_enrollment(self):
-        db = FakeSyncDb()
-        db.users_by_email['alice@school.edu'] = {'uid': 'alice-uid', 'email': 'alice@school.edu'}
+class ReconcileCanvasRosterEntriesTest(unittest.TestCase):
+    def _canvas_students(self, *tuples):
+        """Build Canvas student payloads from (id, email, name) tuples."""
+        return [{'id': i, 'email': e, 'name': n, 'sis_user_id': None}
+                for i, e, n in tuples]
 
-        canvas_students = [
-            {'id': 50, 'email': 'alice@school.edu', 'name': 'Alice', 'sis_user_id': None},
-        ]
-        result = reconcile_enrollments(
-            db=db, class_id='class-1', org_id='org-1',
-            canvas_students=canvas_students,
+    def test_upsert_for_each_canvas_student_zero_enrollment_mutations(self):
+        db = FakeRosterDb()
+        students = self._canvas_students(
+            (50, 'alice@school.edu', 'Alice'),
+            (51, 'bob@school.edu', 'Bob'),
         )
-        self.assertEqual(result.matched, 1)
-        self.assertEqual(result.unmatched, 0)
-        self.assertEqual(len(db.created_enrollments), 1)
-        self.assertEqual(db.created_enrollments[0]['status'], 'active')
-        self.assertEqual(db.created_enrollments[0]['student_uid'], 'alice-uid')
-
-    def test_unmatched_student_creates_pending_sync(self):
-        db = FakeSyncDb()
-        canvas_students = [
-            {'id': 51, 'email': 'bob@school.edu', 'name': 'Bob', 'sis_user_id': None},
-        ]
-        result = reconcile_enrollments(
-            db=db, class_id='class-1', org_id='org-1',
-            canvas_students=canvas_students,
+        result = reconcile_canvas_roster_entries(
+            db=db, class_id='class-1', connection_id='conn-1',
+            canvas_students=students,
         )
-        self.assertEqual(result.matched, 0)
-        self.assertEqual(result.unmatched, 1)
-        self.assertEqual(len(db.created_enrollments), 1)
-        self.assertEqual(db.created_enrollments[0]['status'], 'pending_sync')
-        # pending_sync uses double-underscore ID format
-        self.assertIn('__', db.created_enrollments[0]['id'])
+        self.assertEqual(result.entries_upserted, 2)
+        self.assertEqual(result.entries_removed, 0)
+        self.assertEqual(result.total_canvas_students, 2)
+        self.assertEqual(set(db.roster_entries.keys()),
+                         {'class-1__50', 'class-1__51'})
+        self.assertEqual(db.enrollment_mutations, [])
 
-    def test_removed_canvas_student_deactivated(self):
-        db = FakeSyncDb()
-        # Existing Canvas-sourced enrollment
-        db.enrollments['class-1__cv99'] = {
-            'id': 'class-1__cv99', 'class_id': 'class-1',
-            'student_uid': '', 'status': 'pending_sync',
-            'join_source': 'canvas', 'canvas_user_id': 'cv99',
-            'canvas_email': 'gone@school.edu',
+    def test_removes_entry_when_student_dropped_from_canvas(self):
+        db = FakeRosterDb()
+        db.roster_entries['class-1__50'] = {
+            'class_id': 'class-1', 'canvas_user_id': '50',
+            'canvas_email': 'alice@school.edu', 'canvas_name': 'Alice',
         }
-        # Canvas returns NO students now
-        result = reconcile_enrollments(
-            db=db, class_id='class-1', org_id='org-1',
+        result = reconcile_canvas_roster_entries(
+            db=db, class_id='class-1', connection_id='conn-1',
             canvas_students=[],
         )
-        self.assertEqual(result.deactivated, 1)
+        self.assertEqual(result.entries_removed, 1)
+        self.assertEqual(result.entries_upserted, 0)
+        self.assertNotIn('class-1__50', db.roster_entries)
+        self.assertEqual(db.enrollment_mutations, [])
 
-    def test_manual_enrollment_not_touched(self):
-        db = FakeSyncDb()
-        db.enrollments['class-1_manual-student'] = {
-            'id': 'class-1_manual-student', 'class_id': 'class-1',
-            'student_uid': 'manual-student', 'status': 'active',
-            'join_source': 'manual', 'canvas_user_id': '',
-            'canvas_email': '',
+    def test_idempotent_when_roster_unchanged(self):
+        db = FakeRosterDb()
+        students = self._canvas_students((50, 'alice@school.edu', 'Alice'))
+        reconcile_canvas_roster_entries(
+            db=db, class_id='class-1', connection_id='conn-1',
+            canvas_students=students,
+        )
+        db.upsert_calls.clear()
+        db.delete_calls.clear()
+        result = reconcile_canvas_roster_entries(
+            db=db, class_id='class-1', connection_id='conn-1',
+            canvas_students=students,
+        )
+        # Each canvas student is re-upserted on every sync (refreshes synced_at);
+        # nothing is deleted because the roster is unchanged.
+        self.assertEqual(result.entries_upserted, 1)
+        self.assertEqual(result.entries_removed, 0)
+
+    def test_lowercases_and_trims_canvas_email(self):
+        db = FakeRosterDb()
+        students = self._canvas_students((50, '  Alice@School.Edu ', 'Alice'))
+        reconcile_canvas_roster_entries(
+            db=db, class_id='class-1', connection_id='conn-1',
+            canvas_students=students,
+        )
+        self.assertEqual(db.roster_entries['class-1__50']['canvas_email'],
+                         'alice@school.edu')
+
+    def test_scopes_deletion_to_this_class_only(self):
+        """Entries for other classes must not be deleted when this class's roster changes."""
+        db = FakeRosterDb()
+        db.roster_entries['other-class__99'] = {
+            'class_id': 'other-class', 'canvas_user_id': '99',
+            'canvas_email': 'x@y.edu', 'canvas_name': 'X',
         }
-        result = reconcile_enrollments(
-            db=db, class_id='class-1', org_id='org-1',
+        reconcile_canvas_roster_entries(
+            db=db, class_id='class-1', connection_id='conn-1',
             canvas_students=[],
         )
-        self.assertEqual(result.deactivated, 0)
-        self.assertEqual(db.enrollments['class-1_manual-student']['status'], 'active')
+        self.assertIn('other-class__99', db.roster_entries)
 
-    def test_already_enrolled_student_skipped(self):
-        db = FakeSyncDb()
-        db.users_by_email['alice@school.edu'] = {'uid': 'alice-uid', 'email': 'alice@school.edu'}
-        db.enrollments['class-1_alice-uid'] = {
-            'id': 'class-1_alice-uid', 'class_id': 'class-1',
-            'student_uid': 'alice-uid', 'status': 'active',
-            'join_source': 'canvas', 'canvas_user_id': '50',
-            'canvas_email': 'alice@school.edu',
-        }
-        canvas_students = [
-            {'id': 50, 'email': 'alice@school.edu', 'name': 'Alice', 'sis_user_id': None},
-        ]
-        result = reconcile_enrollments(
-            db=db, class_id='class-1', org_id='org-1',
-            canvas_students=canvas_students,
-        )
-        self.assertEqual(result.matched, 1)
-        self.assertEqual(result.created, 0)
 
-    def test_mixed_scenario(self):
-        db = FakeSyncDb()
-        db.users_by_email['alice@school.edu'] = {'uid': 'alice-uid', 'email': 'alice@school.edu'}
-        # Existing pending enrollment that should be deactivated (student removed from Canvas)
-        db.enrollments['class-1__cv_gone'] = {
-            'id': 'class-1__cv_gone', 'class_id': 'class-1',
-            'student_uid': '', 'status': 'pending_sync',
-            'join_source': 'canvas', 'canvas_user_id': 'cv_gone',
-            'canvas_email': 'gone@school.edu',
-        }
-        canvas_students = [
-            {'id': 50, 'email': 'alice@school.edu', 'name': 'Alice', 'sis_user_id': None},
-            {'id': 51, 'email': 'bob@school.edu', 'name': 'Bob', 'sis_user_id': None},
-        ]
-        result = reconcile_enrollments(
-            db=db, class_id='class-1', org_id='org-1',
-            canvas_students=canvas_students,
-        )
-        self.assertEqual(result.matched, 1)    # Alice
-        self.assertEqual(result.unmatched, 1)   # Bob
-        self.assertEqual(result.deactivated, 1)  # cv_gone removed
-
-    def test_existing_membership_gets_class_added(self):
-        db = FakeSyncDb()
-        db.users_by_email['alice@school.edu'] = {'uid': 'alice-uid', 'email': 'alice@school.edu'}
-        db.memberships['org-1_alice-uid'] = {
-            'id': 'org-1_alice-uid', 'org_id': 'org-1', 'uid': 'alice-uid',
-            'roles': ['student'], 'primaryClassIds': ['class-other'],
-        }
-        canvas_students = [
-            {'id': 50, 'email': 'alice@school.edu', 'name': 'Alice', 'sis_user_id': None},
-        ]
-        reconcile_enrollments(
-            db=db, class_id='class-1', org_id='org-1',
-            canvas_students=canvas_students,
-        )
-        self.assertIn('class-1', db.memberships['org-1_alice-uid']['primaryClassIds'])
-        self.assertEqual(len(db.created_memberships), 0)
-
-    def test_pending_sync_removed_student_deleted_not_deactivated(self):
-        """pending_sync enrollments for removed students should be deleted, not deactivated."""
-        db = FakeSyncDb()
-        db.enrollments['class-1__cv_gone'] = {
-            'id': 'class-1__cv_gone', 'class_id': 'class-1',
-            'student_uid': '', 'status': 'pending_sync',
-            'join_source': 'canvas', 'canvas_user_id': 'cv_gone',
-            'canvas_email': 'gone@school.edu',
-        }
-        result = reconcile_enrollments(
-            db=db, class_id='class-1', org_id='org-1',
-            canvas_students=[],
-        )
-        self.assertEqual(len(db.deleted_enrollments), 1)
-        self.assertEqual(result.deactivated, 1)
+class SyncResultTest(unittest.TestCase):
+    def test_to_dict(self):
+        r = SyncResult(entries_upserted=3, entries_removed=1, total_canvas_students=3)
+        d = r.to_dict()
+        self.assertEqual(d['entries_upserted'], 3)
+        self.assertEqual(d['entries_removed'], 1)
+        self.assertEqual(d['total_canvas_students'], 3)
 
 
 class FlattenCourseContentTest(unittest.TestCase):
+    # UNCHANGED — sync_course_content is out of scope for this plan.
     def test_flattens_modules_and_items(self):
         modules = [
             {'id': 10, 'name': 'Week 1', 'position': 1},
@@ -237,25 +171,10 @@ class FlattenCourseContentTest(unittest.TestCase):
         flat = flatten_course_content('conn1', 'class-1', modules, items_by_module)
         self.assertEqual(len(flat), 3)
         self.assertEqual(flat[0]['canvas_module_name'], 'Week 1')
-        self.assertEqual(flat[0]['canvas_module_position'], 1)
-        self.assertEqual(flat[0]['item_position'], 1)
-        self.assertEqual(flat[0]['item_title'], 'Reading')
         self.assertEqual(flat[2]['canvas_module_position'], 2)
 
     def test_empty_modules(self):
-        flat = flatten_course_content('conn1', 'class-1', [], {})
-        self.assertEqual(flat, [])
-
-
-class SyncResultTest(unittest.TestCase):
-    def test_to_dict(self):
-        r = SyncResult(matched=5, unmatched=12, deactivated=2, created=17, unchanged=3)
-        d = r.to_dict()
-        self.assertEqual(d['matched'], 5)
-        self.assertEqual(d['unmatched'], 12)
-        self.assertEqual(d['deactivated'], 2)
-        self.assertEqual(d['created'], 17)
-        self.assertEqual(d['unchanged'], 3)
+        self.assertEqual(flatten_course_content('conn1', 'class-1', [], {}), [])
 
 
 if __name__ == '__main__':

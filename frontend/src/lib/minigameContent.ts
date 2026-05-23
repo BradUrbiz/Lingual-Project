@@ -3,6 +3,16 @@ export interface CurriculumScenarioForMinigames {
   title: string;
   objective_id?: string;
   target_phrases: string[];
+  grammar_challenges?: GrammarChallengeSeed[];
+}
+
+export interface GrammarChallengeSeed {
+  id?: string;
+  sentence: string;
+  masked_sentence: string;
+  answer: string;
+  choices: string[];
+  explanation: string;
 }
 
 export interface ListeningQuizQuestion {
@@ -123,6 +133,36 @@ export function buildGrammarChallengeQuestions(
   allScenarios: CurriculumScenarioForMinigames[],
   count = 5
 ): GrammarChallengeQuestion[] {
+  const curatedQuestions = (selectedScenario.grammar_challenges ?? [])
+    .slice(0, Math.max(1, count))
+    .map((question, index) => {
+      const normalizedChoices = [...new Set(question.choices.map((choice) => choice.trim()).filter(Boolean))];
+      const answer = question.answer.trim();
+      const choices = normalizedChoices.includes(answer)
+        ? shuffle(normalizedChoices)
+        : shuffle([answer, ...normalizedChoices]);
+      const correctIndex = choices.findIndex((choice) => choice === answer);
+
+      if (!question.sentence.trim() || !question.masked_sentence.trim() || correctIndex < 0) {
+        return null;
+      }
+
+      return {
+        id: question.id ?? `grammar-${selectedScenario.id}-${index}`,
+        sentence: question.sentence.trim(),
+        maskedSentence: question.masked_sentence.trim(),
+        answer,
+        choices,
+        correctIndex,
+        explanation: question.explanation.trim(),
+      };
+    })
+    .filter((question): question is GrammarChallengeQuestion => question !== null);
+
+  if (curatedQuestions.length) {
+    return curatedQuestions;
+  }
+
   const phrasePool = [
     ...selectedScenario.target_phrases,
     ...allScenarios.flatMap((scenario) => scenario.target_phrases),

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from backend.services.compliance import (
     RETENTION_POLICIES,
     apply_launch_compliance,
+    auto_grant_voice_consent_for_pilot,
     build_voice_block_reasons,
     create_consent_event,
     get_retention_policy,
@@ -252,13 +253,14 @@ class TestNormalizeComplianceVoiceAllowed(unittest.TestCase):
         )
         self.assertTrue(result["voice_allowed"])
 
-    def test_voice_not_granted_adult(self):
+    def test_voice_not_granted_adult_allowed_under_pilot_override(self):
+        """Pilot override: voice is unconditionally allowed regardless of consent state."""
         result = normalize_student_compliance_record(
             {"is_minor": False, "voice_consent_status": "unknown"},
             org_id="org-1",
             student_uid="stu-1",
         )
-        self.assertFalse(result["voice_allowed"])
+        self.assertTrue(result["voice_allowed"])
 
     def test_minor_with_guardian_and_voice_granted(self):
         result = normalize_student_compliance_record(
@@ -272,7 +274,8 @@ class TestNormalizeComplianceVoiceAllowed(unittest.TestCase):
         )
         self.assertTrue(result["voice_allowed"])
 
-    def test_minor_without_guardian_consent(self):
+    def test_minor_without_guardian_consent_allowed_under_pilot(self):
+        """Pilot rule: guardian=unknown no longer blocks — student self-consent suffices."""
         result = normalize_student_compliance_record(
             {
                 "is_minor": True,
@@ -282,9 +285,23 @@ class TestNormalizeComplianceVoiceAllowed(unittest.TestCase):
             org_id="org-1",
             student_uid="stu-1",
         )
-        self.assertFalse(result["voice_allowed"])
+        self.assertTrue(result["voice_allowed"])
 
-    def test_minor_with_guardian_but_no_voice_consent(self):
+    def test_minor_with_guardian_revoked_allowed_under_pilot_override(self):
+        """Pilot override: even an explicit guardian revoke no longer blocks voice."""
+        result = normalize_student_compliance_record(
+            {
+                "is_minor": True,
+                "guardian_consent_status": "revoked",
+                "voice_consent_status": "granted",
+            },
+            org_id="org-1",
+            student_uid="stu-1",
+        )
+        self.assertTrue(result["voice_allowed"])
+
+    def test_minor_with_voice_revoked_allowed_under_pilot_override(self):
+        """Pilot override: voice_consent_status=revoked no longer blocks voice."""
         result = normalize_student_compliance_record(
             {
                 "is_minor": True,
@@ -294,7 +311,7 @@ class TestNormalizeComplianceVoiceAllowed(unittest.TestCase):
             org_id="org-1",
             student_uid="stu-1",
         )
-        self.assertFalse(result["voice_allowed"])
+        self.assertTrue(result["voice_allowed"])
 
 
 # ---------------------------------------------------------------------------
@@ -378,34 +395,41 @@ class TestBuildVoiceBlockReasons(unittest.TestCase):
         }
         self.assertEqual(build_voice_block_reasons(record), [])
 
-    def test_guardian_reason_for_minor_without_guardian(self):
+    def test_no_reasons_for_minor_with_unknown_guardian(self):
+        """Pilot rule: guardian=unknown is no longer a block reason."""
         record = {
             "is_minor": True,
             "guardian_consent_status": "unknown",
             "voice_consent_status": "granted",
         }
-        reasons = build_voice_block_reasons(record)
-        self.assertEqual(len(reasons), 1)
-        self.assertIn("Guardian", reasons[0])
+        self.assertEqual(build_voice_block_reasons(record), [])
 
-    def test_voice_reason_when_not_granted(self):
+    def test_no_reasons_when_guardian_explicitly_revoked_under_pilot_override(self):
+        """Pilot override: voice is never blocked, so no reasons are surfaced."""
+        record = {
+            "is_minor": True,
+            "guardian_consent_status": "revoked",
+            "voice_consent_status": "granted",
+        }
+        self.assertEqual(build_voice_block_reasons(record), [])
+
+    def test_no_reasons_when_voice_not_granted_under_pilot_override(self):
+        """Pilot override: voice_consent_status=revoked no longer surfaces a reason."""
         record = {
             "is_minor": False,
             "guardian_consent_status": "not_required",
             "voice_consent_status": "revoked",
         }
-        reasons = build_voice_block_reasons(record)
-        self.assertEqual(len(reasons), 1)
-        self.assertIn("Voice consent", reasons[0])
+        self.assertEqual(build_voice_block_reasons(record), [])
 
-    def test_both_reasons_for_minor_without_any_consent(self):
+    def test_no_reasons_for_minor_without_any_consent_under_pilot_override(self):
+        """Pilot override: minor with no consent no longer surfaces a reason."""
         record = {
             "is_minor": True,
             "guardian_consent_status": "unknown",
             "voice_consent_status": "unknown",
         }
-        reasons = build_voice_block_reasons(record)
-        self.assertEqual(len(reasons), 2)
+        self.assertEqual(build_voice_block_reasons(record), [])
 
 
 # ---------------------------------------------------------------------------
@@ -509,21 +533,23 @@ class TestApplyLaunchComplianceVoiceAllowed(unittest.TestCase):
 class TestApplyLaunchComplianceVoiceBlocked(unittest.TestCase):
 
     def test_hybrid_voice_blocked_fallback_enabled(self):
+        # Pilot override: build_voice_block_reasons always returns [], so the
+        # fallback path still downgrades to text_only but surfaces no reasons.
         result = apply_launch_compliance(
             {"mode": "hybrid", "text_fallback_enabled": True},
             {
                 "voice_allowed": False,
                 "text_allowed": True,
                 "is_minor": True,
-                "guardian_consent_status": "unknown",
-                "voice_consent_status": "granted",
+                "guardian_consent_status": "not_required",
+                "voice_consent_status": "unknown",
             },
         )
         self.assertEqual(result["modality"]["mode"], "text_only")
         self.assertFalse(result["voiceAllowed"])
         self.assertTrue(result["textAllowed"])
         self.assertTrue(result["fallbackApplied"])
-        self.assertTrue(len(result["blockedReasons"]) > 0)
+        self.assertEqual(result["blockedReasons"], [])
 
     def test_hybrid_voice_blocked_fallback_disabled(self):
         result = apply_launch_compliance(
@@ -628,8 +654,8 @@ class TestResolveStudentComplianceRecord(unittest.TestCase):
         result = resolve_student_compliance_record(deps, org_id="org-1", student_uid="stu-1")
         self.assertFalse(result["is_minor"])
         self.assertEqual(result["guardian_consent_status"], "not_required")
-        # voice_consent_status defaults to unknown, so voice_allowed is false
-        self.assertFalse(result["voice_allowed"])
+        # Pilot override: voice is unconditionally allowed regardless of consent state.
+        self.assertTrue(result["voice_allowed"])
 
     def test_legacy_path_when_db_lacks_method(self):
         """When db has no get_student_compliance_record, returns a permissive legacy fallback."""
@@ -750,24 +776,25 @@ class TestResolveAssignmentLaunch(unittest.TestCase):
         self.assertTrue(launch["textAllowed"])
         self.assertFalse(launch["fallbackApplied"])
 
-    def test_fallback_for_minor_without_guardian(self):
+    def test_guardian_revoked_does_not_trigger_fallback_under_pilot_override(self):
+        """Pilot override: guardian=revoked no longer blocks voice, so no fallback."""
         db = FakeComplianceDb()
         db.users["stu-1"] = {"uid": "stu-1", "profile": {"age": 14}}
         db.student_compliance_records["org-1_stu-1"] = {
             "is_minor": True,
             "voice_consent_status": "granted",
-            "guardian_consent_status": "unknown",
+            "guardian_consent_status": "revoked",
         }
         deps = _make_deps(db)
-        launch, compliance = resolve_assignment_launch(
+        launch, _compliance = resolve_assignment_launch(
             deps,
             org_id="org-1",
             student_uid="stu-1",
             modality_policy={"mode": "hybrid", "text_fallback_enabled": True},
         )
-        self.assertFalse(launch["voiceAllowed"])
+        self.assertTrue(launch["voiceAllowed"])
         self.assertTrue(launch["textAllowed"])
-        self.assertTrue(launch["fallbackApplied"])
+        self.assertFalse(launch["fallbackApplied"])
 
     def test_teacher_preview_bypasses(self):
         db = FakeComplianceDb()
@@ -802,6 +829,91 @@ class TestIsSchoolVoiceContext(unittest.TestCase):
 
     def test_false_for_none_context(self):
         self.assertFalse(is_school_voice_context(None))
+
+
+class TestAutoGrantVoiceConsentForPilot(unittest.TestCase):
+    """Pilot: enrollment auto-grants voice + guardian consent. Revoked is preserved."""
+
+    def _setup_db(self, *, student_age=15):
+        db = FakeComplianceDb()
+        db.organizations["org-1"] = {"id": "org-1", "name": "Pilot School"}
+        db.users["stu-1"] = {"uid": "stu-1", "profile": {"age": student_age}}
+        return db
+
+    def test_grants_voice_and_guardian_for_minor_with_no_record(self):
+        db = self._setup_db(student_age=15)
+        auto_grant_voice_consent_for_pilot(db, org_id="org-1", student_uid="stu-1")
+        record = db.get_student_compliance_record("org-1", "stu-1")
+        self.assertIsNotNone(record)
+        self.assertEqual(record["voice_consent_status"], "granted")
+        self.assertEqual(record["guardian_consent_status"], "granted")
+        self.assertTrue(record["voice_allowed"])
+        self.assertEqual(len(db.consent_events), 1)
+        event = db.consent_events[0]
+        self.assertEqual(event["event_type"], "consent.auto_granted_for_pilot")
+        self.assertEqual(event["actor_type"], "system")
+        self.assertEqual(event["actor_id"], "system:pilot_auto_grant")
+        self.assertEqual(event["student_uid"], "stu-1")
+        self.assertEqual(event["payload"]["updates"]["voice_consent_status"], "granted")
+        self.assertEqual(event["payload"]["updates"]["guardian_consent_status"], "granted")
+
+    def test_grants_voice_only_for_adult(self):
+        db = self._setup_db(student_age=20)
+        auto_grant_voice_consent_for_pilot(db, org_id="org-1", student_uid="stu-1")
+        record = db.get_student_compliance_record("org-1", "stu-1")
+        self.assertEqual(record["voice_consent_status"], "granted")
+        self.assertEqual(record["guardian_consent_status"], "not_required")
+        self.assertTrue(record["voice_allowed"])
+        self.assertEqual(len(db.consent_events), 1)
+        self.assertEqual(
+            db.consent_events[0]["payload"]["updates"],
+            {"voice_consent_status": "granted"},
+        )
+
+    def test_does_not_override_revoked_voice(self):
+        db = self._setup_db(student_age=15)
+        db.student_compliance_records["org-1_stu-1"] = {
+            "id": "org-1_stu-1",
+            "org_id": "org-1",
+            "student_uid": "stu-1",
+            "is_minor": True,
+            "voice_consent_status": "revoked",
+            "guardian_consent_status": "granted",
+        }
+        auto_grant_voice_consent_for_pilot(db, org_id="org-1", student_uid="stu-1")
+        record = db.get_student_compliance_record("org-1", "stu-1")
+        self.assertEqual(record["voice_consent_status"], "revoked")
+        # No write should have happened — voice is revoked, guardian already granted
+        self.assertEqual(db.upserted_records, [])
+        self.assertEqual(db.consent_events, [])
+
+    def test_does_not_override_revoked_guardian(self):
+        db = self._setup_db(student_age=15)
+        db.student_compliance_records["org-1_stu-1"] = {
+            "id": "org-1_stu-1",
+            "org_id": "org-1",
+            "student_uid": "stu-1",
+            "is_minor": True,
+            "voice_consent_status": "unknown",
+            "guardian_consent_status": "revoked",
+        }
+        auto_grant_voice_consent_for_pilot(db, org_id="org-1", student_uid="stu-1")
+        record = db.get_student_compliance_record("org-1", "stu-1")
+        # Auto-grant still preserves guardian=revoked in the stored record
+        # (audit trail intact), but under the pilot override voice_allowed
+        # is now True regardless.
+        self.assertEqual(record["voice_consent_status"], "granted")
+        self.assertEqual(record["guardian_consent_status"], "revoked")
+        self.assertTrue(record["voice_allowed"])
+
+    def test_idempotent_when_already_granted(self):
+        db = self._setup_db(student_age=15)
+        auto_grant_voice_consent_for_pilot(db, org_id="org-1", student_uid="stu-1")
+        first_upserts = len(db.upserted_records)
+        first_events = len(db.consent_events)
+        auto_grant_voice_consent_for_pilot(db, org_id="org-1", student_uid="stu-1")
+        self.assertEqual(len(db.upserted_records), first_upserts)
+        self.assertEqual(len(db.consent_events), first_events)
 
 
 if __name__ == "__main__":

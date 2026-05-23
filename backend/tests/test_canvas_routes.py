@@ -195,10 +195,7 @@ def _make_app(db):
         login_required=passthrough_login_required,
         get_user_proficiency_context=lambda: '',
         build_system_prompt=lambda _c: '',
-        load_sample_curriculum_package=lambda: {},
-        get_curriculum_practice_context=lambda **kw: None,
-        build_curriculum_system_prompt=lambda **kw: '',
-        get_school_request_context=get_school_ctx,
+            get_school_request_context=get_school_ctx,
         set_active_school_membership=lambda _mid: None,
         allowed_learning_locales={'ko-KR'},
         allowed_minigame_types=set(),
@@ -357,7 +354,9 @@ class SyncEndpointTest(unittest.TestCase):
     def test_sync_triggers_roster_and_content(self, mock_content, mock_roster, MockClient, mock_decrypt):
         from backend.services.canvas.sync import SyncResult
         mock_decrypt.return_value = 'decrypted-pat'
-        mock_roster.return_value = SyncResult(matched=5, unmatched=2, created=7)
+        mock_roster.return_value = SyncResult(
+            entries_upserted=7, entries_removed=2, total_canvas_students=7,
+        )
         mock_content.return_value = 10
 
         db = FakeCanvasRouteDb()
@@ -379,7 +378,9 @@ class SyncEndpointTest(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertTrue(data['success'])
-        self.assertEqual(data['roster']['matched'], 5)
+        self.assertEqual(data['roster']['entries_upserted'], 7)
+        self.assertEqual(data['roster']['entries_removed'], 2)
+        self.assertEqual(data['roster']['total_canvas_students'], 7)
         mock_roster.assert_called_once()
         mock_content.assert_called_once()
 

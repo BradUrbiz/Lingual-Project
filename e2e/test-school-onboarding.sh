@@ -141,29 +141,31 @@ JOIN_RESP=$(curl -s -X POST "$BASE_URL/api/schools/join-as-teacher" \
 JOIN_SUCCESS=$(echo "$JOIN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('success',False))")
 INVITATION_ID=$(echo "$JOIN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('invitationId',''))")
 JOIN_STATUS=$(echo "$JOIN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))")
+TEACHER_MEM_ID=$(echo "$JOIN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('membershipId',''))")
 
-if [ "$JOIN_SUCCESS" = "True" ] && [ "$JOIN_STATUS" = "pending" ]; then
-  log_pass "Teacher invitation created (ID: ${INVITATION_ID:0:12}..., status: pending)"
+# Pilot: teacher join auto-approves — expect status=approved and a membershipId in the same response.
+if [ "$JOIN_SUCCESS" = "True" ] && [ "$JOIN_STATUS" = "approved" ] && [ -n "$TEACHER_MEM_ID" ]; then
+  log_pass "Teacher joined + auto-approved (invitation: ${INVITATION_ID:0:12}..., membership: ${TEACHER_MEM_ID:0:12}...)"
 else
   log_fail "Teacher join failed: $JOIN_RESP"
 fi
 
 # =========================================================================
-# Step 5: School admin approves the teacher
+# Step 5: Admin re-approve on already-approved invitation returns 409
 # =========================================================================
 echo ""
-echo "Step 5: School admin approves teacher..."
+echo "Step 5: Verify admin approve guard on already-approved invitation..."
 
 TEACHER_APPROVE_RESP=$(curl -s -X POST "$BASE_URL/api/schools/teacher-invitations/$INVITATION_ID/approve" \
   -b /tmp/e2e-admin-cookies.txt)
 
 TEACHER_APPROVE_SUCCESS=$(echo "$TEACHER_APPROVE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('success',False))")
-TEACHER_MEM_ID=$(echo "$TEACHER_APPROVE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('membershipId',''))")
+TEACHER_APPROVE_ERROR=$(echo "$TEACHER_APPROVE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))")
 
-if [ "$TEACHER_APPROVE_SUCCESS" = "True" ] && [ -n "$TEACHER_MEM_ID" ]; then
-  log_pass "Teacher approved, membership created (ID: ${TEACHER_MEM_ID:0:12}...)"
+if [ "$TEACHER_APPROVE_SUCCESS" = "False" ] && echo "$TEACHER_APPROVE_ERROR" | grep -qi "already approved"; then
+  log_pass "Double-approve correctly rejected: $TEACHER_APPROVE_ERROR"
 else
-  log_fail "Teacher approval failed: $TEACHER_APPROVE_RESP"
+  log_fail "Expected 'already approved' rejection, got: $TEACHER_APPROVE_RESP"
 fi
 
 # =========================================================================

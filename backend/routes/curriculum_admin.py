@@ -4,24 +4,31 @@ from datetime import UTC, datetime
 
 from flask import Blueprint, jsonify, request
 
+import database
 from backend.route_deps import RouteDeps
 from backend.services.assignment_resolver import (
     SUPPORTED_ASSIGNMENT_STATUSES,
-    SUPPORTED_TASK_TYPES,
     TEACHER_ALLOWED_ROLES,
-    build_sample_package_summary,
     load_assignment_bundle,
     resolve_assignment_bootstrap_for_user,
     resolve_assignment_bootstrap,
-    normalize_feedback_policy,
     normalize_modality_policy,
-    normalize_scaffold_policy,
-    normalize_output_policy,
     serialize_assignment,
-    serialize_curriculum_mapping,
+)
+from backend.services.assignment_workspace import build_student_assignment_workspace
+from backend.services.canvas.practice_generator import generate_canvas_practice
+from backend.services.compliance import (
+    create_consent_event,
+    resolve_student_compliance_record,
+    serialize_student_compliance_record,
+    upsert_student_compliance_record,
 )
 from backend.services.disclosure_logging import log_disclosure_if_new
 from backend.services.membership_context import SchoolContextPermissionError
+from backend.services.suspended_org_guard import (
+    SuspendedOrgError,
+    enforce_org_active,
+)
 from backend.services.practice_analytics import (
     SUPPORTED_EVENT_TYPES,
     apply_learning_event_to_session,
@@ -71,11 +78,6 @@ def _coerce_optional_int(value):
     return None
 
 
-def _sample_package(deps: RouteDeps):
-    package = deps.load_sample_curriculum_package()
-    return package, build_sample_package_summary(package)
-
-
 def _require_teacher_context(deps: RouteDeps, class_id: str):
     context = deps.get_school_request_context()
     context.require_any_role(TEACHER_ALLOWED_ROLES)
@@ -91,31 +93,6 @@ def _require_teacher_context(deps: RouteDeps, class_id: str):
         return context, class_record
 
     raise SchoolContextPermissionError('Teacher membership does not have access to this class.')
-
-
-def _ensure_sample_mapping_references(deps: RouteDeps, package_id: str, module_id: str, situation_ids: list[str], objective_ids: list[str]):
-    package, package_summary = _sample_package(deps)
-    if package_id != package_summary['id']:
-        raise ValueError('Only the bundled sample curriculum package is supported right now.')
-
-    if not situation_ids:
-        raise ValueError('At least one speaking situation is required.')
-
-    deps.get_curriculum_practice_context(
-        module_id=module_id,
-        situation_id=situation_ids[0],
-    )
-
-    objective_index = {
-        objective.get('id')
-        for objective in package.get('objectives', [])
-        if isinstance(objective, dict) and objective.get('id')
-    }
-    invalid_objective_ids = [objective_id for objective_id in objective_ids if objective_id not in objective_index]
-    if invalid_objective_ids:
-        raise ValueError('One or more objectiveIds are invalid for the selected curriculum package.')
-
-    return package_summary
 
 
 def _serialize_assignments_with_class_names(deps: RouteDeps, assignments: list[dict]):
@@ -187,106 +164,6 @@ def _filter_sessions_by_date(
 def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
     bp = Blueprint('curriculum_admin_routes', __name__)
 
-    @bp.route('/api/teacher/classes/<class_id>/curriculum/packages', methods=['GET'])
-    @deps.login_required
-    def api_get_curriculum_packages(class_id):
-        try:
-            _require_teacher_context(deps, class_id)
-            _package, package_summary = _sample_package(deps)
-            return jsonify({
-                'success': True,
-                'packages': [package_summary],
-                'limitations': [
-                    'Teacher package selection is currently sample-only; organization-owned packages are not live yet.',
-                ],
-            })
-        except SchoolContextPermissionError as exc:
-            return jsonify({'success': False, 'error': str(exc)}), 403
-        except Exception as exc:
-            print(f'Curriculum package list error: {exc}')
-            return jsonify({'success': False, 'error': str(exc)}), 500
-
-    @bp.route('/api/teacher/classes/<class_id>/curriculum/mappings', methods=['GET'])
-    @deps.login_required
-    def api_list_curriculum_mappings(class_id):
-        try:
-            _require_teacher_context(deps, class_id)
-            mappings = deps.db.list_class_curriculum_mappings(class_id)
-            return jsonify({
-                'success': True,
-                'mappings': [
-                    mapping_dto
-                    for mapping in mappings
-                    if (mapping_dto := serialize_curriculum_mapping(mapping))
-                ],
-            })
-        except SchoolContextPermissionError as exc:
-            return jsonify({'success': False, 'error': str(exc)}), 403
-        except Exception as exc:
-            print(f'Curriculum mapping list error: {exc}')
-            return jsonify({'success': False, 'error': str(exc)}), 500
-
-    @bp.route('/api/teacher/classes/<class_id>/curriculum/mappings', methods=['POST'])
-    @deps.login_required
-    def api_create_curriculum_mapping(class_id):
-        try:
-            context, class_record = _require_teacher_context(deps, class_id)
-            uid = deps.get_current_user_uid()
-            data = request.get_json() or {}
-
-            package_id = _normalize_string(data.get('packageId'))
-            module_id = _normalize_string(data.get('moduleId'))
-            objective_ids = _normalize_string_list(data.get('objectiveIds'))
-            situation_ids = _normalize_string_list(data.get('situationIds'))
-            target_expressions = _normalize_string_list(data.get('targetExpressions'))
-            focus_grammar = _normalize_string_list(data.get('focusGrammar'))
-            allowed_context_tags = _normalize_string_list(data.get('allowedContextTags'))
-            rubric_focus = _normalize_string_list(data.get('rubricFocus'))
-            teacher_notes = _normalize_string(data.get('teacherNotes'))
-
-            if not package_id:
-                return jsonify({'success': False, 'error': 'packageId is required.'}), 400
-            if not module_id:
-                return jsonify({'success': False, 'error': 'moduleId is required.'}), 400
-
-            if package_id != 'canvas-generated':
-                _ensure_sample_mapping_references(deps, package_id, module_id, situation_ids, objective_ids)
-
-            mapping_id = deps.db.create_curriculum_mapping(
-                org_id=class_record.get('org_id'),
-                class_id=class_id,
-                package_id=package_id,
-                module_id=module_id,
-                objective_ids=objective_ids,
-                situation_ids=situation_ids,
-                target_expressions=target_expressions,
-                focus_grammar=focus_grammar,
-                allowed_context_tags=allowed_context_tags,
-                feedback_policy=normalize_feedback_policy(data.get('feedbackPolicy')),
-                scaffold_policy=normalize_scaffold_policy(data.get('scaffoldPolicy')),
-                output_policy=(
-                    normalize_output_policy(data.get('outputPolicy'))
-                    if data.get('outputPolicy') is not None
-                    else {}
-                ),
-                modality_policy=normalize_modality_policy(data.get('modalityPolicy')),
-                rubric_focus=rubric_focus,
-                teacher_notes=teacher_notes,
-                created_by_uid=uid or '',
-            )
-
-            return jsonify({
-                'success': True,
-                'mapping': serialize_curriculum_mapping(deps.db.get_curriculum_mapping(mapping_id)),
-            }), 201
-        except SchoolContextPermissionError as exc:
-            return jsonify({'success': False, 'error': str(exc)}), 403
-        except ValueError as exc:
-            return jsonify({'success': False, 'error': str(exc)}), 400
-        except Exception as exc:
-            print(f'Curriculum mapping creation error: {exc}')
-            return jsonify({'success': False, 'error': str(exc)}), 500
-
     @bp.route('/api/teacher/classes/<class_id>/assignments', methods=['GET'])
     @deps.login_required
     def api_list_class_assignments(class_id):
@@ -303,41 +180,102 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             print(f'Assignment list error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
 
+    @bp.route('/api/teacher/classes/<class_id>/assignment-drafts/generate', methods=['POST'])
+    @deps.login_required
+    def api_generate_assignment_draft(class_id):
+        try:
+            _context, class_record = _require_teacher_context(deps, class_id)
+            try:
+                enforce_org_active(class_record.get('org_id'), db=deps.db)
+            except SuspendedOrgError as exc:
+                return jsonify(exc.to_payload()), 403
+            data = request.get_json() or {}
+            source_text = _normalize_string(data.get('sourceText'))
+
+            if not source_text:
+                return jsonify({'success': False, 'error': 'sourceText is required.'}), 400
+
+            openai_client = deps.get_openai_client()
+            if not openai_client:
+                return jsonify({'success': False, 'error': 'OpenAI client not initialized.'}), 500
+
+            suggestions = generate_canvas_practice(
+                openai_client,
+                item_title='Teacher-provided source packet',
+                item_type='TeacherSource',
+                item_description=source_text,
+                class_learning_locale=class_record.get('learning_locale', 'ko-KR'),
+                class_name=class_record.get('name', ''),
+                class_subject=class_record.get('subject', ''),
+            )
+
+            return jsonify({
+                'success': True,
+                'suggestions': {
+                    'scenario': suggestions.get('scenario', ''),
+                    'targetExpressions': suggestions.get('target_expressions', []),
+                    'targetVocabulary': suggestions.get('target_vocabulary', []),
+                    'focusGrammar': suggestions.get('focus_grammar', []),
+                    'successCriteria': suggestions.get('success_criteria', []),
+                    'suggestedTitle': suggestions.get('suggested_title', ''),
+                    'suggestedDescription': suggestions.get('suggested_description', ''),
+                    'teacherNotes': suggestions.get('teacher_notes', ''),
+                },
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except Exception as exc:
+            print(f'Assignment draft generation error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
     @bp.route('/api/teacher/classes/<class_id>/assignments', methods=['POST'])
     @deps.login_required
     def api_create_assignment(class_id):
         try:
             _context, class_record = _require_teacher_context(deps, class_id)
+            try:
+                enforce_org_active(class_record.get('org_id'), db=deps.db)
+            except SuspendedOrgError as exc:
+                return jsonify(exc.to_payload()), 403
             uid = deps.get_current_user_uid()
             data = request.get_json() or {}
 
-            mapping_id = _normalize_string(data.get('mappingId'))
             title = _normalize_string(data.get('title'))
             description = _normalize_string(data.get('description'))
             status = _normalize_string(data.get('status')) or 'draft'
             release_at = _normalize_string(data.get('releaseAt'))
             due_at = _normalize_string(data.get('dueAt'))
-            task_type = _normalize_string(data.get('taskType')) or 'decision_making'
             success_criteria = _normalize_string_list(data.get('successCriteria'))
             max_attempts = _coerce_optional_int(data.get('maxAttempts'))
+            instructions = _normalize_string(data.get('instructions'))
+            generated_scenario = _normalize_string(data.get('generatedScenario'))
+            objectives = _normalize_string_list(data.get('objectives'))
+            target_expressions = _normalize_string_list(data.get('targetExpressions'))
+            target_vocabulary = _normalize_string_list(data.get('targetVocabulary'))
+            focus_grammar = _normalize_string_list(data.get('focusGrammar'))
+            teacher_notes = _normalize_string(data.get('teacherNotes'))
+            student_instructions = _normalize_string(data.get('studentInstructions'))
+            target_language_intensity = _normalize_string(data.get('targetLanguageIntensity')) or 'balanced'
+            task_type = _normalize_string(data.get('taskType')) or 'decision_making'
 
-            if not mapping_id:
-                return jsonify({'success': False, 'error': 'mappingId is required.'}), 400
+            if task_type not in {'information_gap', 'opinion_gap', 'decision_making', 'custom_prompt'}:
+                return jsonify({'success': False, 'error': 'Invalid taskType.'}), 400
+
             if not title:
                 return jsonify({'success': False, 'error': 'title is required.'}), 400
             if status not in SUPPORTED_ASSIGNMENT_STATUSES:
                 return jsonify({'success': False, 'error': 'Invalid assignment status.'}), 400
-            if task_type not in SUPPORTED_TASK_TYPES:
-                return jsonify({'success': False, 'error': 'Invalid task type.'}), 400
-
-            mapping = deps.db.get_curriculum_mapping(mapping_id)
-            if not mapping or mapping.get('class_id') != class_id:
-                return jsonify({'success': False, 'error': 'Mapping not found for this class.'}), 404
+            if not instructions:
+                return jsonify({'success': False, 'error': 'instructions is required.'}), 400
+            # Scaffold-free assignments use the teacher's instructions as the
+            # full system prompt; scenario/target/grammar scaffolds are skipped
+            # by design, so we don't require a generated scenario for them.
+            if task_type != 'custom_prompt' and not generated_scenario:
+                return jsonify({'success': False, 'error': 'generatedScenario is required.'}), 400
 
             assignment_id = deps.db.create_assignment(
                 org_id=class_record.get('org_id'),
                 class_id=class_id,
-                mapping_id=mapping_id,
                 title=title,
                 description=description,
                 status=status,
@@ -348,6 +286,15 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 task_type=task_type,
                 success_criteria=success_criteria,
                 created_by_uid=uid or '',
+                instructions=instructions,
+                objectives=objectives,
+                target_expressions=target_expressions,
+                target_vocabulary=target_vocabulary,
+                focus_grammar=focus_grammar,
+                generated_scenario=generated_scenario,
+                teacher_notes=teacher_notes,
+                student_instructions=student_instructions,
+                target_language_intensity=target_language_intensity,
             )
 
             return jsonify({
@@ -358,6 +305,63 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({'success': False, 'error': str(exc)}), 403
         except Exception as exc:
             print(f'Assignment creation error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/student/compliance', methods=['GET'])
+    @deps.login_required
+    def api_student_compliance():
+        try:
+            uid = deps.get_current_user_uid()
+            if not uid:
+                return jsonify({'success': False, 'error': 'not_authenticated'}), 401
+            context = deps.get_school_request_context()
+            org_id = getattr(context, 'active_organization_id', None) if context else None
+            if not org_id:
+                return jsonify({'success': False, 'error': 'no_active_org'}), 400
+            record = resolve_student_compliance_record(deps, org_id=org_id, student_uid=uid)
+            return jsonify({
+                'success': True,
+                'compliance': serialize_student_compliance_record(record),
+            })
+        except Exception as exc:
+            print(f'Student compliance fetch error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/student/voice-consent', methods=['POST'])
+    @deps.login_required
+    def api_student_voice_consent():
+        try:
+            uid = deps.get_current_user_uid()
+            if not uid:
+                return jsonify({'success': False, 'error': 'not_authenticated'}), 401
+            context = deps.get_school_request_context()
+            org_id = getattr(context, 'active_organization_id', None) if context else None
+            if not org_id:
+                return jsonify({'success': False, 'error': 'no_active_org'}), 400
+            data = request.get_json(silent=True) or {}
+            status = _normalize_string(data.get('status')).lower()
+            if status not in ('granted', 'revoked'):
+                return jsonify({'success': False, 'error': 'invalid_status'}), 400
+            record = upsert_student_compliance_record(
+                deps,
+                org_id=org_id,
+                student_uid=uid,
+                updates={'voice_consent_status': status},
+            )
+            create_consent_event(
+                deps,
+                org_id=org_id,
+                student_uid=uid,
+                event_type=f'voice_consent_{status}',
+                actor_type='student',
+                actor_id=uid,
+            )
+            return jsonify({
+                'success': True,
+                'compliance': serialize_student_compliance_record(record),
+            })
+        except Exception as exc:
+            print(f'Student voice consent error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
 
     @bp.route('/api/student/assignments', methods=['GET'])
@@ -390,6 +394,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 ui_language=ui_language,
             )
             return jsonify({'success': True, 'bootstrap': bootstrap})
+        except SuspendedOrgError as exc:
+            return jsonify(exc.to_payload()), 403
         except ValueError as exc:
             error = str(exc)
             status_code = 404 if 'not found' in error.lower() else 400
@@ -398,6 +404,46 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({'success': False, 'error': str(exc)}), 403
         except Exception as exc:
             print(f'Assignment bootstrap error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/student/assignments/<assignment_id>/workspace', methods=['GET'])
+    @deps.login_required
+    def api_get_student_assignment_workspace(assignment_id):
+        try:
+            uid = deps.get_current_user_uid()
+            context = deps.get_school_request_context()
+            bootstrap = resolve_assignment_bootstrap_for_user(
+                deps,
+                uid=uid,
+                context=context,
+                assignment_id=assignment_id,
+                ui_language='en',
+            )
+            if hasattr(deps.db, 'list_student_assignment_practice_sessions'):
+                session_records = deps.db.list_student_assignment_practice_sessions(assignment_id, uid)
+            else:
+                session_records = [
+                    session
+                    for session in deps.db.list_assignment_practice_sessions(assignment_id)
+                    if session.get('student_uid') == uid
+                ]
+            workspace = build_student_assignment_workspace(
+                bootstrap,
+                session_records,
+                db=deps.db,
+                uid=uid or '',
+            )
+            return jsonify({'success': True, 'workspace': workspace})
+        except SuspendedOrgError as exc:
+            return jsonify(exc.to_payload()), 403
+        except ValueError as exc:
+            error = str(exc)
+            status_code = 404 if 'not found' in error.lower() else 400
+            return jsonify({'success': False, 'error': error}), status_code
+        except PermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except Exception as exc:
+            print(f'Assignment workspace error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
 
     @bp.route('/api/student/assignments/<assignment_id>/practice-sessions', methods=['POST'])
@@ -428,6 +474,15 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 chat_id=chat_id,
                 ui_language=ui_language,
             )
+            # In-flight grace anchor: capture the org status at session
+            # creation. Future event POSTs on this session pass through if
+            # *this* snapshot is 'active', even after the org is suspended.
+            classroom = bootstrap.get('class', {}) if isinstance(bootstrap, dict) else {}
+            session_org_id = classroom.get('orgId') or session_payload.get('org_id')
+            session_org = deps.db.get_organization(session_org_id) if session_org_id else None
+            session_payload['org_status_when_created'] = (
+                (session_org or {}).get('status') or database.ORG_STATUS_ACTIVE
+            )
             session_id = deps.db.create_practice_session(session_payload)
             session_record = deps.db.get_practice_session(session_id)
 
@@ -447,6 +502,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 'success': True,
                 'practiceSession': serialize_practice_session(session_record),
             }), 201
+        except SuspendedOrgError as exc:
+            return jsonify(exc.to_payload()), 403
         except ValueError as exc:
             error = str(exc)
             status_code = 404 if 'not found' in error.lower() else 400
@@ -477,6 +534,24 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 return jsonify({'success': False, 'error': 'Practice session is not available for this user.'}), 403
             if session_record.get('status') != 'active' and event_type != 'session.ended':
                 return jsonify({'success': False, 'error': 'Practice session is no longer active.'}), 409
+
+            # In-flight grace: only block when *both* the org is currently
+            # suspended AND the session was created while the org was
+            # already suspended. Sessions that started while the org was
+            # active continue to drain their events through to closure even
+            # if the org is suspended mid-session.
+            session_org_id = session_record.get('org_id')
+            if session_org_id:
+                org = deps.db.get_organization(session_org_id) or {}
+                current_status = org.get('status', database.ORG_STATUS_ACTIVE)
+                snapshot = session_record.get('org_status_when_created', database.ORG_STATUS_ACTIVE)
+                if current_status != database.ORG_STATUS_ACTIVE and snapshot != database.ORG_STATUS_ACTIVE:
+                    err = SuspendedOrgError(
+                        org_id=session_org_id,
+                        reason=org.get('suspend_reason'),
+                        until=org.get('suspended_until'),
+                    )
+                    return jsonify(err.to_payload()), 403
 
             deps.db.create_learning_event(
                 build_learning_event_payload(
@@ -515,11 +590,10 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
     def api_get_assignment_analytics(assignment_id):
         try:
             _require_assignment_teacher_access(deps, assignment_id)
-            assignment, mapping, class_record = load_assignment_bundle(deps, assignment_id)
+            assignment, _mapping, class_record = load_assignment_bundle(deps, assignment_id)
             bootstrap = resolve_assignment_bootstrap(
                 deps,
                 assignment=assignment,
-                mapping=mapping,
                 class_record=class_record,
                 ui_language='en',
             )
@@ -532,6 +606,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 'success': True,
                 'analytics': analytics,
             })
+        except SuspendedOrgError as exc:
+            return jsonify(exc.to_payload()), 403
         except SchoolContextPermissionError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 403
         except ValueError as exc:
@@ -546,7 +622,7 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
         try:
             _context, class_record = _require_teacher_context(deps, class_id)
             assignments = deps.db.list_class_assignments(class_id)
-            enrollments = deps.db.list_class_enrollments(class_id, status=None)
+            enrollments = deps.db.list_class_enrollments(class_id)
             all_sessions = deps.db.list_class_practice_sessions(class_id)
 
             # Optional date range filtering on sessions

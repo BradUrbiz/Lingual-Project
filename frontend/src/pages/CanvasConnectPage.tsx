@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Link as LinkIcon, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Link as LinkIcon, ArrowLeft, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { validateCanvasConnection, connectCanvas } from '@/api/canvas';
+import { getLtiPlatform } from '@/api/lti';
 import { Alert, AlertDescription, Badge, Button, Card, Input } from '@/components/ui';
 import type { CanvasCourse } from '@/types/canvas';
 
@@ -20,6 +21,13 @@ export function CanvasConnectPage() {
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ltiConfigured, setLtiConfigured] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getLtiPlatform()
+      .then((platform) => setLtiConfigured(platform !== null))
+      .catch(() => setLtiConfigured(false));
+  }, []);
 
   const handleValidate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,10 +104,31 @@ export function CanvasConnectPage() {
         </Alert>
       )}
 
+      {ltiConfigured && step === 'credentials' && (
+        <Card className="border-3 border-primary/40 bg-primary/5 p-6 shadow-stamp">
+          <div className="flex items-start gap-3">
+            <ShieldCheck size={22} className="mt-0.5 text-primary" />
+            <div>
+              <h2 className="text-lg font-display font-bold text-foreground">
+                Connect with Canvas LTI (Recommended)
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Your school has configured LTI integration. Simply open Lingual from inside Canvas to connect automatically.
+              </p>
+              <p className="mt-2 text-sm font-medium text-primary">
+                No action needed here — launch Lingual from your Canvas course navigation.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {step === 'credentials' && (
         <Card className="border-3 border-foreground p-6 shadow-stamp">
           <div className="mb-5">
-            <h2 className="text-lg font-display font-bold text-foreground">Step 1: Canvas credentials</h2>
+            <h2 className="text-lg font-display font-bold text-foreground">
+              {ltiConfigured ? 'Or connect manually with a Personal Access Token' : 'Step 1: Canvas credentials'}
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Enter your Canvas instance URL and a Personal Access Token.
             </p>

@@ -9,20 +9,17 @@ import {
   CheckCircle,
   Menu,
   X,
-  ArrowRight,
-  Star,
   Loader2,
   Sparkles,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '@/hooks/useAuth';
-import { getUserProfile } from '@/api/user';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { staggerContainer, staggerItem, cardVariants } from '@/lib/animations';
+import { getOnboardingDestination } from '@/lib/homeRoutes';
+import { Button } from '@/components/ui/button';
 
 const HERO_IMAGE = '/imgs/landing/hero.jpg';
-const TEACHER_IMAGE = '/imgs/landing/teacher.jpg';
-const STUDENT_IMAGE = '/imgs/landing/student.jpg';
 const AVATAR_IMAGES = [
   '/imgs/avatars/user-1.svg',
   '/imgs/avatars/user-2.svg',
@@ -32,49 +29,38 @@ const AVATAR_IMAGES = [
 
 export function LandingPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [checkingProfile, setCheckingProfile] = useState(false);
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const { t } = useLanguage();
 
   const handleLogin = () => {
     if (!user) {
-      navigate('/auth');
+      navigate('/login');
       return;
     }
-    navigate('/app/learn');
+    const dest = getOnboardingDestination(user);
+    if (dest) {
+      navigate(dest);
+    }
+    // else: legacy user awaiting modal; stay on landing page (modal will cover it).
   };
 
-  const handleGetStarted = async () => {
-    if (!user) {
-      navigate('/auth');
-      return;
-    }
+  type LandingRole = 'student' | 'teacher' | 'admin';
 
-    setCheckingProfile(true);
-    try {
-      const profile = await getUserProfile();
-      if (profile.profileCompleted) {
-        if (profile.assessed) {
-          navigate('/app/learn');
-        } else if (profile.assessmentPreference === 'skip') {
-          navigate('/app/learn');
-        } else if (profile.assessmentPreference === 'take') {
-          navigate('/assessment');
-        } else {
-          navigate('/onboarding');
-        }
-      } else {
-        navigate('/general');
+  const handleStartAsRole = (role: LandingRole) => {
+    if (user) {
+      // Already signed in — route through the dispatcher and ignore the role
+      // because their memberships are the source of truth.
+      const dest = getOnboardingDestination(user);
+      if (dest) {
+        navigate(dest);
+        return;
       }
-    } catch {
-      navigate('/general');
-    } finally {
-      setCheckingProfile(false);
     }
+    navigate(`/signup?role=${role}`);
   };
 
-  if (loading || checkingProfile) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}>
@@ -127,7 +113,7 @@ export function LandingPage() {
                 {t('landing.nav.login')}
               </button>
               <motion.button
-                onClick={handleGetStarted}
+                onClick={() => handleStartAsRole('student')}
                 whileHover={{ y: -2, boxShadow: '6px 6px 0 0 #2D2A26' }}
                 whileTap={{ y: 2, boxShadow: '2px 2px 0 0 #2D2A26' }}
                 className="bg-primary text-primary-foreground font-bold py-3 px-6 rounded-xl border-3 border-foreground shadow-stamp transition-all"
@@ -167,7 +153,7 @@ export function LandingPage() {
               <button onClick={handleLogin} className="w-full text-center py-3 font-medium border-2 border-foreground rounded-xl">
                 {t('landing.nav.login')}
               </button>
-              <button onClick={handleGetStarted} className="w-full bg-primary text-primary-foreground py-3 rounded-xl font-bold border-3 border-foreground shadow-stamp-sm">
+              <button onClick={() => handleStartAsRole('student')} className="w-full bg-primary text-primary-foreground py-3 rounded-xl font-bold border-3 border-foreground shadow-stamp-sm">
                 {t('landing.nav.getStarted')}
               </button>
             </div>
@@ -212,24 +198,16 @@ export function LandingPage() {
                 {t('landing.hero.subtitle')}
               </motion.p>
 
-              <motion.div variants={staggerItem} className="flex flex-col sm:flex-row gap-4">
-                <motion.button
-                  onClick={handleGetStarted}
-                  whileHover={{ y: -3, boxShadow: '8px 8px 0 0 #2D2A26' }}
-                  whileTap={{ y: 2, boxShadow: '2px 2px 0 0 #2D2A26' }}
-                  className="bg-primary text-primary-foreground text-lg font-bold py-4 px-8 rounded-xl border-3 border-foreground shadow-stamp flex items-center justify-center gap-2 transition-all"
-                >
-                  {t('landing.hero.ctaPrimary')}
-                  <ArrowRight size={22} strokeWidth={2.5} />
-                </motion.button>
-                <motion.a
-                  href="#schools"
-                  whileHover={{ y: -2 }}
-                  whileTap={{ y: 1 }}
-                  className="bg-card text-foreground text-lg font-bold py-4 px-8 rounded-xl border-3 border-foreground flex items-center justify-center transition-all hover:bg-secondary"
-                >
-                  {t('landing.hero.ctaSecondary')}
-                </motion.a>
+              <motion.div variants={staggerItem} className="grid gap-3 sm:grid-cols-3">
+                <Button onClick={() => handleStartAsRole('student')} className="w-full justify-center">
+                  I'm a Student
+                </Button>
+                <Button onClick={() => handleStartAsRole('teacher')} variant="secondary" className="w-full justify-center">
+                  I'm a Teacher
+                </Button>
+                <Button onClick={() => handleStartAsRole('admin')} variant="outline" className="w-full justify-center">
+                  I'm a School Admin
+                </Button>
               </motion.div>
 
               <motion.div variants={staggerItem} className="mt-10 flex items-center gap-4">
@@ -464,7 +442,7 @@ export function LandingPage() {
               </ul>
 
               <motion.button
-                onClick={() => navigate('/school/setup')}
+                onClick={() => handleStartAsRole('admin')}
                 whileHover={{ y: -3, boxShadow: '6px 6px 0 0 #F5F0E8' }}
                 whileTap={{ y: 2 }}
                 className="bg-background text-ink font-bold py-4 px-8 rounded-xl border-3 border-background shadow-[4px_4px_0_0_#F5F0E8] transition-all"
@@ -475,27 +453,23 @@ export function LandingPage() {
 
             {/* Stats grid - brutalist boxes */}
             <div className="grid grid-cols-2 gap-4">
-              {[
-                { value: '3x', label: t('landing.schools.stats.speaking'), color: 'bg-primary' },
-                { value: '40%', label: t('landing.schools.stats.grading'), color: 'bg-accent' },
-              ].map((stat, idx) => (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: idx * 0.1 }}
-                  className={`${stat.color} p-6 rounded-2xl border-3 border-background`}
-                >
-                  <div className="text-4xl font-display font-bold text-background mb-2">{stat.value}</div>
-                  <div className="text-background/80 font-medium">{stat.label}</div>
-                </motion.div>
-              ))}
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
-                transition={{ delay: 0.2 }}
+                transition={{ delay: 0 }}
+                className="col-span-2 bg-primary p-6 rounded-2xl border-3 border-background"
+              >
+                <div className="text-4xl font-display font-bold text-background mb-2">3x</div>
+                <div className="text-background/80 font-medium">
+                  {t('landing.schools.stats.speaking')}
+                </div>
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.1 }}
                 className="col-span-2 bg-success p-6 rounded-2xl border-3 border-background"
               >
                 <div className="text-4xl font-display font-bold text-background mb-2">100%</div>
@@ -504,66 +478,6 @@ export function LandingPage() {
                 </div>
               </motion.div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials - Brutalist quote cards */}
-      <section className="py-20 bg-background">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl lg:text-5xl font-display font-bold">
-              {t('landing.testimonials.title')}
-            </h2>
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            {[
-              {
-                image: TEACHER_IMAGE,
-                name: 'Sarah Johnson',
-                role: t('landing.testimonials.teacher.role'),
-                quote: t('landing.testimonials.teacher.quote'),
-              },
-              {
-                image: STUDENT_IMAGE,
-                name: 'Michael Chen',
-                role: t('landing.testimonials.student.role'),
-                quote: t('landing.testimonials.student.quote'),
-              },
-            ].map((testimonial, idx) => (
-              <motion.div
-                key={testimonial.name}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: idx * 0.15 }}
-                className="bg-card p-8 rounded-2xl border-3 border-foreground shadow-stamp relative"
-              >
-                <div className="absolute -top-4 -right-4 w-12 h-12 bg-accent rounded-xl border-3 border-foreground flex items-center justify-center rotate-12">
-                  <Star size={24} fill="currentColor" className="text-accent-foreground" />
-                </div>
-                <div className="flex items-center gap-4 mb-6">
-                  <img
-                    src={testimonial.image}
-                    alt={testimonial.name}
-                    className="w-16 h-16 rounded-xl object-cover border-3 border-foreground"
-                  />
-                  <div>
-                    <div className="font-display font-bold text-xl">{testimonial.name}</div>
-                    <div className="text-muted-foreground font-medium">{testimonial.role}</div>
-                  </div>
-                </div>
-                <p className="text-lg leading-relaxed italic text-foreground/80">
-                  "{testimonial.quote}"
-                </p>
-              </motion.div>
-            ))}
           </div>
         </div>
       </section>

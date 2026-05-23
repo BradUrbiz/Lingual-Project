@@ -1,7 +1,7 @@
 import unittest
 
-from backend.services.assignment_resolver import build_assignment_system_prompt
-from backend.services.pedagogy import (
+from backend.services.assignment_resolver import (
+    build_assignment_system_prompt,
     build_correction_ladder_prompt,
     build_feedback_mode_prompt,
     build_output_pressure_prompt,
@@ -149,6 +149,7 @@ class PedagogyPromptSectionsTestCase(unittest.TestCase):
         self.assertIn('Bias the exchange toward rubric evidence for Task completion.', task_prompt)
         self.assertIn('Create visible evidence for these mapped curriculum outcomes', task_prompt)
         self.assertIn('Do not close the task until the learner has materially demonstrated', task_prompt)
+        self.assertNotIn('finish within about', task_prompt)
         self.assertIn('OUTPUT PRESSURE', output_prompt)
         self.assertIn('roughly 9+ words', output_prompt)
         self.assertIn('target turn volume of about 4 turns', output_prompt)
@@ -160,13 +161,13 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
             'systemPromptPreview': 'Base assignment prompt',
             'assignment': {
                 'title': 'Restaurant Ordering Practice',
-                'taskType': 'information_gap',
                 'maxAttempts': 3,
                 'successCriteria': ['Use one polite request', 'Ask one follow-up question'],
                 'description': 'Order a meal and ask about one menu item.',
             },
             'mapping': {
                 'targetExpressions': ['Could I have', 'I would like'],
+                'targetVocabulary': ['appetizer', 'receipt'],
                 'focusGrammar': ['polite requests'],
                 'allowedContextTags': ['restaurant'],
                 'rubricFocus': ['task_completion'],
@@ -250,19 +251,111 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
         prompt = build_assignment_system_prompt(bootstrap)
 
         self.assertIn('Base assignment prompt', prompt)
-        self.assertIn('ASSIGNMENT ENVELOPE', prompt)
-        self.assertIn('FEEDBACK MODE DIRECTIVE', prompt)
-        self.assertIn('CORRECTION LADDER', prompt)
-        self.assertIn('SCAFFOLD LADDER', prompt)
+        self.assertIn('ASSIGNMENT:', prompt)
+        self.assertIn('Restaurant Ordering Practice', prompt)
+        self.assertIn('CONVERSATION STYLE:', prompt)
+        self.assertIn('TARGETS to elicit', prompt)
+        self.assertIn('TUTOR STANCE:', prompt)
         self.assertIn('TASK TEMPLATE DIRECTIVE', prompt)
-        self.assertIn('OUTPUT PRESSURE', prompt)
-        self.assertIn('Output min student turn words: 8', prompt)
-        self.assertIn('repeats 2 time(s)', prompt)
+        self.assertNotIn('Task type:', prompt)
+        self.assertNotIn('ASSIGNMENT ENVELOPE', prompt)
+        self.assertNotIn('TEACHER POLICY', prompt)
+        self.assertNotIn('PRIORITY RULES', prompt)
+        self.assertNotIn('Output min student turn words:', prompt)
+        self.assertIn('appetizer', prompt)
+        self.assertIn('Prioritize accurate target production', prompt)
+        self.assertIn('repeats 2+ times', prompt)
+        self.assertIn('~8+ word', prompt)
         self.assertIn('Resolved scenario anchor: setting=Restaurant; roles=learner, server; register=mixed.', prompt)
         self.assertIn('Teacher-approved context bounds: restaurant.', prompt)
         self.assertIn('Bias the exchange toward rubric evidence for Task completion.', prompt)
         self.assertIn('Resolved curriculum template references: tpl.restaurant_roleplay.v1.', prompt)
         self.assertIn('Resolved structured activity template: Restaurant Roleplay.', prompt)
+        self.assertNotIn('Evidence time limit sec:', prompt)
+        self.assertNotIn('finish within about', prompt)
+
+    def test_build_assignment_system_prompt_includes_teacher_notes_when_present(self):
+        prompt = build_assignment_system_prompt(
+            {
+                'systemPromptPreview': 'Base assignment prompt',
+                'assignment': {
+                    'title': 'Museum Ticket Practice',
+                },
+                'mapping': {
+                    'teacherNotes': 'Keep the learner at the museum ticket desk and do not drift into sightseeing small talk.',
+                },
+                'class': {},
+                'curriculum': {
+                    'pedagogy': {},
+                },
+            }
+        )
+
+        self.assertIn('Teacher guidance:', prompt)
+        self.assertIn(
+            'Keep the learner at the museum ticket desk and do not drift into sightseeing small talk.',
+            prompt,
+        )
+
+    def test_build_assignment_system_prompt_preserves_scaffold_ladder_and_zero_limits(self):
+        prompt = build_assignment_system_prompt(
+            {
+                'systemPromptPreview': 'Base assignment prompt',
+                'assignment': {
+                    'title': 'Lost and Found Practice',
+                },
+                'mapping': {
+                    'scaffoldPolicy': {
+                        'silenceToleranceMs': 0,
+                        'hintLadder': ['wait', 'context_hint'],
+                        'maxModelingSteps': 0,
+                    },
+                },
+                'class': {},
+                'curriculum': {
+                    'pedagogy': {},
+                },
+            }
+        )
+
+        self.assertIn('Allow about 0ms of productive silence before stepping in', prompt)
+        self.assertIn('hint ladder (wait → context cue)', prompt)
+        self.assertIn(
+            'Avoid full modeling unless task completion would otherwise stall completely.',
+            prompt,
+        )
+        self.assertNotIn('forced choice', prompt)
+
+    def test_build_assignment_system_prompt_respects_disabled_end_review_and_clarification_support(self):
+        prompt = build_assignment_system_prompt(
+            {
+                'systemPromptPreview': 'Base assignment prompt',
+                'assignment': {
+                    'title': 'Phone Call Practice',
+                },
+                'mapping': {
+                    'feedbackPolicy': {
+                        'endReviewEnabled': False,
+                    },
+                    'outputPolicy': {
+                        'allowClarificationRequests': False,
+                    },
+                },
+                'class': {},
+                'curriculum': {
+                    'pedagogy': {},
+                },
+            }
+        )
+
+        self.assertIn(
+            'Do not add a formal end-of-session review block unless the learner explicitly asks for one.',
+            prompt,
+        )
+        self.assertIn(
+            'Keep clarification support minimal so the learner must stay in productive output mode.',
+            prompt,
+        )
 
 
 if __name__ == '__main__':

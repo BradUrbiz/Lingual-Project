@@ -32,6 +32,10 @@ from backend.services.guardian_packets import (
     serialize_guardian_consent_packet,
 )
 from backend.services.membership_context import SchoolContextPermissionError
+from backend.services.suspended_org_guard import (
+    SuspendedOrgError,
+    enforce_org_active,
+)
 
 TEACHER_ALLOWED_ROLES = {"teacher", "school_admin"}
 
@@ -285,6 +289,10 @@ def create_teacher_blueprint(deps: RouteDeps) -> Blueprint:
     def api_create_teacher_class():
         try:
             context = _require_teacher_context(deps)
+            try:
+                enforce_org_active(context.active_organization_id, db=deps.db)
+            except SuspendedOrgError as exc:
+                return jsonify(exc.to_payload()), 403
             data = request.get_json() or {}
 
             class_name = _normalize_string(data.get("name"))
@@ -760,27 +768,96 @@ def create_teacher_blueprint(deps: RouteDeps) -> Blueprint:
     def api_get_class_roster(class_id):
         try:
             _context, _class_record = _require_teacher_class_context(deps, class_id)
-            enrollments = deps.db.list_class_enrollments(class_id)
+            active_enrollments = deps.db.list_class_enrollments(class_id)
+
+            # Is this class Canvas-connected? If not, skip the badge lookup.
+            has_canvas_connection = (
+                deps.db.get_canvas_connection_by_class(class_id) is not None
+                if hasattr(deps.db, "get_canvas_connection_by_class")
+                else False
+            )
+
             students = []
-            for enrollment in enrollments:
+            for enrollment in active_enrollments:
                 student_uid = _normalize_string(enrollment.get("student_uid"))
                 if not student_uid:
+                    # Defensive: a row without student_uid is stale
+                    # (e.g. an un-migrated pending_sync). Do not surface it.
                     continue
                 user = deps.db.get_user(student_uid) if hasattr(deps.db, "get_user") else None
-                students.append({
+                row = {
                     "uid": student_uid,
                     "displayName": _get_user_display_name(user, fallback=student_uid),
                     "studentNumber": _normalize_string(enrollment.get("student_number")),
                     "joinSource": _normalize_string(enrollment.get("join_source")),
                     "enrolledAt": _timestamp_to_iso(enrollment.get("created_at")),
                     "status": _normalize_string(enrollment.get("status")) or "active",
-                })
+                }
+                if has_canvas_connection and hasattr(deps.db, "get_canvas_roster_entry_by_email"):
+                    email = (user or {}).get("email", "") if user else ""
+                    entry = (
+                        deps.db.get_canvas_roster_entry_by_email(class_id, email)
+                        if email else None
+                    )
+                    row["isOnCanvasRoster"] = bool(entry)
+                students.append(row)
+
             students.sort(key=lambda item: item.get("displayName", "").lower())
-            return jsonify({"success": True, "students": students})
+            return jsonify({"success": True, "roster": students})
         except SchoolContextPermissionError as exc:
             return jsonify({"success": False, "error": str(exc)}), 403
         except Exception as exc:
             print(f"Class roster error: {exc}")
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @bp.route("/api/teacher/classes/<class_id>/canvas-roster-gap")
+    @deps.login_required
+    def api_get_canvas_roster_gap(class_id):
+        try:
+            _context, class_record = _require_teacher_class_context(deps, class_id)
+
+            has_canvas_connection = (
+                deps.db.get_canvas_connection_by_class(class_id) is not None
+                if hasattr(deps.db, "get_canvas_connection_by_class")
+                else False
+            )
+            if not has_canvas_connection:
+                return jsonify({"success": True, "gap": [], "summary": None})
+
+            roster_entries = deps.db.list_canvas_roster_entries(class_id)
+            enrollments = deps.db.list_class_enrollments(class_id)
+
+            joined_emails = set()
+            for enrollment in enrollments:
+                student_uid = enrollment.get("student_uid")
+                if not student_uid:
+                    continue
+                user = deps.db.get_user(student_uid) if hasattr(deps.db, "get_user") else None
+                email = ((user or {}).get("email") or "").lower().strip()
+                if email:
+                    joined_emails.add(email)
+
+            gap = []
+            for entry in roster_entries:
+                entry_email = (entry.get("canvas_email") or "").lower().strip()
+                if entry_email and entry_email not in joined_emails:
+                    gap.append({
+                        "canvas_name": entry.get("canvas_name", ""),
+                        "canvas_email": entry.get("canvas_email", ""),
+                        "synced_at": _timestamp_to_iso(entry.get("synced_at")),
+                    })
+            gap.sort(key=lambda item: item.get("canvas_name", "").lower())
+
+            summary = {
+                "canvas_total": len(roster_entries),
+                "joined": len(roster_entries) - len(gap),
+                "not_joined": len(gap),
+            }
+            return jsonify({"success": True, "gap": gap, "summary": summary})
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            print(f"Canvas roster gap error: {exc}")
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @bp.route("/api/teacher/classes/<class_id>/students/<student_uid>", methods=["DELETE"])

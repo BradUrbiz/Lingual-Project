@@ -1,17 +1,21 @@
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AppChatPage } from '@/pages/AppChatPage';
 import type { AvatarPerformanceFrame } from '@/components/avatar/types';
 
 const getChatSessionsMock = vi.fn();
 const getChatSessionMock = vi.fn();
 const createChatSessionMock = vi.fn();
+const updateChatSettingsMock = vi.fn();
 const saveMessageToChatMock = vi.fn();
 const sendChatMessageMock = vi.fn();
 const deleteChatSessionMock = vi.fn();
 const getUserProfileMock = vi.fn();
 const getAssessmentResultsMock = vi.fn();
 let voiceOnMessage: ((role: 'user' | 'assistant', content: string) => void) | undefined;
+let latestRealtimeOptions: {
+  sessionParams?: { avatarDirectives?: boolean; chatId?: string | null };
+} | undefined;
 
 const legacyRealtimeState = {
   isConnected: true,
@@ -108,6 +112,7 @@ vi.mock('motion/react', () => ({
 vi.mock('@/hooks/useRealtimeChat', () => ({
   useRealtimeChat: (options?: { onMessage?: (role: 'user' | 'assistant', content: string) => void }) => {
     voiceOnMessage = options?.onMessage;
+    latestRealtimeOptions = options;
     return legacyRealtimeState;
   },
 }));
@@ -158,7 +163,21 @@ vi.mock('@/components/chat', () => ({
 }));
 
 vi.mock('@/components/learning', () => ({
-  ChatSessionsSidebar: () => <div data-testid="chat-sessions-sidebar" />,
+  ChatSessionsSidebar: ({
+    sessions,
+    onSelectSession,
+  }: {
+    sessions: Array<{ id: string; title: string }>;
+    onSelectSession: (chatId: string) => void;
+  }) => (
+    <div data-testid="chat-sessions-sidebar">
+      {sessions.map((session) => (
+        <button key={session.id} type="button" onClick={() => onSelectSession(session.id)}>
+          {session.title}
+        </button>
+      ))}
+    </div>
+  ),
 }));
 
 vi.mock('@/components/ui', () => ({
@@ -182,6 +201,7 @@ vi.mock('@/api/chat', () => ({
   getChatSessions: (...args: unknown[]) => getChatSessionsMock(...args),
   getChatSession: (...args: unknown[]) => getChatSessionMock(...args),
   createChatSession: (...args: unknown[]) => createChatSessionMock(...args),
+  updateChatSettings: (...args: unknown[]) => updateChatSettingsMock(...args),
   saveMessageToChat: (...args: unknown[]) => saveMessageToChatMock(...args),
   sendChatMessage: (...args: unknown[]) => sendChatMessageMock(...args),
   deleteChatSession: (...args: unknown[]) => deleteChatSessionMock(...args),
@@ -218,6 +238,12 @@ vi.mock('@/contexts/LanguageContext', () => ({
         'app.learn.chat.input.disconnected': 'Disconnected',
         'chat.textMode': 'Text',
         'chat.voiceMode': 'Voice',
+        'chat.languageMix.label': 'Language mix',
+        'chat.languageMix.english_first': 'English-first',
+        'chat.languageMix.english_led': 'English-led',
+        'chat.languageMix.balanced': 'Balanced',
+        'chat.languageMix.target_led': 'Target-language-led',
+        'chat.languageMix.target_only': 'Target-language-only',
         'app.learn.sessions.title': 'Sessions',
         'app.learn.path.title': 'Path',
         'app.learn.chat.loading': 'Loading',
@@ -301,12 +327,14 @@ describe('AppChatPage live2d avatar wiring', () => {
     getChatSessionsMock.mockReset();
     getChatSessionMock.mockReset();
     createChatSessionMock.mockReset();
+    updateChatSettingsMock.mockReset();
     saveMessageToChatMock.mockReset();
     sendChatMessageMock.mockReset();
     deleteChatSessionMock.mockReset();
     getUserProfileMock.mockReset();
     getAssessmentResultsMock.mockReset();
     voiceOnMessage = undefined;
+    latestRealtimeOptions = undefined;
 
     getChatSessionsMock.mockResolvedValue([
       {
@@ -315,12 +343,32 @@ describe('AppChatPage live2d avatar wiring', () => {
         created_at: '2026-03-06T00:00:00.000Z',
         updated_at: '2026-03-06T00:00:00.000Z',
         message_count: 0,
+        languageMixLevel: 'target_led',
+      },
+      {
+        id: 'chat-2',
+        title: 'English support chat',
+        created_at: '2026-03-06T00:00:00.000Z',
+        updated_at: '2026-03-06T00:00:00.000Z',
+        message_count: 0,
+        languageMixLevel: 'english_first',
       },
     ]);
-    getChatSessionMock.mockResolvedValue({
+    getChatSessionMock.mockImplementation(async (chatId: string) => ({
+      id: chatId,
+      title: chatId === 'chat-2' ? 'English support chat' : 'Realtime practice',
+      created_at: '2026-03-06T00:00:00.000Z',
+      updated_at: '2026-03-06T00:00:00.000Z',
+      messages: [],
+      languageMixLevel: chatId === 'chat-2' ? 'english_first' : 'target_led',
+    }));
+    updateChatSettingsMock.mockResolvedValue({
       id: 'chat-1',
       title: 'Realtime practice',
+      created_at: '2026-03-06T00:00:00.000Z',
+      updated_at: '2026-03-06T00:00:00.000Z',
       messages: [],
+      languageMixLevel: 'english_led',
     });
     getUserProfileMock.mockResolvedValue({
       assessed: false,
@@ -343,52 +391,32 @@ describe('AppChatPage live2d avatar wiring', () => {
       removeEventListener: vi.fn(),
       dispatchEvent: vi.fn(),
     })) as typeof window.matchMedia;
+
+    // AppChatPage reads its avatar-enabled preference from localStorage and
+    // defaults to `false` when nothing is stored. The avatar panel is only
+    // rendered when the preference is truthy, so explicitly opt in for this
+    // test suite — this matches the real-user flow where someone toggles the
+    // avatar on and the preference persists across sessions.
+    window.localStorage.clear();
+    window.localStorage.setItem('lingual:chat:avatarEnabled', 'true');
   });
 
-  it('passes live2d avatar state, reaction, and audio level into the new avatar panel', async () => {
-    const view = render(<AppChatPage />);
+  it('forces avatar off for the pilot even when local storage says it was enabled', async () => {
+    render(<AppChatPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('live2d-avatar')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Realtime practice' })).toBeInTheDocument();
     });
 
-    legacyRealtimeState.isSpeaking = true;
-    avatarPerformanceState.dialogueState = 'speaking';
-    avatarPerformanceState.affect = 'curious';
-    avatarPerformanceState.debug = {
-      audioLevel: 0.42,
-      rmsLevel: 0.11,
-      transcript: 'Can you try that again?',
-      hasRemoteAudio: true,
-      speakingEventState: 'speaking',
-      mouthTarget: 0.33,
-      detectedExpressionKeys: [],
-      directiveSource: 'fallback',
-      lastExplicitDirective: null,
-    };
-
-    view.rerender(<AppChatPage />);
-
-    const panel = screen.getByTestId('live2d-avatar');
-    expect(panel).toHaveAttribute('data-status-label', 'AI speaking');
-    expect(panel).toHaveAttribute('data-audio-level', '0.42');
-
-    const state = JSON.parse(panel.getAttribute('data-avatar-state') || '{}');
-    const reaction = JSON.parse(panel.getAttribute('data-avatar-reaction') || 'null');
-    const diagnostics = JSON.parse(panel.getAttribute('data-avatar-diagnostics') || '{}');
-    expect(state.motionGroup).toBe('question');
-    expect(state.subtitleText).toBe('Can you try that again?');
-    expect(reaction).toBeNull();
-    expect(panel).toHaveAttribute('data-has-avatar-hit', 'true');
-    expect(diagnostics.audioLevel).toBe(0.42);
-    expect(diagnostics.mouthTarget).toBe(0.33);
+    expect(screen.queryByTestId('live2d-avatar')).not.toBeInTheDocument();
+    expect(latestRealtimeOptions?.sessionParams?.avatarDirectives).toBe(false);
   });
 
   it('still saves finalized realtime voice messages with sequential sortOrder metadata', async () => {
     render(<AppChatPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('live2d-avatar')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Realtime practice' })).toBeInTheDocument();
     });
 
     await act(async () => {
@@ -418,5 +446,65 @@ describe('AppChatPage live2d avatar wiring', () => {
       '좋아요',
       expect.objectContaining({ sortOrder: 2 })
     );
+  });
+
+  it('shows the active chat language mix level', async () => {
+    render(<AppChatPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Realtime practice' })).toBeInTheDocument();
+    });
+
+    expect(screen.getByLabelText('Language mix')).toHaveValue('target_led');
+    expect(screen.getByRole('option', { name: 'Target-language-led' })).toBeInTheDocument();
+  });
+
+  it('switching chats updates the visible language mix level', async () => {
+    render(<AppChatPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Language mix')).toHaveValue('target_led');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'English support chat' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'English support chat' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Language mix')).toHaveValue('english_first');
+    });
+  });
+
+  it('changing the language mix level saves it for the current chat', async () => {
+    render(<AppChatPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Language mix')).toHaveValue('target_led');
+    });
+
+    fireEvent.change(screen.getByLabelText('Language mix'), {
+      target: { value: 'english_led' },
+    });
+
+    await waitFor(() => {
+      expect(updateChatSettingsMock).toHaveBeenCalledWith('chat-1', {
+        languageMixLevel: 'english_led',
+      });
+    });
+  });
+
+  it('passes the active chat id into realtime params and shows reconnect notice on mix change', async () => {
+    render(<AppChatPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Language mix')).toHaveValue('target_led');
+    });
+
+    expect(latestRealtimeOptions?.sessionParams?.chatId).toBe('chat-1');
+
+    fireEvent.change(screen.getByLabelText('Language mix'), {
+      target: { value: 'english_led' },
+    });
+
+    expect(await screen.findByText('Reconnect voice to apply this language mix.')).toBeInTheDocument();
   });
 });

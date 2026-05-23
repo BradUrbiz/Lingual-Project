@@ -449,35 +449,11 @@ def resolve_system_instructions(deps: RouteDeps, payload: dict[str, Any]) -> str
     if ui_language not in deps.supported_ui_languages:
         ui_language = 'en'
 
-    practice = payload.get('practice')
-    if isinstance(practice, dict) and practice.get('type') == 'curriculum_module':
-        curriculum_id = practice.get('curriculumId')
-        module_id = practice.get('moduleId')
-        situation_id = practice.get('situationId')
-        if not module_id or not situation_id:
-            raise ValueError('moduleId and situationId are required for curriculum practice.')
-
-        package = deps.load_sample_curriculum_package()
-        sample_curriculum_id = package.get('curriculum', {}).get('id')
-        if curriculum_id and curriculum_id != sample_curriculum_id:
-            raise ValueError('Unsupported curriculumId.')
-
-        package, unit, module, situation, mode, objectives = deps.get_curriculum_practice_context(
-            module_id=module_id,
-            situation_id=situation_id,
-        )
-        return deps.build_curriculum_system_prompt(
-            package=package,
-            unit=unit,
-            module=module,
-            situation=situation,
-            mode=mode,
-            objectives=objectives,
-            ui_language=ui_language,
-        )
-
     proficiency_context = deps.get_user_proficiency_context()
-    return deps.build_system_prompt(proficiency_context)
+    uid = deps.get_current_user_uid()
+    profile_context = deps.db.get_user_profile_context(uid) or {}
+    learning_locale = profile_context.get('learning_locale', 'ko-KR')
+    return deps.build_system_prompt(proficiency_context, learning_locale)
 
 
 def send_ws_event(ws: Any, event_type: str, payload: dict[str, Any] | None = None) -> None:

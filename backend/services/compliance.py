@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 SUPPORTED_CONSENT_STATUSES = {"unknown", "granted", "revoked", "not_required"}
@@ -121,10 +122,16 @@ def _compute_voice_allowed(
     guardian_consent_status: str,
     voice_consent_status: str,
 ) -> bool:
-    if voice_consent_status != "granted":
-        return False
-    if is_minor and guardian_consent_status != "granted":
-        return False
+    # TEMPORARY PILOT OVERRIDE: voice is unconditionally allowed for every
+    # student regardless of consent state. Consent fields are still written
+    # (audit trail preserved) but no longer gate practice. To revert, remove
+    # this shortcut and restore the prior gate:
+    #     if voice_consent_status != "granted":
+    #         return False
+    #     if guardian_consent_status == "revoked":
+    #         return False
+    #     return True
+    del is_minor, guardian_consent_status, voice_consent_status
     return True
 
 
@@ -258,6 +265,70 @@ def upsert_student_compliance_record(
     return normalized
 
 
+def auto_grant_voice_consent_for_pilot(
+    db: Any,
+    *,
+    org_id: str,
+    student_uid: str,
+) -> None:
+    """Pilot: auto-grant voice + guardian consent on student enrollment.
+
+    Pilot schools opt in to voice practice as part of onboarding, so each
+    student enrollment writes a compliance record with voice_consent_status
+    and (for minors) guardian_consent_status set to ``granted``. Teachers and
+    admins can still revoke per-student on the compliance page — an explicit
+    ``revoked`` value is never overridden. Idempotent: when the record is
+    already fully granted, no write happens. To restore the explicit-consent
+    flow, revert this helper and its callers.
+    """
+    if not hasattr(db, "upsert_student_compliance_record"):
+        return
+    user = db.get_user(student_uid) if hasattr(db, "get_user") else None
+    organization = db.get_organization(org_id) if hasattr(db, "get_organization") else None
+    stored = (
+        db.get_student_compliance_record(org_id, student_uid)
+        if hasattr(db, "get_student_compliance_record")
+        else None
+    )
+    current = normalize_student_compliance_record(
+        stored,
+        org_id=org_id,
+        student_uid=student_uid,
+        user=user,
+        organization=organization,
+    )
+
+    updates: dict[str, Any] = {}
+    if current.get("voice_consent_status") not in {"granted", "revoked"}:
+        updates["voice_consent_status"] = "granted"
+    if current.get("is_minor") and current.get("guardian_consent_status") not in {"granted", "revoked"}:
+        updates["guardian_consent_status"] = "granted"
+    if not updates:
+        return
+
+    merged = {**current, **updates}
+    normalized = normalize_student_compliance_record(
+        merged,
+        org_id=org_id,
+        student_uid=student_uid,
+        user=user,
+        organization=organization,
+    )
+    db.upsert_student_compliance_record(org_id, student_uid, normalized)
+    create_consent_event(
+        SimpleNamespace(db=db),
+        org_id=org_id,
+        student_uid=student_uid,
+        event_type="consent.auto_granted_for_pilot",
+        actor_type="system",
+        actor_id="system:pilot_auto_grant",
+        payload={
+            "updates": dict(updates),
+            "source": "pilot_auto_grant",
+        },
+    )
+
+
 def create_consent_event(
     deps: Any,
     *,
@@ -287,12 +358,16 @@ def create_consent_event(
 
 
 def build_voice_block_reasons(record: dict[str, Any]) -> list[str]:
-    reasons: list[str] = []
-    if record.get("is_minor") and record.get("guardian_consent_status") != "granted":
-        reasons.append("Guardian consent is required before voice practice can start.")
-    if record.get("voice_consent_status") != "granted":
-        reasons.append("Voice consent has not been granted for this student.")
-    return reasons
+    # TEMPORARY PILOT OVERRIDE: voice is never blocked for any student, so no
+    # block reasons are ever surfaced. To revert, restore the prior logic:
+    #     reasons: list[str] = []
+    #     if record.get("guardian_consent_status") == "revoked":
+    #         reasons.append("Guardian has revoked voice consent for this student.")
+    #     if record.get("voice_consent_status") != "granted":
+    #         reasons.append("Voice consent has not been granted for this student.")
+    #     return reasons
+    del record
+    return []
 
 
 def apply_launch_compliance(

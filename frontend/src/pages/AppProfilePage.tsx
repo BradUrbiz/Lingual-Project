@@ -1,56 +1,110 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Camera,
-  MapPin,
-  School,
-  Globe,
-  Github,
-  Facebook,
-  Instagram,
-  Youtube,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { clsx } from 'clsx';
+import { Camera, CircleUserRound, Globe, MapPin, School } from 'lucide-react';
 import { toast } from 'sonner';
-import { useLanguage } from '@/contexts/LanguageContext';
-import { useAuth } from '@/hooks/useAuth';
+import { getMinigameSummary } from '@/api/minigames';
 import { getUserProfile, updateProfile } from '@/api/user';
 import { Button, Input } from '@/components/ui';
-import type { UserProfile } from '@/types';
-import { GraduationCap } from "lucide-react";
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/hooks/useAuth';
+import { DEFAULT_LEARNING_LOCALE, LEARNING_LOCALES } from '@/lib/learningLocales';
+import type { Language, LearningLocale, MinigameSummary, UserProfile } from '@/types';
 
-const USER_AVATAR = '/imgs/landing/student.jpg';
+type PracticeLevelBand = {
+  minMinutes: number;
+  maxMinutes: number;
+  labelEn: string;
+  labelKo: string;
+  barClassName: string;
+};
 
-type ProviderKey = 'google' | 'github' | 'facebook' | 'instagram' | 'youtube';
-type ProviderConfig = {
-  key: ProviderKey;
-  label: string;
-  providerId?: string;
-  iconType: 'image' | 'icon';
-  iconSrc?: string;
-  iconAlt?: string;
-  icon?: LucideIcon;
-  iconClassName: string;
-  unsupported?: boolean;
-  connectedVia?: string;
+const PRACTICE_LEVEL_BANDS: PracticeLevelBand[] = [
+  {
+    minMinutes: 0,
+    maxMinutes: 30,
+    labelEn: 'Starter',
+    labelKo: '입문',
+    barClassName: 'bg-[var(--color-chart-4)]',
+  },
+  {
+    minMinutes: 30,
+    maxMinutes: 120,
+    labelEn: 'Explorer',
+    labelKo: '탐색',
+    barClassName: 'bg-primary',
+  },
+  {
+    minMinutes: 120,
+    maxMinutes: 300,
+    labelEn: 'Builder',
+    labelKo: '성장',
+    barClassName: 'bg-accent',
+  },
+  {
+    minMinutes: 300,
+    maxMinutes: 600,
+    labelEn: 'Conversational',
+    labelKo: '대화',
+    barClassName: 'bg-success',
+  },
+  {
+    minMinutes: 600,
+    maxMinutes: Number.POSITIVE_INFINITY,
+    labelEn: 'Immersed',
+    labelKo: '몰입',
+    barClassName: 'bg-foreground',
+  },
+];
+
+const isLearningLocale = (value: string): value is LearningLocale =>
+  LEARNING_LOCALES.some((option) => option.value === value);
+
+const getPracticeLevelBand = (minutes: number) =>
+  PRACTICE_LEVEL_BANDS.find(
+    (band) => minutes >= band.minMinutes && minutes < band.maxMinutes
+  ) ?? PRACTICE_LEVEL_BANDS[PRACTICE_LEVEL_BANDS.length - 1];
+
+const getPracticeLevelLabel = (minutes: number, lang: Language) => {
+  const band = getPracticeLevelBand(minutes);
+  return lang === 'ko' ? band.labelKo : band.labelEn;
+};
+
+const getPracticeLevelProgress = (minutes: number) => {
+  const band = getPracticeLevelBand(minutes);
+  if (!Number.isFinite(band.maxMinutes)) return 100;
+  const span = band.maxMinutes - band.minMinutes;
+  if (span <= 0) return 100;
+  return Math.min(100, Math.max(8, ((minutes - band.minMinutes) / span) * 100));
+};
+
+const formatPracticeTime = (durationSeconds: number, lang: Language) => {
+  const totalMinutes = Math.max(0, Math.round(durationSeconds / 60));
+  const formatter = new Intl.NumberFormat(lang === 'ko' ? 'ko-KR' : 'en-US', {
+    maximumFractionDigits: totalMinutes >= 60 ? 1 : 0,
+  });
+
+  if (totalMinutes >= 60) {
+    const totalHours = totalMinutes / 60;
+    return lang === 'ko'
+      ? `${formatter.format(totalHours)}시간 연습`
+      : `${formatter.format(totalHours)} hrs practiced`;
+  }
+
+  return lang === 'ko'
+    ? `${formatter.format(totalMinutes)}분 연습`
+    : `${formatter.format(totalMinutes)} min practiced`;
 };
 
 export function AppProfilePage() {
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
   const {
     user,
-    firebaseUser,
-    linkWithGoogle,
-    linkWithGithub,
-    linkWithFacebook,
-    unlinkProvider,
     updateAvatarUrl,
   } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [minigameSummary, setMinigameSummary] = useState<MinigameSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [providerLoading, setProviderLoading] = useState<Record<string, boolean>>({});
   const [formState, setFormState] = useState({
     displayName: '',
     contactEmail: '',
@@ -62,9 +116,22 @@ export function AppProfilePage() {
   });
 
   useEffect(() => {
+    let isActive = true;
+
     const loadProfile = async () => {
       try {
-        const data = await getUserProfile();
+        const [profileResult, summaryResult] = await Promise.allSettled([
+          getUserProfile(),
+          getMinigameSummary(),
+        ]);
+
+        if (!isActive) return;
+
+        if (profileResult.status !== 'fulfilled') {
+          throw profileResult.reason;
+        }
+
+        const data = profileResult.value;
         setProfile(data);
         setFormState({
           displayName: data.displayName || user?.name || '',
@@ -75,15 +142,24 @@ export function AppProfilePage() {
           schoolName: data.schoolName || '',
           avatarUrl: data.avatarUrl || '',
         });
+
+        if (summaryResult.status === 'fulfilled') {
+          setMinigameSummary(summaryResult.value);
+        } else {
+          console.error('Failed to load minigame summary:', summaryResult.reason);
+        }
       } catch (error) {
         console.error('Failed to load profile:', error);
         toast.error(t('app.profile.toast.loadError') || 'Failed to load profile.');
       } finally {
-        setIsLoading(false);
+        if (isActive) setIsLoading(false);
       }
     };
 
     loadProfile();
+    return () => {
+      isActive = false;
+    };
   }, [t, user?.email, user?.name]);
 
 
@@ -472,132 +548,50 @@ const languages = [
     }
   };
 
-  const gradeOptions = [
+const gradeOptions = [
   'Kindergarten',
   ...Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`),
   'College',
   'Out of School',
 ]
-
-  const providerData = firebaseUser?.providerData ?? [];
-  const connectionEmail = formState.contactEmail || user?.email || '';
-
-  const getProviderEntry = (providerId: string) =>
-    providerData.find((provider) => provider.providerId === providerId);
-
-  const isProviderConnected = (providerId: string) =>
-    Boolean(getProviderEntry(providerId));
-
-  const getProviderIdentity = (providerId: string) => {
-    const entry = getProviderEntry(providerId);
-    return entry?.email || entry?.displayName || connectionEmail;
-  };
-
-  const setProviderBusy = (providerKey: ProviderKey, busy: boolean) => {
-    setProviderLoading((prev) => ({ ...prev, [providerKey]: busy }));
-  };
-
-  const handleProviderAction = async (providerKey: ProviderKey) => {
-    if (providerKey === 'instagram' || providerKey === 'youtube') {
-      toast.info(t('app.profile.unavailable') || 'Not supported yet.');
-      return;
-    }
-
-    const providerId =
-      providerKey === 'google'
-        ? 'google.com'
-        : providerKey === 'github'
-        ? 'github.com'
-        : 'facebook.com';
-    const connected = isProviderConnected(providerId);
-
-    if (connected && providerData.length <= 1) {
-      toast.error(
-        t('app.profile.toast.disconnectLast') ||
-          'Add another sign-in method before disconnecting.'
-      );
-      return;
-    }
-
-    setProviderBusy(providerKey, true);
-    try {
-      if (connected) {
-        await unlinkProvider(providerId);
-        toast.success(t('app.profile.toast.unlinked') || 'Disconnected.');
-      } else {
-        if (providerKey === 'google') {
-          await linkWithGoogle();
-        } else if (providerKey === 'github') {
-          await linkWithGithub();
-        } else {
-          await linkWithFacebook();
-        }
-        toast.success(t('app.profile.toast.linked') || 'Connected.');
-      }
-    } catch (error) {
-      console.error('Failed to update provider link:', error);
-      toast.error(
-        connected
-          ? t('app.profile.toast.unlinkError') || 'Failed to disconnect.'
-          : t('app.profile.toast.linkError') || 'Failed to connect.'
-      );
-    } finally {
-      setProviderBusy(providerKey, false);
-    }
-  };
-
-  const avatarSrc =
-    formState.avatarUrl || firebaseUser?.photoURL || USER_AVATAR;
+  const avatarSrc = formState.avatarUrl || '';
   const inputsDisabled = isLoading || !profile || isSaving;
   const studentLabel = t('app.profile.student') || 'Student';
   const gradeSummary = formState.gradeLevel
     ? `${formState.gradeLevel}`
     : studentLabel;
+  const activeLearningLocale = profile?.learningLocale || DEFAULT_LEARNING_LOCALE;
+  const durationByLocale = minigameSummary?.durationSecondsByLocale ?? {};
+  const languageRows = Array.from(
+    new Set([
+      activeLearningLocale,
+      ...Object.keys(durationByLocale).filter(isLearningLocale),
+    ])
+  )
+    .map((locale) => {
+      const localeOption =
+        LEARNING_LOCALES.find((option) => option.value === locale) ??
+        LEARNING_LOCALES.find((option) => option.value === DEFAULT_LEARNING_LOCALE);
+      const durationSeconds = Math.max(0, durationByLocale[locale] ?? 0);
+      const practiceMinutes = Math.round(durationSeconds / 60);
+      const practiceLevel = getPracticeLevelBand(practiceMinutes);
 
-  const providers: ProviderConfig[] = [
-    {
-      key: 'google' as ProviderKey,
-      label: 'Google Classroom',
-      providerId: 'google.com',
-      iconType: 'icon' as const,
-      icon: GraduationCap,
-      iconAlt: 'Google',
-      iconClassName: 'bg-[#0F9D58] text-white',
-    },
-    {
-      key: 'github' as ProviderKey,
-      label: 'GitHub',
-      providerId: 'github.com',
-      iconType: 'icon' as const,
-      icon: Github,
-      iconClassName: 'bg-black text-white',
-    },
-    {
-      key: 'facebook' as ProviderKey,
-      label: 'Facebook',
-      providerId: 'facebook.com',
-      iconType: 'icon' as const,
-      icon: Facebook,
-      iconClassName: 'bg-blue-600 text-white',
-    },
-    {
-      key: 'instagram' as ProviderKey,
-      label: 'Instagram',
-      iconType: 'icon' as const,
-      icon: Instagram,
-      iconClassName: 'bg-gradient-to-br from-pink-500 via-purple-500 to-orange-400 text-white',
-      unsupported: true,
-    },
-    {
-      key: 'youtube' as ProviderKey,
-      label: 'YouTube',
-      iconType: 'icon' as const,
-      icon: Youtube,
-      iconClassName: 'bg-red-600 text-white',
-      unsupported: true,
-      connectedVia: 'google.com',
-    },
-  ];
+      return {
+        locale,
+        durationSeconds,
+        isActive: locale === activeLearningLocale,
+        label: localeOption?.shortLabel ?? locale,
+        flag: localeOption?.flag ?? '🌐',
+        levelLabel: getPracticeLevelLabel(practiceMinutes, lang),
+        progressPercent: getPracticeLevelProgress(practiceMinutes),
+        progressClassName: practiceLevel.barClassName,
+        practiceTimeLabel: formatPracticeTime(durationSeconds, lang),
+      };
+    })
+    .sort((left, right) => {
+      if (left.isActive !== right.isActive) return left.isActive ? -1 : 1;
+      return right.durationSeconds - left.durationSeconds;
+    });
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -613,12 +607,21 @@ const languages = [
       <div className="grid gap-6 md:grid-cols-3">
         <div className="space-y-6 md:col-span-1">
           <section className="rounded-2xl border-3 border-foreground bg-card p-6 text-center shadow-stamp">
+            <p className="mb-4 text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('app.profile.photo') || 'Profile photo'}
+            </p>
             <div className="relative mx-auto mb-4 inline-block">
-              <img
-                src={avatarSrc}
-                alt={t('app.profile.photo') || 'Profile'}
-                className="h-32 w-32 rounded-2xl border-3 border-foreground bg-secondary object-cover shadow-stamp-sm"
-              />
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt={t('app.profile.photo') || 'Profile'}
+                  className="h-32 w-32 rounded-2xl border-3 border-foreground bg-secondary object-cover shadow-stamp-sm"
+                />
+              ) : (
+                <div className="flex h-32 w-32 items-center justify-center rounded-2xl border-3 border-foreground bg-secondary text-muted-foreground shadow-stamp-sm">
+                  <CircleUserRound className="h-16 w-16" strokeWidth={1.75} />
+                </div>
+              )}
               <button
                 type="button"
                 onClick={handleAvatarClick}
@@ -661,24 +664,38 @@ const languages = [
               {t('app.profile.languages')}
             </h3>
             <div className="space-y-4">
-              <div>
-                <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="font-semibold text-foreground">Spanish</span>
-                  <span className="text-muted-foreground">{t('app.profile.level')} A2</span>
+              {languageRows.map((language) => (
+                <div
+                  key={language.locale}
+                  className="rounded-xl border-2 border-border bg-secondary/60 p-4"
+                >
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base" aria-hidden="true">
+                          {language.flag}
+                        </span>
+                        <span className="font-semibold text-foreground">{language.label}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {language.practiceTimeLabel}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {t('app.profile.level')}
+                      </p>
+                      <p className="text-sm font-bold text-foreground">{language.levelLabel}</p>
+                    </div>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-background">
+                    <div
+                      className={`h-full rounded-full ${language.progressClassName}`}
+                      style={{ width: `${language.progressPercent}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-2.5 rounded-full bg-secondary">
-                  <div className="h-full w-[65%] rounded-full bg-primary" />
-                </div>
-              </div>
-              <div>
-                <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="font-semibold text-foreground">French</span>
-                  <span className="text-muted-foreground">{t('app.profile.level')} A1</span>
-                </div>
-                <div className="h-2.5 rounded-full bg-secondary">
-                  <div className="h-full w-[20%] rounded-full bg-[var(--color-chart-4)]" />
-                </div>
-              </div>
+              ))}
             </div>
           </section>
         </div>
@@ -789,89 +806,6 @@ const languages = [
                 placeholder={t('app.profile.school') || 'School'}
                 disabled={inputsDisabled}
               />
-            </div>
-          </section>
-
-          <section className="rounded-2xl border-3 border-foreground bg-card p-6 shadow-stamp">
-            <h3 className="mb-5 border-b-2 border-border pb-4 text-xl font-display font-bold text-foreground">
-              {t('app.profile.connectedAccounts')}
-            </h3>
-            <div className="space-y-3">
-              {providers.map((provider) => {
-                const connected = provider.providerId
-                  ? isProviderConnected(provider.providerId)
-                  : provider.connectedVia
-                  ? isProviderConnected(provider.connectedVia)
-                  : false;
-                const providerEmail = provider.providerId
-                  ? getProviderIdentity(provider.providerId)
-                  : '';
-                const busy = Boolean(providerLoading[provider.key]);
-                const actionLabel = provider.unsupported
-                  ? t('app.profile.unavailable') || 'Not supported yet'
-                  : connected
-                  ? t('app.profile.disconnect')
-                  : t('app.profile.connect');
-                const connectedLabel = providerEmail
-                  ? `${t('app.profile.connectedAs')} ${providerEmail}`
-                  : t('app.profile.connected') || 'Connected';
-                const statusLabel = provider.unsupported
-                  ? provider.connectedVia && isProviderConnected(provider.connectedVia)
-                    ? t('app.profile.connectedViaGoogle') || 'Connected via Google'
-                    : t('app.profile.unavailable') || 'Not supported yet'
-                  : connected
-                  ? connectedLabel
-                  : t('app.profile.notConnected');
-                const Icon = provider.iconType === 'icon' ? provider.icon : null;
-
-                return (
-                  <div
-                    key={provider.key}
-                    className="flex flex-col gap-3 rounded-xl border-2 border-border bg-secondary/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div
-                        className={`h-10 w-10 shrink-0 rounded-xl border border-border flex items-center justify-center ${provider.iconClassName}`}
-                      >
-                        {provider.iconType === 'image' ? (
-                          <img
-                            src={provider.iconSrc}
-                            alt={provider.iconAlt}
-                            className="h-5 w-5"
-                          />
-                        ) : Icon ? (
-                          <Icon size={18} />
-                        ) : null}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-foreground">{provider.label}</p>
-                        <p className="truncate text-sm text-muted-foreground">{statusLabel}</p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleProviderAction(provider.key)}
-                      disabled={busy || !firebaseUser || provider.unsupported}
-                      className={clsx(
-                        'min-h-11 rounded-xl border-2 px-4 py-2 text-sm font-semibold transition-colors',
-                        provider.unsupported
-                          ? 'border-border bg-secondary text-muted-foreground'
-                          : connected
-                          ? 'border-destructive/35 bg-destructive/10 text-destructive hover:bg-destructive/15'
-                          : 'border-primary/35 bg-primary/10 text-primary hover:bg-primary/20',
-                        (busy || !firebaseUser) && 'opacity-60 cursor-not-allowed'
-                      )}
-                    >
-                      {busy
-                        ? connected
-                          ? t('app.profile.disconnecting') || 'Disconnecting...'
-                          : t('app.profile.connecting') || 'Connecting...'
-                        : actionLabel}
-                    </button>
-                  </div>
-                );
-              })}
             </div>
           </section>
         </div>

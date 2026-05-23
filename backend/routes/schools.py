@@ -5,6 +5,7 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request
 
 from backend.route_deps import RouteDeps
+from backend.services.compliance import auto_grant_voice_consent_for_pilot
 from backend.services.membership_context import (
     SchoolContextNotFoundError,
     SchoolContextPermissionError,
@@ -39,6 +40,17 @@ def _count_assignments_for_class(deps: RouteDeps, class_id: str) -> int:
     return len(deps.db.list_class_assignments(class_id))
 
 
+def _class_canvas_linked(deps: RouteDeps, class_id: str) -> bool:
+    getter = getattr(deps.db, "get_canvas_connection_by_class", None)
+    if not callable(getter):
+        return False
+    try:
+        connection = getter(class_id)
+    except Exception:
+        return False
+    return isinstance(connection, dict)
+
+
 def build_class_summary(deps: RouteDeps, class_record: dict | None) -> dict | None:
     if not isinstance(class_record, dict):
         return None
@@ -59,6 +71,7 @@ def build_class_summary(deps: RouteDeps, class_record: dict | None) -> dict | No
         "status": class_record.get("status", "active"),
         "studentCount": _count_students_for_class(deps, class_id),
         "assignmentCount": _count_assignments_for_class(deps, class_id),
+        "canvasLinked": _class_canvas_linked(deps, class_id),
         "createdAt": _timestamp_to_iso(class_record.get("created_at")),
         "updatedAt": _timestamp_to_iso(class_record.get("updated_at")),
     }
@@ -294,6 +307,13 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
                     join_source="join_code",
                 )
 
+            # Pilot: auto-grant voice + guardian consent on enrollment.
+            # Teachers can still revoke per-student on the compliance page.
+            # To restore explicit consent, revert the helper call here.
+            auto_grant_voice_consent_for_pilot(
+                deps.db, org_id=org_id, student_uid=uid,
+            )
+
             deps.db.set_user_last_active_membership(uid, membership_id)
 
             return jsonify({
@@ -312,6 +332,61 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({"success": False, "error": str(exc)}), 403
         except Exception as exc:
             print(f"Class join error: {exc}")
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @bp.route("/api/student/classes")
+    @deps.login_required
+    def api_list_student_classes():
+        try:
+            uid = deps.get_current_user_uid()
+            if not uid:
+                raise SchoolContextPermissionError("Authentication required.")
+
+            class_summaries = []
+            for class_record in deps.db.list_student_classes(uid):
+                summary = build_class_summary(deps, class_record)
+                if summary:
+                    class_summaries.append(summary)
+
+            return jsonify({
+                "success": True,
+                "classes": class_summaries,
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            print(f"Student classes error: {exc}")
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @bp.route("/api/student/classes/<class_id>", methods=["DELETE"])
+    @deps.login_required
+    def api_leave_student_class(class_id):
+        try:
+            uid = deps.get_current_user_uid()
+            if not uid:
+                raise SchoolContextPermissionError("Authentication required.")
+
+            enrollment = deps.db.get_student_class_enrollment(class_id, uid)
+            if not enrollment or enrollment.get("status") != "active":
+                return jsonify({"success": False, "error": "Active class enrollment not found."}), 404
+
+            membership_id = _normalize_string(enrollment.get("student_membership_id"))
+            if membership_id:
+                deps.db.remove_primary_class_from_membership(membership_id, class_id)
+            deps.db.deactivate_enrollment(class_id, uid)
+
+            class_record = deps.db.get_class(class_id)
+            return jsonify({
+                "success": True,
+                "class": {
+                    "id": class_id,
+                    "name": (class_record or {}).get("name", ""),
+                },
+            })
+        except SchoolContextPermissionError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 403
+        except Exception as exc:
+            print(f"Student leave class error: {exc}")
             return jsonify({"success": False, "error": str(exc)}), 500
 
     # ------------------------------------------------------------------
@@ -368,49 +443,20 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
     @bp.route("/api/schools/join-as-teacher", methods=["POST"])
     @deps.login_required
     def api_join_as_teacher():
-        try:
-            uid = deps.get_current_user_uid()
-            if not uid:
-                return jsonify({"success": False, "error": "Authentication required."}), 401
+        """Deprecated: superseded by POST /api/teacher-join-requests.
 
-            data = request.get_json() or {}
-            raw_code = (data.get("inviteCode") or "").strip().upper()
-            if not raw_code or len(raw_code) != 6:
-                return jsonify({"success": False, "error": "A valid 6-character invite code is required."}), 400
-
-            org = deps.db.get_org_by_teacher_invite_code(raw_code)
-            if not org:
-                return jsonify({"success": False, "error": "Invalid or expired invite code."}), 404
-
-            org_id = org["id"]
-
-            # Check if already a member
-            memberships = deps.db.get_user_memberships(uid)
-            for m in memberships:
-                if m.get("orgId") == org_id:
-                    return jsonify({"success": False, "error": "You are already a member of this school."}), 409
-
-            # Check if already has pending invitation
-            existing_invite = deps.db.get_teacher_invitation_by_user(org_id, uid)
-            if existing_invite:
-                return jsonify({"success": False, "error": "You already have a pending invitation for this school."}), 409
-
-            user = deps.db.get_user(uid)
-            invitation_id = deps.db.create_teacher_invitation(
-                org_id=org_id,
-                uid=uid,
-                email=user.get("email", "") if user else "",
-                name=user.get("name", "") if user else "",
-            )
-
-            return jsonify({
-                "success": True,
-                "invitationId": invitation_id,
-                "orgName": org.get("name", ""),
-                "status": "pending",
-            }), 201
-        except Exception as exc:
-            return jsonify({"success": False, "error": str(exc)}), 500
+        Returns 410 Gone with a pointer. Frontends that still call this should
+        be updated to use the new endpoint. Removing the route entirely would
+        break any cached SPA bundle still in users' browsers — keep this until
+        the next forced cache bust.
+        """
+        return jsonify({
+            "success": False,
+            "error": (
+                "This endpoint has been replaced by "
+                "POST /api/teacher-join-requests. Please refresh the page."
+            ),
+        }), 410
 
     # ------------------------------------------------------------------
     # Teacher invitations (school admin reviews)

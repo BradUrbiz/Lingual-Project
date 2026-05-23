@@ -1,11 +1,23 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { LandingPage } from '@/pages/LandingPage';
 
 let navigateMock = vi.fn();
-const getUserProfileMock = vi.fn();
 const authState: {
-  user: { uid: string; email: string; name: string } | null;
+  user:
+    | {
+        uid: string;
+        email: string;
+        name: string;
+        activeRoles?: Array<'teacher' | 'student' | 'school_admin'>;
+        memberships?: Array<{
+          id: string;
+          orgId: string;
+          orgName: string;
+          roles: Array<'teacher' | 'student' | 'school_admin'>;
+        }>;
+      }
+    | null;
   loading: boolean;
 } = {
   user: null,
@@ -24,16 +36,11 @@ vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => authState,
 }));
 
-vi.mock('@/api/user', () => ({
-  getUserProfile: (...args: unknown[]) => getUserProfileMock(...args),
-}));
-
 vi.mock('@/contexts/LanguageContext', () => ({
   useLanguage: () => ({
     t: (key: string) =>
       ({
         'landing.nav.features': 'Features',
-        'landing.hero.ctaPrimary': 'Try Demo',
         'landing.nav.getStarted': 'Get Started',
       })[key] || key,
   }),
@@ -42,13 +49,12 @@ vi.mock('@/contexts/LanguageContext', () => ({
 describe('LandingPage', () => {
   beforeEach(() => {
     navigateMock = vi.fn();
-    getUserProfileMock.mockReset();
     authState.user = null;
     authState.loading = false;
     window.scrollTo = vi.fn();
   });
 
-  it('renders hero and routes unauthenticated users to auth', () => {
+  it('renders hero and routes unauthenticated users to /signup?role=student on "I\'m a Student"', () => {
     render(
       <MemoryRouter>
         <LandingPage />
@@ -57,18 +63,64 @@ describe('LandingPage', () => {
 
     expect(screen.getByText('Features')).toBeInTheDocument();
 
-    const cta = screen.getByRole('button', { name: 'Try Demo' });
+    const cta = screen.getAllByRole('button', { name: "I'm a Student" })[0];
     fireEvent.click(cta);
 
-    expect(navigateMock).toHaveBeenCalledWith('/auth');
+    expect(navigateMock).toHaveBeenCalledWith('/signup?role=student');
   });
 
-  it('routes assessed users to /app/learn', async () => {
-    authState.user = { uid: '1', email: 'test@example.com', name: 'Test User' };
-    getUserProfileMock.mockResolvedValue({
-      profileCompleted: true,
-      assessed: true,
-    });
+  it('routes unauthenticated users to /signup?role=teacher on "I\'m a Teacher"', () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+
+    const cta = screen.getByRole('button', { name: "I'm a Teacher" });
+    fireEvent.click(cta);
+
+    expect(navigateMock).toHaveBeenCalledWith('/signup?role=teacher');
+  });
+
+  it('routes unauthenticated users to /signup?role=admin on "I\'m a School Admin"', () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+
+    const cta = screen.getByRole('button', { name: "I'm a School Admin" });
+    fireEvent.click(cta);
+
+    expect(navigateMock).toHaveBeenCalledWith('/signup?role=admin');
+  });
+
+  it('routes unauthenticated users to /login on Login button', () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'landing.nav.login' }));
+
+    expect(navigateMock).toHaveBeenCalledWith('/login');
+  });
+
+  it('routes teacher users to /app/teacher from the login action', () => {
+    authState.user = {
+      uid: 'teacher-1',
+      email: 'teacher@example.com',
+      name: 'Teacher User',
+      memberships: [
+        {
+          id: 'mem-teacher-1',
+          orgId: 'org-1',
+          orgName: 'Lingual Academy',
+          roles: ['teacher'],
+        },
+      ],
+    };
 
     render(
       <MemoryRouter>
@@ -76,19 +128,25 @@ describe('LandingPage', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Try Demo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'landing.nav.login' }));
 
-    await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/app/learn');
-    });
+    expect(navigateMock).toHaveBeenCalledWith('/app/teacher');
   });
 
-  it('routes unassessed users to /onboarding', async () => {
-    authState.user = { uid: '1', email: 'test@example.com', name: 'Test User' };
-    getUserProfileMock.mockResolvedValue({
-      profileCompleted: true,
-      assessed: false,
-    });
+  it('routes signed-in teacher users to /app/teacher when clicking any role CTA', () => {
+    authState.user = {
+      uid: 'teacher-1',
+      email: 'teacher@example.com',
+      name: 'Teacher User',
+      memberships: [
+        {
+          id: 'mem-teacher-1',
+          orgId: 'org-1',
+          orgName: 'Lingual Academy',
+          roles: ['teacher'],
+        },
+      ],
+    };
 
     render(
       <MemoryRouter>
@@ -96,19 +154,27 @@ describe('LandingPage', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Try Demo' }));
+    // Membership is source of truth — clicking "I'm a Student" still routes to teacher home
+    const cta = screen.getAllByRole('button', { name: "I'm a Student" })[0];
+    fireEvent.click(cta);
 
-    await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/onboarding');
-    });
+    expect(navigateMock).toHaveBeenCalledWith('/app/teacher');
   });
 
-  it('routes incomplete profiles to /general', async () => {
-    authState.user = { uid: '1', email: 'test@example.com', name: 'Test User' };
-    getUserProfileMock.mockResolvedValue({
-      profileCompleted: false,
-      assessed: false,
-    });
+  it('routes signed-in student membership users to /app/learn when clicking a role CTA', () => {
+    authState.user = {
+      uid: 'student-1',
+      email: 'student@example.com',
+      name: 'Student User',
+      memberships: [
+        {
+          id: 'mem-student-1',
+          orgId: 'org-1',
+          orgName: 'Lingual Academy',
+          roles: ['student'],
+        },
+      ],
+    };
 
     render(
       <MemoryRouter>
@@ -116,10 +182,9 @@ describe('LandingPage', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Try Demo' }));
+    const cta = screen.getAllByRole('button', { name: "I'm a Student" })[0];
+    fireEvent.click(cta);
 
-    await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/general');
-    });
+    expect(navigateMock).toHaveBeenCalledWith('/app/learn');
   });
 });

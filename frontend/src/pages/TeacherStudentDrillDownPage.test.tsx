@@ -1,24 +1,16 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { TeacherStudentDrillDownPage } from '@/pages/TeacherStudentDrillDownPage';
-import type { GuardianConsentIssueResult, GuardianConsentPacket, StudentComplianceRecord, StudentDrillDownData } from '@/types';
+import type { StudentComplianceRecord, StudentDrillDownData } from '@/types';
 
 const getStudentDrillDownMock = vi.fn();
 const getStudentComplianceMock = vi.fn();
-const getStudentGuardianConsentPacketMock = vi.fn();
 const updateStudentComplianceMock = vi.fn();
-const issueStudentGuardianConsentPacketMock = vi.fn();
-const resendStudentGuardianConsentPacketMock = vi.fn();
-const cancelStudentGuardianConsentPacketMock = vi.fn();
 
 vi.mock('@/api/teacher', () => ({
   getStudentDrillDown: (...args: unknown[]) => getStudentDrillDownMock(...args),
   getStudentCompliance: (...args: unknown[]) => getStudentComplianceMock(...args),
-  getStudentGuardianConsentPacket: (...args: unknown[]) => getStudentGuardianConsentPacketMock(...args),
   updateStudentCompliance: (...args: unknown[]) => updateStudentComplianceMock(...args),
-  issueStudentGuardianConsentPacket: (...args: unknown[]) => issueStudentGuardianConsentPacketMock(...args),
-  resendStudentGuardianConsentPacket: (...args: unknown[]) => resendStudentGuardianConsentPacketMock(...args),
-  cancelStudentGuardianConsentPacket: (...args: unknown[]) => cancelStudentGuardianConsentPacketMock(...args),
 }));
 
 const ANALYTICS: StudentDrillDownData = {
@@ -82,64 +74,22 @@ const COMPLIANCE: StudentComplianceRecord = {
   lastVerifiedAt: '2026-03-09T12:00:00Z',
 };
 
-const ISSUED_PACKET: GuardianConsentPacket = {
-  id: 'packet-1',
-  orgId: 'org-1',
-  classId: 'class-1',
-  studentUid: 'student-1',
-  noticeVersion: 'guardian_beta_v1',
-  consentScope: 'voice_school_beta',
-  contactChannel: 'email',
-  contactDestinationHint: 'parent@example.org',
-  deliveryMethod: 'secure_link',
-  status: 'issued',
-  tokenLastFour: 'cdef',
-  responseMethod: '',
-  evidenceRef: '',
-  reminderCount: 0,
-  expiresAt: '2026-03-23T12:00:00Z',
-  issuedAt: '2026-03-09T12:00:00Z',
-  lastSentAt: '2026-03-09T12:00:00Z',
-  actedAt: null,
-  createdByUid: 'teacher-1',
-  createdAt: '2026-03-09T12:00:00Z',
-  updatedAt: '2026-03-09T12:00:00Z',
-  canResend: true,
-  canCancel: true,
-  isTerminal: false,
-};
-
-const ISSUE_RESULT: GuardianConsentIssueResult = {
-  guardianPacket: ISSUED_PACKET,
-  deliveryToken: 'token-abc',
-};
-
 describe('TeacherStudentDrillDownPage', () => {
   beforeEach(() => {
     getStudentDrillDownMock.mockReset();
     getStudentComplianceMock.mockReset();
-    getStudentGuardianConsentPacketMock.mockReset();
     updateStudentComplianceMock.mockReset();
-    issueStudentGuardianConsentPacketMock.mockReset();
-    resendStudentGuardianConsentPacketMock.mockReset();
-    cancelStudentGuardianConsentPacketMock.mockReset();
 
     getStudentDrillDownMock.mockResolvedValue(ANALYTICS);
     getStudentComplianceMock.mockResolvedValue(COMPLIANCE);
-    getStudentGuardianConsentPacketMock.mockResolvedValue(null);
-    updateStudentComplianceMock.mockResolvedValue(COMPLIANCE);
-    issueStudentGuardianConsentPacketMock.mockResolvedValue(ISSUE_RESULT);
-    resendStudentGuardianConsentPacketMock.mockResolvedValue(ISSUE_RESULT);
-    cancelStudentGuardianConsentPacketMock.mockResolvedValue({
-      ...ISSUED_PACKET,
-      status: 'canceled',
-      canResend: false,
-      canCancel: false,
-      isTerminal: true,
+    updateStudentComplianceMock.mockResolvedValue({
+      ...COMPLIANCE,
+      voiceConsentStatus: 'granted',
+      voiceAllowed: true,
     });
   });
 
-  it('issues a guardian packet from the student drill-down view', async () => {
+  it('renders student analytics and saves voice consent from the compliance editor', async () => {
     render(
       <MemoryRouter initialEntries={['/app/teacher/classes/class-1/students/student-1/analytics']}>
         <Routes>
@@ -152,23 +102,17 @@ describe('TeacherStudentDrillDownPage', () => {
     );
 
     expect(await screen.findByText('Student One')).toBeInTheDocument();
-    expect(await screen.findByText('Guardian packet')).toBeInTheDocument();
+    expect(screen.queryByText('Guardian packet')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Guardian consent')).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Contact destination hint'), {
-      target: { value: 'parent@example.org' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Issue guardian packet' }));
+    const voiceSelect = screen.getByLabelText('Voice consent');
+    fireEvent.change(voiceSelect, { target: { value: 'granted' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save consent state' }));
 
     await waitFor(() => {
-      expect(issueStudentGuardianConsentPacketMock).toHaveBeenCalledWith('class-1', 'student-1', {
-        deliveryMethod: 'secure_link',
-        contactChannel: 'email',
-        contactDestinationHint: 'parent@example.org',
-        noticeVersion: 'guardian_beta_v1',
-      });
+      expect(updateStudentComplianceMock).toHaveBeenCalledWith('class-1', 'student-1', expect.objectContaining({
+        voiceConsentStatus: 'granted',
+      }));
     });
-
-    expect(await screen.findByText('Latest secure link')).toBeInTheDocument();
-    expect(screen.getByDisplayValue(/token-abc$/)).toBeInTheDocument();
   });
 });

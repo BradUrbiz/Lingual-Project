@@ -14,6 +14,7 @@ export interface MinigameCompletionResult {
 
 interface ListeningQuizProps {
   questions: ListeningQuizQuestion[];
+  locale: string;
   scenarioTitle: string;
   onClose: () => void;
   onComplete: (result: MinigameCompletionResult) => void;
@@ -21,6 +22,7 @@ interface ListeningQuizProps {
 
 export function ListeningQuiz({
   questions,
+  locale,
   scenarioTitle,
   onClose,
   onComplete,
@@ -41,7 +43,7 @@ export function ListeningQuiz({
   const playPrompt = () => {
     if (!currentQuestion || !('speechSynthesis' in window)) return;
     const utterance = new SpeechSynthesisUtterance(currentQuestion.promptText);
-    utterance.lang = 'ko-KR';
+    utterance.lang = locale;
     utterance.rate = 0.9;
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);

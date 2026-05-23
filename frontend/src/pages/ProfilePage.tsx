@@ -160,7 +160,7 @@ export function ProfilePage() {
     setLoggingOut(true);
     try {
       await logout();
-      navigate('/auth');
+      navigate('/', { replace: true });
     } catch (error) {
       console.error('Logout failed:', error);
     } finally {

@@ -1,0 +1,227 @@
+{
+  "curriculum_id": "ru-core-v1",
+  "locale": "ru-RU",
+  "title": "Russian Core Speaking (Example)",
+  "levels": [
+    {
+      "id": "L1",
+      "name": "Survival Basics",
+      "description": "Greetings, simple requests, and everyday phrases."
+    },
+    {
+      "id": "L2",
+      "name": "Everyday Interactions",
+      "description": "Ordering, directions, and common small talk."
+    }
+  ],
+  "objectives": [
+    {
+      "id": "OBJ-GREET-RU-01",
+      "level_id": "L1",
+      "title": "Basic greetings and introductions",
+      "skills": ["greeting", "self-introduction", "politeness"]
+    },
+    {
+      "id": "OBJ-ORDER-RU-01",
+      "level_id": "L2",
+      "title": "Order food and drinks politely",
+      "skills": ["ordering", "politeness", "numbers"]
+    },
+    {
+      "id": "OBJ-DIR-RU-01",
+      "level_id": "L2",
+      "title": "Ask for and confirm directions",
+      "skills": ["directions", "locations", "clarifying"]
+    }
+  ],
+  "practice_scenarios": [
+    {
+      "id": "SCN-GREET-RU-01",
+      "objective_id": "OBJ-GREET-RU-01",
+      "title": "Meeting another student",
+      "setting": "Campus lobby",
+      "roles": ["student", "peer"],
+      "difficulty": "easy",
+      "target_phrases": [
+        "Здравствуйте, меня зовут Анна.",
+        "Очень приятно.",
+        "Я студент."
+      ],
+      "success_criteria": [
+        "Use a polite greeting",
+        "Say your name clearly",
+        "Share one basic fact about yourself"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-GREET-RU-01",
+          "sentence": "Здравствуйте, меня зовут Анна.",
+          "masked_sentence": "Здравствуйте, меня (__) Анна.",
+          "answer": "зовут",
+          "choices": ["зовут", "живут", "говорят", "учат"],
+          "explanation": "Use 'зовут' in the phrase for saying your name."
+        },
+        {
+          "id": "GRAM-GREET-RU-02",
+          "sentence": "Я студент.",
+          "masked_sentence": "(__) студент.",
+          "answer": "Я",
+          "choices": ["Я", "Ты", "Он", "Мы"],
+          "explanation": "Use 'я' for 'I.'"
+        },
+        {
+          "id": "GRAM-GREET-RU-03",
+          "sentence": "Очень приятно с вами познакомиться.",
+          "masked_sentence": "Очень приятно (__) вами познакомиться.",
+          "answer": "с",
+          "choices": ["с", "в", "на", "у"],
+          "explanation": "Use 'с вами' to say 'with you' in this introduction phrase."
+        },
+        {
+          "id": "GRAM-GREET-RU-04",
+          "sentence": "Я учусь в университете.",
+          "masked_sentence": "Я учусь (__) университете.",
+          "answer": "в",
+          "choices": ["в", "на", "с", "под"],
+          "explanation": "Use 'в' to say where you study."
+        }
+      ]
+    },
+    {
+      "id": "SCN-ORDER-RU-01",
+      "objective_id": "OBJ-ORDER-RU-01",
+      "title": "Ordering at a café",
+      "setting": "Coffee shop",
+      "roles": ["customer", "barista"],
+      "difficulty": "medium",
+      "target_phrases": [
+        "Можно один кофе, пожалуйста?",
+        "С собой, пожалуйста.",
+        "Сколько стоит?"
+      ],
+      "success_criteria": [
+        "Order clearly",
+        "Say it is to go",
+        "Ask the price"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-ORDER-RU-01",
+          "sentence": "Можно один кофе, пожалуйста?",
+          "masked_sentence": "Можно (__) кофе, пожалуйста?",
+          "answer": "один",
+          "choices": ["один", "одна", "одно", "много"],
+          "explanation": "Use the masculine form 'один' with 'кофе.'"
+        },
+        {
+          "id": "GRAM-ORDER-RU-02",
+          "sentence": "С собой, пожалуйста.",
+          "masked_sentence": "(__) собой, пожалуйста.",
+          "answer": "С",
+          "choices": ["С", "В", "На", "От"],
+          "explanation": "Use 'с собой' to say you want it to go."
+        },
+        {
+          "id": "GRAM-ORDER-RU-03",
+          "sentence": "Сколько стоит?",
+          "masked_sentence": "Сколько (__) ?",
+          "answer": "стоит",
+          "choices": ["стоит", "стоят", "стою", "стоим"],
+          "explanation": "Use the third-person singular form when asking the price."
+        },
+        {
+          "id": "GRAM-ORDER-RU-04",
+          "sentence": "Кофе с молоком, пожалуйста.",
+          "masked_sentence": "Кофе (__) молоком, пожалуйста.",
+          "answer": "с",
+          "choices": ["с", "в", "под", "из"],
+          "explanation": "Use 'с' to say the coffee comes with milk."
+        }
+      ]
+    },
+    {
+      "id": "SCN-DIR-RU-01",
+      "objective_id": "OBJ-DIR-RU-01",
+      "title": "Finding the metro station",
+      "setting": "Street",
+      "roles": ["pedestrian", "local"],
+      "difficulty": "medium",
+      "target_phrases": [
+        "Где станция метро?",
+        "Это далеко отсюда?",
+        "Мне нужно повернуть налево?"
+      ],
+      "success_criteria": [
+        "Ask where a place is",
+        "Check the distance",
+        "Confirm the turn"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-DIR-RU-01",
+          "sentence": "Где находится станция метро?",
+          "masked_sentence": "(__) находится станция метро?",
+          "answer": "Где",
+          "choices": ["Где", "Когда", "Почему", "Сколько"],
+          "explanation": "Use 'где' to ask where something is."
+        },
+        {
+          "id": "GRAM-DIR-RU-02",
+          "sentence": "Это далеко отсюда?",
+          "masked_sentence": "Это далеко (__) ?",
+          "answer": "отсюда",
+          "choices": ["отсюда", "сюда", "рядом", "вчера"],
+          "explanation": "Use 'отсюда' to mean 'from here.'"
+        },
+        {
+          "id": "GRAM-DIR-RU-03",
+          "sentence": "Мне нужно повернуть налево?",
+          "masked_sentence": "Мне нужно повернуть (__) ?",
+          "answer": "налево",
+          "choices": ["налево", "направо", "прямо", "быстро"],
+          "explanation": "Use 'налево' to ask about turning left."
+        },
+        {
+          "id": "GRAM-DIR-RU-04",
+          "sentence": "Идите прямо и потом направо.",
+          "masked_sentence": "Идите (__) и потом направо.",
+          "answer": "прямо",
+          "choices": ["прямо", "домой", "завтра", "медленно"],
+          "explanation": "Use 'прямо' to tell someone to go straight."
+        }
+      ]
+    }
+  ],
+  "pronunciation_prompts": [
+    {
+      "id": "PRON-GREET-RU-01",
+      "objective_id": "OBJ-GREET-RU-01",
+      "text": "Здравствуйте, меня зовут Анна."
+    },
+    {
+      "id": "PRON-GREET-RU-02",
+      "objective_id": "OBJ-GREET-RU-01",
+      "text": "Очень приятно."
+    },
+    {
+      "id": "PRON-ORDER-RU-01",
+      "objective_id": "OBJ-ORDER-RU-01",
+      "text": "Можно один кофе, пожалуйста?"
+    },
+    {
+      "id": "PRON-ORDER-RU-02",
+      "objective_id": "OBJ-ORDER-RU-01",
+      "text": "С собой, пожалуйста."
+    },
+    {
+      "id": "PRON-DIR-RU-01",
+      "objective_id": "OBJ-DIR-RU-01",
+      "text": "Где станция метро?"
+    },
+    {
+      "id": "PRON-DIR-RU-02",
+      "objective_id": "OBJ-DIR-RU-01",
+      "text": "Это далеко отсюда?"
+    }
+  ]
+}

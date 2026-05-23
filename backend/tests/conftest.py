@@ -11,6 +11,7 @@ Provides:
 
 from __future__ import annotations
 
+import os
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -18,6 +19,38 @@ from typing import Any
 from flask import Flask, session
 
 from backend.route_deps import RouteDeps
+
+
+class FakeAuditLogger:
+    """Captures audit calls for assertions; never raises.
+
+    Mirrors the public surface of `backend.services.audit.AuditLogger` used by
+    routes: `log(**kwargs)` for fail-soft view audits, and `build_audit_doc`
+    (delegated to the real class) for state-transition writes that batch
+    audit entries with the business write.
+    """
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    def log(self, **kwargs) -> str:
+        self.calls.append(kwargs)
+        return f"audit-{len(self.calls)}"
+
+    @staticmethod
+    def build_audit_doc(**kwargs) -> dict:
+        # Delegate to the real builder so callers get the same shape (and so
+        # tests inspecting batched audit docs see realistic structure).
+        from backend.services.audit import AuditLogger as _RealAuditLogger
+        return _RealAuditLogger.build_audit_doc(**kwargs)
+
+# Test-mode safety guard for the outbox writer. See
+# `backend/services/outbox.py:_OUTBOX_BLOCK_ENV_VAR` for the full rationale.
+# Set at conftest import time so every backend test inherits the protection
+# regardless of how it's invoked. Without this, any test that exercises a
+# route which calls `enqueue_outbox_email` against the prod-pointed
+# `database.get_db()` will write real outbox docs to production Firestore.
+os.environ.setdefault('LINGUAL_BLOCK_OUTBOX_WRITES', '1')
 from backend.services.membership_context import resolve_school_request_context
 
 
@@ -151,7 +184,6 @@ def make_assignment(
     assignment_id: str | None = None,
     org_id: str = "org-1",
     class_id: str = "class-1",
-    mapping_id: str = "mapping-1",
     title: str = "Practice 1",
     status: str = "published",
     task_type: str = "information_gap",
@@ -161,7 +193,6 @@ def make_assignment(
         "id": assignment_id or _next_id("assign"),
         "org_id": org_id,
         "class_id": class_id,
-        "mapping_id": mapping_id,
         "title": title,
         "description": extra.pop("description", ""),
         "status": status,
@@ -172,38 +203,13 @@ def make_assignment(
         "max_attempts": None,
         "success_criteria": [],
         "created_by_uid": extra.pop("created_by_uid", ""),
-        "created_at": datetime.now(UTC),
-        "updated_at": datetime.now(UTC),
-        **extra,
-    }
-
-
-def make_mapping(
-    mapping_id: str | None = None,
-    org_id: str = "org-1",
-    class_id: str = "class-1",
-    package_id: str = "ap-french-sample",
-    module_id: str = "mod-1",
-    **extra,
-) -> dict[str, Any]:
-    return {
-        "id": mapping_id or _next_id("mapping"),
-        "org_id": org_id,
-        "class_id": class_id,
-        "package_id": package_id,
-        "module_id": module_id,
-        "objective_ids": extra.pop("objective_ids", ["obj-1"]),
-        "situation_ids": extra.pop("situation_ids", ["sit-1"]),
+        # Direct scenario fields (C2 — curriculum_mappings is gone).
+        "instructions": extra.pop("instructions", "Default test instructions."),
+        "generated_scenario": extra.pop("generated_scenario", "Default test scenario."),
         "target_expressions": extra.pop("target_expressions", []),
+        "target_vocabulary": extra.pop("target_vocabulary", []),
         "focus_grammar": extra.pop("focus_grammar", []),
-        "allowed_context_tags": extra.pop("allowed_context_tags", []),
-        "feedback_policy": extra.pop("feedback_policy", {"mode": "balanced"}),
-        "scaffold_policy": extra.pop("scaffold_policy", {}),
-        "output_policy": extra.pop("output_policy", {}),
-        "modality_policy": extra.pop("modality_policy", {"mode": "hybrid"}),
-        "rubric_focus": extra.pop("rubric_focus", []),
         "teacher_notes": extra.pop("teacher_notes", ""),
-        "created_by_uid": extra.pop("created_by_uid", ""),
         "created_at": datetime.now(UTC),
         "updated_at": datetime.now(UTC),
         **extra,
@@ -378,13 +384,13 @@ class FakeDbBase:
         self.consent_events: list[dict] = []
         self.guardian_packets: dict[str, dict] = {}
         self.assignments: dict[str, dict] = {}
-        self.mappings: dict[str, dict] = {}
         self.practice_sessions: dict[str, dict] = {}
         self.learning_events: list[dict] = []
         self.deletion_requests: dict[str, dict] = {}
         self.deletion_execution_runs: dict[str, dict] = {}
         self.user_active_memberships: dict[str, str] = {}
         self._counters: dict[str, int] = {}
+        self.canvas_course_content: dict[str, dict] = {}
 
     def _next_id(self, prefix: str) -> str:
         self._counters[prefix] = self._counters.get(prefix, 0) + 1
@@ -394,6 +400,12 @@ class FakeDbBase:
 
     def set_user_last_active_membership(self, uid: str, membership_id: str):
         self.user_active_memberships[uid] = membership_id
+
+    def update_user_profile(self, uid: str, **_kwargs):
+        pass
+
+    def delete_school_creation_draft(self, uid: str):
+        pass
 
     def resolve_user_school_context(self, uid: str, preferred_active_membership_id: str | None = None):
         memberships = []
@@ -413,13 +425,43 @@ class FakeDbBase:
         memberships.sort(key=lambda m: m["id"])
         active_membership_id = preferred_active_membership_id or self.user_active_memberships.get(uid)
         active = next((m for m in memberships if m["id"] == active_membership_id), memberships[0] if memberships else None)
+        user = self.users.get(uid) or {}
+        lingual_admin = bool(user.get("lingual_admin")) or any(
+            (membership or {}).get("status") == "active"
+            and "lingual_admin" in ((membership or {}).get("roles") or [])
+            for membership in memberships
+        )
         return {
             "memberships": memberships,
             "active_membership": active,
             "active_membership_id": active.get("id") if active else None,
             "active_organization_id": active.get("orgId") if active else None,
             "active_roles": active.get("roles", []) if active else [],
+            "lingual_admin": lingual_admin,
         }
+
+    def create_school_request_with_onboarding(self, **kwargs):
+        # Mirrors database.create_school_request_with_onboarding: the duplicate
+        # invariant lives inside the "transaction" so concurrent submits can't
+        # both pass a non-atomic precheck. The route's outer precheck stays
+        # for a friendly 409; this is the correctness backstop.
+        from database import DuplicateSchoolRequestError
+        requester_uid = kwargs["requester_uid"]
+        for existing in (self.school_requests or {}).values():
+            if (
+                existing.get("requester_uid") == requester_uid
+                and existing.get("status") in ("pending", "approved")
+            ):
+                raise DuplicateSchoolRequestError(
+                    "You already have a pending or approved request."
+                )
+        self.update_user_profile(
+            requester_uid,
+            onboarding_state="awaiting_lingual",
+        )
+        request_id = self.create_school_request(**kwargs)
+        self.delete_school_creation_draft(requester_uid)
+        return request_id
 
     # -- Core CRUD --
 
@@ -466,8 +508,11 @@ class FakeDbBase:
         enr = self.enrollments.get(f"{class_id}_{student_uid}")
         return dict(enr) if enr else None
 
-    def list_class_enrollments(self, class_id: str):
-        return [dict(e) for e in self.enrollments.values() if e.get("class_id") == class_id and e.get("status") == "active"]
+    def list_class_enrollments(self, class_id: str, status: str = "active"):
+        return [
+            dict(e) for e in self.enrollments.values()
+            if e.get("class_id") == class_id and (not status or e.get("status") == status)
+        ]
 
     def deactivate_enrollment(self, class_id: str, student_uid: str):
         key = f"{class_id}_{student_uid}"
@@ -533,9 +578,64 @@ class FakeDbBase:
         a = self.assignments.get(assignment_id)
         return dict(a) if a else None
 
-    def create_assignment(self, **kwargs) -> str:
-        aid = self._next_id("assign")
-        self.assignments[aid] = {"id": aid, **kwargs, "created_at": datetime.now(UTC), "updated_at": datetime.now(UTC)}
+    def create_assignment(
+        self,
+        org_id,
+        class_id,
+        title='',
+        description='',
+        status='draft',
+        release_at='',
+        due_at='',
+        modality_override=None,
+        max_attempts=None,
+        task_type='decision_making',
+        success_criteria=None,
+        created_by_uid='',
+        assignment_id=None,
+        canvas_module_item_id='',
+        instructions='',
+        canvas_module_item_ref=None,
+        objectives=None,
+        target_expressions=None,
+        target_vocabulary=None,
+        focus_grammar=None,
+        generated_scenario='',
+        teacher_notes='',
+        target_language_intensity='mostly_target',
+    ) -> str:
+        aid = assignment_id or self._next_id("assign")
+        self.assignments[aid] = {
+            'id': aid,
+            'org_id': org_id,
+            'class_id': class_id,
+            'title': title,
+            'description': description or '',
+            'status': status,
+            'release_at': release_at or '',
+            'due_at': due_at or '',
+            'modality_override': modality_override or {},
+            'max_attempts': max_attempts,
+            'task_type': task_type,
+            'success_criteria': list(success_criteria or []),
+            'created_by_uid': created_by_uid,
+            'canvas_module_item_id': canvas_module_item_id or '',
+            'instructions': instructions or '',
+            'canvas_module_item_ref': canvas_module_item_ref,
+            'objectives': list(objectives or []),
+            'target_expressions': list(target_expressions or []),
+            'target_vocabulary': list(target_vocabulary or []),
+            'focus_grammar': list(focus_grammar or []),
+            'generated_scenario': generated_scenario or '',
+            'teacher_notes': teacher_notes or '',
+            'target_language_intensity': (
+                target_language_intensity
+                if target_language_intensity in ('target_only', 'mostly_target', 'bilingual_scaffold')
+                else 'mostly_target'
+            ),
+            'created_at': datetime.now(UTC),
+            'updated_at': datetime.now(UTC),
+        }
         return aid
 
     def list_class_assignments(self, class_id: str):
@@ -552,17 +652,16 @@ class FakeDbBase:
             results.append(dict(a))
         return results
 
-    def get_curriculum_mapping(self, mapping_id: str):
-        m = self.mappings.get(mapping_id)
-        return dict(m) if m else None
+    # -- Canvas course content --
 
-    def create_curriculum_mapping(self, **kwargs) -> str:
-        mid = self._next_id("mapping")
-        self.mappings[mid] = {"id": mid, **kwargs, "created_at": datetime.now(UTC), "updated_at": datetime.now(UTC)}
-        return mid
+    def get_canvas_course_content(self, content_id: str):
+        doc = self.canvas_course_content.get(content_id)
+        return dict(doc) if doc else None
 
-    def list_class_curriculum_mappings(self, class_id: str):
-        return [dict(m) for m in self.mappings.values() if m.get("class_id") == class_id]
+    def link_assignment_to_canvas_item(self, assignment_id: str, content_id: str, canvas_module_item_id: str):
+        asg = self.assignments.get(assignment_id)
+        if asg is not None:
+            asg['canvas_module_item_id'] = canvas_module_item_id
 
     # -- Practice sessions --
 
@@ -650,12 +749,20 @@ class FakeDbBase:
 def make_test_deps(
     db: FakeDbBase | None = None,
     package: dict | None = None,
+    audit_logger: Any = None,
 ) -> RouteDeps:
-    """Build a RouteDeps suitable for Flask test blueprints."""
+    """Build a RouteDeps suitable for Flask test blueprints.
+
+    `audit_logger` defaults to a `FakeAuditLogger` so route tests can assert
+    on audit calls without a Firestore mock. Pass an explicit instance to
+    pre-seed or inspect captured calls across multiple deps.
+    """
     if db is None:
         db = FakeDbBase()
     if package is None:
         package = SAMPLE_CURRICULUM_PACKAGE
+    if audit_logger is None:
+        audit_logger = FakeAuditLogger()
 
     def get_school_request_context():
         uid = (session.get("user") or {}).get("uid")
@@ -686,21 +793,34 @@ def make_test_deps(
         login_required=passthrough_login_required,
         get_user_proficiency_context=lambda: "",
         build_system_prompt=lambda _ctx: "",
-        load_sample_curriculum_package=lambda: package,
-        get_curriculum_practice_context=lambda module_id, situation_id: get_sample_curriculum_practice_context(module_id, situation_id),
-        build_curriculum_system_prompt=lambda **kw: "SYSTEM PROMPT PLACEHOLDER",
-        get_school_request_context=get_school_request_context,
+            get_school_request_context=get_school_request_context,
         set_active_school_membership=set_active_school_membership,
         allowed_learning_locales={"ko-KR", "es-ES", "fr-FR"},
         allowed_minigame_types={"listening_quiz", "grammar_challenge"},
         supported_ui_languages={"en", "ko"},
+        audit_logger=audit_logger,
     )
 
 
-def make_test_app(*blueprints) -> Flask:
-    """Create a Flask test app with the given blueprints registered."""
+def make_test_app(*blueprints, extra_blueprints=None) -> Flask:
+    """Create a Flask test app with the given blueprints registered.
+
+    Two calling styles are supported:
+        make_test_app(bp1, bp2, ...)                  # positional (legacy)
+        make_test_app(deps, extra_blueprints=[bp1])   # Plan 5 style
+
+    The first positional may be a `RouteDeps` (ignored — kept for the
+    Plan 5 smoke-test signature) or a Flask Blueprint.
+    """
     app = Flask(__name__)
     app.secret_key = "test-secret"
     for bp in blueprints:
+        if isinstance(bp, RouteDeps):
+            # Plan 5 callers pass deps positionally then list blueprints
+            # under `extra_blueprints=`. Skip — deps are already wired
+            # into the blueprints themselves.
+            continue
+        app.register_blueprint(bp)
+    for bp in (extra_blueprints or []):
         app.register_blueprint(bp)
     return app

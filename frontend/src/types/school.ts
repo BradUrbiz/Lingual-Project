@@ -35,6 +35,7 @@ export interface TeacherClassSummary {
   status: string;
   studentCount: number;
   assignmentCount?: number;
+  canvasLinked?: boolean;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
@@ -254,6 +255,26 @@ export interface ClassRosterStudent {
   joinSource?: string;
   enrolledAt?: string | null;
   status: string;
+  // Set true/false only when the class has a Canvas connection.
+  // Undefined when no Canvas connection exists for the class.
+  isOnCanvasRoster?: boolean;
+}
+
+export interface CanvasRosterGapEntry {
+  canvas_name: string;
+  canvas_email: string;
+  synced_at?: string | null;
+}
+
+export interface CanvasRosterGapSummary {
+  canvas_total: number;
+  joined: number;
+  not_joined: number;
+}
+
+export interface CanvasRosterGapResponse {
+  gap: CanvasRosterGapEntry[];
+  summary: CanvasRosterGapSummary | null;
 }
 
 // --- Org-wide compliance (school-wide admin tooling) ---
@@ -353,23 +374,7 @@ export interface DeletionRequestDetail {
 }
 
 // --- School requests (onboarding approval flow) ---
-
-export interface SchoolRequest {
-  id: string;
-  schoolName: string;
-  orgType: string;
-  websiteUrl: string;
-  canvasInstanceUrl: string;
-  requesterUid: string;
-  requesterEmail: string;
-  requesterName: string;
-  status: 'pending' | 'approved' | 'rejected';
-  reviewedByUid: string | null;
-  reviewedAt: string | null;
-  rejectionReason: string | null;
-  createdOrgId: string | null;
-  createdAt: string | null;
-}
+// SchoolRequest has moved to ./schoolRequest.ts (Plan 3 — wizard payload types).
 
 export interface TeacherInvitation {
   id: string;

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { computeRmsFromByteTimeDomain } from '@/components/avatar/rms';
 import type { AvatarDebugStats, AvatarDiagnostics, AvatarDirective } from '@/components/avatar/types';
 import api from '../api';
+import {
+  assistantPromptLikelyExpectsReply,
+  createEmptyRealtimeInputTurnMetrics,
+  shouldRespondToRealtimeTurn,
+} from './realtimeSpeechGate';
 import {
   buildBaseAvatarDiagnostics,
   parseAvatarDirectiveArguments,
@@ -41,7 +47,7 @@ interface UseRealtimeChatReturn {
   avatarDirectiveSource: 'directive' | 'fallback';
   avatarDiagnostics: AvatarDiagnostics;
   error: string | null;
-  connect: () => Promise<void>;
+  connect: (sessionParamsOverride?: RealtimeSessionParams) => Promise<void>;
   disconnect: () => void;
   startListening: () => void;
   stopListening: () => void;
@@ -108,7 +114,6 @@ const ASSISTANT_AUDIO_DONE_EVENTS = new Set([
 ]);
 
 const DIRECTIVE_TOOL_NAME = 'emit_avatar_directive';
-const REALTIME_MODEL = 'gpt-realtime-mini';
 
 function createEmptyAvatarDebugStats(): AvatarDebugStats {
   return {
@@ -159,9 +164,14 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const micAudioContextRef = useRef<AudioContext | null>(null);
+  const micSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micAnalyserRef = useRef<AnalyserNode | null>(null);
+  const micMeterFrameRef = useRef<number | null>(null);
   const finalizedItemsRef = useRef<Set<string>>(new Set());
   const messageContentRef = useRef<Map<string, string>>(new Map());
   const messageTimestampRef = useRef<Map<string, string>>(new Map());
+  const userTranscriptBufferRef = useRef<Map<string, string>>(new Map());
   const messageOrderRef = useRef<Map<string, number>>(new Map());
   const nextMessageOrderRef = useRef(0);
   const pendingUserOrderRef = useRef<number | null>(null);
@@ -171,7 +181,17 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const isListeningRef = useRef(false);
   const isSpeakingRef = useRef(false);
   const assistantTranscriptDeltaRef = useRef('');
+  const assistantTranscriptFinalRef = useRef('');
   const assistantSpeechStartedAtRef = useRef<number | null>(null);
+  const inputSpeechStartedAtRef = useRef<number | null>(null);
+  // Authoritative start timestamp for the current user input turn. Unlike
+  // `inputSpeechStartedAtRef`, this is NOT cleared by transcription.completed
+  // or transcription.failed, so `input_audio_buffer.speech_stopped` can still
+  // compute a non-zero duration even if the transcription result lands first.
+  // Reset to 0 by speech_started, so any consumer checking `> 0` knows whether
+  // a turn is in progress.
+  const currentTurnStartedAtRef = useRef<number>(0);
+  const currentInputTurnRef = useRef(createEmptyRealtimeInputTurnMetrics());
   const directiveResetTimeoutRef = useRef<number | null>(null);
   const directiveArgumentBufferRef = useRef<Map<string, string>>(new Map());
   const directiveCallRef = useRef<Map<string, { callId: string | null; name: string | null }>>(new Map());
@@ -220,6 +240,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     finalizedItemsRef.current.clear();
     messageContentRef.current.clear();
     messageTimestampRef.current.clear();
+    userTranscriptBufferRef.current.clear();
     messageOrderRef.current.clear();
     nextMessageOrderRef.current = 0;
     pendingUserOrderRef.current = null;
@@ -228,6 +249,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
 
   const resetAssistantPerformanceState = useCallback(() => {
     assistantTranscriptDeltaRef.current = '';
+    assistantTranscriptFinalRef.current = '';
     assistantSpeechStartedAtRef.current = null;
     setAssistantTranscriptDelta('');
     setAssistantTranscriptFinal('');
@@ -362,6 +384,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       const nextContent = upsertMessage(role, resolvedContent, resolvedItemId, 'replace', true);
       if (role === 'assistant') {
         assistantTranscriptDeltaRef.current = nextContent;
+        assistantTranscriptFinalRef.current = nextContent;
         setAssistantTranscriptDelta(nextContent);
         setAssistantTranscriptFinal(nextContent);
       }
@@ -373,7 +396,91 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     [adoptPendingMessageOrder, onMessageCallback, upsertMessage]
   );
 
+  const removeMessage = useCallback((itemId?: string) => {
+    if (!itemId) return;
+
+    finalizedItemsRef.current.delete(itemId);
+    userTranscriptBufferRef.current.delete(itemId);
+    messageContentRef.current.delete(itemId);
+    messageTimestampRef.current.delete(itemId);
+    messageOrderRef.current.delete(itemId);
+
+    setMessages((prev) => prev.filter((message) => message.id !== itemId));
+  }, []);
+
+  const ensureMicAnalyser = useCallback(async () => {
+    if (!mediaStreamRef.current) {
+      return null;
+    }
+
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) {
+      return null;
+    }
+
+    if (!micAudioContextRef.current) {
+      micAudioContextRef.current = new AudioContextCtor();
+    }
+
+    if (!micAnalyserRef.current) {
+      micAnalyserRef.current = micAudioContextRef.current.createAnalyser();
+      micAnalyserRef.current.fftSize = 1024;
+      micAnalyserRef.current.smoothingTimeConstant = 0.18;
+    }
+
+    if (!micSourceNodeRef.current) {
+      micSourceNodeRef.current = micAudioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
+      micSourceNodeRef.current.connect(micAnalyserRef.current);
+    }
+
+    if (micAudioContextRef.current.state === 'suspended') {
+      await micAudioContextRef.current.resume();
+    }
+
+    return micAnalyserRef.current;
+  }, []);
+
+  const stopMicMeter = useCallback(() => {
+    if (micMeterFrameRef.current !== null) {
+      window.cancelAnimationFrame(micMeterFrameRef.current);
+      micMeterFrameRef.current = null;
+    }
+  }, []);
+
+  const startMicMeter = useCallback(async () => {
+    const analyser = await ensureMicAnalyser();
+    if (!analyser) {
+      currentInputTurnRef.current.hadMicSignal = false;
+      return;
+    }
+
+    stopMicMeter();
+    const waveform = new Uint8Array(analyser.fftSize);
+
+    const tick = () => {
+      const currentAnalyser = micAnalyserRef.current;
+      if (!currentAnalyser) {
+        micMeterFrameRef.current = null;
+        return;
+      }
+
+      currentAnalyser.getByteTimeDomainData(waveform);
+      const rms = computeRmsFromByteTimeDomain(waveform);
+
+      if (inputSpeechStartedAtRef.current !== null) {
+        currentInputTurnRef.current.hadMicSignal = true;
+        currentInputTurnRef.current.peakRms = Math.max(currentInputTurnRef.current.peakRms, rms);
+      }
+
+      micMeterFrameRef.current = window.requestAnimationFrame(tick);
+    };
+
+    micMeterFrameRef.current = window.requestAnimationFrame(tick);
+  }, [ensureMicAnalyser, stopMicMeter]);
+
   const cleanupConnection = useCallback(() => {
+    stopMicMeter();
+
     if (dataChannelRef.current) {
       dataChannelRef.current.close();
       dataChannelRef.current = null;
@@ -387,6 +494,21 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
+    }
+
+    if (micSourceNodeRef.current) {
+      micSourceNodeRef.current.disconnect();
+      micSourceNodeRef.current = null;
+    }
+
+    if (micAnalyserRef.current) {
+      micAnalyserRef.current.disconnect();
+      micAnalyserRef.current = null;
+    }
+
+    if (micAudioContextRef.current) {
+      void micAudioContextRef.current.close().catch(() => undefined);
+      micAudioContextRef.current = null;
     }
 
     if (audioElementRef.current) {
@@ -403,6 +525,9 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     isSpeakingRef.current = false;
 
     currentResponseIdRef.current = null;
+    inputSpeechStartedAtRef.current = null;
+    currentInputTurnRef.current = createEmptyRealtimeInputTurnMetrics();
+    userTranscriptBufferRef.current.clear();
     directiveArgumentBufferRef.current.clear();
     directiveCallRef.current.clear();
     completedDirectiveCallsRef.current.clear();
@@ -413,7 +538,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     setAvatarDebugStats(createEmptyAvatarDebugStats());
     resetAssistantPerformanceState();
     clearAvatarDirective();
-  }, [clearAvatarDirective, resetAssistantPerformanceState]);
+  }, [clearAvatarDirective, resetAssistantPerformanceState, stopMicMeter]);
 
   const sendClientEvent = useCallback((payload: Record<string, unknown>) => {
     if (dataChannelRef.current?.readyState === 'open') {
@@ -433,6 +558,15 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const createRealtimeResponse = useCallback(() => {
     return sendClientEvent({ type: 'response.create' });
   }, [sendClientEvent]);
+
+  const deleteConversationItem = useCallback((itemId?: string) => {
+    if (!itemId) return false;
+    removeMessage(itemId);
+    return sendClientEvent({
+      type: 'conversation.item.delete',
+      item_id: itemId,
+    });
+  }, [removeMessage, sendClientEvent]);
 
   const cancelCurrentResponse = useCallback(() => {
     sendClientEvent({ type: 'response.cancel' });
@@ -648,19 +782,47 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
           break;
 
         case 'conversation.item.input_audio_transcription.delta':
-          appendTranscript('user', event.delta ?? event.transcript ?? '', itemId);
+          if (itemId) {
+            const previous = userTranscriptBufferRef.current.get(itemId) ?? '';
+            userTranscriptBufferRef.current.set(itemId, `${previous}${event.delta ?? event.transcript ?? ''}`);
+          }
           break;
 
         case 'conversation.item.input_audio_transcription.completed':
         case 'conversation.item.input_audio_transcription.done':
-          finalizeTranscript('user', event.transcript, itemId);
+          {
+            const resolvedTranscript = event.transcript ?? userTranscriptBufferRef.current.get(itemId ?? '') ?? '';
+            if (itemId) {
+              userTranscriptBufferRef.current.delete(itemId);
+            }
+
+            currentInputTurnRef.current.durationMs =
+              inputSpeechStartedAtRef.current === null
+                ? currentInputTurnRef.current.durationMs
+                : Math.max(0, Math.round(performance.now() - inputSpeechStartedAtRef.current));
+            inputSpeechStartedAtRef.current = null;
+
+            if (shouldRespondToRealtimeTurn(resolvedTranscript, currentInputTurnRef.current)) {
+              finalizeTranscript('user', resolvedTranscript, itemId);
+              createRealtimeResponse();
+            } else {
+              pendingUserOrderRef.current = null;
+              deleteConversationItem(itemId);
+            }
+          }
           break;
 
         case 'conversation.item.input_audio_transcription.failed':
           pendingUserOrderRef.current = null;
+          inputSpeechStartedAtRef.current = null;
+          currentInputTurnRef.current = createEmptyRealtimeInputTurnMetrics();
           if (event.error?.message) {
             setError(event.error.message);
           }
+          break;
+
+        case 'conversation.item.deleted':
+          removeMessage(itemId);
           break;
 
         case 'input_audio_buffer.speech_started':
@@ -668,6 +830,15 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
           pendingDirectiveContinuationRef.current = false;
           pendingSpeechTurnHasDirectiveRef.current = false;
           currentSpeechTurnCountedRef.current = false;
+          {
+            const speechStartedAt = performance.now();
+            inputSpeechStartedAtRef.current = speechStartedAt;
+            currentTurnStartedAtRef.current = speechStartedAt;
+          }
+          currentInputTurnRef.current = {
+            ...createEmptyRealtimeInputTurnMetrics(),
+            assistantPromptedUser: assistantPromptLikelyExpectsReply(assistantTranscriptFinalRef.current),
+          };
           isListeningRef.current = true;
           setIsListening(true);
           resetAssistantPerformanceState();
@@ -682,6 +853,18 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
 
         case 'input_audio_buffer.speech_stopped':
           reserveMessageOrder(undefined, itemId);
+          {
+            const computedDuration = currentTurnStartedAtRef.current > 0
+              ? Math.max(0, Math.round(performance.now() - currentTurnStartedAtRef.current))
+              : 0;
+            // Prefer the larger of the computed duration and whatever
+            // transcription.completed may have already recorded, so out-of-order
+            // events never drop the duration back to 0.
+            currentInputTurnRef.current.durationMs = Math.max(
+              currentInputTurnRef.current.durationMs,
+              computedDuration,
+            );
+          }
           isListeningRef.current = false;
           setIsListening(false);
           flushQueuedAvatarContexts();
@@ -719,9 +902,12 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       clearAvatarDirective,
       clearOutputAudioBuffer,
       completeDirectiveToolCall,
+      createRealtimeResponse,
+      deleteConversationItem,
       finalizeTranscript,
       flushQueuedAvatarContexts,
       maybeContinueAfterDirectiveTool,
+      removeMessage,
       reserveMessageOrder,
       reservePendingMessageOrder,
       resetAssistantPerformanceState,
@@ -730,13 +916,13 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     ]
   );
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (sessionParamsOverride?: RealtimeSessionParams) => {
     cleanupConnection();
 
     try {
       setError(null);
 
-      const tokenResponse = await api.post('/realtime/session', sessionParams ?? {});
+      const tokenResponse = await api.post('/realtime/session', sessionParamsOverride ?? sessionParams ?? {});
       const { client_secret } = tokenResponse.data;
 
       if (!client_secret) {
@@ -758,6 +944,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
+      await startMicMeter();
 
       stream.getTracks().forEach((track) => {
         pc.addTrack(track, stream);
@@ -791,7 +978,6 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       const connectResponse = await api.post('/realtime/connect', {
         offerSdp: offer.sdp,
         clientSecret: client_secret,
-        model: REALTIME_MODEL,
       });
 
       const answerSdp = connectResponse.data?.answerSdp;
@@ -809,7 +995,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       setError(message);
       console.error('Realtime connection error:', err);
     }
-  }, [cleanupConnection, flushQueuedAvatarContexts, handleServerEvent, sessionParams]);
+  }, [cleanupConnection, flushQueuedAvatarContexts, handleServerEvent, sessionParams, startMicMeter]);
 
   const disconnect = useCallback(() => {
     cleanupConnection();
@@ -833,6 +1019,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     setMessages([]);
     resetMessageTracking();
     resetAssistantPerformanceState();
+    inputSpeechStartedAtRef.current = null;
+    currentInputTurnRef.current = createEmptyRealtimeInputTurnMetrics();
     directiveArgumentBufferRef.current.clear();
     directiveCallRef.current.clear();
     completedDirectiveCallsRef.current.clear();

@@ -24,17 +24,17 @@ interface ModuleGroup {
 
 export function CanvasModuleView({
   items,
-  canvasInstanceUrl: _,
   linkedAssignments = {},
   onLaunchAssignment,
   isTeacherView = false,
   onCreatePractice,
 }: Props) {
   const modules = groupByModule(items);
-  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
+  // Track collapsed modules so synced content is visible by default.
+  const [collapsedModules, setCollapsedModules] = useState<Set<string>>(new Set());
 
   const toggleModule = (moduleId: string) => {
-    setExpandedModules((prev) => {
+    setCollapsedModules((prev) => {
       const next = new Set(prev);
       if (next.has(moduleId)) next.delete(moduleId);
       else next.add(moduleId);
@@ -49,7 +49,7 @@ export function CanvasModuleView({
   return (
     <div className="space-y-3" data-testid="canvas-module-view">
       {modules.map((mod) => {
-        const isExpanded = expandedModules.has(mod.moduleId);
+        const isExpanded = !collapsedModules.has(mod.moduleId);
         return (
           <div key={mod.moduleId} className="rounded-xl border-2 border-border">
             <button
@@ -161,5 +161,7 @@ function groupByModule(items: CanvasCourseContentItem[]): ModuleGroup[] {
     }
     map[item.canvasModuleId].items.push(item);
   }
-  return Object.values(map).sort((a, b) => b.position - a.position);
+  // Sort ascending so Canvas module position 1 renders before position 2,
+  // matching the order students see in Canvas itself.
+  return Object.values(map).sort((a, b) => a.position - b.position);
 }

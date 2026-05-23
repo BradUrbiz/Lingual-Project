@@ -1,25 +1,49 @@
-import { useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import * as Tabs from '@radix-ui/react-tabs';
-import { User, Bell, Shield, Lock, Smartphone, Settings } from 'lucide-react';
+import {
+  AlertCircle,
+  Bell,
+  ChevronRight,
+  KeyRound,
+  Lock,
+  Mail,
+  Mic,
+  Settings,
+  Shield,
+  Smartphone,
+  User,
+} from 'lucide-react';
 import { clsx } from 'clsx';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { getUserProfile, updateProfile } from '@/api/user';
+import { getStudentCompliance } from '@/api/voiceConsent';
+import { Alert, AlertDescription, Badge, Button } from '@/components/ui';
 import type { LearningLocale, UserProfile } from '@/types';
+import type { StudentComplianceRecord } from '@/types/school';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useLearningLocale } from '@/contexts/LearningLocaleContext';
 import { DEFAULT_LEARNING_LOCALE, LEARNING_LOCALES } from '@/lib/learningLocales';
 
 export function AppSettingsPage() {
   const { t } = useLanguage();
-  const { user } = useAuth();
+  const { user, changePassword, sendPasswordReset } = useAuth();
+  const navigate = useNavigate();
   const { learningLocale, setLearningLocale } = useLearningLocale();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [selectedLocale, setSelectedLocale] = useState<LearningLocale>(learningLocale);
+  const [compliance, setCompliance] = useState<StudentComplianceRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -41,6 +65,23 @@ export function AppSettingsPage() {
 
     loadProfile();
   }, [user?.name, t, learningLocale]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const record = await getStudentCompliance();
+        if (active) setCompliance(record);
+      } catch (err) {
+        // Silent: students not in a school org get 400 here. Fine to skip.
+        if (active) setCompliance(null);
+        console.debug('compliance fetch skipped:', err);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSave = async () => {
     if (!profile) return;
@@ -73,6 +114,64 @@ export function AppSettingsPage() {
       toast.error(t('app.settings.toast.saveError'));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePasswordChange = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPasswordError(null);
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordError(t('app.settings.password.error.required'));
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordError(t('app.settings.password.error.tooShort'));
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError(t('app.settings.password.error.mismatch'));
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      toast.success(t('app.settings.password.toast.changed'));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : t('app.settings.password.toast.changeError');
+      setPasswordError(message);
+      toast.error(message);
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    setPasswordError(null);
+
+    if (!user?.email) {
+      setPasswordError(t('app.settings.password.error.noEmail'));
+      return;
+    }
+
+    setIsSendingReset(true);
+    try {
+      await sendPasswordReset(user.email);
+      toast.success(t('app.settings.password.toast.resetSent'));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : t('app.settings.password.toast.resetError');
+      setPasswordError(message);
+      toast.error(message);
+    } finally {
+      setIsSendingReset(false);
     }
   };
 
@@ -278,39 +377,171 @@ export function AppSettingsPage() {
               </div>
 
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 border-2 border-border rounded-xl">
-                  <span className="font-bold text-foreground">
-                    {t('app.settings.privacy.audio')}
-                  </span>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      defaultChecked
-                      className="sr-only peer"
-                      aria-label={t('app.settings.privacy.audio')}
-                    />
-                    <div className="w-12 h-7 bg-secondary border-2 border-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-foreground after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-card after:border-2 after:border-border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-success peer-checked:border-foreground"></div>
-                  </label>
-                </div>
-                <p className="text-sm text-muted-foreground ml-0">
-                  {t('app.settings.privacy.audioNote')}
+                <button
+                  type="button"
+                  onClick={() => navigate('/app/consent/voice')}
+                  className="flex w-full items-center justify-between gap-3 rounded-xl border-2 border-border p-4 text-left transition-colors hover:border-foreground"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-primary/10 text-primary">
+                      <Mic size={18} strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <div className="font-bold text-foreground">Voice practice consent</div>
+                      <div className="text-xs text-muted-foreground">
+                        Manage whether your audio is sent to the AI tutor.
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {compliance ? (
+                      <Badge
+                        variant={
+                          compliance.voiceConsentStatus === 'granted'
+                            ? 'success'
+                            : compliance.voiceConsentStatus === 'revoked'
+                              ? 'destructive'
+                              : 'outline'
+                        }
+                        size="sm"
+                      >
+                        {compliance.voiceConsentStatus}
+                      </Badge>
+                    ) : null}
+                    <ChevronRight size={18} className="text-muted-foreground" />
+                  </div>
+                </button>
+
+                <p className="text-sm text-muted-foreground">
+                  <Link to="/compliance" className="underline">
+                    See Lingual's full data policy
+                  </Link>{' '}
+                  for retention, who can see what, and how deletion works.
                 </p>
               </div>
 
             </div>
           </Tabs.Content>
 
-          {/* Password Tab (Placeholder) */}
+          {/* Password Tab */}
           <Tabs.Content
             value="password"
-            className="outline-none animate-in fade-in slide-in-from-right-4 duration-300"
+            className="space-y-6 outline-none animate-in fade-in slide-in-from-right-4 duration-300"
           >
-            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-              <div className="w-16 h-16 rounded-2xl bg-secondary border-2 border-border flex items-center justify-center mb-4">
-                <Lock size={32} strokeWidth={2} />
-              </div>
-              <p className="font-medium">{t('app.settings.password.placeholder')}</p>
+            <div>
+              <h2 className="mb-2 text-lg font-display font-bold text-foreground">
+                {t('app.settings.password.title')}
+              </h2>
+              <p className="text-muted-foreground text-sm">
+                {t('app.settings.password.subtitle')}
+              </p>
             </div>
+
+            {passwordError && (
+              <Alert variant="destructive">
+                <AlertCircle size={18} strokeWidth={2.5} />
+                <AlertDescription>{passwordError}</AlertDescription>
+              </Alert>
+            )}
+
+            <section className="rounded-2xl border-2 border-border bg-secondary/40 p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex gap-4">
+                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border-2 border-border bg-card text-primary">
+                    <Mail size={20} strokeWidth={2.5} />
+                  </div>
+                  <div>
+                    <h3 className="font-display text-base font-bold text-foreground">
+                      {t('app.settings.password.resetTitle')}
+                    </h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t('app.settings.password.resetSubtitle')}
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-foreground">{user?.email}</p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  loading={isSendingReset}
+                  disabled={!user?.email || isSendingReset}
+                  onClick={handlePasswordReset}
+                  className="w-full sm:w-auto"
+                >
+                  {t('app.settings.password.reset')}
+                </Button>
+              </div>
+            </section>
+
+            <form
+              onSubmit={handlePasswordChange}
+              className="space-y-5 rounded-2xl border-2 border-border p-5"
+            >
+              <div className="flex gap-4">
+                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border-2 border-border bg-primary/10 text-primary">
+                  <KeyRound size={20} strokeWidth={2.5} />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-bold text-foreground">
+                    {t('app.settings.password.changeTitle')}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {t('app.settings.password.changeSubtitle')}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="settings-current-password" className="text-sm font-bold text-foreground">
+                  {t('app.settings.password.current')}
+                </label>
+                <input
+                  id="settings-current-password"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  autoComplete="current-password"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-border bg-card text-foreground font-medium placeholder:text-muted-foreground focus:border-primary focus:outline-none transition-all"
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label htmlFor="settings-new-password" className="text-sm font-bold text-foreground">
+                    {t('app.settings.password.new')}
+                  </label>
+                  <input
+                    id="settings-new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    autoComplete="new-password"
+                    minLength={6}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-border bg-card text-foreground font-medium placeholder:text-muted-foreground focus:border-primary focus:outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="settings-confirm-password" className="text-sm font-bold text-foreground">
+                    {t('app.settings.password.confirm')}
+                  </label>
+                  <input
+                    id="settings-confirm-password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    autoComplete="new-password"
+                    minLength={6}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-border bg-card text-foreground font-medium placeholder:text-muted-foreground focus:border-primary focus:outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button type="submit" loading={isChangingPassword} disabled={isChangingPassword}>
+                  {t('app.settings.password.change')}
+                </Button>
+              </div>
+            </form>
           </Tabs.Content>
 
           {/* Devices Tab (Placeholder) */}

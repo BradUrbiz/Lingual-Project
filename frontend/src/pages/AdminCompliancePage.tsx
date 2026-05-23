@@ -39,14 +39,11 @@ const CONSENT_FILTER_OPTIONS = [
   { value: 'unknown_consent', label: 'Unknown consent' },
 ];
 
-type BulkMinorValue = 'unchanged' | 'minor' | 'adult';
 type BulkConsentValue = 'unchanged' | ConsentStatus;
 type BulkTextAllowedValue = 'unchanged' | 'allowed' | 'blocked';
 type BulkRetentionValue = 'unchanged' | 'standard_school' | 'no_raw_audio';
 
 const DEFAULT_BULK_FORM = {
-  isMinor: 'unchanged' as BulkMinorValue,
-  guardianConsentStatus: 'unchanged' as BulkConsentValue,
   voiceConsentStatus: 'unchanged' as BulkConsentValue,
   textAllowed: 'unchanged' as BulkTextAllowedValue,
   retentionPolicyId: 'unchanged' as BulkRetentionValue,
@@ -55,10 +52,6 @@ const DEFAULT_BULK_FORM = {
 
 function buildBulkUpdates(form: typeof DEFAULT_BULK_FORM): UpdateStudentCompliancePayload {
   const updates: UpdateStudentCompliancePayload = {};
-  if (form.isMinor === 'minor') updates.isMinor = true;
-  else if (form.isMinor === 'adult') updates.isMinor = false;
-  if (form.guardianConsentStatus !== 'unchanged')
-    updates.guardianConsentStatus = form.guardianConsentStatus;
   if (form.voiceConsentStatus !== 'unchanged')
     updates.voiceConsentStatus = form.voiceConsentStatus;
   if (form.textAllowed === 'allowed') updates.textAllowed = true;
@@ -272,39 +265,6 @@ function RosterSection({
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <label className="space-y-1 text-xs font-medium text-gray-600">
-              <span>Student status</span>
-              <select
-                value={bulkForm.isMinor}
-                onChange={(e) =>
-                  setBulkForm((f) => ({ ...f, isMinor: e.target.value as BulkMinorValue }))
-                }
-                className={selectStyle + ' w-full'}
-              >
-                <option value="unchanged">Leave unchanged</option>
-                <option value="minor">Set to minor</option>
-                <option value="adult">Set to adult</option>
-              </select>
-            </label>
-            <label className="space-y-1 text-xs font-medium text-gray-600">
-              <span>Guardian consent</span>
-              <select
-                value={bulkForm.guardianConsentStatus}
-                onChange={(e) =>
-                  setBulkForm((f) => ({
-                    ...f,
-                    guardianConsentStatus: e.target.value as BulkConsentValue,
-                  }))
-                }
-                className={selectStyle + ' w-full'}
-              >
-                <option value="unchanged">Leave unchanged</option>
-                <option value="unknown">Unknown</option>
-                <option value="granted">Granted</option>
-                <option value="revoked">Revoked</option>
-                <option value="not_required">Not required</option>
-              </select>
-            </label>
-            <label className="space-y-1 text-xs font-medium text-gray-600">
               <span>Voice consent</span>
               <select
                 value={bulkForm.voiceConsentStatus}
@@ -450,13 +410,6 @@ function RosterSection({
                       ) : (
                         <Badge className="bg-red-100 text-red-800">Voice Blocked</Badge>
                       )}
-                      {student.compliance.isMinor && (
-                        <Badge className="bg-purple-100 text-purple-800">Minor</Badge>
-                      )}
-                      {student.compliance.guardianConsentStatus === 'unknown' &&
-                        student.compliance.isMinor && (
-                          <Badge className="bg-amber-100 text-amber-800">Guardian Needed</Badge>
-                        )}
                     </div>
                   </div>
                   {student.blockedReasons.length > 0 && (
@@ -466,10 +419,7 @@ function RosterSection({
                       ))}
                     </div>
                   )}
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-500 sm:grid-cols-4">
-                    <span>
-                      Guardian: <strong>{student.compliance.guardianConsentStatus}</strong>
-                    </span>
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-500 sm:grid-cols-3">
                     <span>
                       Voice: <strong>{student.compliance.voiceConsentStatus}</strong>
                     </span>

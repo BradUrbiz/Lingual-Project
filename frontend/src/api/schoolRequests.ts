@@ -1,14 +1,13 @@
 import api from './index';
-import type { SchoolRequest, TeacherInvitation } from '@/types';
+import type { SchoolRequest } from '@/types';
+import type {
+  WizardSubmitPayload,
+  WizardDraft,
+} from '@/types/schoolRequest';
 
 // --- School request (teacher submits, Lingual admin reviews) ---
 
-export interface SubmitSchoolRequestPayload {
-  schoolName: string;
-  orgType: string;
-  websiteUrl?: string;
-  canvasInstanceUrl?: string;
-}
+export type SubmitSchoolRequestPayload = WizardSubmitPayload;
 
 export const submitSchoolRequest = async (
   payload: SubmitSchoolRequestPayload,
@@ -25,6 +24,24 @@ export const getMySchoolRequest = async (): Promise<SchoolRequest | null> => {
     '/school-requests/mine',
   );
   return response.data.request;
+};
+
+export const cancelMySchoolRequest = async (): Promise<void> => {
+  await api.delete('/school-requests/mine');
+};
+
+export const getSchoolRequestDraft = async (): Promise<WizardDraft | null> => {
+  const response = await api.get<{ success: boolean; draft: WizardDraft | null }>(
+    '/school-requests/draft',
+  );
+  return response.data.draft;
+};
+
+export const saveSchoolRequestDraft = async (input: {
+  currentStep: 1 | 2 | 3 | 4;
+  draftPayload: Partial<WizardSubmitPayload>;
+}): Promise<void> => {
+  await api.patch('/school-requests/draft', input);
 };
 
 // --- Admin review ---
@@ -51,11 +68,12 @@ export const approveSchoolRequest = async (
 
 export const rejectSchoolRequest = async (
   id: string,
-  reason?: string,
+  reason: string,
+  category: string,
 ): Promise<SchoolRequest> => {
   const response = await api.post<{ success: boolean; request: SchoolRequest }>(
     `/admin/school-requests/${id}/reject`,
-    { reason },
+    { reason, category },
   );
   return response.data.request;
 };
@@ -86,55 +104,3 @@ export const deactivateTeacherInviteCode = async (): Promise<void> => {
   await api.delete('/schools/teacher-invite-code');
 };
 
-// --- Teacher invitations (teacher applies, school admin reviews) ---
-
-export const listTeacherInvitations = async (
-  status?: string,
-): Promise<TeacherInvitation[]> => {
-  const params = status ? { status } : undefined;
-  const response = await api.get<{ success: boolean; invitations: TeacherInvitation[] }>(
-    '/schools/teacher-invitations',
-    { params },
-  );
-  return response.data.invitations;
-};
-
-export const approveTeacherInvitation = async (
-  id: string,
-): Promise<TeacherInvitation> => {
-  const response = await api.post<{ success: boolean; invitation: TeacherInvitation }>(
-    `/schools/teacher-invitations/${id}/approve`,
-  );
-  return response.data.invitation;
-};
-
-export const rejectTeacherInvitation = async (
-  id: string,
-): Promise<TeacherInvitation> => {
-  const response = await api.post<{ success: boolean; invitation: TeacherInvitation }>(
-    `/schools/teacher-invitations/${id}/reject`,
-  );
-  return response.data.invitation;
-};
-
-// --- Join school as teacher ---
-
-export interface JoinSchoolAsTeacherResult {
-  invitationId: string;
-  orgName: string;
-  status: string;
-}
-
-export const joinSchoolAsTeacher = async (
-  inviteCode: string,
-): Promise<JoinSchoolAsTeacherResult> => {
-  const response = await api.post<{ success: boolean } & JoinSchoolAsTeacherResult>(
-    '/schools/join-as-teacher',
-    { inviteCode },
-  );
-  return {
-    invitationId: response.data.invitationId,
-    orgName: response.data.orgName,
-    status: response.data.status,
-  };
-};

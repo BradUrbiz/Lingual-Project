@@ -18,6 +18,7 @@ _LOCALE_LABELS = {
     "fr-FR": "French",
     "es-ES": "Spanish",
     "ru-RU": "Russian",
+    "he-IL": "Hebrew",
     "en-US": "English",
 }
 
@@ -34,9 +35,9 @@ def generate_canvas_practice(
 ) -> dict[str, Any]:
     """Call GPT to generate a speaking practice config from Canvas item content.
 
-    Returns a dict with keys: scenario, target_expressions, focus_grammar,
-    success_criteria, task_type, suggested_title, suggested_description,
-    teacher_notes.
+    Returns a dict with keys: scenario, target_expressions,
+    target_vocabulary, focus_grammar, success_criteria, suggested_title,
+    suggested_description, teacher_notes.
     """
     target_language = _LOCALE_LABELS.get(class_learning_locale, class_learning_locale)
 
@@ -47,9 +48,9 @@ Given a Canvas course item (title, type, and optionally its description), design
 Return a JSON object with exactly these keys:
 - "scenario": A 2-3 sentence immersive scenario description that sets the scene for speaking practice. Write it in English as instructions for the AI tutor.
 - "target_expressions": An array of 3-5 key {target_language} expressions/phrases students should practice using.
+- "target_vocabulary": An array of 5-8 individual {target_language} vocabulary words students should practice using.
 - "focus_grammar": An array of 2-3 grammar points relevant to the scenario.
 - "success_criteria": An array of 2-4 success criteria for evaluating the practice.
-- "task_type": One of "information_gap", "opinion_gap", or "decision_making" — pick the best fit for the content.
 - "suggested_title": A concise human-friendly title for the assignment.
 - "suggested_description": A 1-2 sentence description of what students will practice.
 - "teacher_notes": Brief notes for the teacher about pedagogical intent.
@@ -95,9 +96,9 @@ Return only the JSON object."""
     return {
         "scenario": str(parsed.get("scenario", "")),
         "target_expressions": _to_string_list(parsed.get("target_expressions", [])),
+        "target_vocabulary": _to_string_list(parsed.get("target_vocabulary", [])),
         "focus_grammar": _to_string_list(parsed.get("focus_grammar", [])),
         "success_criteria": _to_string_list(parsed.get("success_criteria", [])),
-        "task_type": _validate_task_type(parsed.get("task_type", "information_gap")),
         "suggested_title": str(parsed.get("suggested_title", f"Practice: {item_title}")),
         "suggested_description": str(parsed.get("suggested_description", "")),
         "teacher_notes": str(parsed.get("teacher_notes", "")),
@@ -108,9 +109,3 @@ def _to_string_list(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(v) for v in value if v]
     return []
-
-
-def _validate_task_type(value: Any) -> str:
-    valid = {"information_gap", "opinion_gap", "decision_making"}
-    s = str(value)
-    return s if s in valid else "information_gap"

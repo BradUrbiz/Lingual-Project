@@ -1,28 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { TEACHER_JOIN_ORG_ROUTE } from '@/lib/homeRoutes';
 import {
   AlertTriangle,
   BookOpen,
   CalendarClock,
-  Check,
   CheckCircle2,
   ClipboardCopy,
   Filter,
   GraduationCap,
   Loader2,
   Plus,
+  RefreshCw,
   School,
   ShieldCheck,
   Trash2,
   Link as LinkIcon,
   UserPlus,
   Users,
-  X,
 } from 'lucide-react';
 import {
   Alert,
   AlertDescription,
-  Badge,
   Button,
   Card,
   Dialog,
@@ -41,24 +40,27 @@ import {
   deactivateClassJoinCode,
   getClassRoster,
   removeStudentFromClass,
+  getClassCanvasRosterGap,
 } from '@/api/teacher';
 import {
   generateTeacherInviteCode,
   getTeacherInviteCode,
   deactivateTeacherInviteCode,
-  listTeacherInvitations,
-  approveTeacherInvitation,
-  rejectTeacherInvitation,
 } from '@/api/schoolRequests';
 import type { TeacherInviteCodeData } from '@/api/schoolRequests';
+import { PendingTeacherRequestsSection } from '@/components/teacher/PendingTeacherRequestsSection';
+import { getLtiPlatform, registerLtiPlatform, deleteLtiPlatform } from '@/api/lti';
+import type { LtiPlatformConfig } from '@/api/lti';
 import { useMembership } from '@/contexts/MembershipContext';
+import { LEARNING_LOCALES } from '@/lib/learningLocales';
 import { OnboardingHint } from '@/components/ui/OnboardingHint';
 import type {
   ClassJoinCodeData,
   ClassRosterStudent,
   CreateTeacherClassPayload,
   TeacherDashboardData,
-  TeacherInvitation,
+  CanvasRosterGapEntry,
+  CanvasRosterGapSummary,
 } from '@/types';
 
 const DEFAULT_CLASS_FORM: CreateTeacherClassPayload = {
@@ -68,12 +70,6 @@ const DEFAULT_CLASS_FORM: CreateTeacherClassPayload = {
   gradeBand: '',
   learningLocale: 'ko-KR',
 };
-
-const LOCALE_OPTIONS = [
-  { value: 'ko-KR', label: 'Korean (Korea)' },
-  { value: 'es-ES', label: 'Spanish (Spain)' },
-  { value: 'fr-FR', label: 'French (France)' },
-];
 
 export function TeacherDashboardPage() {
   const navigate = useNavigate();
@@ -100,13 +96,33 @@ export function TeacherDashboardPage() {
   const [rosterLoading, setRosterLoading] = useState(false);
   const [removingUid, setRemovingUid] = useState<string | null>(null);
 
+  // Canvas roster gap state
+  const [canvasRosterGap, setCanvasRosterGap] = useState<CanvasRosterGapEntry[]>([]);
+  const [canvasRosterSummary, setCanvasRosterSummary] =
+    useState<CanvasRosterGapSummary | null>(null);
+
+  // Tracks the class whose roster is currently being fetched, so an
+  // in-flight fetch for class A doesn't overwrite state after the teacher
+  // has already switched to class B.
+  const activeRosterClassIdRef = useRef<string | null>(null);
+
   // Team section state (school_admin only)
   const [teacherInviteCode, setTeacherInviteCode] = useState<TeacherInviteCodeData | null>(null);
   const [teacherInviteCodeLoading, setTeacherInviteCodeLoading] = useState(false);
   const [teacherInviteCodeCopied, setTeacherInviteCodeCopied] = useState(false);
-  const [pendingInvitations, setPendingInvitations] = useState<TeacherInvitation[]>([]);
-  const [pendingInvitationsLoading, setPendingInvitationsLoading] = useState(false);
-  const [processingInvitationId, setProcessingInvitationId] = useState<string | null>(null);
+
+  // LTI configuration state (school_admin only)
+  const [ltiPlatform, setLtiPlatform] = useState<LtiPlatformConfig | null>(null);
+  const [ltiLoading, setLtiLoading] = useState(false);
+  const [ltiSaving, setLtiSaving] = useState(false);
+  const [ltiForm, setLtiForm] = useState({
+    issuer: '',
+    clientId: '',
+    deploymentId: '',
+    authLoginUrl: '',
+    authTokenUrl: '',
+    keySetUrl: '',
+  });
 
   const loadDashboard = async () => {
     try {
@@ -203,16 +219,31 @@ export function TeacherDashboardPage() {
   // ── Roster handlers ───────────────────────────────────────────────
 
   const openRosterDialog = async (classId: string) => {
+    activeRosterClassIdRef.current = classId;
     setRosterClassId(classId);
     setRoster([]);
+    setCanvasRosterGap([]);
+    setCanvasRosterSummary(null);
     setRosterLoading(true);
     try {
-      const students = await getClassRoster(classId);
+      const [students, gapResponse] = await Promise.all([
+        getClassRoster(classId),
+        getClassCanvasRosterGap(classId),
+      ]);
+      // Bail if the teacher clicked a different class's roster button
+      // before this fetch resolved — applying stale data would show
+      // class A's roster under class B's dialog title.
+      if (activeRosterClassIdRef.current !== classId) return;
       setRoster(students);
+      setCanvasRosterGap(gapResponse.gap);
+      setCanvasRosterSummary(gapResponse.summary);
     } catch (err) {
+      if (activeRosterClassIdRef.current !== classId) return;
       setError(err instanceof Error ? err.message : 'Failed to load roster.');
     } finally {
-      setRosterLoading(false);
+      if (activeRosterClassIdRef.current === classId) {
+        setRosterLoading(false);
+      }
     }
   };
 
@@ -235,7 +266,6 @@ export function TeacherDashboardPage() {
   const loadTeamData = useCallback(async () => {
     if (!isSchoolAdmin) return;
     setTeacherInviteCodeLoading(true);
-    setPendingInvitationsLoading(true);
     try {
       const code = await getTeacherInviteCode();
       setTeacherInviteCode(code);
@@ -244,13 +274,15 @@ export function TeacherDashboardPage() {
     } finally {
       setTeacherInviteCodeLoading(false);
     }
+    // Load LTI platform config
+    setLtiLoading(true);
     try {
-      const invitations = await listTeacherInvitations('pending');
-      setPendingInvitations(invitations);
+      const platform = await getLtiPlatform();
+      setLtiPlatform(platform);
     } catch {
-      setPendingInvitations([]);
+      setLtiPlatform(null);
     } finally {
-      setPendingInvitationsLoading(false);
+      setLtiLoading(false);
     }
   }, [isSchoolAdmin]);
 
@@ -288,27 +320,31 @@ export function TeacherDashboardPage() {
     setTimeout(() => setTeacherInviteCodeCopied(false), 2000);
   };
 
-  const handleApproveInvitation = async (invitationId: string) => {
-    setProcessingInvitationId(invitationId);
+  const handleRegisterLtiPlatform = async () => {
+    setLtiSaving(true);
+    setError(null);
     try {
-      await approveTeacherInvitation(invitationId);
-      setPendingInvitations((prev) => prev.filter((inv) => inv.id !== invitationId));
+      await registerLtiPlatform(ltiForm);
+      const platform = await getLtiPlatform();
+      setLtiPlatform(platform);
+      setLtiForm({ issuer: '', clientId: '', deploymentId: '', authLoginUrl: '', authTokenUrl: '', keySetUrl: '' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to approve invitation.');
+      setError(err instanceof Error ? err.message : 'Failed to register LTI platform.');
     } finally {
-      setProcessingInvitationId(null);
+      setLtiSaving(false);
     }
   };
 
-  const handleRejectInvitation = async (invitationId: string) => {
-    setProcessingInvitationId(invitationId);
+  const handleRemoveLtiPlatform = async () => {
+    setLtiSaving(true);
+    setError(null);
     try {
-      await rejectTeacherInvitation(invitationId);
-      setPendingInvitations((prev) => prev.filter((inv) => inv.id !== invitationId));
+      await deleteLtiPlatform();
+      setLtiPlatform(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reject invitation.');
+      setError(err instanceof Error ? err.message : 'Failed to remove LTI platform.');
     } finally {
-      setProcessingInvitationId(null);
+      setLtiSaving(false);
     }
   };
 
@@ -343,8 +379,8 @@ export function TeacherDashboardPage() {
         <Alert variant="destructive">
           <AlertDescription>{error || 'Teacher dashboard is unavailable.'}</AlertDescription>
         </Alert>
-        <Button variant="outline" onClick={() => navigate('/school/setup')}>
-          Go to school setup
+        <Button variant="outline" onClick={() => navigate(TEACHER_JOIN_ORG_ROUTE)}>
+          Go to teacher join
         </Button>
       </div>
     );
@@ -393,9 +429,6 @@ export function TeacherDashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={() => navigate('/school/setup')}>
-            Workspace settings
-          </Button>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus size={16} className="mr-2" />
             Create class
@@ -490,7 +523,9 @@ export function TeacherDashboardPage() {
         </>
       )}
 
-      <div className="grid gap-6 grid-cols-1 xl:grid-cols-2">
+      {isSchoolAdmin && <PendingTeacherRequestsSection />}
+
+      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <Card className="border-3 border-foreground p-6 shadow-stamp">
           <h2 className="text-xl font-display font-bold text-foreground">Setup checklist</h2>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -550,80 +585,129 @@ export function TeacherDashboardPage() {
             </div>
           ) : (
             <div className="mt-6 grid gap-4">
-              {filteredClasses.map((classSummary) => (
-                <div key={classSummary.id} className="rounded-2xl border-2 border-border bg-secondary/50 p-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <h3 className="text-lg font-display font-bold text-foreground">{classSummary.name}</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {classSummary.subject || 'Subject TBD'}
-                        {classSummary.term ? ` · ${classSummary.term}` : ''}
-                        {classSummary.gradeBand ? ` · Grades ${classSummary.gradeBand}` : ''}
-                      </p>
+              {filteredClasses.map((classSummary) => {
+                const goToClass = () =>
+                  navigate(`/app/teacher/classes/${classSummary.id}/analytics`);
+                return (
+                  <div
+                    key={classSummary.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={goToClass}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        goToClass();
+                      }
+                    }}
+                    aria-label={`Open ${classSummary.name} analytics`}
+                    className="cursor-pointer rounded-2xl border-2 border-border bg-secondary/50 p-5 transition-colors hover:border-primary hover:bg-secondary focus:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <h3 className="text-lg font-display font-bold text-foreground">{classSummary.name}</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {classSummary.subject || 'Subject TBD'}
+                          {classSummary.term ? ` · ${classSummary.term}` : ''}
+                          {classSummary.gradeBand ? ` · Grades ${classSummary.gradeBand}` : ''}
+                        </p>
+                      </div>
+                      <div className="grid gap-3 sm:w-[420px] sm:grid-cols-3">
+                        <div className="rounded-xl border border-border bg-card px-3 py-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            Students
+                          </p>
+                          <p className="mt-1 text-lg font-bold text-foreground">{classSummary.studentCount}</p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-card px-3 py-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            Language
+                          </p>
+                          <p className="mt-1 text-lg font-bold text-foreground">{classSummary.learningLocale}</p>
+                        </div>
+                        <div className="rounded-xl border border-border bg-card px-3 py-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            Assignments
+                          </p>
+                          <p className="mt-1 text-lg font-bold text-foreground">{classSummary.assignmentCount ?? 0}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="grid gap-3 sm:w-[420px] sm:grid-cols-3">
-                      <div className="rounded-xl border border-border bg-card px-3 py-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                          Students
-                        </p>
-                        <p className="mt-1 text-lg font-bold text-foreground">{classSummary.studentCount}</p>
-                      </div>
-                      <div className="rounded-xl border border-border bg-card px-3 py-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                          Language
-                        </p>
-                        <p className="mt-1 text-lg font-bold text-foreground">{classSummary.learningLocale}</p>
-                      </div>
-                      <div className="rounded-xl border border-border bg-card px-3 py-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                          Assignments
-                        </p>
-                        <p className="mt-1 text-lg font-bold text-foreground">{classSummary.assignmentCount ?? 0}</p>
-                      </div>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openJoinCodeDialog(classSummary.id);
+                        }}
+                      >
+                        <UserPlus size={14} className="mr-1.5" />
+                        Invite students
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openRosterDialog(classSummary.id);
+                        }}
+                      >
+                        <Users size={14} className="mr-1.5" />
+                        Roster
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/app/teacher/classes/${classSummary.id}/assignments`);
+                        }}
+                      >
+                        Build assignments
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={classSummary.canvasLinked ? 'group' : undefined}
+                        aria-label={
+                          classSummary.canvasLinked
+                            ? 'Canvas linked — click to manage or resync'
+                            : 'Connect Canvas'
+                        }
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/app/teacher/classes/${classSummary.id}/canvas/connect`);
+                        }}
+                      >
+                        {classSummary.canvasLinked ? (
+                          <>
+                            <CheckCircle2
+                              size={14}
+                              className="mr-1.5 group-hover:hidden group-focus-visible:hidden"
+                            />
+                            <RefreshCw
+                              size={14}
+                              className="mr-1.5 hidden group-hover:inline group-focus-visible:inline"
+                            />
+                            <span className="group-hover:hidden group-focus-visible:hidden">
+                              Canvas Linked
+                            </span>
+                            <span className="hidden group-hover:inline group-focus-visible:inline">
+                              Resync Canvas
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <LinkIcon size={14} className="mr-1.5" />
+                            Canvas
+                          </>
+                        )}
+                      </Button>
                     </div>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openJoinCodeDialog(classSummary.id)}
-                    >
-                      <UserPlus size={14} className="mr-1.5" />
-                      Invite students
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openRosterDialog(classSummary.id)}
-                    >
-                      <Users size={14} className="mr-1.5" />
-                      Roster
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/app/teacher/classes/${classSummary.id}/analytics`)}
-                    >
-                      Class analytics
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/app/teacher/classes/${classSummary.id}/assignments`)}
-                    >
-                      Build assignments
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/app/teacher/classes/${classSummary.id}/canvas/connect`)}
-                    >
-                      <LinkIcon size={14} className="mr-1.5" />
-                      Canvas
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
@@ -693,77 +777,187 @@ export function TeacherDashboardPage() {
             )}
           </Card>
 
-          {/* Pending Teacher Invitations card */}
-          <Card className="border-3 border-foreground p-6 shadow-stamp">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-foreground bg-success/15 text-success">
-                <UserPlus size={20} strokeWidth={2.5} />
+        </div>
+      )}
+
+      {/* ── LTI Configuration (school_admin only) ──────────────────── */}
+      {isSchoolAdmin && (
+        <Card className="border-3 border-foreground p-6 shadow-stamp">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-foreground bg-primary/10 text-primary">
+              <LinkIcon size={20} strokeWidth={2.5} />
+            </div>
+            <div>
+              <h2 className="text-xl font-display font-bold text-foreground">LTI 1.3 Configuration</h2>
+              <p className="text-sm text-muted-foreground">
+                Connect Canvas via LTI 1.3 for single sign-on and deep linking.
+              </p>
+            </div>
+          </div>
+
+          {ltiLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : ltiPlatform ? (
+            <div className="space-y-5">
+              <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4 space-y-3">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Registered Platform
+                </h3>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Issuer</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">{ltiPlatform.issuer}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Client ID</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">{ltiPlatform.clientId}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Deployment ID</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">{ltiPlatform.deploymentId}</span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h2 className="text-xl font-display font-bold text-foreground">Pending Teacher Invitations</h2>
-                <p className="text-sm text-muted-foreground">Review requests from teachers to join your school.</p>
+
+              <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4 space-y-3">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Your Lingual LTI URLs
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Enter these in your Canvas Developer Key / LTI tool configuration.
+                </p>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Login URL</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/login
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Launch URL</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/callback
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">JWKS URL</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/jwks
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Redirect URI</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/callback
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRemoveLtiPlatform}
+                  loading={ltiSaving}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 size={14} className="mr-1.5" />
+                  Remove LTI Platform
+                </Button>
               </div>
             </div>
-
-            {pendingInvitationsLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            ) : pendingInvitations.length === 0 ? (
-              <div className="text-center py-8">
-                <Users className="mx-auto h-10 w-10 text-muted-foreground" />
-                <p className="mt-3 text-muted-foreground">No pending invitations.</p>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                {pendingInvitations.map((invitation) => (
-                  <div
-                    key={invitation.id}
-                    className="flex items-center justify-between rounded-xl border border-border bg-secondary/40 px-4 py-3"
-                  >
-                    <div>
-                      <p className="font-medium text-foreground">{invitation.name || 'Unknown'}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {invitation.email || 'No email'}
-                        {invitation.createdAt
-                          ? ` · Submitted ${new Date(invitation.createdAt).toLocaleDateString()}`
-                          : ''}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleApproveInvitation(invitation.id)}
-                        disabled={processingInvitationId === invitation.id}
-                        className="bg-success hover:bg-success/90 text-white"
-                      >
-                        {processingInvitationId === invitation.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Check size={14} className="mr-1" />
-                        )}
-                        Approve
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleRejectInvitation(invitation.id)}
-                        disabled={processingInvitationId === invitation.id}
-                      >
-                        {processingInvitationId === invitation.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <X size={14} className="mr-1" />
-                        )}
-                        Reject
-                      </Button>
-                    </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4 space-y-3 mb-4">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Your Lingual LTI URLs
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Enter these in your Canvas Developer Key / LTI tool configuration.
+                </p>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Login URL</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/login
+                    </span>
                   </div>
-                ))}
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Launch URL</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/callback
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">JWKS URL</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/jwks
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium text-muted-foreground">Redirect URI</span>
+                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
+                      {window.location.origin}/lti/callback
+                    </span>
+                  </div>
+                </div>
               </div>
-            )}
-          </Card>
-        </div>
+
+              <h3 className="text-base font-display font-bold text-foreground">Register Canvas Platform</h3>
+              <p className="text-sm text-muted-foreground">
+                Enter the LTI 1.3 configuration values from your Canvas Developer Key.
+              </p>
+              <div className="grid gap-3">
+                <Input
+                  label="Issuer"
+                  value={ltiForm.issuer}
+                  onChange={(e) => setLtiForm((f) => ({ ...f, issuer: e.target.value }))}
+                  placeholder="https://canvas.instructure.com"
+                />
+                <Input
+                  label="Client ID"
+                  value={ltiForm.clientId}
+                  onChange={(e) => setLtiForm((f) => ({ ...f, clientId: e.target.value }))}
+                  placeholder="10000000000001"
+                />
+                <Input
+                  label="Deployment ID"
+                  value={ltiForm.deploymentId}
+                  onChange={(e) => setLtiForm((f) => ({ ...f, deploymentId: e.target.value }))}
+                  placeholder="1"
+                />
+                <Input
+                  label="Auth Login URL"
+                  value={ltiForm.authLoginUrl}
+                  onChange={(e) => setLtiForm((f) => ({ ...f, authLoginUrl: e.target.value }))}
+                  placeholder="https://canvas.instructure.com/api/lti/authorize_redirect"
+                />
+                <Input
+                  label="Auth Token URL"
+                  value={ltiForm.authTokenUrl}
+                  onChange={(e) => setLtiForm((f) => ({ ...f, authTokenUrl: e.target.value }))}
+                  placeholder="https://canvas.instructure.com/login/oauth2/token"
+                />
+                <Input
+                  label="Key Set URL"
+                  value={ltiForm.keySetUrl}
+                  onChange={(e) => setLtiForm((f) => ({ ...f, keySetUrl: e.target.value }))}
+                  placeholder="https://canvas.instructure.com/api/lti/security/jwks"
+                />
+              </div>
+              <Button
+                onClick={handleRegisterLtiPlatform}
+                loading={ltiSaving}
+                disabled={!ltiForm.issuer || !ltiForm.clientId || !ltiForm.deploymentId || !ltiForm.authLoginUrl || !ltiForm.authTokenUrl || !ltiForm.keySetUrl}
+              >
+                Register Platform
+              </Button>
+            </div>
+          )}
+        </Card>
       )}
 
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -810,7 +1004,7 @@ export function TeacherDashboardPage() {
                 onChange={(event) => updateClassField('learningLocale', event.target.value)}
                 className="h-12 w-full rounded-xl border-3 border-border bg-card px-4 text-base text-foreground focus:border-primary focus:outline-none"
               >
-                {LOCALE_OPTIONS.map((option) => (
+                {LEARNING_LOCALES.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -923,33 +1117,98 @@ export function TeacherDashboardPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {roster.map((student) => (
-                  <div
-                    key={student.uid}
-                    className="flex items-center justify-between rounded-xl border border-border bg-secondary/40 px-4 py-3"
-                  >
-                    <div>
-                      <p className="font-medium text-foreground">{student.displayName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {student.joinSource === 'join_code' ? 'Joined via code' : student.joinSource || 'Enrolled'}
-                        {student.enrolledAt ? ` · ${new Date(student.enrolledAt).toLocaleDateString()}` : ''}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveStudent(student.uid)}
-                      disabled={removingUid === student.uid}
-                      className="text-destructive hover:text-destructive"
+                {roster.map((student, idx) => {
+                  const key = student.uid || `row-${idx}`;
+                  const joinedLabel =
+                    student.joinSource === 'join_code'
+                      ? 'Joined via code'
+                      : student.joinSource === 'lti'
+                      ? 'Joined via Canvas LTI'
+                      : student.joinSource === 'canvas_legacy'
+                      ? 'Legacy Canvas enrollment'
+                      : student.joinSource || 'Enrolled';
+                  const enrolledSuffix = student.enrolledAt
+                    ? ` · ${new Date(student.enrolledAt).toLocaleDateString()}`
+                    : '';
+                  const subtitle = `${joinedLabel}${enrolledSuffix}`;
+                  return (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between rounded-xl border border-border bg-secondary/40 px-4 py-3"
                     >
-                      {removingUid === student.uid ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 size={14} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-foreground truncate">
+                            {student.displayName}
+                          </p>
+                          {student.isOnCanvasRoster === true && (
+                            <span className="rounded-full border border-emerald-500/40 bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+                              On Canvas roster
+                            </span>
+                          )}
+                          {student.isOnCanvasRoster === false && (
+                            <span className="rounded-full border border-muted bg-muted/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Not on Canvas roster
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{subtitle}</p>
+                      </div>
+                      {student.uid && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveStudent(student.uid)}
+                          disabled={removingUid === student.uid}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          {removingUid === student.uid ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 size={14} />
+                          )}
+                        </Button>
                       )}
-                    </Button>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {canvasRosterSummary && (
+              <div className="mt-6 space-y-2 border-t border-border pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Canvas roster — not yet joined
+                  </h3>
+                  <span className="text-xs text-muted-foreground">
+                    {canvasRosterSummary.joined} of {canvasRosterSummary.canvas_total}{' '}
+                    Canvas students joined
+                  </span>
+                </div>
+                {canvasRosterGap.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    All Canvas-rostered students have joined via class code.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      Share the class code with these students to enroll them.
+                    </p>
+                    <ul className="space-y-1">
+                      {canvasRosterGap.map((entry) => (
+                        <li
+                          key={entry.canvas_email}
+                          className="flex items-center justify-between rounded-lg border border-dashed border-border px-3 py-2 text-sm"
+                        >
+                          <span className="truncate">{entry.canvas_name || entry.canvas_email}</span>
+                          <span className="text-xs text-muted-foreground truncate">
+                            {entry.canvas_email}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
               </div>
             )}
           </div>

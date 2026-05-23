@@ -18,6 +18,7 @@ import { getClassAnalytics } from '@/api/teacher';
 import { Alert, AlertDescription, Badge, Button, Card } from '@/components/ui';
 import { CanvasSyncStatus } from '@/components/canvas/CanvasSyncStatus';
 import { OnboardingHint } from '@/components/ui/OnboardingHint';
+import { formatSpeakingMinutes } from '@/lib/utils';
 import type { ClassAnalyticsData } from '@/types';
 
 const STATUS_OPTIONS = [
@@ -119,11 +120,16 @@ export function TeacherClassAnalyticsPage() {
     );
   }
 
+  const avgSessionsPerStudent =
+    analytics.summary.enrolledStudentCount > 0
+      ? (analytics.summary.sessionCount / analytics.summary.enrolledStudentCount).toFixed(1)
+      : '0';
+
   const stats = [
     { label: 'Assignments', value: analytics.summary.assignmentCount, icon: ClipboardList, accent: 'bg-primary/10 text-primary' },
     { label: 'Students enrolled', value: analytics.summary.enrolledStudentCount, icon: Users, accent: 'bg-success/15 text-success' },
-    { label: 'Sessions', value: analytics.summary.sessionCount, icon: BarChart3, accent: 'bg-accent/20 text-accent-foreground' },
-    { label: 'Speaking minutes', value: Math.round(analytics.summary.estimatedSpeakingTimeSeconds / 60), icon: MessageSquareText, accent: 'bg-secondary text-foreground' },
+    { label: 'Avg sessions / student', value: avgSessionsPerStudent, icon: BarChart3, accent: 'bg-accent/20 text-accent-foreground' },
+    { label: 'Speaking minutes', value: formatSpeakingMinutes(analytics.summary.estimatedSpeakingTimeSeconds), icon: MessageSquareText, accent: 'bg-secondary text-foreground' },
     { label: 'Self-corrections', value: analytics.summary.selfCorrectionCount, icon: CheckCircle2, accent: 'bg-primary/5 text-foreground' },
     { label: 'Repeated errors', value: analytics.summary.repeatedErrorCount, icon: AlertTriangle, accent: 'bg-destructive/10 text-destructive' },
   ];
@@ -311,14 +317,11 @@ export function TeacherClassAnalyticsPage() {
                     <Badge variant={assignment.status === 'published' ? 'success' : 'outline'} size="sm">
                       {assignment.status}
                     </Badge>
-                    <Badge variant="secondary" size="sm">
-                      {assignment.taskType.replaceAll('_', ' ')}
-                    </Badge>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                     <span>{assignment.sessionCount} sessions</span>
                     <span>{assignment.uniqueStudentCount} students</span>
-                    <span>{Math.round(assignment.estimatedSpeakingTimeSeconds / 60)} min speaking</span>
+                    <span>{formatSpeakingMinutes(assignment.estimatedSpeakingTimeSeconds)} min speaking</span>
                     <span>{assignment.selfCorrectionCount} self-corrections</span>
                   </div>
                 </div>
@@ -354,7 +357,7 @@ export function TeacherClassAnalyticsPage() {
                   <p className="text-sm font-semibold text-foreground">{student.displayName}</p>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                     <span>{student.sessionCount} sessions</span>
-                    <span>{Math.round(student.estimatedSpeakingTimeSeconds / 60)} min speaking</span>
+                    <span>{formatSpeakingMinutes(student.estimatedSpeakingTimeSeconds)} min speaking</span>
                     <span>{student.totalStudentTurns} turns</span>
                     <span>
                       {student.averageStudentWordsPerTurn > 0

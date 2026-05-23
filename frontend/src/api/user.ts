@@ -113,6 +113,13 @@ export const setLanguage = async (language: Language): Promise<void> => {
   await api.post('/set-language', { language });
 };
 
+export const updateLearningLocale = async (learningLocale: LearningLocale): Promise<void> => {
+  await api.post('/profile', {
+    learningLocale,
+    isEdit: true,
+  });
+};
+
 export const saveInitialOnboarding = async (
   learningLocale: LearningLocale,
   assessmentPreference: AssessmentPreference

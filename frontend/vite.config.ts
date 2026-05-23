@@ -93,6 +93,9 @@ export default defineConfig({
       ...(hasCubismSdk
         ? { '@cubism': cubismSdkPath }
         : {
+            // Provide a full stub namespace so Vite can resolve Cubism imports
+            // during dependency scanning when the SDK folder is not checked out.
+            '@cubism': path.resolve(__dirname, './src/stubs/cubism'),
             // Stub out Live2DAvatarPanel so the build succeeds without the Cubism SDK.
             // The panel is behind LIVE2D_CHAT_ENABLED (false) so the stub never renders.
             '@/components/avatar/Live2DAvatarPanel': path.resolve(__dirname, './src/stubs/live2d-panel-stub.ts'),
@@ -104,6 +107,9 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     globals: true,
     css: true,
+    fakeTimers: {
+      shouldAdvanceTime: true,
+    },
   },
   server: {
     proxy: {

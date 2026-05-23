@@ -2,233 +2,248 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Attitude
+
+Aim high. **Lingual** can reshape how language is learned in the classroom in the AI era. Today the product is spoken-language practice; the architecture is built so the same pattern can extend to other subjects later. Be ambitious, be opinionated, and treat school beta as the real product.
+
 ## Project Overview
 
-**Lingual** is an AI-powered platform for learning colloquial/spoken language through real-time conversation practice. Our mission is to become **the standard for spoken language learning**.
+**Lingual** is an AI-powered platform for teacher-designed speaking practice that runs at student scale. Mission: become **the standard for spoken language learning** in schools.
 
-### Current Priority
+**Positioning:** *Teacher-designed practice, AI-executed at student scale.* Curriculum is the backbone — the teacher designs the exercise, the AI executes it.
 
-**School integration** is the top priority. The system has moved beyond B2C-only assumptions. All new work should follow the formal school-integration documents:
+### Current Priority: School Integration
 
-- `docs/school-integration/PRD.md` - product goals, scope, success metrics
-- `docs/school-integration/TECH_SPEC.md` - architecture, domain model, API design
-- `docs/school-integration/TASKS.md` - phased checklist and build order
-- `docs/school-integration/LIMITATIONS.md` - known gaps and temporary shortcuts
-
-### Document-Driven Development
-
-All school-integration work follows a document-first workflow. The four spec documents are the authoritative source of truth — code implements what the docs describe, and docs are updated to match what code ships.
-
-**Update order:** PRD → TECH_SPEC → TASKS → LIMITATIONS.md
+School integration is the top strategic priority. The system has moved past its B2C-only origins. The authoritative specs live in `docs/school-integration/`:
 
 | Document | Purpose | When to update |
 |----------|---------|----------------|
 | `PRD.md` | Product goals, user stories, success metrics | Scope, user stories, or success criteria change |
 | `TECH_SPEC.md` | Architecture, domain model, API design | Architecture decisions, data models, or API surface change |
-| `TASKS.md` | Phased checklist (`[x]`/`[-]`/`[ ]`) | Items start, complete, or new items are identified |
-| `LIMITATIONS.md` | Shipped constraints, temporary shortcuts | Shipped behavior is narrower than the intended architecture |
+| `TASKS.md` | Phased checklist (`[x]`/`[-]`/`[ ]`/`[!]`) | Items start, complete, block, or new items are identified |
+| `LIMITATIONS.md` | Shipped constraints and temporary shortcuts | Shipped behavior is narrower than the intended architecture |
 
-**Rules for Claude Code:**
+**Update order on scope changes:** PRD → TECH_SPEC → TASKS → LIMITATIONS.
 
-- Before starting a feature: read the relevant PRD → TECH_SPEC → TASKS sections to understand scope and architecture
-- After shipping: mark TASKS.md items complete, add LIMITATIONS.md entries for any behavior narrower than spec
-- Do not implement features that contradict TECH_SPEC architecture without updating docs first
-- When the user says "update docs," refresh all four documents to match the current codebase state
-- When a feature introduces new architecture (new collections, API surface, domain concepts), update TECH_SPEC before or alongside the implementation
+**Rules:**
+- Before touching architecture, data model, or API surface: read PRD → TECH_SPEC → TASKS for the relevant area.
+- After shipping: mark TASKS items complete and add LIMITATIONS entries where behavior is narrower than spec.
+- Do not implement features that contradict TECH_SPEC. Update docs first, or in the same change set.
+- When the user says "update docs," refresh all four to match the codebase.
 
-### Vision & Roadmap
+### Language Support Is Not the Focus
 
-| Aspect | Current (v1) | Future |
-|--------|--------------|--------|
-| **Languages** | Korean (SKLC-aligned), French (AP sample) | Spanish, Russian |
-| **Market** | B2B-first (K-12 schools, language institutes) | Broader B2C |
-| **Platform** | Web only | Web + Native mobile apps |
+The learning engine is deliberately language-agnostic. Adding a locale is a config change in `main.py` (`ALLOWED_LEARNING_LOCALES` + `LEARNING_LOCALE_PROMPT_CONFIG`), not a product initiative. Currently configured locales: `ko-KR`, `es-ES`, `fr-FR`, `ru-RU`, `he-IL`. Most US schools teach Spanish and French, so those get exercised most, but the architecture should never hard-code a single language. Prompt assembly, analytics, and rubrics must stay locale-parametric.
 
 ### User Roles
 
 | Role | Capabilities |
 |------|-------------|
 | **Student** | Assessment, assignment-aware AI practice, progress tracking |
-| **Teacher** | Class management, curriculum mapping, assignment creation, analytics |
-| **Administrator** | School-wide analytics, multi-teacher management, billing |
+| **Teacher** | Class + roster management, Canvas-linked or teacher-authored assignment creation, analytics, compliance management |
+| **School Admin** | Org-wide analytics, multi-teacher management, compliance dashboard, deletion-request lifecycle |
+| **Lingual Admin** | Approves school creation requests |
 
 ### Core Learning Flow
 
-1. Teacher creates class → maps curriculum → publishes assignment
-2. Student launches assignment-aware speaking practice (voice/text/hybrid)
-3. AI tutor follows curriculum mapping (target expressions, grammar, feedback policy)
-4. System captures learning events → builds session summaries → rolls up analytics
-5. Teacher reviews class/assignment/student analytics to inform instruction
-
-**Key Principle:** Curriculum is the backbone - teachers design the exercise, AI executes it at student scale.
+1. Teacher connects Canvas (optional) → creates class → authors assignment from Canvas content, teacher source packet, or custom prompt → publishes.
+2. Student joins via class code (or LTI launch, or Canvas roster) → completes consent → launches assignment-aware speaking/text practice.
+3. AI tutor runs with assignment-resolved prompt (instructions, generated scenario, target expressions, focus grammar, language-mix policy, modality policy).
+4. Runtime emits `learning_events` → `practice_sessions` get rolling summaries → analytics aggregate class/assignment/student.
+5. Teacher reviews class, assignment, and student analytics; manages compliance roster and guardian packets.
 
 ## Development Commands
 
-### Backend (Flask)
+### Backend (Flask, Python 3.11)
 ```bash
+python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-PORT=5001 FLASK_ENV=development python main.py  # Runs on localhost:5001
+PORT=5001 FLASK_ENV=development python main.py   # localhost:5001 (matches Vite proxy)
 ```
 
-### Frontend (React + Vite)
+`main.py` fast-fails on missing required env vars in production and warns in dev — see `_validate_required_env` for the required/feature-gated lists.
+
+### Frontend (React 19 + Vite 7)
 ```bash
 cd frontend
 npm install
-npm run dev      # Dev server on localhost:5173, proxies /api/* to :5001
-npm run build    # TypeScript compile + Vite build
-npm run lint     # ESLint
-npm run test     # Vitest
+npm run dev       # Vite on localhost:5173, proxies /api/* to :5001
+npm run build     # tsc -b && vite build → outputs to frontend/dist (Docker copies to static/react)
+npm run lint
+npm run test      # Vitest
 ```
 
-### Running Tests
-```bash
-# Backend unit tests
-python3 -m unittest backend.tests.test_curriculum_admin_routes backend.tests.test_realtime_chat backend.tests.test_school_foundation_routes backend.tests.test_auth_memberships backend.tests.test_deletion_requests
+### Tests (Makefile is the source of truth)
 
-# Frontend tests
-cd frontend && npm run test -- --run src/pages/TeacherAssignmentAnalyticsPage.test.tsx src/components/layout/TeacherRoute.test.tsx
+```bash
+make test                 # backend + frontend
+make test-backend         # python3 -m unittest discover -s backend/tests -p "test_*.py" -v
+make test-frontend        # cd frontend && npm run test -- --run
+make test-firebase        # firebase-tests/ — requires Java runtime (Firestore emulator)
+make test-e2e             # bash e2e/*.sh — requires backend + frontend running
+make test-emulator        # backend integration against Firestore emulator
+make test-all             # everything above
+make coverage-backend     # HTML report in coverage_html/
+```
+
+Run a single test file:
+```bash
+python3 -m unittest backend.tests.test_curriculum_admin_routes -v
+cd frontend && npm run test -- --run src/pages/TeacherAssignmentBuilderPage.test.tsx
 ```
 
 ### Docker
 ```bash
 docker build -t lingual .
-docker run -p 8080:8080 lingual
+docker run -p 8080:8080 lingual   # multi-stage: node builds frontend, python serves via gunicorn
 ```
 
 ## Architecture
 
-### Backend
+### Backend (Flask + Firestore + OpenAI)
 
-- **Flask** app registered via blueprints in `main.py`
+**Stack:** Flask 3.1, Firebase Admin SDK, Firestore, OpenAI Realtime + Chat APIs, flask-sock for websockets, PyLTI1p3 for LTI 1.3.
 
-- **Firestore** for all persistence (users, schools, sessions, events)
-- **OpenAI GPT Realtime API** powers live conversation with ephemeral token auth
-- **Firebase Auth** ID tokens verified server-side
+**Dependency injection pattern:** `main.py` builds a `RouteDeps` (`backend/route_deps.py`) that carries `db`, `firebase_auth`, session helpers, OpenAI client, prompt builders, school-context resolvers, and allowed-locale sets. Every blueprint is registered via a `create_*_blueprint(deps)` factory. **New routes must follow this pattern** — never import `main` or module-level singletons directly.
 
-Backend is organized into:
-- `main.py` - Flask app, blueprint registration, legacy routes
-- `database.py` - Firestore CRUD helpers for all collections
-- `backend/routes/` - Blueprint modules (auth, chat, teacher, curriculum_admin, schools, pronunciation)
-- `backend/services/` - Domain services (assignment_resolver, practice_analytics, membership_context, compliance)
-- `backend/services/pedagogy/` - Pedagogy engine (task templates, curriculum template resolution, prompt section assembly)
-- `backend/route_deps.py` - Shared dependencies injected into routes
-- `scoring.py` - Assessment scoring (MCQ, heuristic text, domain aggregation)
+**Blueprints** (`backend/routes/`): `auth`, `chat`, `assessment`, `pronunciation`, `games`, `schools`, `guardian`, `teacher`, `curriculum_admin`, `admin`, `integrations` (Canvas), `canvas_practice`, `school_requests`, `lti`. `test_harness` is registered only in development/testing and exposes `/api/test/*` for E2E.
 
-### Frontend
+**Services** (`backend/services/`): domain logic that blueprints compose.
+- `assignment_resolver.py` — assembles assignment-aware system prompts from assignment-owned fields + student profile + compliance policy + modality policy
+- `practice_analytics.py` — session summary building, learning event rollup, class/assignment/student aggregation
+- `membership_context.py` — request-level resolution of active org + role + classes
+- `compliance.py`, `disclosure_logging.py`, `deletion_requests.py`, `guardian_packets.py` — the compliance surface
+- `canvas/` — Canvas LMS client, AES-256-GCM PAT encryption, roster sync, practice generator
+- `lti/` — LTI 1.3 identity, config, grade passback, JWKS keys
+- `pedagogy/` — pedagogy-driven prompt shaping helpers
+- `assignment_workspace.py` — teacher-side assignment authoring helpers
 
-- **React 19 + TypeScript + Vite** with React Router v7
-- **Contexts**: `AuthContext` (Firebase user, session, memberships), `LanguageContext` (en/ko UI), `MembershipContext` (active org, role, classes)
-- **UI**: Radix UI primitives + Tailwind CSS 4 + Framer Motion
-- **Route-level lazy loading** via `React.lazy()` in `App.tsx`
-- **Vendor chunking** configured in `vite.config.ts`
+**Assignment content lives on the assignment document.** The resolver reads `instructions`, `generated_scenario`, `objectives`, `target_expressions`, `focus_grammar`, `teacher_notes`, `task_type`, `target_language_intensity`, and (optionally) `canvas_module_item_ref` directly — there is no separate curriculum-overlay collection. `task_type: custom_prompt` is a scaffold-free mode that bypasses scenario generation and rubric-dependent analytics (see LIMITATIONS.md #14).
 
-Frontend is organized into:
-- `frontend/src/App.tsx` - Router, lazy-loaded pages, `TeacherRoute` guard
-- `frontend/src/api/` - Typed API client modules (teacher, assignments, schools, compliance)
-- `frontend/src/types/` - TypeScript DTOs (school, assignment, curriculum)
-- `frontend/src/pages/` - Page components
-- `frontend/src/contexts/` - React contexts
-- `frontend/src/components/` - Shared UI components
+**Auth flow:** Firebase ID token → `POST /api/auth/verify` verifies token, creates Flask session, returns memberships + active org context. `MembershipContext` on the frontend consumes this.
 
-### Data Flow
+**Realtime flow:** `POST /api/realtime/session` mints an ephemeral OpenAI Realtime credential → frontend connects via `useRealtimeChat`. Voice is compliance-gated and fails closed without consent.
 
-1. Firebase Auth issues ID token → `/api/auth/verify` creates session + returns memberships
-2. `MembershipContext` hydrates active org, role, classes
-3. `TeacherRoute` guards teacher-only pages by checking membership role
-4. Teacher creates assignment → curriculum mapping → assignment record
-5. Student launches assignment → backend resolves assignment context → creates practice session
-6. During practice: learning events emitted → session summary updated in real-time
-7. Teacher views analytics: backend aggregates sessions + events into typed payloads
+**SPA serving:** in production, Flask serves `static/react/` (built by the frontend Docker stage). Never hand-edit `static/react/`.
 
-### Firestore Schema
+### Frontend (React 19 + TypeScript + Vite)
+
+**Stack:** React 19, React Router v7, Radix UI primitives, Tailwind CSS 4 (`@tailwindcss/vite`), Framer Motion + `motion`, Recharts, Sonner, axios, Firebase JS SDK. Avatar: `pixi-live2d-display` + Cubism SDK for Live2D and `@pixiv/three-vrm` + three.js for VRM. Speech: `microsoft-cognitiveservices-speech-sdk`.
+
+**Context stack** (outermost → innermost, in `App.tsx`):
+`AuthProvider` → `MembershipProvider` → `LanguageProvider` (en/ko UI) → `LearningLocaleProvider` (target language per session).
+
+**Routing:** `App.tsx` uses React Router v7 with `React.lazy()` per page. Three protection layers:
+- `ProtectedRoute` — signed-in users
+- `AppProtectedRoute` — users inside the `/app` shell
+- `TeacherRoute` — membership role must be teacher or admin
+- `LingualAdminRoute` — Lingual-side superadmin
+
+Production build uses `base: '/app/'` in Vite, and `basename` in `App.tsx` is derived from `import.meta.env.BASE_URL`.
+
+**Layout:** `frontend/src/`
+- `api/` — typed API client modules per backend blueprint (`teacher.ts`, `assignments.ts`, `canvas.ts`, `guardian.ts`, `lti.ts`, `admin.ts`, etc.). All go through `api/index.ts`'s shared axios instance.
+- `types/` — DTOs matching backend contracts (`assignment.ts`, `school.ts`, `canvas.ts`, `avatarChat.ts`).
+- `pages/` — one file per route; lazy-loaded.
+- `hooks/` — `useRealtimeChat`, `useAvatarChatSession`, `useVoiceRecorder`, `usePronunciationPractice`, `realtimeAvatar`, `realtimeSpeechGate`.
+- `contexts/`, `components/`, `lib/`, `i18n/`.
+
+### Firestore Schema (high level)
 
 ```
 users/{uid}/
-  ├── profile/       (display_name, age, rigor, frequency, ui_language)
-  ├── assessment/    (responses, current_item_index, completed)
-  ├── results/       (global_stage, domain_bands, domain_raw_scores)
-  └── chats/{id}/    (title, messages[], timestamps)
+  profile/          display_name, age, rigor, frequency, ui_language, last_active_membership_id
+  assessment/       responses, current_item_index, completed
+  results/          global_stage, domain_bands, domain_raw_scores, framework
+  chats/{id}/       (legacy B2C chat history)
 
-organizations/{orgId}          (name, type, status, pilot_stage, policies)
-memberships/{membershipId}     (org_id, uid, roles[], status)
-classes/{classId}              (org_id, name, term, subject, teacher_membership_ids[])
-enrollments/{enrollmentId}     (class_id, student_uid, status, join_source)
-curriculum_mappings/{mappingId} (class_id, package_id, module_id, objectives, policies)
-assignments/{assignmentId}     (class_id, mapping_id, title, status, task_type)
-practice_sessions/{sessionId}  (assignment_id, student_uid, session_summary, cost_summary)
-learning_events/{eventId}      (assignment_id, session_id, event_type, turn_index, payload)
+organizations/{orgId}              name, type, status, pilot_stage, policies
+memberships/{membershipId}         org_id, uid, roles[], status
+classes/{classId}                  org_id, name, term, subject, teacher_membership_ids[]
+enrollments/{enrollmentId}         class_id, student_uid, status, join_source  (only real enrollments)
+assignments/{assignmentId}         class_id, title, status, task_type, instructions,
+                                   generated_scenario, target_expressions, focus_grammar,
+                                   objectives, teacher_notes, target_language_intensity,
+                                   canvas_module_item_ref?
+practice_sessions/{sessionId}      assignment_id, student_uid, session_summary, cost_summary
+learning_events/{eventId}          assignment_id, session_id, event_type, turn_index, payload
+
+canvas_connections/{id}            encrypted PAT (AES-256-GCM), class binding, sync status
+canvas_course_content/{id}         synced modules/items visible to enrolled students
+canvas_roster_entries/{id}         Canvas roster snapshot (decoupled from enrollments, 2026-04-21)
+
+guardian_packets/{id}              secure-link consent lifecycle
+deletion_requests/{id}             student/class/org-scoped deletion workflow
+compliance_state, disclosure_logs  consent + audit surface
 ```
 
-## Key Files
+Firestore rules live in `firestore.rules` and are validated via Firebase Emulator tests in `firebase-tests/` (requires Java).
 
-### Backend - School Integration
+### Canvas Roster Decoupling (2026-04-21)
 
-- `backend/routes/curriculum_admin.py` - Assignment CRUD, practice session creation, event reporting, analytics endpoints
-- `backend/routes/teacher.py` - Teacher dashboard, class CRUD
-- `backend/routes/schools.py` - School/org bootstrap and management
-- `backend/services/practice_analytics.py` - Session summary building, learning event processing, assignment analytics aggregation
-- `backend/services/assignment_resolver.py` - Assignment bootstrap, curriculum resolution, prompt assembly
-- `backend/services/pedagogy/` - Task template prompt assembly, curriculum template resolution, template catalog
-- `backend/services/membership_context.py` - Request-level school context and role checking
-
-### Backend - Core
-
-- `main.py` - Flask app with blueprint registration and legacy routes
-- `database.py` - Firestore CRUD for all collections
-- `scoring.py` - Assessment scoring
-
-### Frontend - Teacher Flow
-
-- `TeacherDashboardPage.tsx` - Class list, summary stats, setup checklist
-- `TeacherAssignmentBuilderPage.tsx` - Curriculum mapping, assignment authoring, interaction contract preview
-- `TeacherAssignmentAnalyticsPage.tsx` - Per-assignment analytics drill-down
-- `frontend/src/api/teacher.ts` - Teacher dashboard and class API
-- `frontend/src/api/assignments.ts` - Assignment CRUD and analytics API
-- `frontend/src/types/assignment.ts` - Assignment, practice session, analytics DTOs
-- `frontend/src/types/school.ts` - School, class, membership DTOs
-
-### Frontend - Student Flow
-
-- `AppCurriculumPage.tsx` - Curriculum browsing with template summaries
-- `AppCurriculumModulePage.tsx` - Module practice entry with interaction contract display
-- `ChatPage.tsx` - AI tutor conversation (legacy + assignment-aware)
-
-### Frontend - Core
-
-- `frontend/src/App.tsx` - Router with lazy-loaded pages and TeacherRoute guard
-- `frontend/src/contexts/AuthContext.tsx` - Firebase auth + session
-- `frontend/src/contexts/MembershipContext.tsx` - Active org, role, classes
-- `frontend/src/components/layout/TeacherRoute.tsx` - Role-gated route wrapper
-
-## Development Workflow Agents
-
-This project has a local plugin (`lingual-dev-agents`) with 5 agents. Dispatch them at phase boundaries — they are not optional nice-to-haves, they are part of the workflow.
-
-### Dispatch Rules
-
-| Agent | When to dispatch | Skip when |
-|-------|-----------------|-----------|
-| `spec-agent` | Before implementing any TASKS.md item or feature that touches architecture, data model, or API surface | Pure UI polish, copy changes, or bug fixes confined to one file |
-| `backend-impl` | During implementation, in parallel with `frontend-impl` when backend/frontend work is independent | Feature is frontend-only |
-| `frontend-impl` | During implementation, in parallel with `backend-impl` when work is independent; sequentially after backend when frontend depends on new API | Feature is backend-only |
-| `cross-layer-review` | After completing a feature that spans backend + frontend, especially if it touches compliance, pedagogy, or analytics | Change is isolated to one layer with no cross-layer contract |
-| `doc-sync` | After completing a TASKS.md phase or any change that introduces new collections, endpoints, or domain concepts | Trivial bug fixes that don't change architecture or shipped behavior |
-
-### Parallel Dispatch Pattern
-
-When a feature decomposes into independent backend + frontend work, dispatch `backend-impl` and `frontend-impl` simultaneously with `isolation: "worktree"`. Review both results, then run `cross-layer-review` on the merged state.
-
-### Agent Output Rules
-
-- `spec-agent`, `cross-layer-review`, and `doc-sync` are advisory — they propose, they don't modify files. Review their output before acting on it.
-- `backend-impl` and `frontend-impl` write code in isolated worktrees. Review their changes before merging.
+Canvas roster sync writes **only** to `canvas_roster_entries/`. It never auto-enrolls students. Enrollments come from class-join codes or LTI launches. Teachers see an "on Canvas roster" badge next to enrolled students and a "not yet joined" gap view. If you touch Canvas sync or auth activation, preserve this separation. Design notes: `docs/superpowers/specs/2026-04-21-canvas-roster-decouple-from-enrollment-design.md`.
 
 ## Environment Variables
 
-Required in `.env`:
-- `OPENAI_API_KEY` - For GPT Realtime API
-- `GOOGLE_APPLICATION_CREDENTIALS` - Path to Firebase service account JSON
-- `GOOGLE_CLOUD_PROJECT` - Firebase project ID (defaults to `lingu-480600`)
-- `SECRET_KEY` - Flask session secret
-- `PORT` - Backend port (default 5000; set to 5001 for Vite proxy)
-- `FLASK_ENV` - Set to `development` for debug mode
+Hard-required in production (fail-fast in `_validate_required_env`):
+- `OPENAI_API_KEY` — AI chat, realtime voice, scoring
+- `SECRET_KEY` — Flask session signing (dev fallback is explicitly rejected in prod)
+
+Feature-gated (warns on missing):
+- `CANVAS_PAT_ENCRYPTION_KEY` — Canvas connect returns 503 without it
+
+Other:
+- `GOOGLE_APPLICATION_CREDENTIALS` — path to Firebase service account JSON (or rely on ADC)
+- `GOOGLE_CLOUD_PROJECT` — defaults to `lingu-480600`
+- `PORT` — backend port (use `5001` locally to match Vite proxy; Cloud Run uses `8080`)
+- `FLASK_ENV` — `development` enables debug + test-harness blueprint
+
+## Development Workflow Agents
+
+The repo ships a local plugin at `.claude/plugins/lingual-dev-agents/` with five agents. They are part of the workflow, not optional.
+
+| Agent | Dispatch when | Skip when |
+|-------|--------------|-----------|
+| `spec-agent` | Before implementing any TASKS.md item touching architecture, data model, or API surface | Pure UI polish, copy, or single-file bug fix |
+| `backend-impl` | Backend changes, typically parallel with `frontend-impl` | Frontend-only change |
+| `frontend-impl` | Frontend changes, parallel with `backend-impl` or sequential after a backend contract lands | Backend-only change |
+| `cross-layer-review` | After a feature that spans backend + frontend — especially compliance, prompt assembly, or analytics | Change is isolated to one layer |
+| `doc-sync` | After finishing a TASKS.md phase or introducing new collections, endpoints, or domain concepts | Trivial bug fix |
+
+**Parallel pattern:** When backend and frontend work are independent, dispatch `backend-impl` and `frontend-impl` simultaneously with `isolation: "worktree"`, review both diffs, then run `cross-layer-review` on the merged state.
+
+**Advisory vs. writing:** `spec-agent`, `cross-layer-review`, and `doc-sync` propose — they do not modify files. Read their output before acting. `backend-impl` and `frontend-impl` write code in isolated worktrees; always review before merging.
+
+## Key Files
+
+### Backend
+- `main.py` — Flask app, env validation, OpenAI client factory, prompt builders, blueprint registration
+- `database.py` — Firestore CRUD for all collections
+- `scoring.py` — Assessment scoring + ACTFL description lookup
+- `backend/route_deps.py` — DI container injected into every blueprint
+- `backend/routes/curriculum_admin.py` — Assignment CRUD, practice session creation, event reporting, analytics
+- `backend/routes/teacher.py`, `schools.py`, `admin.py` — Teacher + school-admin + Lingual-admin surfaces
+- `backend/routes/integrations.py`, `canvas_practice.py` — Canvas LMS
+- `backend/routes/lti.py` — LTI 1.3 launch, link-account, assignment picker, grade passback
+- `backend/routes/guardian.py`, `school_requests.py` — Compliance + school-request lifecycle
+- `backend/services/assignment_resolver.py` — Assignment-aware prompt assembly
+- `backend/services/practice_analytics.py` — Session summaries + analytics aggregation
+
+### Frontend
+- `frontend/src/App.tsx` — Router, providers, route guards
+- `frontend/src/contexts/MembershipContext.tsx` — Active org, role, classes
+- `frontend/src/pages/TeacherDashboardPage.tsx`, `TeacherAssignmentBuilderPage.tsx`, `TeacherAssignmentAnalyticsPage.tsx`, `TeacherClassAnalyticsPage.tsx`, `TeacherClassCompliancePage.tsx`, `TeacherStudentDrillDownPage.tsx`
+- `frontend/src/pages/AppLearningPage.tsx`, `AssignmentLaunchPage.tsx`, `AppChatPage.tsx`, `PronunciationPracticePage.tsx`
+- `frontend/src/pages/CanvasConnectPage.tsx`, `LtiLinkAccountPage.tsx`, `LtiAssignmentPickerPage.tsx`
+- `frontend/src/pages/AdminCompliancePage.tsx`, `AdminDeletionRequestsPage.tsx`, `LingualSchoolRequestsPage.tsx`
+- `frontend/src/hooks/useRealtimeChat.ts`, `useAvatarChatSession.ts`
+
+## Working Conventions
+
+- **Do not edit `static/react/`** — it is the frontend build output.
+- **Do not add a second persistence system** — stay on Firestore for beta (see TECH_SPEC §1).
+- **Never route practice through a generic chat prompt** when an assignment context exists — always go through `assignment_resolver`.
+- **Compliance gating is architecture, not polish.** Voice sessions fail closed without consent. Treat any change that touches voice, audio retention, or guardian flows as high-scrutiny.
+- **Analytics are heuristic for now** (see LIMITATIONS.md #7, #8). Do not market them as model-verified scoring until that's true.
+- **Canvas roster ≠ enrollments.** Preserve the decoupling from 2026-04-21.
+- **Implementation conventions** (test framework, DI patterns, naming, Cloud Function `_impl`+wrapper split, outbox usage, Plan 1 contract surface): see `docs/superpowers/codebase-conventions.md`. Read it before writing plan code.

@@ -1,18 +1,23 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import {
+  EmailAuthProvider,
   onAuthStateChanged,
+  reauthenticateWithCredential,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updatePassword,
   linkWithPopup,
   unlink,
   AuthProvider as FirebaseAuthProvider,
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth, googleProvider, githubProvider, facebookProvider } from '../config/firebase';
-import { verifyToken } from '../api/auth';
+import { verifyToken, migrateRole, type AuthRoleOptions, type IntendedRole } from '../api/auth';
+import { LegacyRoleMigrationModal } from '@/components/LegacyRoleMigrationModal';
 import type { User } from '../types';
 
 interface AuthContextType {
@@ -24,8 +29,14 @@ interface AuthContextType {
   updateAvatarUrl: (url: string) => void;
   refreshUser: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signUpWithEmail: (
+    email: string,
+    password: string,
+    options?: AuthRoleOptions,
+  ) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  signInWithGoogle: (options?: AuthRoleOptions) => Promise<void>;
   linkWithGoogle: () => Promise<void>;
   linkWithGithub: () => Promise<void>;
   linkWithFacebook: () => Promise<void>;
@@ -36,12 +47,66 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const getAuthErrorCode = (err: unknown) => {
+  if (typeof err === 'object' && err !== null && 'code' in err) {
+    const code = (err as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+};
+
+const getAuthErrorMessage = (err: unknown, fallback: string) => {
+  const code = getAuthErrorCode(err);
+
+  switch (code) {
+    case 'auth/invalid-email':
+      return 'Enter a valid email address.';
+    case 'auth/missing-email':
+      return 'Enter your email address.';
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'The current password is incorrect.';
+    case 'auth/weak-password':
+      return 'Use a password with at least 6 characters.';
+    case 'auth/requires-recent-login':
+      return 'Please sign out and sign back in, then try again.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Please wait and try again.';
+    case 'auth/network-request-failed':
+      return 'Network error. Check your connection and try again.';
+    default:
+      return err instanceof Error ? err.message : fallback;
+  }
+};
+
+const POLL_INTERVAL_MS = 5 * 60 * 1000;
+
+export function hasMembershipDiff(prev: User | null, next: User | null): boolean {
+  if (!prev || !next) return prev !== next;
+  if (prev.lingualAdmin !== next.lingualAdmin) return true;
+  const prevRoles = JSON.stringify((prev.activeRoles || []).slice().sort());
+  const nextRoles = JSON.stringify((next.activeRoles || []).slice().sort());
+  if (prevRoles !== nextRoles) return true;
+  const prevMems = JSON.stringify(
+    (prev.memberships || [])
+      .map((m) => `${m.orgId ?? ''}:${(m.roles || []).slice().sort().join(',')}:${m.status}`)
+      .sort(),
+  );
+  const nextMems = JSON.stringify(
+    (next.memberships || [])
+      .map((m) => `${m.orgId ?? ''}:${(m.roles || []).slice().sort().join(',')}:${m.status}`)
+      .sort(),
+  );
+  return prevMems !== nextMems;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const updateAvatarUrl = (url: string) => setAvatarUrl(url);
 
@@ -64,6 +129,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setUser(null);
     setError(result.error || 'Failed to verify token');
+  };
+
+  const handleLegacyRolePick = async (role: IntendedRole) => {
+    await migrateRole(role);
+    // Refresh the user state so `requiresLegacyRolePick` flips to false
+    // and the modal unmounts. Errors propagate to the modal's catch.
+    await refreshUser();
   };
 
   useEffect(() => {
@@ -107,6 +179,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
+  // Periodic re-verify so role/membership/suspension changes made by an admin
+  // propagate to the active session without requiring sign-out.
+  // See LIMITATIONS #28.
+  useEffect(() => {
+    if (!user) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+    pollRef.current = setInterval(async () => {
+      try {
+        const fbUser = auth.currentUser;
+        if (!fbUser) return;
+        const idToken = await fbUser.getIdToken();
+        const result = await verifyToken(idToken);
+        if (!result.success || !result.user) return;
+        const next = result.user as User;
+        setUser((prev) => (hasMembershipDiff(prev, next) ? next : prev));
+      } catch (err) {
+        console.warn('[auth] periodic verify failed', err);
+      }
+    }, POLL_INTERVAL_MS);
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+    // We intentionally key only on user?.uid; the effect body uses setUser(prev
+    // => …) and reads auth.currentUser directly, so the latest `user` object
+    // is not needed inside the interval callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
+
   const signInWithEmail = async (email: string, password: string) => {
     setLoading(true);
     setError(null);
@@ -130,14 +238,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signUpWithEmail = async (email: string, password: string) => {
+  const signUpWithEmail = async (
+    email: string,
+    password: string,
+    options?: AuthRoleOptions,
+  ) => {
     setLoading(true);
     setError(null);
 
     try {
       const result = await createUserWithEmailAndPassword(auth, email, password);
       const idToken = await result.user.getIdToken();
-      const verifyResult = await verifyToken(idToken);
+      const verifyResult = await verifyToken(idToken, options);
 
       if (verifyResult.success && verifyResult.user) {
         setUser(verifyResult.user);
@@ -153,14 +265,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signInWithGoogle = async () => {
+  const sendPasswordReset = async (email: string) => {
+    setError(null);
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      throw new Error('Enter your email address.');
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, trimmedEmail);
+    } catch (err) {
+      if (getAuthErrorCode(err) === 'auth/user-not-found') {
+        return;
+      }
+
+      const message = getAuthErrorMessage(err, 'Failed to send password reset email');
+      setError(message);
+      throw new Error(message);
+    }
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    setError(null);
+
+    if (!auth.currentUser) {
+      throw new Error('No authenticated user');
+    }
+
+    if (!auth.currentUser.email) {
+      throw new Error('This account does not have an email address.');
+    }
+
+    try {
+      const credential = EmailAuthProvider.credential(auth.currentUser.email, currentPassword);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+      await updatePassword(auth.currentUser, newPassword);
+    } catch (err) {
+      const message = getAuthErrorMessage(err, 'Failed to change password');
+      setError(message);
+      throw new Error(message);
+    }
+  };
+
+  const signInWithGoogle = async (options?: AuthRoleOptions) => {
     setLoading(true);
     setError(null);
 
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const idToken = await result.user.getIdToken();
-      const verifyResult = await verifyToken(idToken);
+      const verifyResult = await verifyToken(idToken, options);
 
       if (verifyResult.success && verifyResult.user) {
         setUser(verifyResult.user);
@@ -229,6 +384,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshUser,
         signInWithEmail,
         signUpWithEmail,
+        sendPasswordReset,
+        changePassword,
         signInWithGoogle,
         linkWithGoogle,
         linkWithGithub,
@@ -239,6 +396,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
+      {user?.requiresLegacyRolePick && (
+        <LegacyRoleMigrationModal onPicked={handleLegacyRolePick} />
+      )}
     </AuthContext.Provider>
   );
 }

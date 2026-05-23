@@ -19,14 +19,11 @@ import { Alert, AlertDescription, Badge, Button, Card, Input } from '@/component
 import { OnboardingHint } from '@/components/ui/OnboardingHint';
 import type { ClassComplianceRosterData, ConsentStatus, UpdateStudentCompliancePayload } from '@/types';
 
-type BulkMinorValue = 'unchanged' | 'minor' | 'adult';
 type BulkConsentValue = 'unchanged' | ConsentStatus;
 type BulkTextAllowedValue = 'unchanged' | 'allowed' | 'blocked';
 type BulkRetentionValue = 'unchanged' | 'standard_school' | 'no_raw_audio';
 
 const DEFAULT_BULK_FORM = {
-  isMinor: 'unchanged' as BulkMinorValue,
-  guardianConsentStatus: 'unchanged' as BulkConsentValue,
   voiceConsentStatus: 'unchanged' as BulkConsentValue,
   textAllowed: 'unchanged' as BulkTextAllowedValue,
   retentionPolicyId: 'unchanged' as BulkRetentionValue,
@@ -42,14 +39,6 @@ function formatGuardianPacketTimestamp(value?: string | null) {
 
 function buildBulkUpdates(form: typeof DEFAULT_BULK_FORM): UpdateStudentCompliancePayload {
   const updates: UpdateStudentCompliancePayload = {};
-  if (form.isMinor === 'minor') {
-    updates.isMinor = true;
-  } else if (form.isMinor === 'adult') {
-    updates.isMinor = false;
-  }
-  if (form.guardianConsentStatus !== 'unchanged') {
-    updates.guardianConsentStatus = form.guardianConsentStatus;
-  }
   if (form.voiceConsentStatus !== 'unchanged') {
     updates.voiceConsentStatus = form.voiceConsentStatus;
   }
@@ -302,34 +291,6 @@ export function TeacherClassCompliancePage() {
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <label className="space-y-2 text-sm font-medium text-foreground">
-              <span>Student status</span>
-              <select
-                value={bulkForm.isMinor}
-                onChange={(event) => setBulkForm((current) => ({ ...current, isMinor: event.target.value as BulkMinorValue }))}
-                className="w-full rounded-2xl border-2 border-border bg-background px-4 py-3 text-sm text-foreground focus:border-foreground focus:outline-none"
-              >
-                <option value="unchanged">Leave unchanged</option>
-                <option value="minor">Set to minor</option>
-                <option value="adult">Set to adult</option>
-              </select>
-            </label>
-
-            <label className="space-y-2 text-sm font-medium text-foreground">
-              <span>Guardian consent</span>
-              <select
-                value={bulkForm.guardianConsentStatus}
-                onChange={(event) => setBulkForm((current) => ({ ...current, guardianConsentStatus: event.target.value as BulkConsentValue }))}
-                className="w-full rounded-2xl border-2 border-border bg-background px-4 py-3 text-sm text-foreground focus:border-foreground focus:outline-none"
-              >
-                <option value="unchanged">Leave unchanged</option>
-                <option value="unknown">Unknown</option>
-                <option value="granted">Granted</option>
-                <option value="revoked">Revoked</option>
-                <option value="not_required">Not required</option>
-              </select>
-            </label>
-
-            <label className="space-y-2 text-sm font-medium text-foreground">
               <span>Voice consent</span>
               <select
                 value={bulkForm.voiceConsentStatus}
@@ -448,9 +409,6 @@ export function TeacherClassCompliancePage() {
                           </Badge>
                           <Badge variant={student.compliance.textAllowed ? 'accent' : 'outline'} size="sm">
                             Text {student.compliance.textAllowed ? 'allowed' : 'blocked'}
-                          </Badge>
-                          <Badge variant="secondary" size="sm">
-                            Guardian {student.compliance.guardianConsentStatus}
                           </Badge>
                           <Badge variant="secondary" size="sm">
                             Voice {student.compliance.voiceConsentStatus}

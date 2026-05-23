@@ -1,7 +1,7 @@
 # School Integration Tasks
 
 Status: Active
-Last updated: 2026-03-13
+Last updated: 2026-04-18
 Owner: Engineering + Product
 
 ## Status legend
@@ -36,7 +36,7 @@ Owner: Engineering + Product
 - [x] Add Firestore collections for `organizations`, `memberships`, `classes`, and `enrollments`.
 - [x] Define indexes needed for teacher class queries and student enrollment lookups.
 - [x] Add secure Firestore rules for org/class-scoped reads and writes.
-- [ ] Define data migration plan for existing users who only have `profile.school_name`.
+- [x] Define data migration plan for existing users who only have `profile.school_name`. Implemented by Plan 6: `scripts/backfill_legacy_user_roles.py` infers roles from active memberships/enrollments; the `LegacyRoleMigrationModal` handles unresolved users at next sign-in.
 
 ### UI shell
 
@@ -46,12 +46,33 @@ Owner: Engineering + Product
 
 ## Phase 2: School onboarding and roster workflows
 
+### Admin school registration wizard
+
+- [x] Admin org wizard — 4-step form with autosave draft
+- [x] Authorization attestation with server-stamped IP hash + UA
+- [x] Pre-invite teachers list on submit; auto-invitations on approval
+- [x] Approval / decline transactional emails via outbox
+
 ### Teacher onboarding
 
 - [x] Design separate school onboarding flow from learner onboarding.
 - [x] Create class manually flow.
 - [x] Invite student flow (class join code + student join page + roster management).
 - [x] Add basic teacher-facing setup checklist state.
+- [x] Hybrid teacher join: invite code + name search (Plan 4)
+- [x] Admin approval pipeline with email notification (Plan 4)
+- [x] Removed auto-approve from /api/schools/join-as-teacher (Plan 4)
+- [x] organizations.school_admin_uids denormalization for rules (Plan 4)
+- [x] PendingTeacherRequestsSection on TeacherDashboardPage (Plan 4)
+- [x] Backfill `organizations.school_admin_uids` for orgs created before Plan 4 — ran `scripts/backfill_school_admin_uids.py` against `lingu-480600` on 2026-05-21.
+- [x] Backfill `organizations.name_lower` for orgs created before Plan 4 — ran `scripts/backfill_org_name_lower.py` against `lingu-480600` on 2026-05-21.
+- [x] **(Plan 5 acceptance)** Any membership-removal path MUST call `_sync_org_admin_uids(org_id, uid, add=False)` when removing `school_admin`. Extended `backend/tests/test_school_admin_uids_invariant.py` with the removal regression (Plan 5 Task 7).
+- [ ] Replace in-memory org search rate limiter with a shared store (Redis / Firestore counter) when scaling to multi-replica.
+- [ ] 7-day reminder email for stale pending teacher join requests (v1.5). **Product decision needed before launch.**
+- [ ] Realtime status listener on `/signup/teacher/pending` (replace 30s polling, v1.5).
+- [ ] Wrap teacher-join approve flow in a Firestore batch/transaction (v1.5). Introduces the project's first transactional path — plan it cross-cuttingly.
+- [ ] Document `PUBLIC_BASE_URL` in `.env.example` and the deployment runbook.
+- [ ] Top-level `try/except` wrapper around the main body of each route in `backend/routes/teacher_requests.py` (matches `school_requests.py` pattern; ensures Firestore transient errors return shaped JSON, not unformatted HTML 500).
 
 ### LMS / roster import
 
@@ -60,37 +81,92 @@ Owner: Engineering + Product
 - [x] Implement LMS connection record model (`canvas_connections`, `canvas_course_content` collections).
 - [x] Implement Canvas API client with pagination and typed errors (`backend/services/canvas/client.py`).
 - [x] Implement PAT encryption with AES-256-GCM (`backend/services/canvas/encryption.py`).
-- [x] Implement roster sync service with email match and pending_sync flow (`backend/services/canvas/sync.py`).
+- [x] Implement roster sync service with email match and pending_sync flow (`backend/services/canvas/sync.py`). *Superseded 2026-04-21: see roster-decouple entry below.*
 - [x] Implement Canvas integration routes: validate, connect, sync, status, disconnect, link/unlink (`backend/routes/integrations.py`).
-- [x] Activate pending Canvas enrollments on student login (`backend/routes/auth.py`).
+- [x] Activate pending Canvas enrollments on student login (`backend/routes/auth.py`). *Removed 2026-04-21: see roster-decouple entry below.*
 - [x] Add Firestore rules for Canvas collections (deny-all for connections, enrolled-student read for content).
 - [x] Build teacher Canvas connect flow (two-step: validate PAT + select course) (`CanvasConnectPage.tsx`).
 - [x] Build Canvas sync status component for class analytics page (`CanvasSyncStatus.tsx`).
 - [x] Build Canvas assignment link picker (`CanvasLinkPicker.tsx`).
 - [x] Build student Canvas module view component (`CanvasModuleView.tsx`).
 - [x] Add Canvas link button to teacher dashboard class cards.
+- [x] Decouple Canvas roster from Lingual enrollments (2026-04-21).
+  See `docs/superpowers/specs/2026-04-21-canvas-roster-decouple-from-enrollment-design.md`
+  and `docs/superpowers/plans/2026-04-21-canvas-roster-decouple-from-enrollment.md`.
+  Ships: new `canvas_roster_entries/` collection, "On Canvas roster" badge
+  and "not yet joined" gap view on the teacher roster, `GET /api/teacher/classes/<class_id>/canvas-roster-gap`
+  endpoint, one-time migration script at `scripts/migrate_canvas_roster_decouple.py`,
+  removal of `pending_sync`-on-login activation in `auth.py`, and removal
+  of email-match auto-enroll from `reconcile_enrollments`. Canvas PAT sync
+  no longer writes to `enrollments/`; enrollments come only from join
+  code or LTI deep-link launch. Deferred: manual "link to Canvas roster
+  entry" UI for the email-mismatch case (see `LIMITATIONS.md` item 20).
 - [ ] Add manual CSV fallback if LMS setup is delayed.
 
-## Phase 3: Curriculum mapping and assignment authoring
+### Lingual admin panel (Plan 5)
 
-### Curriculum package delivery
+- [x] Routes mounted at `/lingual-admin/*` (top-level, outside `/app`, so AppLayout does not double-nest with `LingualAdminShell`).
+- [x] `lingual_admin_audit` collection with `AuditLogger` service.
+- [x] 12 endpoints under `backend/routes/lingual_admin.py`.
+- [x] Org suspend/restore with email fan-out via outbox.
+- [x] Auto-restore hourly Cloud Function scheduler.
+- [x] Suspended-org enforcement at 5 points (assignment_resolver, realtime mint, practice mutations, canvas_practice, teacher writes).
+- [x] Member removal UI with `_sync_org_admin_uids(add=False)` invariant test (Plan 4 forward obligation).
+- [x] `org_suspended` + `org_restored` email templates.
+- [x] `/app/admin` school_admin home route (separated from `/app/teacher`).
+- [x] AuthContext 5-min `/api/auth/verify` polling.
+- [x] Legacy `/api/admin/school-requests/*` endpoints return 410 Gone.
+- [x] Legacy `/app/admin/school-requests` route redirects to `/lingual-admin/requests`.
 
-- [ ] Replace sample-only package loading with school-aware package lookup.
-- [ ] Define package ownership rules: global vs organization.
-- [-] Add package selection endpoint for teachers.
+- [ ] `PATCH /api/lingual-admin/organizations/<orgId>` (org metadata editing) — v1.5.
+- [ ] Realtime listener for org-detail audit feed (replace pagination, v1.5).
+- [ ] Bulk export of org audit feed as CSV — v1.5.
+- [ ] Internationalize Lingual admin panel UI (en-only in v1).
+- [ ] Wire `school_request_reminder_to_lingual` once the outbox sweep gap (LIMITATIONS #21) is closed.
+- [ ] Delete orphan Firestore composite index `enrollments(status, student_uid, updated_at DESC)` (LIMITATIONS #41) — safe, redundant with the IaC-managed `(student_uid, status, updated_at DESC)` index. Targeted `gcloud firestore indexes composite delete` command in LIMITATIONS #41.
+- [ ] Reminder email for inactive suspended orgs (≥30 days suspended_until in past with auto-restore disabled) — needs product decision before launch.
+- [ ] Backfill top-level `country` from `location.country` for `school_requests` rows submitted before the LIMITATIONS #47 denormalization fix. One-shot script: query `school_requests` where `country` is missing AND `location.country` is non-empty; write `country` to each. Until run, the Requests page country filter (LIMITATIONS #47) matches only post-fix rows.
+- [x] Backfill org metadata (`school_type`, `country`, `state`, `county`, `website_url`, `public_or_private`, `grade_size`) on `organizations/` rows created before the LIMITATIONS #49 approval-time copy fix — ran `scripts/backfill_org_metadata_from_requests.py` against `lingu-480600` on 2026-05-21. The script looks up originating `school_requests` rows via `created_org_id` reverse lookup and copies missing fields.
+- [ ] Wire `make test-emulator` into CI so a missing composite index trips before deploy. Infrastructure exists (`backend/tests/test_firestore_indexes.py` + Makefile target) but Plan 5 round-4 surfaced a class of index-shaped findings (LIMITATIONS #50) that FakeDb-only test suites cannot catch. Requires Java runtime on CI agents + Firebase CLI; add as a separate job that runs alongside `make test-backend`.
+- [ ] Share the school-type enum between FE and BE (LIMITATIONS #51 root cause). Today both sides hand-code overlapping lists in TS and Python, and the round-4 drift (`elementary` in TS, not in BE's `ALLOWED_SCHOOL_TYPES`) was caught by Codex review rather than the type system. Either (a) emit the Python enum as a generated TS const at build time, or (b) move both to a single JSON/YAML source-of-truth that both layers read.
 
-### Mapping overlay
+### Legacy migration (Plan 6)
 
-- [x] Create `curriculum_mappings` model.
-- [x] Build teacher UI to select package, module, objective IDs, and situations.
+- [x] `scripts/backfill_legacy_user_roles.py` with `--dry-run` and idempotent skip-already-migrated.
+- [x] `database.mark_user_legacy_role_picked(uid, role)` helper.
+- [x] `POST /api/auth/migrate-role` (idempotent, defense-in-depth).
+- [x] `LegacyRoleMigrationModal` blocking modal (en-only, spec §628 copy).
+- [x] `AuthProvider` mounts modal on `requiresLegacyRolePick`.
+- [x] Dispatcher (`getOnboardingDestination` + `getPrivilegedHomeRoute`) returns `null` while modal is pending so it never races route changes.
+
+- [ ] Run backfill `--dry-run` on staging.
+- [ ] Run backfill on staging (writes).
+- [ ] Run backfill on production.
+- [ ] Monitor `[backfill]` and `legacy_role_pick` log volume for 1 week post-launch.
+- [ ] "Switch to learning mode" for teacher/admin-migrated users who want to learn — v1.5.
+- [ ] Localize the modal copy (en + ko) — v1.5.
+
+## Phase 3: Canvas content and assignment authoring
+
+### Content sources
+
+- [x] Replace sample-only package loading with Canvas-synced content and teacher-authored source text.
+- [x] Remove the sample package selection endpoint for teachers.
+- [x] Add Canvas content picker for assignment authoring.
+- [x] Add AI-assisted draft generation from teacher-provided source packets.
+- [x] Add manual advanced authoring without any Canvas item.
+
+### Assignment content model
+
+- [x] Remove `curriculum_mappings` from the beta assignment path.
+- [x] Store assignment scenario fields directly on `assignments`.
 - [x] Add teacher controls for:
+  - objectives
   - target expressions
   - focus grammar
-  - rubric focus
-  - feedback mode
-  - scaffolding mode
+  - teacher notes
   - modality policy
-- [ ] Persist mapping versions for assignment reproducibility.
+  - task type / success criteria
 
 ### Assignments
 
@@ -106,24 +182,15 @@ Owner: Engineering + Product
 - [x] Add assignment resolver service.
 - [x] Add practice session bootstrap endpoint.
 - [x] Extend realtime session creation to accept `assignmentId`.
-- [x] Snapshot resolved mapping into each practice session.
+- [x] Snapshot resolved assignment context into each practice session.
 - [x] Expose rubric, task-model, and evidence metadata in assignment bootstrap.
 - [x] Enforce assignment-aware prompt assembly for school practice.
 
-### Pedagogy engine
+### Assignment prompt policy
 
-- [x] Encode default recast -> elicitation -> review ladder.
-- [x] Add teacher-configurable feedback modes.
-- [x] Add scaffold ladder settings.
-- [x] Support task templates:
-  - information gap
-  - opinion gap
-  - decision-making
-- [x] Add extended-output pressure settings.
-- [x] Promote task templates to structured definitions owned by curriculum packages.
-- [x] Add runtime template resolution from objective templateRefs to package-level activityTemplates.
+- [x] Encode assignment-aware prompt assembly around instructions, generated scenario, and teacher targets.
 - [x] Add interaction contract preview to teacher assignment builder.
-- [x] Add interaction contract display to curriculum browsing views (module page + listing).
+- [x] Remove the legacy sample-curriculum and pedagogy-engine prompt path.
 
 ### Modality and cost controls
 
@@ -235,7 +302,7 @@ Recommended sequence for the remaining hardening work:
 
 1. Auth, memberships, and teacher route protection.
 2. Class model and onboarding split.
-3. Curriculum mappings and assignments.
+3. Canvas content and assignments.
 4. Assignment-aware session bootstrap and prompt resolver.
 5. Learning events and dashboard APIs.
 6. Compliance enforcement and LMS hardening.
@@ -246,13 +313,13 @@ Recommended sequence for the remaining hardening work:
 - [x] Update auth contract to return memberships and active context.
 - [x] Add frontend `MembershipContext` and teacher route guard.
 - [x] Convert `/app/teacher` from mock-only access to role-aware dashboard shell.
-- [x] Define `curriculum_mappings` and `assignments` DTOs.
+- [x] Define assignment DTOs and bootstrap contracts.
 - [x] Add backend assignment bootstrap endpoint skeleton.
 
 ## Definition of done for beta entry
 
 - [x] Teacher can create or import a class.
-- [x] Teacher can create an assignment from curriculum mappings.
+- [x] Teacher can create an assignment from Canvas content or teacher-authored source material.
 - [x] Student can launch assignment-aware practice.
 - [x] Teacher can see class and student analytics tied to that assignment.
 - [x] Voice access respects consent and retention policy.

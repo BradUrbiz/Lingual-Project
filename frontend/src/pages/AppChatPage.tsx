@@ -9,8 +9,8 @@ import {
   ChevronLeft,
   ChevronRight,
   BookOpen,
-  History,
   MonitorPlay,
+  CircleUserRound,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx } from 'clsx';
@@ -22,6 +22,7 @@ import {
   saveMessageToChat,
   sendChatMessage,
   deleteChatSession,
+  updateChatSettings,
 } from '@/api/chat';
 import { ChatInput } from '@/components/chat';
 import { buildLive2DAvatarStateFromPerformance } from '@/components/avatar/live2dAdapter';
@@ -30,29 +31,35 @@ import { getUserProfile } from '@/api/user';
 import { getAssessmentResults } from '@/api/assessment';
 import { ChatSessionsSidebar } from '@/components/learning';
 import {
-  Button,
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui';
-import type { ChatMessage, ChatSession, AssessmentResults, UserProfile } from '@/types';
+import type {
+  ChatMessage,
+  ChatSession,
+  AssessmentResults,
+  UserProfile,
+  LanguageMixLevel,
+} from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/hooks/useAuth';
 
-const FALLBACK_AVATAR = '/imgs/landing/student.jpg';
 const AI_AVATAR = '/imgs/avatars/ai.svg';
 const CHAT_AVATAR_ENABLED_KEY = 'lingual:chat:avatarEnabled';
 const TEXT_AVATAR_SPEAK_MIN_MS = 1200;
 const TEXT_AVATAR_SPEAK_MAX_MS = 4200;
 declare const __CUBISM_SDK_AVAILABLE__: boolean;
+const PILOT_AVATAR_ENABLED = (import.meta.env.VITE_ENABLE_PILOT_AVATAR ?? 'false') === 'true';
 const LIVE2D_CHAT_ENABLED =
   import.meta.env.VITE_ENABLE_LIVE2D_CHAT !== undefined
     ? import.meta.env.VITE_ENABLE_LIVE2D_CHAT !== 'false'
-    : __CUBISM_SDK_AVAILABLE__;
+    : import.meta.env.MODE === 'test' || __CUBISM_SDK_AVAILABLE__;
 const REALTIME_AVATAR_DIRECTIVES_ENABLED = (import.meta.env.VITE_ENABLE_REALTIME_AVATAR_DIRECTIVES ?? 'false') === 'true';
+const CHAT_AVATAR_AVAILABLE = PILOT_AVATAR_ENABLED && LIVE2D_CHAT_ENABLED;
+const DEFAULT_LANGUAGE_MIX_LEVEL: LanguageMixLevel = 'balanced';
 
 const Live2DAvatarPanel = lazy(() => import('@/components/avatar/Live2DAvatarPanel'));
 
@@ -91,7 +98,7 @@ function getClientNow(): number {
 export function AppChatPage() {
   const { lang, t } = useLanguage();
   const { avatarUrl } = useAuth();
-  const userAvatar = avatarUrl || FALLBACK_AVATAR;
+  const userAvatar = avatarUrl || null;
   const [searchParams] = useSearchParams();
   const requestedChatId = searchParams.get('chatId');
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -103,13 +110,14 @@ export function AppChatPage() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [assessmentResults, setAssessmentResults] = useState<AssessmentResults | null>(null);
   const [profileSummary, setProfileSummary] = useState<UserProfile | null>(null);
+  const [languageMixLevel, setLanguageMixLevel] = useState<LanguageMixLevel>(DEFAULT_LANGUAGE_MIX_LEVEL);
+  const [languageMixNotice, setLanguageMixNotice] = useState<string | null>(null);
 
   // Chat mode state
   type Mode = 'text' | 'realtime';
   const [mode, setMode] = useState<Mode>('realtime');
   const [inputValue, setInputValue] = useState('');
   const [isSendingText, setIsSendingText] = useState(false);
-  const [deleteDialogChatId, setDeleteDialogChatId] = useState<string | null>(null);
   const [isDeletingChat, setIsDeletingChat] = useState(false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [isSidebarDialogOpen, setIsSidebarDialogOpen] = useState(false);
@@ -119,6 +127,7 @@ export function AppChatPage() {
   const [textAssistantSpeechStartedAt, setTextAssistantSpeechStartedAt] = useState<number | null>(null);
   const [textAssistantSpeechEndedAt, setTextAssistantSpeechEndedAt] = useState<number | null>(null);
   const [isAvatarEnabled, setIsAvatarEnabled] = useState(() => {
+    if (!CHAT_AVATAR_AVAILABLE) return false;
     try {
       const stored = window.localStorage.getItem(CHAT_AVATAR_ENABLED_KEY);
       if (stored === null) return false;
@@ -227,10 +236,11 @@ export function AppChatPage() {
 
   const realtimeSessionParams = useMemo(
     () => ({
+      chatId: currentChatId,
       uiLanguage: lang,
-      avatarDirectives: LIVE2D_CHAT_ENABLED && REALTIME_AVATAR_DIRECTIVES_ENABLED,
+      avatarDirectives: CHAT_AVATAR_AVAILABLE && isAvatarEnabled && REALTIME_AVATAR_DIRECTIVES_ENABLED,
     }),
-    [lang]
+    [currentChatId, isAvatarEnabled, lang]
   );
   const legacyRealtimeSession = useRealtimeChat({
     onMessage: handleRealtimeMessage,
@@ -326,12 +336,13 @@ export function AppChatPage() {
     if (!isConnected) return t('app.learn.status.tapToConnect');
     if (
       LIVE2D_CHAT_ENABLED &&
+      CHAT_AVATAR_AVAILABLE &&
       mode === 'realtime' &&
       (live2dPerformance.dialogueState === 'thinking' || live2dPerformance.dialogueState === 'pre_speaking')
     ) {
       return t('app.learn.status.aiResponding');
     }
-    if (isSpeaking || (LIVE2D_CHAT_ENABLED && mode === 'realtime' && live2dPerformance.dialogueState === 'speaking')) {
+    if (isSpeaking || (CHAT_AVATAR_AVAILABLE && mode === 'realtime' && live2dPerformance.dialogueState === 'speaking')) {
       return t('app.learn.status.aiSpeaking');
     }
     if (isListening) return t('app.learn.status.listening');
@@ -396,6 +407,8 @@ export function AppChatPage() {
       resetRealtimePersistence(formattedMessages.length);
       setHistoryMessages(formattedMessages);
       setCurrentChatId(chatId);
+      setLanguageMixLevel(chat.languageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL);
+      setLanguageMixNotice(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load chat');
     } finally {
@@ -413,7 +426,7 @@ export function AppChatPage() {
     disconnect();
 
     try {
-      const { chatId, title } = await createChatSession();
+      const { chatId, title, languageMixLevel: createdLanguageMixLevel } = await createChatSession();
       const timestamp = new Date().toISOString();
       const newSession: ChatSession = {
         id: chatId,
@@ -421,11 +434,14 @@ export function AppChatPage() {
         created_at: timestamp,
         updated_at: timestamp,
         message_count: 0,
+        languageMixLevel: createdLanguageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL,
       };
       resetRealtimePersistence(0);
       setSessions((prev) => [newSession, ...prev]);
       setHistoryMessages([]);
       setCurrentChatId(chatId);
+      setLanguageMixLevel(createdLanguageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL);
+      setLanguageMixNotice(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create chat');
     } finally {
@@ -543,6 +559,33 @@ export function AppChatPage() {
     setMode(newMode);
   };
 
+  const handleLanguageMixChange = async (nextValue: string) => {
+    if (!currentChatId) return;
+
+    const nextLanguageMixLevel = nextValue as LanguageMixLevel;
+    const previousLanguageMixLevel = languageMixLevel;
+    setLanguageMixLevel(nextLanguageMixLevel);
+    setLanguageMixNotice(
+      isConnected ? 'Reconnect voice to apply this language mix.' : null
+    );
+
+    try {
+      const updatedChat = await updateChatSettings(currentChatId, {
+        languageMixLevel: nextLanguageMixLevel,
+      });
+      setLanguageMixLevel(updatedChat.languageMixLevel || nextLanguageMixLevel);
+      setSessions((prev) => prev.map((session) => (
+        session.id === currentChatId
+          ? { ...session, languageMixLevel: updatedChat.languageMixLevel || nextLanguageMixLevel }
+          : session
+      )));
+    } catch (err) {
+      setLanguageMixLevel(previousLanguageMixLevel);
+      setLanguageMixNotice(null);
+      setError(err instanceof Error ? err.message : 'Failed to update language mix');
+    }
+  };
+
   const handleSendText = async () => {
     if (!inputValue.trim() || isSendingText || !currentChatId) return;
 
@@ -613,14 +656,9 @@ export function AppChatPage() {
     }
   };
 
-  const handleDeleteChat = (chatId: string, e: React.MouseEvent) => {
+  const handleDeleteChat = async (chatId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setDeleteDialogChatId(chatId);
-  };
-
-  const handleConfirmDeleteChat = async () => {
-    if (!deleteDialogChatId || isDeletingChat) return;
-    const chatId = deleteDialogChatId;
+    if (isDeletingChat) return;
     setIsDeletingChat(true);
 
     try {
@@ -647,7 +685,6 @@ export function AppChatPage() {
       setError('Failed to delete chat');
     } finally {
       setIsDeletingChat(false);
-      setDeleteDialogChatId(null);
     }
   };
 
@@ -657,9 +694,6 @@ export function AppChatPage() {
     Boolean(currentChatId) &&
     Boolean(mostRecentSession) &&
     mostRecentSession?.id !== currentChatId;
-  const pendingDeleteSession = deleteDialogChatId
-    ? sessions.find((session) => session.id === deleteDialogChatId) ?? null
-    : null;
 
   const focusAreas = profileSummary?.selectedCategories ?? [];
   const domainEntries = assessmentResults?.domainBands
@@ -692,8 +726,23 @@ export function AppChatPage() {
   const focusBadgeClass = focusAreas.length > 0
     ? domainBadgeStyles[focusAreas[0]] || 'bg-slate-100 text-slate-600'
     : 'bg-slate-100 text-slate-600';
+  const languageMixOptions: Array<{ value: LanguageMixLevel; label: string }> = [
+    { value: 'english_first', label: t('chat.languageMix.english_first') },
+    { value: 'english_led', label: t('chat.languageMix.english_led') },
+    { value: 'balanced', label: t('chat.languageMix.balanced') },
+    { value: 'target_led', label: t('chat.languageMix.target_led') },
+    { value: 'target_only', label: t('chat.languageMix.target_only') },
+  ];
 
   useEffect(() => {
+    if (!CHAT_AVATAR_AVAILABLE) {
+      setIsAvatarEnabled(false);
+      return;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!CHAT_AVATAR_AVAILABLE) return;
     try {
       window.localStorage.setItem(CHAT_AVATAR_ENABLED_KEY, String(isAvatarEnabled));
     } catch {
@@ -750,15 +799,6 @@ export function AppChatPage() {
           >
             <BookOpen size={18} strokeWidth={2.5} />
           </button>
-          <button
-            type="button"
-            onClick={() => setIsSidebarExpanded(true)}
-            aria-label={t('app.learn.sessions.title')}
-            title={t('app.learn.sessions.title')}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          >
-            <History size={18} strokeWidth={2.5} />
-          </button>
         </div>
       </div>
 
@@ -800,7 +840,7 @@ export function AppChatPage() {
       {/* Main Content: Avatar (5) + Chat (3) */}
       <div className="flex h-full min-h-0 min-w-0 flex-1 gap-3">
         {/* Virtual Avatar Panel — only available when Live2D SDK is present */}
-        {LIVE2D_CHAT_ENABLED && isAvatarEnabled && isDesktop && (
+        {CHAT_AVATAR_AVAILABLE && isAvatarEnabled && isDesktop && (
           <div className="hidden h-full min-h-0 flex-[5] overflow-hidden rounded-2xl border-3 border-foreground bg-card shadow-stamp lg:flex lg:flex-col">
             <Suspense
               fallback={
@@ -834,7 +874,7 @@ export function AppChatPage() {
         {/* Chat Panel */}
         <div className={clsx(
           'relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border-3 border-foreground bg-card shadow-stamp',
-          LIVE2D_CHAT_ENABLED && isAvatarEnabled ? 'flex-[3]' : 'flex-1'
+          CHAT_AVATAR_AVAILABLE && isAvatarEnabled ? 'flex-[3]' : 'flex-1'
         )}>
           <div className="z-10 flex items-center justify-between border-b-3 border-foreground bg-card p-4">
             <div className="min-w-0 flex-1">
@@ -873,6 +913,26 @@ export function AppChatPage() {
               )}
             </div>
             <div className="flex items-center space-x-2 shrink-0 ml-3">
+              <div className="flex flex-col items-end gap-1 mr-1">
+                <select
+                  aria-label={t('chat.languageMix.label')}
+                  value={languageMixLevel}
+                  onChange={(event) => void handleLanguageMixChange(event.target.value)}
+                  disabled={!currentChatId}
+                  className="h-8 rounded-xl border-2 border-border bg-card px-2 text-xs font-bold text-foreground focus:border-primary focus:outline-none"
+                >
+                  {languageMixOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {languageMixNotice ? (
+                  <p className="max-w-48 text-right text-[10px] font-medium text-muted-foreground">
+                    {languageMixNotice}
+                  </p>
+                ) : null}
+              </div>
               <div className="flex bg-secondary rounded-xl p-1 border-2 border-border">
                 <button
                   type="button"
@@ -908,7 +968,7 @@ export function AppChatPage() {
               >
                 <Menu size={14} strokeWidth={2.5} />
               </button>
-              {LIVE2D_CHAT_ENABLED && (
+              {CHAT_AVATAR_AVAILABLE && (
                 <button
                   type="button"
                   onClick={() => setIsAvatarEnabled((prev) => !prev)}
@@ -961,11 +1021,20 @@ export function AppChatPage() {
                       animate={{ opacity: 1, y: 0 }}
                       className={clsx('flex gap-3', isUser ? 'flex-row-reverse' : 'flex-row')}
                     >
-                      <img
-                        src={isUser ? userAvatar : AI_AVATAR}
-                        alt={isUser ? 'You' : 'Lingual AI'}
-                        className="w-10 h-10 shrink-0 rounded-xl bg-card border-2 border-foreground object-cover object-center"
-                      />
+                      {isUser && !userAvatar ? (
+                        <div
+                          aria-label="You"
+                          className="w-10 h-10 shrink-0 rounded-xl bg-secondary border-2 border-foreground flex items-center justify-center text-muted-foreground"
+                        >
+                          <CircleUserRound className="h-6 w-6" strokeWidth={1.75} />
+                        </div>
+                      ) : (
+                        <img
+                          src={isUser ? (userAvatar as string) : AI_AVATAR}
+                          alt={isUser ? 'You' : 'Lingual AI'}
+                          className="w-10 h-10 shrink-0 rounded-xl bg-card border-2 border-foreground object-cover object-center"
+                        />
+                      )}
                       <div
                         className={clsx(
                           'max-w-[85%] px-3 py-2.5 rounded-xl text-[11.7px] leading-[1.45] border-2',
@@ -1064,46 +1133,6 @@ export function AppChatPage() {
               />
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(deleteDialogChatId)}
-        onOpenChange={(open) => {
-          if (!open && !isDeletingChat) {
-            setDeleteDialogChatId(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-[420px] rounded-2xl border-3 border-foreground bg-card shadow-stamp">
-          <DialogHeader>
-            <DialogTitle className="font-display text-xl text-foreground">
-              {t('app.learn.sessions.deleteTitle') || 'Delete conversation?'}
-            </DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
-              {pendingDeleteSession?.title
-                ? `${pendingDeleteSession.title} — ${t('chat.deleteConfirm') || 'Are you sure you want to delete this chat?'}`
-                : t('chat.deleteConfirm') || 'Are you sure you want to delete this chat?'}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDeleteDialogChatId(null)}
-              disabled={isDeletingChat}
-            >
-              {t('logout.cancel') || 'Cancel'}
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleConfirmDeleteChat}
-              loading={isDeletingChat}
-            >
-              {t('app.learn.sessions.deleteAction') || 'Delete chat'}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

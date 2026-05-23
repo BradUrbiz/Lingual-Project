@@ -68,7 +68,7 @@ export function ServiceNavigationCard({ title, description, icon, href, color }:
           {href.replace('/app/', '')}
         </span>
       </div>
-      <h3 className="text-lg font-display font-bold text-foreground">{title}</h3>
+      <h3 className="text-xl font-display font-bold text-foreground">{title}</h3>
       <p className="mt-1 text-sm text-muted-foreground">{description}</p>
     </motion.button>
   );

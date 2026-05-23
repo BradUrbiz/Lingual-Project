@@ -7,10 +7,10 @@ For each school in docs/sales/extracted/*.json:
     (one per language-per-teacher).
   - If extraction was a failure or yielded no teachers, keep the anchor and
     annotate notes with the extraction status.
-  - For teachers whose email was hidden on the page, fall back to
-    predict_email.py and mark email_verified=N.
+  - Preserve extracted vs inferred email provenance.
 
 Run from repo root:
+  python3 docs/sales/scripts/process_nces.py
   python3 docs/sales/scripts/aggregate_pilot.py
 """
 from __future__ import annotations
@@ -24,8 +24,6 @@ from datetime import date
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO / "docs" / "sales" / "scripts"))
-from predict_email import predict  # noqa: E402
 
 CSV_PATH = REPO / "docs" / "sales" / "teacher_dmv.csv"
 EXTRACTED = REPO / "docs" / "sales" / "extracted"
@@ -38,17 +36,57 @@ def _norm_name(s: str) -> str:
     return s
 
 
-def _match_anchor(extracted_name: str, state: str, anchors: list[dict]) -> int | None:
+def _match_anchor(
+    extracted_name: str,
+    state: str,
+    anchors: list[dict],
+    district: str = "",
+    county: str = "",
+) -> int | None:
     """Return index of best-matching anchor row, or None."""
     e = _norm_name(extracted_name)
     candidates = [(i, a) for i, a in enumerate(anchors) if a["state"] == state]
-    for i, a in candidates:
-        if _norm_name(a["school_name"]) == e:
-            return i
+    district_norm = _norm_name(district)
+    county_norm = _norm_name(county)
+
+    def district_match(items: list[tuple[int, dict]]) -> int | None:
+        if district_norm:
+            matches = [
+                (i, a)
+                for i, a in items
+                if _norm_name(a.get("district", "")) == district_norm
+            ]
+            if len(matches) == 1:
+                return matches[0][0]
+        if county_norm:
+            matches = [
+                (i, a)
+                for i, a in items
+                if _norm_name(a.get("county", "")) == county_norm
+            ]
+            if len(matches) == 1:
+                return matches[0][0]
+        return None
+
+    exact = [(i, a) for i, a in candidates if _norm_name(a["school_name"]) == e]
+    if len(exact) == 1:
+        return exact[0][0]
+    if exact:
+        matched = district_match(exact)
+        if matched is not None:
+            return matched
+        return exact[0][0]
+
+    fuzzy = []
     for i, a in candidates:
         an = _norm_name(a["school_name"])
         if e in an or an in e:
-            return i
+            fuzzy.append((i, a))
+    if fuzzy:
+        matched = district_match(fuzzy)
+        if matched is not None:
+            return matched
+        return fuzzy[0][0]
     return None
 
 
@@ -57,6 +95,11 @@ def main():
         reader = csv.DictReader(f)
         header = reader.fieldnames
         anchors = list(reader)
+    if any(r.get("teacher_first_name") for r in anchors):
+        raise SystemExit(
+            "teacher_dmv.csv already contains teacher rows. Rebuild the "
+            "anchor table first with: python3 docs/sales/scripts/process_nces.py"
+        )
 
     extracted_files = sorted(
         p for p in EXTRACTED.glob("*.json") if not p.name.startswith("_")
@@ -70,7 +113,13 @@ def main():
 
     for fp in extracted_files:
         d = json.loads(fp.read_text())
-        idx = _match_anchor(d["school_name"], d["state"], anchors)
+        idx = _match_anchor(
+            d["school_name"],
+            d["state"],
+            anchors,
+            d.get("district", ""),
+            d.get("county", ""),
+        )
         if idx is None:
             print(f"  WARN no anchor matched for {d['school_name']} ({d['state']})",
                   file=sys.stderr)
@@ -83,6 +132,7 @@ def main():
         stats[status] += 1
         if not teachers:
             anchor = dict(anchor)
+            anchor["school_url"] = d.get("school_url") or anchor.get("school_url", "")
             note = anchor.get("notes") or ""
             anchor["notes"] = (
                 f"{note} | extraction={status}: "
@@ -100,35 +150,33 @@ def main():
             role = (t.get("role") or "teacher").strip()
             hook = (t.get("personalization_hook") or "").strip()
 
-            predicted_email = ""
-            predicted_conf = ""
             if not email:
-                p = predict(first, last, anchor["district"])
-                if p.email:
-                    predicted_email = p.email
-                    predicted_conf = p.confidence
-                    stats["email_predicted"] += 1
-                else:
-                    stats["email_none"] += 1
-            else:
+                stats["email_none"] += 1
+            elif email_source == "extracted":
                 stats["email_extracted"] += 1
+            elif email_source == "inferred_pattern":
+                stats["email_inferred_pattern"] += 1
+            else:
+                stats["email_other_source"] += 1
 
-            final_email = email or predicted_email
             email_verified = "Y" if email_source == "extracted" else "N"
-            email_note = (
-                "email source: extracted"
-                if email_source == "extracted"
-                else f"email source: predicted ({predicted_conf} confidence)"
-                if predicted_email
-                else "email source: none"
-            )
+            if email_source == "extracted":
+                email_note = "email source: extracted"
+            elif email_source == "inferred_pattern":
+                conf = t.get("pattern_confidence") or "n/a"
+                email_note = (
+                    f"email source: inferred_pattern ({conf} confidence)"
+                )
+            else:
+                email_note = "email source: none"
 
             for lang in languages:
                 row = dict(anchor)
                 row.update({
+                    "school_url": d.get("school_url") or anchor.get("school_url", ""),
                     "teacher_first_name": first,
                     "teacher_last_name": last,
-                    "teacher_email": final_email,
+                    "teacher_email": email,
                     "teacher_role": role,
                     "language": lang,
                     "source_url": d.get("faculty_page_url")

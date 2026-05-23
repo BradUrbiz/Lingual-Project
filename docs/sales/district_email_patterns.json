@@ -5,184 +5,603 @@
     "pattern_syntax": "Python str.format with {first} and {last} placeholders. Both are normalized: lowercase, non-alpha chars stripped (so 'Ana Maria' -> 'anamaria', \"O'Brien\" -> 'obrien', 'Vasquez-Gil' -> 'vasquezgil').",
     "confidence_values": {
       "verified": "directly observed in extracted faculty data",
-      "high":     "well-documented standard for this district / commonly cited",
-      "medium":   "K-12 default (first.last@domain) and domain confirmed",
-      "low":      "domain guessed, pattern guessed",
+      "high": "well-documented standard for this district / commonly cited",
+      "medium": "K-12 default (first.last@domain) and domain confirmed",
+      "low": "domain guessed, pattern guessed",
       "variable": "district uses multiple formats; pattern is best-guess majority case"
     },
     "matching": "Key must match the 'district' column in teacher_dmv.csv exactly (LEA_NAME from NCES). Special key 'independent' matches MD nonpublic rows.",
-    "usage_rule": "Real extracted email > pattern prediction. Predicted emails MUST be marked email_verified=N and pass Hunter/NeverBounce check before any mass send."
+    "usage_rule": "Real extracted email > pattern prediction. Predicted emails MUST be marked email_verified=N and pass Hunter/NeverBounce check before any mass send.",
+    "generated_from": "docs/sales/extracted/*.json",
+    "generated_last_updated": "2026-05-23",
+    "generated_rule": "Generated entries only use teachers whose email_source is 'extracted'. Inferred emails remain unverified.",
+    "supported_email_source_values": [
+      "extracted",
+      "inferred_pattern",
+      "inferred_directory",
+      "empty"
+    ]
   },
-
   "Montgomery County Public Schools": {
     "pattern": "{first}_{last}@mcpsmd.org",
     "domain": "mcpsmd.org",
     "confidence": "verified",
     "verified_via": "Walt Whitman HS Google Doc staff directory, 2026-05-21",
-    "notes": "Underscore separator. Validated against 15-teacher sample (Whitman HS World Languages): 40% case-insensitive match. The ~60% miss is mostly middle-initial variants ({first}_{m}_{last}, e.g., kathleen_e_bartels). Pattern prediction is best-guess only — always prefer extracted email."
+    "notes": "Underscore separator. Validated against 15-teacher sample (Whitman HS World Languages): 40% case-insensitive match. The ~60% miss is mostly middle-initial variants ({first}_{m}_{last}, e.g., kathleen_e_bartels). Pattern prediction is best-guess only \u2014 always prefer extracted email.",
+    "generated_pattern": "{first}_{last}@mcpsmd.org",
+    "generated_domain": "mcpsmd.org",
+    "generated_confidence": "low",
+    "generated_source": "generated_from_extracted_contacts",
+    "observed_emails": 183,
+    "matched_emails": 52,
+    "supporting_emails": 52,
+    "dominant_pattern_share": 0.284,
+    "pattern_counts": {
+      "{first}_{last}@mcpsmd.org": 52
+    },
+    "generated_notes": "Derived from 52/183 observed emails in docs/sales/extracted on 2026-05-23."
   },
-
   "District of Columbia Public Schools": {
     "pattern": "{first}.{last}@k12.dc.gov",
     "domain": "k12.dc.gov",
     "confidence": "high",
-    "notes": "DCPS standard. Each charter LEA uses its own domain — see charter entries."
+    "notes": "DCPS standard. Each charter LEA uses its own domain \u2014 see charter entries.",
+    "generated_pattern": "{first}.{last}@k12.dc.gov",
+    "generated_domain": "k12.dc.gov",
+    "generated_confidence": "medium",
+    "generated_source": "generated_from_extracted_contacts",
+    "observed_emails": 18,
+    "matched_emails": 15,
+    "supporting_emails": 12,
+    "dominant_pattern_share": 0.667,
+    "pattern_counts": {
+      "{first}.{last}@k12.dc.gov": 12,
+      "{first[0]}{last}@bard.edu": 3
+    },
+    "generated_notes": "Derived from 12/18 observed emails in docs/sales/extracted on 2026-05-23."
   },
-
   "Arlington County Public Schools": {
     "pattern": "{first}.{last}@apsva.us",
     "domain": "apsva.us",
     "confidence": "high",
-    "notes": "Arlington Public Schools (APS). Standard dot-separated."
+    "notes": "Arlington Public Schools (APS). Standard dot-separated.",
+    "generated_pattern": "{first}.{last}@apsva.us",
+    "generated_domain": "apsva.us",
+    "generated_confidence": "high",
+    "generated_source": "generated_from_extracted_contacts",
+    "observed_emails": 12,
+    "matched_emails": 9,
+    "supporting_emails": 9,
+    "dominant_pattern_share": 0.75,
+    "pattern_counts": {
+      "{first}.{last}@apsva.us": 9
+    },
+    "generated_notes": "Derived from 9/12 observed emails in docs/sales/extracted on 2026-05-23."
   },
   "Arlington Public Schools": {
     "pattern": "{first}.{last}@apsva.us",
     "domain": "apsva.us",
     "confidence": "high",
-    "notes": "Alias — NCES LEA name variant."
+    "notes": "Alias \u2014 NCES LEA name variant."
   },
-
   "Fairfax County Public Schools": {
     "pattern": "{first}.{last}@fcps.edu",
     "domain": "fcps.edu",
     "confidence": "variable",
-    "notes": "FCPS uses multiple formats simultaneously: first.last (~45%), jdoe i.e. {first[0]}{last} (~55%), and {first[0:2]}{last} occasionally. Bot-blocked by Cloudflare — use playwright-cli for actual extraction; this pattern is fallback only."
+    "notes": "FCPS uses multiple formats simultaneously: first.last (~45%), jdoe i.e. {first[0]}{last} (~55%), and {first[0:2]}{last} occasionally. Bot-blocked by Cloudflare \u2014 use playwright-cli for actual extraction; this pattern is fallback only."
   },
-
   "Loudoun County Public Schools": {
     "pattern": "{first}.{last}@lcps.org",
     "domain": "lcps.org",
     "confidence": "medium"
   },
-
   "Prince William County Public Schools": {
     "pattern": "{first}.{last}@pwcs.edu",
     "domain": "pwcs.edu",
     "confidence": "medium"
   },
-
   "Alexandria City Public Schools": {
     "pattern": "{first}.{last}@acps.k12.va.us",
     "domain": "acps.k12.va.us",
     "confidence": "medium"
   },
-
   "Stafford County Public Schools": {
     "pattern": "{first}.{last}@staffordschools.net",
     "domain": "staffordschools.net",
     "confidence": "medium"
   },
-
   "Spotsylvania County Public Schools": {
     "pattern": "{first}.{last}@spotsylvania.k12.va.us",
     "domain": "spotsylvania.k12.va.us",
-    "confidence": "low"
+    "confidence": "low",
+    "generated_pattern": "{first[0]}{last}@spotsylvania.k12.va.us",
+    "generated_domain": "spotsylvania.k12.va.us",
+    "generated_confidence": "high",
+    "generated_source": "generated_from_extracted_contacts",
+    "observed_emails": 10,
+    "matched_emails": 9,
+    "supporting_emails": 9,
+    "dominant_pattern_share": 0.9,
+    "pattern_counts": {
+      "{first[0]}{last}@spotsylvania.k12.va.us": 9
+    },
+    "generated_notes": "Derived from 9/10 observed emails in docs/sales/extracted on 2026-05-23."
   },
-
   "Chesterfield County Public Schools": {
     "pattern": "{first}.{last}@ccpsnet.net",
     "domain": "ccpsnet.net",
-    "confidence": "medium"
+    "confidence": "medium",
+    "generated_pattern": "{first}_{last}@ccpsnet.net",
+    "generated_domain": "ccpsnet.net",
+    "generated_confidence": "high",
+    "generated_source": "generated_from_extracted_contacts",
+    "observed_emails": 10,
+    "matched_emails": 9,
+    "supporting_emails": 9,
+    "dominant_pattern_share": 0.9,
+    "pattern_counts": {
+      "{first}_{last}@ccpsnet.net": 9
+    },
+    "generated_notes": "Derived from 9/10 observed emails in docs/sales/extracted on 2026-05-23."
   },
-
   "Henrico County Public Schools": {
     "pattern": "{first}.{last}@henrico.k12.va.us",
     "domain": "henrico.k12.va.us",
     "confidence": "medium"
   },
-
   "Richmond City Public Schools": {
     "pattern": "{first}.{last}@rvaschools.net",
     "domain": "rvaschools.net",
-    "confidence": "medium"
+    "confidence": "medium",
+    "generated_pattern": "{first[0]}{last}@rvaschools.net",
+    "generated_domain": "rvaschools.net",
+    "generated_confidence": "low",
+    "generated_source": "generated_from_extracted_contacts",
+    "observed_emails": 17,
+    "matched_emails": 9,
+    "supporting_emails": 9,
+    "dominant_pattern_share": 0.529,
+    "pattern_counts": {
+      "{first[0]}{last}@rvaschools.net": 9
+    },
+    "generated_notes": "Derived from 9/17 observed emails in docs/sales/extracted on 2026-05-23."
   },
-
   "Virginia Beach City Public Schools": {
     "pattern": "{first}.{last}@vbschools.com",
     "domain": "vbschools.com",
-    "confidence": "medium"
+    "confidence": "medium",
+    "generated_pattern": "{first}.{last}@vbschools.com",
+    "generated_domain": "vbschools.com",
+    "generated_confidence": "verified",
+    "generated_source": "generated_from_extracted_contacts",
+    "observed_emails": 74,
+    "matched_emails": 66,
+    "supporting_emails": 66,
+    "dominant_pattern_share": 0.892,
+    "pattern_counts": {
+      "{first}.{last}@vbschools.com": 66
+    },
+    "generated_notes": "Derived from 66/74 observed emails in docs/sales/extracted on 2026-05-23."
   },
-
   "Prince George's County Public Schools": {
     "pattern": "{first}.{last}@pgcps.org",
     "domain": "pgcps.org",
-    "confidence": "medium"
+    "confidence": "medium",
+    "generated_pattern": "{first}.{last}@pgcps.org",
+    "generated_domain": "pgcps.org",
+    "generated_confidence": "high",
+    "generated_source": "generated_from_extracted_contacts",
+    "observed_emails": 13,
+    "matched_emails": 11,
+    "supporting_emails": 10,
+    "dominant_pattern_share": 0.769,
+    "pattern_counts": {
+      "{first}.{last}@pgcps.org": 10,
+      "{last}.{first}@pgcps.org": 1
+    },
+    "generated_notes": "Derived from 10/13 observed emails in docs/sales/extracted on 2026-05-23."
   },
-
   "Baltimore County Public Schools": {
     "pattern": "{first}.{last}@bcps.org",
     "domain": "bcps.org",
     "confidence": "medium",
-    "notes": "Not to be confused with Baltimore City Schools."
+    "notes": "Not to be confused with Baltimore City Schools.",
+    "generated_pattern": "{first[0]}{last}@bcps.org",
+    "generated_domain": "bcps.org",
+    "generated_confidence": "high",
+    "generated_source": "generated_from_extracted_contacts",
+    "observed_emails": 32,
+    "matched_emails": 29,
+    "supporting_emails": 23,
+    "dominant_pattern_share": 0.719,
+    "pattern_counts": {
+      "{first[0]}{last}@bcps.org": 23,
+      "{first}.{last}@bcps.org": 5,
+      "{first}{last}@bcps.org": 1
+    },
+    "generated_notes": "Derived from 23/32 observed emails in docs/sales/extracted on 2026-05-23."
   },
-
   "Baltimore City Public Schools": {
     "pattern": "{first}.{last}@bcps.k12.md.us",
     "domain": "bcps.k12.md.us",
     "confidence": "medium",
     "notes": "Baltimore City is an independent jurisdiction, separate domain from Baltimore County."
   },
-
   "Anne Arundel County Public Schools": {
     "pattern": "{first}.{last}@aacps.org",
     "domain": "aacps.org",
     "confidence": "medium"
   },
-
   "Howard County Public School System": {
     "pattern": "{first}_{last}@hcpss.org",
     "domain": "hcpss.org",
     "confidence": "medium",
     "notes": "HCPSS uses underscores like MCPS, not dots."
   },
-
   "Frederick County Public Schools": {
     "pattern": "{first}.{last}@fcps.org",
     "domain": "fcps.org",
     "confidence": "medium",
-    "notes": "Same district name as Fairfax in VA but completely different domain (fcps.org vs fcps.edu)."
+    "notes": "Same district name as Fairfax in VA but completely different domain (fcps.org vs fcps.edu).",
+    "generated_pattern": "{first}.{last}@fcps.org",
+    "generated_domain": "fcps.org",
+    "generated_confidence": "verified",
+    "generated_source": "generated_from_extracted_contacts",
+    "observed_emails": 12,
+    "matched_emails": 11,
+    "supporting_emails": 11,
+    "dominant_pattern_share": 0.917,
+    "pattern_counts": {
+      "{first}.{last}@fcps.org": 11
+    },
+    "generated_notes": "Derived from 11/12 observed emails in docs/sales/extracted on 2026-05-23."
   },
-
   "Harford County Public Schools": {
     "pattern": "{first}.{last}@hcps.org",
     "domain": "hcps.org",
     "confidence": "medium"
   },
-
   "Washington County Public Schools": {
     "pattern": "{first}.{last}@wcps.k12.md.us",
     "domain": "wcps.k12.md.us",
     "confidence": "low"
   },
-
   "Carroll County Public Schools": {
     "pattern": "{first}.{last}@carrollk12.org",
     "domain": "carrollk12.org",
     "confidence": "medium"
   },
-
   "Charles County Public Schools": {
     "pattern": "{first}.{last}@ccboe.com",
     "domain": "ccboe.com",
-    "confidence": "low"
+    "confidence": "low",
+    "generated_pattern": "{first[0]}{last}@ccboe.com",
+    "generated_domain": "ccboe.com",
+    "generated_confidence": "high",
+    "generated_source": "generated_from_extracted_contacts",
+    "observed_emails": 5,
+    "matched_emails": 5,
+    "supporting_emails": 5,
+    "dominant_pattern_share": 1.0,
+    "pattern_counts": {
+      "{first[0]}{last}@ccboe.com": 5
+    },
+    "generated_notes": "Derived from 5/5 observed emails in docs/sales/extracted on 2026-05-23."
   },
-
   "Calvert County Public Schools": {
     "pattern": "{first}.{last}@calvertnet.k12.md.us",
     "domain": "calvertnet.k12.md.us",
     "confidence": "low"
   },
-
   "Saint Mary's County Public Schools": {
     "pattern": "{first}.{last}@smcps.org",
     "domain": "smcps.org",
     "confidence": "low"
   },
-
   "independent": {
     "pattern": null,
     "domain": null,
     "confidence": "n/a",
-    "notes": "MD nonpublic / independent schools each have their own domain — no shared pattern. Skip prediction; rely on extraction or manual lookup."
+    "notes": "MD nonpublic / independent schools each have their own domain \u2014 no shared pattern. Skip prediction; rely on extraction or manual lookup."
+  },
+  "Albemarle County Public Schools": {
+    "pattern": "{first[0]}{last}@k12albemarle.org",
+    "domain": "k12albemarle.org",
+    "confidence": "verified",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 25,
+    "matched_emails": 22,
+    "supporting_emails": 22,
+    "dominant_pattern_share": 0.88,
+    "pattern_counts": {
+      "{first[0]}{last}@k12albemarle.org": 22
+    },
+    "generated_notes": "Derived from 22/25 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Bedford County Public Schools": {
+    "pattern": "{first}.{last}@bedford.k12.va.us",
+    "domain": "bedford.k12.va.us",
+    "confidence": "high",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 15,
+    "matched_emails": 14,
+    "supporting_emails": 11,
+    "dominant_pattern_share": 0.733,
+    "pattern_counts": {
+      "{first}.{last}@bedford.k12.va.us": 11,
+      "{first[0]}{last}@bedford.k12.va.us": 3
+    },
+    "generated_notes": "Derived from 11/15 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Campbell County Public Schools": {
+    "pattern": "{first[0]}{last}@campbell.k12.va.us",
+    "domain": "campbell.k12.va.us",
+    "confidence": "low",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 4,
+    "matched_emails": 4,
+    "supporting_emails": 2,
+    "dominant_pattern_share": 0.5,
+    "pattern_counts": {
+      "{first[0]}{last}@campbell.k12.va.us": 2,
+      "{first}.{last}@campbell.k12.va.us": 2
+    },
+    "generated_notes": "Derived from 2/4 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Clarke County Public Schools": {
+    "pattern": "{last}{first[0]}@clarke.k12.va.us",
+    "domain": "clarke.k12.va.us",
+    "confidence": "medium",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 4,
+    "matched_emails": 4,
+    "supporting_emails": 4,
+    "dominant_pattern_share": 1.0,
+    "pattern_counts": {
+      "{last}{first[0]}@clarke.k12.va.us": 4
+    },
+    "generated_notes": "Derived from 4/4 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Dinwiddie County Public Schools": {
+    "pattern": "{first[0]}{last}@dcpsnet.org",
+    "domain": "dcpsnet.org",
+    "confidence": "medium",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 4,
+    "matched_emails": 4,
+    "supporting_emails": 4,
+    "dominant_pattern_share": 1.0,
+    "pattern_counts": {
+      "{first[0]}{last}@dcpsnet.org": 4
+    },
+    "generated_notes": "Derived from 4/4 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Greene County Public Schools": {
+    "pattern": "{first[0]}{last}@greenecountyschools.com",
+    "domain": "greenecountyschools.com",
+    "confidence": "high",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 5,
+    "matched_emails": 5,
+    "supporting_emails": 5,
+    "dominant_pattern_share": 1.0,
+    "pattern_counts": {
+      "{first[0]}{last}@greenecountyschools.com": 5
+    },
+    "generated_notes": "Derived from 5/5 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Hampton City Public Schools": {
+    "pattern": "{first[0]}{last}@hampton.k12.va.us",
+    "domain": "hampton.k12.va.us",
+    "confidence": "medium",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 12,
+    "matched_emails": 9,
+    "supporting_emails": 8,
+    "dominant_pattern_share": 0.667,
+    "pattern_counts": {
+      "{first[0]}{last}@hampton.k12.va.us": 8,
+      "{first[0]}{last}@sbo.hampton.k12.va.us": 1
+    },
+    "generated_notes": "Derived from 8/12 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Harrisonburg City Public Schools": {
+    "pattern": "{first[0]}{last}@harrisonburg.k12.va.us",
+    "domain": "harrisonburg.k12.va.us",
+    "confidence": "low",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 3,
+    "matched_emails": 2,
+    "supporting_emails": 2,
+    "dominant_pattern_share": 0.667,
+    "pattern_counts": {
+      "{first[0]}{last}@harrisonburg.k12.va.us": 2
+    },
+    "generated_notes": "Derived from 2/3 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Howard County Public Schools": {
+    "pattern": "{first}_{last}@hcpss.org",
+    "domain": "hcpss.org",
+    "confidence": "verified",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 27,
+    "matched_emails": 24,
+    "supporting_emails": 24,
+    "dominant_pattern_share": 0.889,
+    "pattern_counts": {
+      "{first}_{last}@hcpss.org": 24
+    },
+    "generated_notes": "Derived from 24/27 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Lynchburg City Public Schools": {
+    "pattern": "{first}.{last}@lcsedu.net",
+    "domain": "lcsedu.net",
+    "confidence": "medium",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 13,
+    "matched_emails": 13,
+    "supporting_emails": 8,
+    "dominant_pattern_share": 0.615,
+    "pattern_counts": {
+      "{first}.{last}@lcsedu.net": 8,
+      "{first[0]}{last}@lcsedu.net": 5
+    },
+    "generated_notes": "Derived from 8/13 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Newport News City Public Schools": {
+    "pattern": "{first}.{last}@nn.k12.va.us",
+    "domain": "nn.k12.va.us",
+    "confidence": "verified",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 32,
+    "matched_emails": 27,
+    "supporting_emails": 27,
+    "dominant_pattern_share": 0.844,
+    "pattern_counts": {
+      "{first}.{last}@nn.k12.va.us": 27
+    },
+    "generated_notes": "Derived from 27/32 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Norfolk City Public Schools": {
+    "pattern": "{first[0]}{last}@nps.k12.va.us",
+    "domain": "nps.k12.va.us",
+    "confidence": "medium",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 4,
+    "matched_emails": 3,
+    "supporting_emails": 3,
+    "dominant_pattern_share": 0.75,
+    "pattern_counts": {
+      "{first[0]}{last}@nps.k12.va.us": 3
+    },
+    "generated_notes": "Derived from 3/4 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Radford City Public Schools": {
+    "pattern": "{first[0]}{last}@rcps.org",
+    "domain": "rcps.org",
+    "confidence": "low",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 4,
+    "matched_emails": 2,
+    "supporting_emails": 2,
+    "dominant_pattern_share": 0.5,
+    "pattern_counts": {
+      "{first[0]}{last}@rcps.org": 2
+    },
+    "generated_notes": "Derived from 2/4 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Roanoke City Public Schools": {
+    "pattern": "{first}{last}@rcps.info",
+    "domain": "rcps.info",
+    "confidence": "low",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 5,
+    "matched_emails": 2,
+    "supporting_emails": 2,
+    "dominant_pattern_share": 0.4,
+    "pattern_counts": {
+      "{first}{last}@rcps.info": 2
+    },
+    "generated_notes": "Derived from 2/5 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Roanoke County Public Schools": {
+    "pattern": "{first[0]}{last}@rcps.us",
+    "domain": "rcps.us",
+    "confidence": "low",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 3,
+    "matched_emails": 3,
+    "supporting_emails": 2,
+    "dominant_pattern_share": 0.667,
+    "pattern_counts": {
+      "{first[0]}{last}@rcps.us": 2,
+      "{first[0]}{last}@rcs.k12.va.us": 1
+    },
+    "generated_notes": "Derived from 2/3 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "St. Mary's County Public Schools": {
+    "pattern": "{first}{last}@smcps.org",
+    "domain": "smcps.org",
+    "confidence": "low",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 13,
+    "matched_emails": 3,
+    "supporting_emails": 2,
+    "dominant_pattern_share": 0.154,
+    "pattern_counts": {
+      "{first}{last}@smcps.org": 2,
+      "{first[0]}{last}@smcps.org": 1
+    },
+    "generated_notes": "Derived from 2/13 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Franklin County Public Schools": {
+    "pattern": "{first}.{last}@frco.k12.va.us",
+    "domain": "frco.k12.va.us",
+    "confidence": "low",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 2,
+    "matched_emails": 2,
+    "supporting_emails": 2,
+    "dominant_pattern_share": 1.0,
+    "pattern_counts": {
+      "{first}.{last}@frco.k12.va.us": 2
+    },
+    "generated_notes": "Derived from 2/2 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Martinsville City Public Schools": {
+    "pattern": "{first[0]}{last}@martinsville.k12.va.us",
+    "domain": "martinsville.k12.va.us",
+    "confidence": "low",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 2,
+    "matched_emails": 2,
+    "supporting_emails": 2,
+    "dominant_pattern_share": 1.0,
+    "pattern_counts": {
+      "{first[0]}{last}@martinsville.k12.va.us": 2
+    },
+    "generated_notes": "Derived from 2/2 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Portsmouth City Public Schools": {
+    "pattern": "{first}.{last}@portsk12.com",
+    "domain": "portsk12.com",
+    "confidence": "medium",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 5,
+    "matched_emails": 4,
+    "supporting_emails": 4,
+    "dominant_pattern_share": 0.8,
+    "pattern_counts": {
+      "{first}.{last}@portsk12.com": 4
+    },
+    "generated_notes": "Derived from 4/5 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Prince Edward County Public Schools": {
+    "pattern": "{first}.{last}@pecps.k12.va.us",
+    "domain": "pecps.k12.va.us",
+    "confidence": "low",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 3,
+    "matched_emails": 2,
+    "supporting_emails": 2,
+    "dominant_pattern_share": 0.667,
+    "pattern_counts": {
+      "{first}.{last}@pecps.k12.va.us": 2
+    },
+    "generated_notes": "Derived from 2/3 observed emails in docs/sales/extracted on 2026-05-23."
+  },
+  "Botetourt County Public Schools": {
+    "pattern": "{first}{last}@bcps.k12.va.us",
+    "domain": "bcps.k12.va.us",
+    "confidence": "high",
+    "source": "generated_from_extracted_contacts",
+    "observed_emails": 5,
+    "matched_emails": 5,
+    "supporting_emails": 5,
+    "dominant_pattern_share": 1.0,
+    "pattern_counts": {
+      "{first}{last}@bcps.k12.va.us": 5
+    },
+    "generated_notes": "Derived from 5/5 observed emails in docs/sales/extracted on 2026-05-23."
   }
 }

@@ -26,15 +26,26 @@ echo "==> Lingual cloud dev setup"
 
 is_root() { [ "$(id -u)" = "0" ]; }
 
-# 1. Java — required by the Firestore emulator. The cloud base image ships
-#    Python/Node/Docker/Postgres/Redis but no JRE.
+# 1. Java — required ONLY by the Firestore emulator. Best-effort: a broken apt
+#    state (e.g. malformed 3rd-party source lists left by a previous template)
+#    must not abort the rest of setup — backend/frontend work without Java.
 if command -v java >/dev/null 2>&1; then
   echo "--> java already present, skipping JRE install"
 elif is_root && command -v apt-get >/dev/null 2>&1; then
   echo "--> installing default-jre-headless for the Firestore emulator"
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -y
-  apt-get install -y --no-install-recommends default-jre-headless
+  (
+    set +e   # tolerate apt hiccups inside this block
+    export DEBIAN_FRONTEND=noninteractive
+    # First pass: capture which source lists apt rejects as malformed, then
+    # disable them so `apt-get update` can succeed from the base repos.
+    apt-get update -y 2>/tmp/lingual-apt-err
+    grep -oE '/etc/apt/sources\.list\.d/[^ ]+\.list' /tmp/lingual-apt-err 2>/dev/null \
+      | sort -u | while read -r src; do
+          [ -f "$src" ] && { echo "--> disabling malformed apt source: $src"; mv "$src" "$src.disabled"; }
+        done
+    apt-get update -y
+    apt-get install -y --no-install-recommends default-jre-headless
+  ) || echo "!!! Java install skipped (apt issue) — 'make test-emulator' unavailable, core dev loop is fine" >&2
 else
   echo "!!! java missing and cannot apt-get install (not root) — emulator tests will not run" >&2
 fi
@@ -49,14 +60,21 @@ if [ -z "${VIRTUAL_ENV:-}" ] && is_root; then
   PIP_FLAGS="--break-system-packages"
 fi
 echo "--> installing backend requirements ${PIP_FLAGS}"
-python3 -m pip install ${PIP_FLAGS} --upgrade pip
+# Note: do NOT `pip install --upgrade pip` here — the base image's pip is a
+# Debian package with no RECORD file, so pip cannot uninstall/upgrade itself
+# and the command fails with exit 1. The shipped pip installs our wheels fine.
 python3 -m pip install ${PIP_FLAGS} -r requirements.txt
 # Uncomment to also run the Cloud Functions emulator:
 # python3 -m pip install ${PIP_FLAGS} -r functions/requirements.txt
 
-# 3. Frontend deps. Base Node 22 satisfies Vite 7 / React 19. Prefer the lockfile.
-echo "--> installing frontend deps"
-( cd frontend && (npm ci || npm install) )
+# 3. Frontend deps. The base image ships Node 20+ (satisfies Vite 7 / React 19).
+if ! command -v npm >/dev/null 2>&1; then
+  echo "!!! npm not found on the base image — frontend deps cannot be installed." >&2
+  echo "    The Claude Code cloud base image is expected to ship Node 20+; check the environment." >&2
+else
+  echo "--> installing frontend deps"
+  ( cd frontend && (npm ci || npm install) )
+fi
 
 # 4. Firebase CLI — provides the Firestore emulator used by `make test-emulator`.
 if command -v firebase >/dev/null 2>&1; then

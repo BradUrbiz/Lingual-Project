@@ -19,8 +19,14 @@ test-e2e:  ## Run E2E browser tests (requires backend + frontend running)
 	bash e2e/test-teacher-dashboard.sh
 	bash e2e/test-student-assignment.sh
 
+# Java home for the Firestore emulator. Honors an existing JAVA_HOME (env or
+# `make JAVA_HOME=...`); otherwise uses the local temurin install on macOS, and
+# falls back to `java` on PATH (Linux/CI/cloud sandbox) where that dir is absent.
+TEMURIN_MAC := /Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
+JAVA_HOME ?= $(shell test -d $(TEMURIN_MAC) && echo $(TEMURIN_MAC))
+
 test-emulator:  ## Run Firestore emulator integration tests (requires Java)
-	JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home \
+	$(if $(JAVA_HOME),JAVA_HOME=$(JAVA_HOME)) \
 	firebase emulators:exec --only firestore --project lingu-480600 \
 	'FIRESTORE_EMULATOR_HOST=localhost:8787 python3 -m unittest backend.tests.test_firestore_indexes -v'
 

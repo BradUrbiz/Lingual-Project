@@ -394,6 +394,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 ui_language=ui_language,
             )
             return jsonify({'success': True, 'bootstrap': bootstrap})
+        except SuspendedOrgError as exc:
+            return jsonify(exc.to_payload()), 403
         except ValueError as exc:
             error = str(exc)
             status_code = 404 if 'not found' in error.lower() else 400
@@ -432,6 +434,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 uid=uid or '',
             )
             return jsonify({'success': True, 'workspace': workspace})
+        except SuspendedOrgError as exc:
+            return jsonify(exc.to_payload()), 403
         except ValueError as exc:
             error = str(exc)
             status_code = 404 if 'not found' in error.lower() else 400
@@ -602,6 +606,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 'success': True,
                 'analytics': analytics,
             })
+        except SuspendedOrgError as exc:
+            return jsonify(exc.to_payload()), 403
         except SchoolContextPermissionError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 403
         except ValueError as exc:

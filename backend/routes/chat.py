@@ -875,6 +875,8 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 'title': resolved_title,
             })
 
+        except SuspendedOrgError as exc:
+            return jsonify(exc.to_payload()), 403
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 

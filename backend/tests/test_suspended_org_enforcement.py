@@ -232,6 +232,14 @@ class SuspendedOrgFake:
         self.practice_sessions = {}
         self.learning_events = []
         self.consent_events = []
+        self.chat_sessions = {
+            ('student-1', 'chat-1'): {
+                'id': 'chat-1',
+                'uid': 'student-1',
+                'messages': [],
+                'language_mix_level': 'balanced',
+            },
+        }
         self.canvas_course_content = {
             'cc-1': {
                 'id': 'cc-1', 'class_id': 'class-1', 'connection_id': 'conn-1',
@@ -331,6 +339,34 @@ class SuspendedOrgFake:
 
     def link_assignment_to_canvas_item(self, *_args, **_kwargs):
         pass
+
+    # -- Chat sessions / analytics readers ---------------------------------
+
+    def get_chat_session(self, uid, chat_id):
+        return self.chat_sessions.get((uid, chat_id))
+
+    def add_message_to_chat(self, uid, chat_id, role, content):
+        chat = self.chat_sessions.get((uid, chat_id))
+        if chat is None:
+            return None
+        msg = {'role': role, 'content': content}
+        chat.setdefault('messages', []).append(msg)
+        return msg
+
+    def update_chat_title(self, *_args, **_kwargs):
+        pass
+
+    def list_assignment_practice_sessions(self, assignment_id):
+        return [s for s in self.practice_sessions.values() if s.get('assignment_id') == assignment_id]
+
+    def list_assignment_learning_events(self, assignment_id):
+        return [e for e in self.learning_events if e.get('assignment_id') == assignment_id]
+
+    def list_student_assignment_practice_sessions(self, assignment_id, uid):
+        return [
+            s for s in self.practice_sessions.values()
+            if s.get('assignment_id') == assignment_id and s.get('student_uid') == uid
+        ]
 
     # -- School-context resolver -------------------------------------------
 
@@ -691,6 +727,134 @@ class RealtimeSessionSuspendedOrgTests(unittest.TestCase):
                 '/api/realtime/session',
                 json={'uiLanguage': 'en', 'assignmentId': 'asg-1'},
             )
+        self.assertEqual(response.status_code, 403)
+        body = response.get_json()
+        self.assertEqual(body['error'], 'org_suspended')
+
+
+# ---------------------------------------------------------------------------
+# 9. POST /api/chats/<chat_id>/messages  (assignment-aware text path)
+# ---------------------------------------------------------------------------
+
+class SendChatMessageAssignmentSuspendedOrgTests(unittest.TestCase):
+    """Regression for the missing SuspendedOrgError handler at chat.py:885.
+    Before the fix, a student in a suspended org sending an assignment-linked
+    text message got HTTP 500 with a leaked 'organization <id> is suspended'
+    body instead of the stable 403 org_suspended payload.
+    """
+
+    def _make_client(self, status):
+        self.fake_db = SuspendedOrgFake(org_status=status)
+        deps = _make_deps(self.fake_db)
+        app = Flask(__name__)
+        app.secret_key = 'test'
+        app.register_blueprint(create_chat_blueprint(deps))
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {
+                'uid': 'student-1', 'name': 'S',
+                'active_membership_id': 'mem-student',
+            }
+        return client
+
+    def test_suspended_org_returns_403_org_suspended(self):
+        client = self._make_client('suspended')
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}, clear=False):
+            response = client.post(
+                '/api/chats/chat-1/messages',
+                json={'message': 'Bonjour', 'assignmentId': 'asg-1', 'uiLanguage': 'en'},
+            )
+        self.assertEqual(response.status_code, 403)
+        body = response.get_json()
+        self.assertEqual(body['error'], 'org_suspended')
+        self.assertEqual(body['reason'], 'unpaid balance')
+
+
+# ---------------------------------------------------------------------------
+# 10. POST /api/student/assignments/<id>/bootstrap
+# ---------------------------------------------------------------------------
+
+class BootstrapStudentAssignmentSuspendedOrgTests(unittest.TestCase):
+    def _make_client(self, status):
+        self.fake_db = SuspendedOrgFake(org_status=status)
+        deps = _make_deps(self.fake_db)
+        app = Flask(__name__)
+        app.secret_key = 'test'
+        app.register_blueprint(create_curriculum_admin_blueprint(deps))
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {
+                'uid': 'student-1', 'name': 'S',
+                'active_membership_id': 'mem-student',
+            }
+        return client
+
+    def test_suspended_org_returns_403_org_suspended(self):
+        client = self._make_client('suspended')
+        response = client.post(
+            '/api/student/assignments/asg-1/bootstrap',
+            json={'uiLanguage': 'en'},
+        )
+        self.assertEqual(response.status_code, 403)
+        body = response.get_json()
+        self.assertEqual(body['error'], 'org_suspended')
+        self.assertEqual(body['reason'], 'unpaid balance')
+
+
+# ---------------------------------------------------------------------------
+# 11. GET /api/student/assignments/<id>/workspace
+# ---------------------------------------------------------------------------
+
+class StudentAssignmentWorkspaceSuspendedOrgTests(unittest.TestCase):
+    def _make_client(self, status):
+        self.fake_db = SuspendedOrgFake(org_status=status)
+        deps = _make_deps(self.fake_db)
+        app = Flask(__name__)
+        app.secret_key = 'test'
+        app.register_blueprint(create_curriculum_admin_blueprint(deps))
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {
+                'uid': 'student-1', 'name': 'S',
+                'active_membership_id': 'mem-student',
+            }
+        return client
+
+    def test_suspended_org_returns_403_org_suspended(self):
+        client = self._make_client('suspended')
+        response = client.get('/api/student/assignments/asg-1/workspace')
+        self.assertEqual(response.status_code, 403)
+        body = response.get_json()
+        self.assertEqual(body['error'], 'org_suspended')
+
+
+# ---------------------------------------------------------------------------
+# 12. GET /api/teacher/assignments/<id>/analytics
+# ---------------------------------------------------------------------------
+
+class AssignmentAnalyticsSuspendedOrgTests(unittest.TestCase):
+    """Read-only teacher analytics: also gated on suspended org. The team
+    may want to revisit whether read-only views should enforce suspension,
+    but as of Plan 5 the resolver is what runs and the resolver raises.
+    """
+
+    def _make_client(self, status):
+        self.fake_db = SuspendedOrgFake(org_status=status)
+        deps = _make_deps(self.fake_db)
+        app = Flask(__name__)
+        app.secret_key = 'test'
+        app.register_blueprint(create_curriculum_admin_blueprint(deps))
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess['user'] = {
+                'uid': 'teacher-1', 'name': 'T',
+                'active_membership_id': 'mem-teacher',
+            }
+        return client
+
+    def test_suspended_org_returns_403_org_suspended(self):
+        client = self._make_client('suspended')
+        response = client.get('/api/teacher/assignments/asg-1/analytics')
         self.assertEqual(response.status_code, 403)
         body = response.get_json()
         self.assertEqual(body['error'], 'org_suspended')

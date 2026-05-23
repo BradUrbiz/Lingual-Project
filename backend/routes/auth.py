@@ -36,7 +36,10 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
     def verify_auth():
         """Verify Firebase ID token and create session."""
         try:
-            data = request.get_json() or {}
+            # silent=True so a missing/invalid body returns None instead of
+            # raising a Werkzeug HTTPException (415/400), which would get
+            # caught by the broad `except Exception` below and remapped to 500.
+            data = request.get_json(silent=True) or {}
             id_token = data.get('idToken')
 
             if not id_token:

@@ -199,6 +199,32 @@ class TestVerifyAuth(unittest.TestCase):
         resp = client.post("/api/auth/verify", content_type="application/json", data="{}")
         self.assertEqual(resp.status_code, 400)
 
+    def test_verify_with_empty_request_body(self):
+        """3c. Truly empty body (Content-Type set, no payload) → 400, not 500.
+
+        Without `silent=True` on get_json(), Werkzeug raises BadRequest, which
+        the broad `except Exception` would remap to 500.
+        """
+        app, _, _ = _build_app()
+        client = app.test_client()
+
+        resp = client.post("/api/auth/verify", content_type="application/json", data="")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("No token", resp.get_json()["error"])
+
+    def test_verify_without_content_type(self):
+        """3d. POST with no Content-Type header → 400, not 500.
+
+        Werkzeug normally raises 415 UnsupportedMediaType from get_json();
+        silent=True swallows it so the explicit token check returns 400.
+        """
+        app, _, _ = _build_app()
+        client = app.test_client()
+
+        resp = client.post("/api/auth/verify")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("No token", resp.get_json()["error"])
+
     def test_verify_with_invalid_token(self):
         """4. Invalid token → 401."""
         app, _, fa = _build_app()

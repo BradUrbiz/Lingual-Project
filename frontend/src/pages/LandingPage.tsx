@@ -262,6 +262,45 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* One Stop Shop */}
+      <section className="bg-ink text-background min-h-[25vh] py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] items-center">
+            <div>
+              <span
+                className="font-display font-black text-background tracking-tighter leading-none select-none whitespace-nowrap block"
+                style={{ fontSize: 'clamp(2.6rem, 4.2vw, 5rem)' }}
+              >
+                L
+                <span className="text-primary">1</span>
+                ngual.com
+              </span>
+            </div>
+
+            <div className="flex items-center gap-6 lg:gap-10">
+              <span
+                className="font-display font-black text-primary select-none leading-none flex-shrink-0"
+                style={{ fontSize: 'clamp(3.6rem, 7vw, 7rem)' }}
+              >
+                #1
+              </span>
+              <div className="w-px self-stretch bg-background/30 flex-shrink-0" />
+              <div className="flex flex-col gap-2">
+                <span className="font-display font-bold text-background" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
+                  stop shop for language learning
+                </span>
+                <span className="font-display font-bold text-background" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
+                  AI tutor for every student
+                </span>
+                <span className="font-display font-semibold text-background" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
+                  platform trusted by schools
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Features Section - Brutalist Cards */}
       <section id="features" className="py-20 bg-secondary">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

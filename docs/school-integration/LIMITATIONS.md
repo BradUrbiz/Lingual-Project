@@ -606,3 +606,16 @@ business actions complete normally but do not produce those emails.
     home-logo click is blocked in practice. Convert the home link to a
     no-op or `href="#"` when null after the backfill removes legacy
     users from the active population.
+
+62. **Stored `age` is a coarse range midpoint, not actual age.** The
+    profile age selectors (`GeneralPage`, `AppSettingsPage`) write the
+    midpoint of a bucket (`frontend/src/lib/ageRanges.ts`) — e.g. a user
+    in "18 – 24" is stored as `21`. Existing users with a real age are
+    silently coarsened to the midpoint the next time they save their
+    profile. Compliance is unaffected: bucket boundaries align with the
+    `age < 18` minor gate in `_derive_is_minor`
+    (`backend/services/compliance.py`), and the gate fails closed when
+    age is unset. But any future logic that assumes precise age (e.g.
+    age-targeted content) must treat the value as a bucket midpoint.
+    `ageRanges.test.ts` guards the minor/adult boundary so a future
+    bucket can't straddle 18.

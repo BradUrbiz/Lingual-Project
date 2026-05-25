@@ -24,7 +24,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getUserProfile, updateProfile } from '@/api/user';
-import { ageToRangeLabel } from '@/lib/ageRanges';
+import { ageToRangeI18nKey } from '@/lib/ageRanges';
 import { getAssessmentResults } from '@/api/assessment';
 import { AnimatedPage } from '@/components/layout';
 import {
@@ -288,7 +288,7 @@ export function ProfilePage() {
   const personalInfoItems = [
     { label: 'Full Name', value: displayName, icon: User },
     { label: 'Email Address', value: user?.email || '', icon: Mail },
-    { label: 'Age', value: ageToRangeLabel(profile?.age) || '', icon: Calendar },
+    { label: 'Age', value: profile?.age ? t(ageToRangeI18nKey(profile.age)) : '', icon: Calendar },
     { label: 'Gender', value: profile?.gender ? genderLabels[profile.gender] : '', icon: Users },
     {
       label: 'Learning Goal',
@@ -346,7 +346,7 @@ export function ProfilePage() {
                     <p className="text-muted-foreground">Learner • {planLabel}</p>
                     {profile?.age && (
                       <p className="text-sm text-muted-foreground mt-1">
-                        {ageToRangeLabel(profile.age)}
+                        {t(ageToRangeI18nKey(profile.age))}
                         {profile.gender && ` · ${genderLabels[profile.gender]}`}
                       </p>
                     )}

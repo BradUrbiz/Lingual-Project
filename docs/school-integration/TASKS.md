@@ -315,6 +315,7 @@ Recommended sequence for the remaining hardening work:
 - [x] Convert `/app/teacher` from mock-only access to role-aware dashboard shell.
 - [x] Define assignment DTOs and bootstrap contracts.
 - [x] Add backend assignment bootstrap endpoint skeleton.
+- [ ] Author Tagalog (`tl-PH`) games/curriculum content. Locale is wired end-to-end (prompt config, locale list, pronunciation prompts) but `curriculaByLocale` in `AppGamesPage.tsx` has no `tl-PH` entry, so Tagalog learners get no minigame content. Same partial-content gap noted for non-French locales in LIMITATIONS.
 
 ## Definition of done for beta entry
 

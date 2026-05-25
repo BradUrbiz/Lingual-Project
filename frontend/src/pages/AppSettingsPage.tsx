@@ -308,25 +308,21 @@ export function AppSettingsPage() {
 
               <div className="space-y-2">
                 <label className="text-sm font-bold text-foreground">
-                  Age range
+                  {t('app.settings.ageRangeLabel')}
                 </label>
                 <div className="grid grid-cols-4 gap-2">
                   {AGE_RANGES.map((range) => (
-                    <button
+                    <Button
                       key={range.midpoint}
-                      type="button"
+                      variant="option"
+                      selected={ageToRangeLabel(selectedAge) === range.label}
+                      aria-pressed={ageToRangeLabel(selectedAge) === range.label}
                       disabled={isLoading}
                       onClick={() => setSelectedAge(range.midpoint)}
-                      className={[
-                        'min-h-10 rounded-xl border-2 px-2 py-2 text-sm font-bold transition-all',
-                        ageToRangeLabel(selectedAge) === range.label
-                          ? 'border-foreground bg-primary text-primary-foreground shadow-stamp'
-                          : 'border-border bg-card text-foreground hover:border-primary',
-                        'disabled:opacity-60 disabled:cursor-not-allowed',
-                      ].join(' ')}
+                      className="text-sm rounded-xl border-border bg-card hover:border-primary hover:text-foreground"
                     >
-                      {range.label}
-                    </button>
+                      {t(range.i18nKey)}
+                    </Button>
                   ))}
                 </div>
               </div>

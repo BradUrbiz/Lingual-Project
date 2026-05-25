@@ -62,6 +62,7 @@
   --warning: #D4A03E;              /* mustard */
   --warning-foreground: #1A1816;
   --ink: #1A1816;                  /* deepest dark */
+  --cream: #F5F0E8;                /* fixed warm cream — pairs with --ink, theme-independent */
 
   /* Typography */
   --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
@@ -138,6 +139,7 @@
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-ink: var(--ink);
+  --color-cream: var(--cream);
   --color-primary-hover: #A84D2E;  /* darker terracotta */
   --color-error: var(--destructive);
 

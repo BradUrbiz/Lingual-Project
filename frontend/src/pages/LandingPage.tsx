@@ -263,12 +263,12 @@ export function LandingPage() {
       </section>
 
       {/* One Stop Shop */}
-      <section className="bg-ink text-background min-h-[25vh] py-20">
+      <section className="bg-ink text-cream min-h-[25vh] py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] items-center">
             <div>
               <span
-                className="font-display font-black text-background tracking-tighter leading-none select-none whitespace-nowrap block"
+                className="font-display font-black text-cream tracking-tighter leading-none select-none whitespace-nowrap block"
                 style={{ fontSize: 'clamp(2.6rem, 4.2vw, 5rem)' }}
               >
                 L
@@ -284,16 +284,16 @@ export function LandingPage() {
               >
                 #1
               </span>
-              <div className="w-px self-stretch bg-background/30 flex-shrink-0" />
+              <div className="w-px self-stretch bg-cream/30 flex-shrink-0" />
               <div className="flex flex-col gap-2">
-                <span className="font-display font-bold text-background" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
+                <span className="font-display font-bold text-cream" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
                   platform trusted by schools
                 </span>
-                <span className="font-display font-bold text-background" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
+                <span className="font-display font-bold text-cream" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
                   AI tutor for every student
                 </span>
-                <span className="font-display font-semibold text-background" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
-                  stop shop for language learning
+                <span className="font-display font-bold text-cream" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
+                  one-stop shop for language learning
                 </span>
               </div>
             </div>

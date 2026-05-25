@@ -252,10 +252,11 @@ export function GeneralPage() {
               <Button
                 variant="option"
                 selected={ageToRangeLabel(formData.age) === range.label}
+                aria-pressed={ageToRangeLabel(formData.age) === range.label}
                 onClick={() => updateField('age', range.midpoint)}
                 className="text-sm rounded-xl border-border bg-card hover:border-primary hover:text-foreground"
               >
-                {range.label}
+                {t(range.i18nKey)}
               </Button>
             </motion.div>
           ))}

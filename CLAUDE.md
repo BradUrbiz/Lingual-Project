@@ -33,7 +33,7 @@ School integration is the top strategic priority. The system has moved past its 
 
 ### Language Support Is Not the Focus
 
-The learning engine is deliberately language-agnostic. Adding a locale is a config change in `main.py` (`ALLOWED_LEARNING_LOCALES` + `LEARNING_LOCALE_PROMPT_CONFIG`), not a product initiative. Currently configured locales: `ko-KR`, `es-ES`, `fr-FR`, `ru-RU`, `he-IL`. Most US schools teach Spanish and French, so those get exercised most, but the architecture should never hard-code a single language. Prompt assembly, analytics, and rubrics must stay locale-parametric.
+The learning engine is deliberately language-agnostic. Adding a locale is a config change in `main.py` (`ALLOWED_LEARNING_LOCALES` + `LEARNING_LOCALE_PROMPT_CONFIG`), not a product initiative. Currently configured locales: `ko-KR`, `es-ES`, `fr-FR`, `ru-RU`, `he-IL`, `tl-PH`. Most US schools teach Spanish and French, so those get exercised most, but the architecture should never hard-code a single language. Prompt assembly, analytics, and rubrics must stay locale-parametric.
 
 ### User Roles
 

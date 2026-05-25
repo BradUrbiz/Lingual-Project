@@ -12,9 +12,6 @@ RUN npm ci
 # Copy frontend source
 COPY frontend/ ./
 
-# Copy Cubism SDK for Live2D avatar build (uploaded from local disk by gcloud builds submit)
-COPY CubismSdkForWeb-5-r.4/Framework/dist /app/CubismSdkForWeb-5-r.4/Framework/dist
-
 # Build the React app
 RUN npm run build
 

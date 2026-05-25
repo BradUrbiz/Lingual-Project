@@ -223,6 +223,7 @@ function RosterSection({
           />
         </div>
         <select
+          aria-label="Filter by consent status"
           value={consentFilter}
           onChange={(e) => setConsentFilter(e.target.value)}
           className={selectStyle}
@@ -235,6 +236,7 @@ function RosterSection({
         </select>
         {classOptions.length > 1 && (
           <select
+            aria-label="Filter by class"
             value={classFilter}
             onChange={(e) => setClassFilter(e.target.value)}
             className={selectStyle}
@@ -550,6 +552,7 @@ export function AdminCompliancePage() {
   const [error, setError] = useState<string | null>(null);
   const [roster, setRoster] = useState<OrgComplianceRosterData | null>(null);
   const [packetsData, setPacketsData] = useState<OrgGuardianPacketsData | null>(null);
+  const isAdmin = activeMembership?.roles?.includes('school_admin') ?? false;
 
   const loadRoster = useCallback(
     async (params?: { consentStatus?: string; search?: string; classId?: string }) => {
@@ -574,13 +577,29 @@ export function AdminCompliancePage() {
   }, []);
 
   useEffect(() => {
+    let isActive = true;
+
     const init = async () => {
+      if (!isAdmin) {
+        if (isActive) {
+          setRoster(null);
+          setPacketsData(null);
+          setLoading(false);
+        }
+        return;
+      }
+
       setLoading(true);
+      setError(null);
       await Promise.all([loadRoster(), loadPackets()]);
-      setLoading(false);
+      if (isActive) setLoading(false);
     };
-    init();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    void init();
+
+    return () => {
+      isActive = false;
+    };
+  }, [isAdmin, loadRoster, loadPackets]);
 
   const handleExportAudit = async () => {
     setExporting(true);
@@ -599,8 +618,6 @@ export function AdminCompliancePage() {
       setExporting(false);
     }
   };
-
-  const isAdmin = activeMembership?.roles?.includes('school_admin');
 
   if (!isAdmin) {
     return (

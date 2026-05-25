@@ -319,7 +319,7 @@ export function AppSettingsPage() {
                       aria-pressed={ageToRangeLabel(selectedAge) === range.label}
                       disabled={isLoading}
                       onClick={() => setSelectedAge(range.midpoint)}
-                      className="text-sm rounded-xl border-border bg-card hover:border-primary hover:text-foreground"
+                      className="text-sm"
                     >
                       {t(range.i18nKey)}
                     </Button>

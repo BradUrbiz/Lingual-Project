@@ -287,13 +287,13 @@ export function LandingPage() {
               <div className="w-px self-stretch bg-background/30 flex-shrink-0" />
               <div className="flex flex-col gap-2">
                 <span className="font-display font-bold text-background" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
-                  stop shop for language learning
+                  platform trusted by schools
                 </span>
                 <span className="font-display font-bold text-background" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
                   AI tutor for every student
                 </span>
                 <span className="font-display font-semibold text-background" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
-                  platform trusted by schools
+                  stop shop for language learning
                 </span>
               </div>
             </div>

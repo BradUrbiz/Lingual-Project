@@ -7,6 +7,7 @@ import curriculumExampleFr from '@/data/curriculum_example_fr.json';
 import curriculumExampleHe from '@/data/curriculum_example_he.json';
 import curriculumExampleKo from '@/data/curriculum_example_ko.json';
 import curriculumExampleRu from '@/data/curriculum_example_ru.json';
+import curriculumExampleTl from '@/data/curriculum_example_tl.json';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useLearningLocale } from '@/contexts/LearningLocaleContext';
 import { getChatSessions } from '@/api/chat';
@@ -55,6 +56,7 @@ const curriculaByLocale: Partial<Record<LearningLocale, Curriculum>> = {
   'fr-FR': curriculumExampleFr as Curriculum,
   'ru-RU': curriculumExampleRu as Curriculum,
   'he-IL': curriculumExampleHe as Curriculum,
+  'tl-PH': curriculumExampleTl as Curriculum,
 };
 
 export function AppGamesPage() {

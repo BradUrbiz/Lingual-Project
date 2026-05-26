@@ -1,0 +1,227 @@
+{
+  "curriculum_id": "tl-core-v1",
+  "locale": "tl-PH",
+  "title": "Filipino Core Speaking (Example)",
+  "levels": [
+    {
+      "id": "L1",
+      "name": "Survival Basics",
+      "description": "Greetings, introductions, and everyday courtesy."
+    },
+    {
+      "id": "L2",
+      "name": "Everyday Interactions",
+      "description": "Shopping, directions, and common small talk."
+    }
+  ],
+  "objectives": [
+    {
+      "id": "OBJ-GREET-TL-01",
+      "level_id": "L1",
+      "title": "Basic greetings and introductions",
+      "skills": ["greeting", "self-introduction", "politeness"]
+    },
+    {
+      "id": "OBJ-SHOP-TL-01",
+      "level_id": "L2",
+      "title": "Buy food or items politely",
+      "skills": ["shopping", "numbers", "politeness"]
+    },
+    {
+      "id": "OBJ-DIR-TL-01",
+      "level_id": "L2",
+      "title": "Ask for and follow directions",
+      "skills": ["directions", "locations", "clarifying"]
+    }
+  ],
+  "practice_scenarios": [
+    {
+      "id": "SCN-GREET-TL-01",
+      "objective_id": "OBJ-GREET-TL-01",
+      "title": "Meeting a classmate before class",
+      "setting": "School hallway",
+      "roles": ["student", "classmate"],
+      "difficulty": "easy",
+      "target_phrases": [
+        "Kumusta ka?",
+        "Ako si Maria.",
+        "Magandang umaga po."
+      ],
+      "success_criteria": [
+        "Use a friendly greeting",
+        "Introduce yourself clearly",
+        "Use 'po' for politeness when appropriate"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-GREET-TL-01",
+          "sentence": "Magandang umaga po.",
+          "masked_sentence": "Magandang umaga (__).",
+          "answer": "po",
+          "choices": ["po", "ba", "na", "din"],
+          "explanation": "'Po' is added to show respect, especially when speaking to elders or teachers."
+        },
+        {
+          "id": "GRAM-GREET-TL-02",
+          "sentence": "Ako si Maria.",
+          "masked_sentence": "(__) si Maria.",
+          "answer": "Ako",
+          "choices": ["Ako", "Ikaw", "Siya", "Kami"],
+          "explanation": "Use 'Ako' (I/me) as the first-person singular pronoun when introducing yourself."
+        },
+        {
+          "id": "GRAM-GREET-TL-03",
+          "sentence": "Kumusta ka?",
+          "masked_sentence": "Kumusta (__)? ",
+          "answer": "ka",
+          "choices": ["ka", "kayo", "siya", "tayo"],
+          "explanation": "Use 'ka' when speaking informally to one person your own age."
+        },
+        {
+          "id": "GRAM-GREET-TL-04",
+          "sentence": "Mabuti naman, salamat.",
+          "masked_sentence": "Mabuti naman, (__).",
+          "answer": "salamat",
+          "choices": ["salamat", "paalam", "paumanhin", "muli"],
+          "explanation": "'Salamat' means 'thank you' and is the standard response after a greeting."
+        }
+      ]
+    },
+    {
+      "id": "SCN-SHOP-TL-01",
+      "objective_id": "OBJ-SHOP-TL-01",
+      "title": "Buying snacks at the school canteen",
+      "setting": "School canteen",
+      "roles": ["student", "vendor"],
+      "difficulty": "medium",
+      "target_phrases": [
+        "Magkano ito?",
+        "Isa lang po, salamat.",
+        "Mayroon ba kayong pandesal?"
+      ],
+      "success_criteria": [
+        "Ask the price correctly",
+        "Order one item politely",
+        "Ask if something is available"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-SHOP-TL-01",
+          "sentence": "Magkano ito?",
+          "masked_sentence": "(__) ito?",
+          "answer": "Magkano",
+          "choices": ["Magkano", "Saan", "Sino", "Kailan"],
+          "explanation": "'Magkano' is the question word for price (how much?)."
+        },
+        {
+          "id": "GRAM-SHOP-TL-02",
+          "sentence": "Mayroon ba kayong pandesal?",
+          "masked_sentence": "Mayroon (__) kayong pandesal?",
+          "answer": "ba",
+          "choices": ["ba", "na", "pa", "din"],
+          "explanation": "'Ba' is used to form yes/no questions in Filipino."
+        },
+        {
+          "id": "GRAM-SHOP-TL-03",
+          "sentence": "Isa lang po, salamat.",
+          "masked_sentence": "Isa (__) po, salamat.",
+          "answer": "lang",
+          "choices": ["lang", "rin", "nga", "man"],
+          "explanation": "'Lang' (or 'lamang') means 'only' — 'isa lang' means 'just one.'"
+        },
+        {
+          "id": "GRAM-SHOP-TL-04",
+          "sentence": "Gusto ko ng mais.",
+          "masked_sentence": "Gusto ko (__) mais.",
+          "answer": "ng",
+          "choices": ["ng", "sa", "na", "at"],
+          "explanation": "'Ng' marks the object of the verb 'gusto' (want)."
+        }
+      ]
+    },
+    {
+      "id": "SCN-DIR-TL-01",
+      "objective_id": "OBJ-DIR-TL-01",
+      "title": "Finding the library on campus",
+      "setting": "School campus",
+      "roles": ["student", "guard"],
+      "difficulty": "medium",
+      "target_phrases": [
+        "Saan po ang library?",
+        "Diretso lang po sa kaliwa.",
+        "Salamat po, naiintindihan ko na."
+      ],
+      "success_criteria": [
+        "Ask where a place is",
+        "Understand basic direction instructions",
+        "Confirm understanding politely"
+      ],
+      "grammar_challenges": [
+        {
+          "id": "GRAM-DIR-TL-01",
+          "sentence": "Saan po ang library?",
+          "masked_sentence": "(__) po ang library?",
+          "answer": "Saan",
+          "choices": ["Saan", "Sino", "Ano", "Bakit"],
+          "explanation": "'Saan' is the question word for location (where?)."
+        },
+        {
+          "id": "GRAM-DIR-TL-02",
+          "sentence": "Diretso lang po sa kaliwa.",
+          "masked_sentence": "Diretso lang po sa (__).",
+          "answer": "kaliwa",
+          "choices": ["kaliwa", "kanan", "harap", "likod"],
+          "explanation": "'Kaliwa' means left. 'Kanan' means right."
+        },
+        {
+          "id": "GRAM-DIR-TL-03",
+          "sentence": "Naiintindihan ko na.",
+          "masked_sentence": "Naiintindihan ko (__).",
+          "answer": "na",
+          "choices": ["na", "pa", "ba", "nga"],
+          "explanation": "'Na' here signals that an action has been completed or a state has been reached."
+        },
+        {
+          "id": "GRAM-DIR-TL-04",
+          "sentence": "Nasa tabi ng gusali ang library.",
+          "masked_sentence": "Nasa tabi (__) gusali ang library.",
+          "answer": "ng",
+          "choices": ["ng", "sa", "na", "at"],
+          "explanation": "'Ng' links two nouns to show possession or proximity ('next to the building')."
+        }
+      ]
+    }
+  ],
+  "pronunciation_prompts": [
+    {
+      "id": "PRON-GREET-TL-01",
+      "objective_id": "OBJ-GREET-TL-01",
+      "text": "Magandang umaga po."
+    },
+    {
+      "id": "PRON-GREET-TL-02",
+      "objective_id": "OBJ-GREET-TL-01",
+      "text": "Ako si Maria."
+    },
+    {
+      "id": "PRON-SHOP-TL-01",
+      "objective_id": "OBJ-SHOP-TL-01",
+      "text": "Magkano ito?"
+    },
+    {
+      "id": "PRON-SHOP-TL-02",
+      "objective_id": "OBJ-SHOP-TL-01",
+      "text": "Isa lang po, salamat."
+    },
+    {
+      "id": "PRON-DIR-TL-01",
+      "objective_id": "OBJ-DIR-TL-01",
+      "text": "Saan po ang library?"
+    },
+    {
+      "id": "PRON-DIR-TL-02",
+      "objective_id": "OBJ-DIR-TL-01",
+      "text": "Diretso lang po sa kaliwa."
+    }
+  ]
+}

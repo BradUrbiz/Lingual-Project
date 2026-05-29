@@ -11,10 +11,12 @@ import {
   BookOpen,
   MonitorPlay,
   CircleUserRound,
+  Hand,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx } from 'clsx';
 import { useRealtimeChat } from '@/hooks/useRealtimeChat';
+import { useRealtimeSpeakingSpeed } from '@/hooks/useRealtimeSpeakingSpeed';
 import {
   createChatSession,
   getChatSession,
@@ -25,6 +27,7 @@ import {
   updateChatSettings,
 } from '@/api/chat';
 import { ChatInput } from '@/components/chat';
+import { SpeakingSpeedControl } from '@/components/chat/SpeakingSpeedControl';
 import { buildLive2DAvatarStateFromPerformance } from '@/components/avatar/live2dAdapter';
 import { useAvatarPerformance } from '@/components/avatar/useAvatarPerformance';
 import { getUserProfile } from '@/api/user';
@@ -112,6 +115,7 @@ export function AppChatPage() {
   const [profileSummary, setProfileSummary] = useState<UserProfile | null>(null);
   const [languageMixLevel, setLanguageMixLevel] = useState<LanguageMixLevel>(DEFAULT_LANGUAGE_MIX_LEVEL);
   const [languageMixNotice, setLanguageMixNotice] = useState<string | null>(null);
+  const [speakingSpeed, setSpeakingSpeed] = useRealtimeSpeakingSpeed();
 
   // Chat mode state
   type Mode = 'text' | 'realtime';
@@ -252,12 +256,23 @@ export function AppChatPage() {
     isSpeaking,
     messages: realtimeMessages,
     error: realtimeError,
+    isTutorHoldActive,
+    hasHeldTutorResponse,
     connect,
     disconnect,
+    updateSpeakingSpeed,
     clearMessages,
+    setTutorHoldActive,
     queueAvatarHit,
   } = legacyRealtimeSession;
   const remoteAudioStream = legacyRealtimeSession.remoteAudioStream;
+
+  const handleSpeakingSpeedChange = useCallback((nextSpeed: number) => {
+    setSpeakingSpeed(nextSpeed);
+    if (isConnected) {
+      updateSpeakingSpeed(nextSpeed);
+    }
+  }, [isConnected, setSpeakingSpeed, updateSpeakingSpeed]);
 
   const displayMessages = useMemo(
     () => [...historyMessages, ...realtimeMessages],
@@ -345,9 +360,10 @@ export function AppChatPage() {
     if (isSpeaking || (CHAT_AVATAR_AVAILABLE && mode === 'realtime' && live2dPerformance.dialogueState === 'speaking')) {
       return t('app.learn.status.aiSpeaking');
     }
+    if (isTutorHoldActive) return t('app.learn.status.tutorHold');
     if (isListening) return t('app.learn.status.listening');
     return t('app.learn.status.ready');
-  }, [isConnecting, isConnected, isListening, isSpeaking, live2dPerformance.dialogueState, mode, t]);
+  }, [isConnecting, isConnected, isListening, isSpeaking, isTutorHoldActive, live2dPerformance.dialogueState, mode, t]);
 
   const avatarStatusLabel = useMemo(() => {
     if (mode === 'realtime') {
@@ -541,7 +557,7 @@ export function AppChatPage() {
       }
 
       setIsConnecting(true);
-      await connect();
+      await connect({ chatId: currentChatId, speakingSpeed });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start realtime session');
     } finally {
@@ -1076,31 +1092,64 @@ export function AppChatPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="flex items-center justify-between gap-4"
+                className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="flex-1 bg-card border-2 border-border rounded-xl px-4 py-3 text-muted-foreground font-medium">
-                  {statusLabel}
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <SpeakingSpeedControl
+                    value={speakingSpeed}
+                    onChange={handleSpeakingSpeedChange}
+                    disabled={isConnecting}
+                  />
+                  <div className="bg-card border-2 border-border rounded-xl px-4 py-3 text-muted-foreground font-medium">
+                    {statusLabel}
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleRecordToggle}
-                  disabled={!currentChatId || isConnecting}
-                  aria-label={micButtonLabel}
-                  title={micButtonLabel}
-                  className={clsx(
-                    'w-14 h-14 rounded-xl flex items-center justify-center border-2 border-foreground transition-all',
-                    isConnected
-                      ? isSpeaking
-                        ? 'bg-primary text-primary-foreground shadow-stamp'
-                        : isListening
-                        ? 'bg-destructive text-white animate-pulse shadow-stamp'
-                        : 'bg-success text-white shadow-stamp'
-                      : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-stamp hover:shadow-[6px_6px_0_0_var(--foreground)]',
-                    (isConnecting || !currentChatId) && 'opacity-60 cursor-not-allowed'
-                  )}
-                >
-                  <Mic size={20} strokeWidth={2.5} />
-                </button>
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setTutorHoldActive(!isTutorHoldActive)}
+                    disabled={!isConnected || isConnecting}
+                    aria-pressed={isTutorHoldActive}
+                    aria-label={isTutorHoldActive ? t('app.learn.chat.hold.release') : t('app.learn.chat.hold.inactive')}
+                    title={isTutorHoldActive ? t('app.learn.chat.hold.release') : t('app.learn.chat.hold.inactive')}
+                    className={clsx(
+                      'flex h-14 shrink-0 items-center gap-2 rounded-xl border-2 border-foreground px-3 text-sm font-bold transition-all',
+                      isTutorHoldActive
+                        ? 'bg-warning text-warning-foreground shadow-stamp'
+                        : 'bg-background text-foreground hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--foreground)]',
+                      (!isConnected || isConnecting) && 'cursor-not-allowed opacity-50 shadow-none'
+                    )}
+                  >
+                    <Hand size={18} strokeWidth={2.5} />
+                    <span className="hidden sm:inline">
+                      {isTutorHoldActive
+                        ? hasHeldTutorResponse
+                          ? t('app.learn.chat.hold.release')
+                          : t('app.learn.chat.hold.active')
+                        : t('app.learn.chat.hold.inactive')}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRecordToggle}
+                    disabled={!currentChatId || isConnecting}
+                    aria-label={micButtonLabel}
+                    title={micButtonLabel}
+                    className={clsx(
+                      'w-14 h-14 rounded-xl flex items-center justify-center border-2 border-foreground transition-all',
+                      isConnected
+                        ? isSpeaking
+                          ? 'bg-primary text-primary-foreground shadow-stamp'
+                          : isListening
+                          ? 'bg-destructive text-white animate-pulse shadow-stamp'
+                          : 'bg-success text-white shadow-stamp'
+                        : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-stamp hover:shadow-[6px_6px_0_0_var(--foreground)]',
+                      (isConnecting || !currentChatId) && 'opacity-60 cursor-not-allowed'
+                    )}
+                  >
+                    <Mic size={20} strokeWidth={2.5} />
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

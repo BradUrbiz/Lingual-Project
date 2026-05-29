@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, History, Loader2, MessageSquareText, Mic } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Hand, History, Loader2, MessageSquareText, Mic } from 'lucide-react';
 import {
   createAssignmentPracticeSession,
   getStudentAssignmentWorkspace,
   reportPracticeSessionEvent,
 } from '@/api/assignments';
 import { createChatSession, getChatSession, saveMessageToChat, sendChatMessage } from '@/api/chat';
-import { ChatInput, ChatMessage } from '@/components/chat';
+import { ChatInput, ChatMessage, SpeakingSpeedControl } from '@/components/chat';
 import { Alert, AlertDescription, Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRealtimeChat } from '@/hooks/useRealtimeChat';
+import { useRealtimeSpeakingSpeed } from '@/hooks/useRealtimeSpeakingSpeed';
 import type { AssignmentBootstrapData, AssignmentWorkspaceData, ChatMessage as ChatMessageType, PracticeSessionDto } from '@/types';
 import { AssignmentContextPanel } from './AssignmentContextPanel';
 import { AssignmentThreadSidebar } from './AssignmentThreadSidebar';
@@ -99,7 +100,7 @@ export function AssignmentPracticeWorkspace({
   bootstrap,
   onClose,
 }: AssignmentPracticeWorkspaceProps) {
-  const { lang } = useLanguage();
+  const { lang, t } = useLanguage();
   const [workspace, setWorkspace] = useState<AssignmentWorkspaceData | null>(null);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [historyMessages, setHistoryMessages] = useState<ChatMessageType[]>([]);
@@ -113,6 +114,7 @@ export function AssignmentPracticeWorkspace({
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
   const [textInput, setTextInput] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [speakingSpeed, setSpeakingSpeed] = useRealtimeSpeakingSpeed();
   const selectedChatIdRef = useRef<string | null>(null);
   const nextMessageOrderRef = useRef(0);
   const closeWithoutAbandonRef = useRef(false);
@@ -206,15 +208,26 @@ export function AssignmentPracticeWorkspace({
     isListening,
     isSpeaking,
     messages: realtimeMessages,
+    isTutorHoldActive,
+    hasHeldTutorResponse,
     connect,
     disconnect,
+    updateSpeakingSpeed,
     clearMessages,
+    setTutorHoldActive,
   } = useRealtimeChat({
     onMessage: (role, content) => {
       void persistRealtimeMessage(role, content);
     },
     sessionParams: realtimeSessionParams,
   });
+
+  const handleSpeakingSpeedChange = useCallback((nextSpeed: number) => {
+    setSpeakingSpeed(nextSpeed);
+    if (isConnected) {
+      updateSpeakingSpeed(nextSpeed);
+    }
+  }, [isConnected, setSpeakingSpeed, updateSpeakingSpeed]);
 
   const loadWorkspace = useCallback(async (
     preferredChatId?: string | null,
@@ -377,7 +390,10 @@ export function AssignmentPracticeWorkspace({
       activePracticeSessionRef.current = practiceSession;
       selectedChatIdRef.current = practiceSession.chatId || selectedChatId;
       setRealtimePersistenceTarget(practiceSession, practiceSession.chatId || selectedChatId);
-      await connect(buildRealtimeSessionParams(bootstrap, practiceSession));
+      await connect({
+        ...buildRealtimeSessionParams(bootstrap, practiceSession),
+        speakingSpeed,
+      });
     } catch (mutationError) {
       clearRealtimePersistenceTarget();
       setError(mutationError instanceof Error ? mutationError.message : 'Failed to connect assignment voice session.');
@@ -516,7 +532,9 @@ export function AssignmentPracticeWorkspace({
   const voiceStatusLabel = isConnecting
     ? 'Connecting...'
     : isConnected
-      ? 'Voice connected'
+      ? isTutorHoldActive
+        ? t('app.learn.status.tutorHold')
+        : 'Voice connected'
       : 'Tap the mic to connect';
 
   return (
@@ -723,23 +741,54 @@ export function AssignmentPracticeWorkspace({
               {selectedThread ? (
                 <div className="shrink-0 space-y-3 border-t-2 border-border bg-card px-4 py-4 sm:px-6">
                   {canUseVoice ? (
-                    <div className="flex items-center gap-3">
-                      <div className="flex min-h-12 flex-1 items-center rounded-2xl border-2 border-border bg-background px-4 text-sm font-semibold text-muted-foreground">
-                        {voiceStatusLabel}
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+                      <div className="flex min-w-0 flex-1 flex-col gap-2">
+                        <SpeakingSpeedControl
+                          value={speakingSpeed}
+                          onChange={handleSpeakingSpeedChange}
+                          disabled={isConnecting || isMutating}
+                        />
+                        <div className="flex min-h-12 items-center rounded-2xl border-2 border-border bg-background px-4 text-sm font-semibold text-muted-foreground">
+                          {voiceStatusLabel}
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleVoiceToggle()}
-                        disabled={isConnecting || isMutating}
-                        aria-label={voiceStatusLabel}
-                        className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border-3 border-foreground transition-all ${
-                          isConnected
-                            ? 'bg-success text-success-foreground shadow-stamp'
-                            : 'bg-primary text-primary-foreground shadow-stamp hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--foreground)]'
-                        } disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none`}
-                      >
-                        {isConnecting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setTutorHoldActive(!isTutorHoldActive)}
+                          disabled={!isConnected || isConnecting || isMutating}
+                          aria-pressed={isTutorHoldActive}
+                          aria-label={isTutorHoldActive ? t('app.learn.chat.hold.release') : t('app.learn.chat.hold.inactive')}
+                          title={isTutorHoldActive ? t('app.learn.chat.hold.release') : t('app.learn.chat.hold.inactive')}
+                          className={`flex h-14 shrink-0 items-center gap-2 rounded-2xl border-3 border-foreground px-3 text-sm font-bold transition-all ${
+                            isTutorHoldActive
+                              ? 'bg-warning text-warning-foreground shadow-stamp'
+                              : 'bg-background text-foreground hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--foreground)]'
+                          } disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none`}
+                        >
+                          <Hand className="h-5 w-5" />
+                          <span className="hidden sm:inline">
+                            {isTutorHoldActive
+                              ? hasHeldTutorResponse
+                                ? t('app.learn.chat.hold.release')
+                                : t('app.learn.chat.hold.active')
+                              : t('app.learn.chat.hold.inactive')}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleVoiceToggle()}
+                          disabled={isConnecting || isMutating}
+                          aria-label={voiceStatusLabel}
+                          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border-3 border-foreground transition-all ${
+                            isConnected
+                              ? 'bg-success text-success-foreground shadow-stamp'
+                              : 'bg-primary text-primary-foreground shadow-stamp hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--foreground)]'
+                          } disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none`}
+                        >
+                          {isConnecting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
+                        </button>
+                      </div>
                     </div>
                   ) : null}
 

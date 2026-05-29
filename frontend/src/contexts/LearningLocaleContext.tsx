@@ -15,6 +15,10 @@ const LearningLocaleContext = createContext<LearningLocaleContextType | null>(nu
 
 const RTL_LEARNING_LOCALES: ReadonlySet<LearningLocale> = new Set<LearningLocale>(['he-IL']);
 
+export function getLearningLocaleDirection(locale: LearningLocale): 'ltr' | 'rtl' {
+  return RTL_LEARNING_LOCALES.has(locale) ? 'rtl' : 'ltr';
+}
+
 export function LearningLocaleProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [learningLocale, setLearningLocale] = useState<LearningLocale>(DEFAULT_LEARNING_LOCALE);
@@ -39,28 +43,24 @@ export function LearningLocaleProvider({ children }: { children: ReactNode }) {
   const effectiveLocale = user ? learningLocale : DEFAULT_LEARNING_LOCALE;
   const isRTL = RTL_LEARNING_LOCALES.has(effectiveLocale);
 
-  // Sync document direction with the active learning locale so RTL scripts
-  // (currently Hebrew) render correctly without per-component `dir` props.
+  // Keep global browser chrome and public routes LTR. Learning-locale direction
+  // is scoped to authenticated app layouts so it cannot leak onto the landing
+  // page when a signed-in learner has Hebrew selected. Re-run on locale changes
+  // so the root is corrected if any stale session state set it to RTL.
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
-    //const dir = RTL_LEARNING_LOCALES.has(effectiveLocale) ? 'rtl' : 'ltr';
     root.setAttribute('dir', 'ltr');
-    root.setAttribute('lang', effectiveLocale);
-    return () => {
-      // Reset to LTR + app UI language on unmount/teardown.
-      root.setAttribute('dir', 'ltr');
-    };
   }, [effectiveLocale]);
 
   return (
     <LearningLocaleContext.Provider
-  value={{
-    learningLocale: effectiveLocale,
-    setLearningLocale,
-    isRTL,
-  }}
->
+      value={{
+        learningLocale: effectiveLocale,
+        setLearningLocale,
+        isRTL,
+      }}
+    >
       {children}
     </LearningLocaleContext.Provider>
   );

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, Plus, MessageSquare, Trash2, ChevronLeft } from 'lucide-react';
+import { Loader2, Plus, MessageSquare, Trash2, ChevronLeft, Hand } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useRealtimeChat } from '../hooks/useRealtimeChat';
+import { useRealtimeSpeakingSpeed } from '../hooks/useRealtimeSpeakingSpeed';
 import { getUserProfile } from '../api/user';
 import {
   getChatSessions,
@@ -15,6 +16,7 @@ import {
 // FLASHCARDFLIP
 import { generateFlashcards, type Flashcard } from '../api/minigames';
 import { FlashcardFlip, WordMatch } from '../components/minigames';
+import { SpeakingSpeedControl } from '../components/chat/SpeakingSpeedControl';
 // FLASHCARDFLIP
 import {
   Card,
@@ -64,6 +66,7 @@ export function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [deleteDialogChatId, setDeleteDialogChatId] = useState<string | null>(null);
   const [isDeletingChat, setIsDeletingChat] = useState(false);
+  const [speakingSpeed, setSpeakingSpeed] = useRealtimeSpeakingSpeed();
 
   // FLASHCARDFLIP
   const [showFlashcards, setShowFlashcards] = useState(false);
@@ -106,10 +109,21 @@ export function ChatPage() {
     isSpeaking,
     messages: realtimeMessages,
     error: realtimeError,
+    isTutorHoldActive,
+    hasHeldTutorResponse,
     connect,
     disconnect,
+    updateSpeakingSpeed,
     clearMessages: clearRealtimeMessages,
+    setTutorHoldActive,
   } = useRealtimeChat({ onMessage: handleRealtimeMessage });
+
+  const handleSpeakingSpeedChange = useCallback((nextSpeed: number) => {
+    setSpeakingSpeed(nextSpeed);
+    if (isConnected) {
+      updateSpeakingSpeed(nextSpeed);
+    }
+  }, [isConnected, setSpeakingSpeed, updateSpeakingSpeed]);
 
   // Use realtime messages when in realtime mode
   const displayMessages = mode === 'realtime' ? realtimeMessages : messages;
@@ -638,6 +652,12 @@ export function ChatPage() {
                     </span>
                   </div>
 
+                  <SpeakingSpeedControl
+                    value={speakingSpeed}
+                    onChange={handleSpeakingSpeedChange}
+                    className="justify-center"
+                  />
+
                   {/* Voice Button */}
                   <button
                     type="button"
@@ -645,7 +665,7 @@ export function ChatPage() {
                       if (isConnected) {
                         disconnect();
                       } else {
-                        void connect();
+                        void connect({ chatId: currentChatId, speakingSpeed });
                       }
                     }}
                     className={`relative w-20 h-20 rounded-full transition-all duration-300 ${
@@ -678,11 +698,36 @@ export function ChatPage() {
                     {isConnected
                       ? isSpeaking
                         ? 'Lingu is speaking...'
+                        : isTutorHoldActive
+                        ? t('app.learn.status.tutorHold')
                         : isListening
                         ? 'Listening...'
                         : 'Speak to chat'
                       : 'Press button to start'}
                   </p>
+
+                  <button
+                    type="button"
+                    onClick={() => setTutorHoldActive(!isTutorHoldActive)}
+                    disabled={!isConnected}
+                    aria-pressed={isTutorHoldActive}
+                    aria-label={isTutorHoldActive ? t('app.learn.chat.hold.release') : t('app.learn.chat.hold.inactive')}
+                    title={isTutorHoldActive ? t('app.learn.chat.hold.release') : t('app.learn.chat.hold.inactive')}
+                    className={`inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${
+                      isTutorHoldActive
+                        ? 'border-amber-700 bg-amber-100 text-amber-950'
+                        : 'border-border bg-background text-foreground hover:bg-accent'
+                    } ${!isConnected ? 'cursor-not-allowed opacity-50' : ''}`}
+                  >
+                    <Hand className="h-4 w-4" />
+                    <span>
+                      {isTutorHoldActive
+                        ? hasHeldTutorResponse
+                          ? t('app.learn.chat.hold.release')
+                          : t('app.learn.chat.hold.active')
+                        : t('app.learn.chat.hold.inactive')}
+                    </span>
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>

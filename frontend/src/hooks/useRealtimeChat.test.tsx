@@ -292,4 +292,83 @@ describe('useRealtimeChat directive continuation', () => {
       type: 'response.create',
     });
   });
+
+  it('updates realtime tutor speaking speed through the data channel', async () => {
+    render(<HookHarness />);
+
+    await act(async () => {
+      await latestHookState?.connect();
+    });
+
+    act(() => {
+      activeDataChannel?.open();
+    });
+
+    await waitFor(() => {
+      expect(latestHookState?.isConnected).toBe(true);
+    });
+
+    let didSend = false;
+    act(() => {
+      didSend = latestHookState?.updateSpeakingSpeed(1.3) ?? false;
+    });
+
+    expect(didSend).toBe(true);
+    expect(sentClientEvents).toContainEqual({
+      type: 'session.update',
+      session: {
+        type: 'realtime',
+        audio: {
+          output: {
+            speed: 1.3,
+          },
+        },
+      },
+    });
+  });
+
+  it('holds accepted learner turns until the student releases the tutor hold', async () => {
+    render(<HookHarness />);
+
+    await act(async () => {
+      await latestHookState?.connect();
+    });
+
+    act(() => {
+      activeDataChannel?.open();
+    });
+
+    await waitFor(() => {
+      expect(latestHookState?.isConnected).toBe(true);
+    });
+
+    act(() => {
+      latestHookState?.setTutorHoldActive(true);
+    });
+
+    act(() => {
+      activeDataChannel?.emitServerEvent({
+        type: 'input_audio_buffer.speech_started',
+      });
+      activeDataChannel?.emitServerEvent({
+        type: 'conversation.item.input_audio_transcription.done',
+        item_id: 'user_3',
+        transcript: 'I want to say one more thing about the restaurant.',
+      });
+    });
+
+    expect(sentClientEvents).not.toContainEqual({
+      type: 'response.create',
+    });
+    expect(latestHookState?.hasHeldTutorResponse).toBe(true);
+
+    act(() => {
+      latestHookState?.setTutorHoldActive(false);
+    });
+
+    expect(sentClientEvents).toContainEqual({
+      type: 'response.create',
+    });
+    expect(latestHookState?.hasHeldTutorResponse).toBe(false);
+  });
 });

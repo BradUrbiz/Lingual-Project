@@ -12,6 +12,7 @@ import {
   parseAvatarDirectiveArguments,
   shouldTriggerAvatarContextResponse,
 } from './realtimeAvatar';
+import { normalizeRealtimeSpeakingSpeed } from '@/lib/realtimeSpeakingSpeed';
 
 interface RealtimeMessage {
   id: string;
@@ -24,6 +25,7 @@ interface RealtimeMessage {
 
 type RealtimeSessionParams = {
   uiLanguage?: string;
+  speakingSpeed?: number;
   practice?: unknown;
   [key: string]: unknown;
 };
@@ -43,15 +45,19 @@ interface UseRealtimeChatReturn {
   assistantTranscriptFinal: string;
   assistantSpeechStartedAt: number | null;
   assistantSpeechEndedAt: number | null;
+  isTutorHoldActive: boolean;
+  hasHeldTutorResponse: boolean;
   avatarDirective: AvatarDirective | null;
   avatarDirectiveSource: 'directive' | 'fallback';
   avatarDiagnostics: AvatarDiagnostics;
   error: string | null;
   connect: (sessionParamsOverride?: RealtimeSessionParams) => Promise<void>;
   disconnect: () => void;
+  updateSpeakingSpeed: (speed: number) => boolean;
   startListening: () => void;
   stopListening: () => void;
   clearMessages: () => void;
+  setTutorHoldActive: (active: boolean) => void;
   queueAvatarHit: (area: string) => Promise<void>;
 }
 
@@ -156,6 +162,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const [assistantTranscriptFinal, setAssistantTranscriptFinal] = useState('');
   const [assistantSpeechStartedAt, setAssistantSpeechStartedAt] = useState<number | null>(null);
   const [assistantSpeechEndedAt, setAssistantSpeechEndedAt] = useState<number | null>(null);
+  const [isTutorHoldActive, setIsTutorHoldActive] = useState(false);
+  const [hasHeldTutorResponse, setHasHeldTutorResponse] = useState(false);
   const [avatarDirective, setAvatarDirective] = useState<AvatarDirective | null>(null);
   const [avatarDebugStats, setAvatarDebugStats] = useState<AvatarDebugStats>(() => createEmptyAvatarDebugStats());
   const [error, setError] = useState<string | null>(null);
@@ -180,6 +188,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const isConnectedRef = useRef(false);
   const isListeningRef = useRef(false);
   const isSpeakingRef = useRef(false);
+  const isTutorHoldActiveRef = useRef(false);
+  const hasHeldTutorResponseRef = useRef(false);
   const assistantTranscriptDeltaRef = useRef('');
   const assistantTranscriptFinalRef = useRef('');
   const assistantSpeechStartedAtRef = useRef<number | null>(null);
@@ -519,10 +529,14 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     setIsConnected(false);
     setIsListening(false);
     setIsSpeaking(false);
+    setIsTutorHoldActive(false);
+    setHasHeldTutorResponse(false);
     setRemoteAudioStream(null);
     isConnectedRef.current = false;
     isListeningRef.current = false;
     isSpeakingRef.current = false;
+    isTutorHoldActiveRef.current = false;
+    hasHeldTutorResponseRef.current = false;
 
     currentResponseIdRef.current = null;
     inputSpeechStartedAtRef.current = null;
@@ -576,6 +590,53 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     sendClientEvent({ type: 'output_audio_buffer.clear' });
   }, [sendClientEvent]);
 
+  const updateSpeakingSpeed = useCallback((speed: number) => {
+    const normalizedSpeed = normalizeRealtimeSpeakingSpeed(speed);
+    return sendClientEvent({
+      type: 'session.update',
+      session: {
+        type: 'realtime',
+        audio: {
+          output: {
+            speed: normalizedSpeed,
+          },
+        },
+      },
+    });
+  }, [sendClientEvent]);
+
+  const setTutorHoldActive = useCallback((active: boolean) => {
+    isTutorHoldActiveRef.current = active;
+    setIsTutorHoldActive(active);
+
+    if (active) {
+      if (isSpeakingRef.current || currentResponseIdRef.current) {
+        cancelCurrentResponse();
+        clearOutputAudioBuffer();
+        pendingAssistantOrderRef.current = null;
+        isSpeakingRef.current = false;
+        setIsSpeaking(false);
+      }
+      return;
+    }
+
+    if (hasHeldTutorResponseRef.current) {
+      hasHeldTutorResponseRef.current = false;
+      setHasHeldTutorResponse(false);
+      createRealtimeResponse();
+    }
+  }, [cancelCurrentResponse, clearOutputAudioBuffer, createRealtimeResponse]);
+
+  const createRealtimeResponseUnlessHeld = useCallback(() => {
+    if (isTutorHoldActiveRef.current) {
+      hasHeldTutorResponseRef.current = true;
+      setHasHeldTutorResponse(true);
+      return false;
+    }
+
+    return createRealtimeResponse();
+  }, [createRealtimeResponse]);
+
   const acknowledgeFunctionCall = useCallback((callId: string | null, ok: boolean) => {
     if (!callId) return;
     createConversationItem({
@@ -591,9 +652,9 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     }
 
     pendingDirectiveContinuationRef.current = false;
-    createRealtimeResponse();
+    createRealtimeResponseUnlessHeld();
     return true;
-  }, [createRealtimeResponse]);
+  }, [createRealtimeResponseUnlessHeld]);
 
   const flushQueuedAvatarContexts = useCallback(() => {
     if (!shouldTriggerAvatarContextResponse({
@@ -624,9 +685,9 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       });
     }
 
-    createRealtimeResponse();
+    createRealtimeResponseUnlessHeld();
     return true;
-  }, [createConversationItem, createRealtimeResponse]);
+  }, [createConversationItem, createRealtimeResponseUnlessHeld]);
 
   const completeDirectiveToolCall = useCallback((itemId: string, argsString?: string, eventCallId?: string | null, eventName?: string | null) => {
     const meta = directiveCallRef.current.get(itemId);
@@ -804,7 +865,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
 
             if (shouldRespondToRealtimeTurn(resolvedTranscript, currentInputTurnRef.current)) {
               finalizeTranscript('user', resolvedTranscript, itemId);
-              createRealtimeResponse();
+              createRealtimeResponseUnlessHeld();
             } else {
               pendingUserOrderRef.current = null;
               deleteConversationItem(itemId);
@@ -902,7 +963,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       clearAvatarDirective,
       clearOutputAudioBuffer,
       completeDirectiveToolCall,
-      createRealtimeResponse,
+      createRealtimeResponseUnlessHeld,
       deleteConversationItem,
       finalizeTranscript,
       flushQueuedAvatarContexts,
@@ -1079,15 +1140,19 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     assistantTranscriptFinal,
     assistantSpeechStartedAt,
     assistantSpeechEndedAt,
+    isTutorHoldActive,
+    hasHeldTutorResponse,
     avatarDirective,
     avatarDirectiveSource: avatarDirective ? 'directive' : 'fallback',
     avatarDiagnostics,
     error,
     connect,
     disconnect,
+    updateSpeakingSpeed,
     startListening,
     stopListening,
     clearMessages,
+    setTutorHoldActive,
     queueAvatarHit,
   };
 }

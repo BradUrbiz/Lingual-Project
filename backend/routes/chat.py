@@ -1,4 +1,5 @@
 import hashlib
+import math
 import os
 from typing import Any
 
@@ -71,6 +72,9 @@ AVATAR_REACTION_INTENTS = [
 REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15'
 REALTIME_CLIENT_SECRET_TTL_SECONDS = 600
 REALTIME_INPUT_AUDIO_TRANSCRIPTION_MODEL = 'gpt-4o-mini-transcribe-2025-12-15'
+REALTIME_SPEAKING_SPEED_DEFAULT = 1.0
+REALTIME_SPEAKING_SPEED_MIN = 0.25
+REALTIME_SPEAKING_SPEED_MAX = 1.5
 REALTIME_TRANSCRIPTION_LANGUAGE_HINTS = {
     'ko-KR': ('ko', 'Korean'),
     'es-ES': ('es', 'Spanish'),
@@ -81,6 +85,41 @@ REALTIME_TRANSCRIPTION_LANGUAGE_HINTS = {
     'en-US': ('en', 'English'),
     'en-GB': ('en', 'English'),
 }
+
+
+def normalize_realtime_speaking_speed(value: Any) -> float:
+    if value is None or isinstance(value, bool):
+        return REALTIME_SPEAKING_SPEED_DEFAULT
+    try:
+        speed = float(value)
+    except (TypeError, ValueError):
+        return REALTIME_SPEAKING_SPEED_DEFAULT
+    if not math.isfinite(speed):
+        return REALTIME_SPEAKING_SPEED_DEFAULT
+    clamped = min(
+        max(speed, REALTIME_SPEAKING_SPEED_MIN),
+        REALTIME_SPEAKING_SPEED_MAX,
+    )
+    return round(clamped, 2)
+
+
+def build_realtime_pacing_instruction(speaking_speed: float) -> str:
+    if speaking_speed <= 0.9:
+        return (
+            'Voice pacing: Speak more slowly than normal, with clear word boundaries '
+            'and short pauses between phrases so the learner can follow.'
+        )
+    if speaking_speed >= 1.2:
+        return (
+            'Voice pacing: Speak briskly but clearly. Keep responses concise and do '
+            'not rush corrections or target-language examples.'
+        )
+    if speaking_speed > 1.0:
+        return (
+            'Voice pacing: Speak slightly faster than normal while keeping pronunciation '
+            'clear and learner-friendly.'
+        )
+    return 'Voice pacing: Speak at a natural, clear tutoring pace.'
 
 
 def build_avatar_directive_tool() -> dict[str, Any]:
@@ -258,11 +297,14 @@ def build_realtime_session_request(
     transcription_language: str = 'en',
     transcription_prompt: str | None = None,
     enable_avatar_directives: bool | None = None,
+    speaking_speed: Any = REALTIME_SPEAKING_SPEED_DEFAULT,
 ) -> dict[str, Any]:
+    normalized_speaking_speed = normalize_realtime_speaking_speed(speaking_speed)
     guarded_instructions = (
         f'{system_instructions}\n\n'
         'Voice-input guardrail: Ignore accidental noise, background conversations, and speech not directed at you. '
-        'Only respond when the learner is clearly addressing you.'
+        'Only respond when the learner is clearly addressing you.\n\n'
+        f'{build_realtime_pacing_instruction(normalized_speaking_speed)}'
     )
     input_audio_transcription: dict[str, Any] = {
         'model': REALTIME_INPUT_AUDIO_TRANSCRIPTION_MODEL,
@@ -284,10 +326,8 @@ def build_realtime_session_request(
                 },
                 'transcription': input_audio_transcription,
                 'turn_detection': {
-                    'type': 'server_vad',
-                    'threshold': 0.7,
-                    'prefix_padding_ms': 300,
-                    'silence_duration_ms': 320,
+                    'type': 'semantic_vad',
+                    'eagerness': 'auto',
                     'create_response': False,
                     'interrupt_response': True,
                 },
@@ -298,6 +338,7 @@ def build_realtime_session_request(
                     'rate': 24000,
                 },
                 'voice': 'coral',
+                'speed': normalized_speaking_speed,
             },
         },
     }
@@ -362,6 +403,7 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
             ui_language = payload.get('uiLanguage', 'en')
             if ui_language not in deps.supported_ui_languages:
                 ui_language = 'en'
+            speaking_speed = normalize_realtime_speaking_speed(payload.get('speakingSpeed'))
 
             uid = deps.get_current_user_uid()
             assignment_id = _extract_assignment_id(payload)
@@ -489,6 +531,7 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     transcription_language=transcription_language,
                     transcription_prompt=transcription_prompt,
                     enable_avatar_directives=realtime_avatar_directives_requested(payload),
+                    speaking_speed=speaking_speed,
                 ),
             )
 

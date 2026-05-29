@@ -579,11 +579,37 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
             audio_input['transcription']['model'],
             'gpt-4o-mini-transcribe-2025-12-15',
         )
-        self.assertEqual(audio_input['turn_detection']['threshold'], 0.7)
+        self.assertEqual(audio_input['turn_detection']['type'], 'semantic_vad')
+        self.assertEqual(audio_input['turn_detection']['eagerness'], 'auto')
         self.assertEqual(audio_input['turn_detection']['create_response'], False)
         self.assertEqual(session_payload['audio']['output']['voice'], 'coral')
+        self.assertEqual(session_payload['audio']['output']['speed'], 1.0)
         self.assertNotIn('tool_choice', session_payload)
         self.assertNotIn('tools', session_payload)
+
+    def test_realtime_session_request_includes_requested_speaking_speed(self):
+        with patch.dict('os.environ', {}, clear=False):
+            payload = build_realtime_session_request(
+                'Base instructions',
+                speaking_speed=1.15,
+            )
+
+        session_payload = payload['session']
+
+        self.assertEqual(session_payload['audio']['output']['speed'], 1.15)
+        self.assertIn('slightly faster', session_payload['instructions'].lower())
+
+    def test_realtime_session_request_uses_balanced_semantic_turn_detection(self):
+        with patch.dict('os.environ', {}, clear=False):
+            payload = build_realtime_session_request('Base instructions')
+
+        turn_detection = payload['session']['audio']['input']['turn_detection']
+
+        self.assertEqual(turn_detection['type'], 'semantic_vad')
+        self.assertEqual(turn_detection['eagerness'], 'auto')
+        self.assertEqual(turn_detection['create_response'], False)
+        self.assertEqual(turn_detection['interrupt_response'], True)
+        self.assertNotIn('silence_duration_ms', turn_detection)
 
     def test_realtime_session_request_accepts_transcription_language_and_prompt(self):
         with patch.dict('os.environ', {}, clear=False):
@@ -741,6 +767,7 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
                 response = self.client.post('/api/realtime/session', json={
                     'uiLanguage': 'en',
                     'chatId': 'chat-existing',
+                    'speakingSpeed': 1.3,
                 })
 
         self.assertEqual(response.status_code, 200)
@@ -750,6 +777,8 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         self.assertEqual(transcription['language'], 'fr')
         self.assertIn('never translate', transcription['prompt'].lower())
         self.assertIn('english may also appear', transcription['prompt'].lower())
+        self.assertEqual(request_payload['session']['audio']['output']['speed'], 1.3)
+        self.assertIn('briskly', request_payload['session']['instructions'].lower())
 
     def test_text_chat_uses_chat_language_mix_for_free_practice(self):
         self.fake_db.chats['student-1']['chat-existing']['language_mix_level'] = 'english_first'

@@ -281,5 +281,96 @@ class TestBackfillEndToEnd(unittest.TestCase):
         self.assertEqual(stats['enrollments']['inserted'], 3)
 
 
+class TestMultiRoleMembershipMerge(unittest.TestCase):
+    """Real PG: a user who is BOTH staff and student in one org is stored in
+    Firestore as two single-role membership docs (different write paths, different
+    doc-ids). PG models one membership per (org,uid) with roles[] + the partial-
+    unique index memberships_org_uid_active_idx, so the upsert must UNION roles
+    into the existing active row rather than INSERT a colliding one. This is the
+    gap the first production backfill surfaced (2026-05-31)."""
+
+    def setUp(self):
+        with Session(_engine) as s:
+            for model in (Enrollment, Class, Membership, Organization, MigrationImportRun):
+                s.query(model).delete()
+            s.commit()
+
+    def _count(self, s, model):
+        return s.execute(select(func.count()).select_from(model)).scalar_one()
+
+    def _run(self, membership_docs, *, with_org=True):
+        with Session(_engine) as s:
+            stats = backfill.run_backfill(
+                s,
+                organizations=([{'id': 'org1', 'name': 'Springfield High', 'status': 'active'}]
+                               if with_org else []),
+                memberships=membership_docs,
+            )
+            s.commit()
+        return stats
+
+    def _sole_row_for(self, uid):
+        with Session(_engine) as s:
+            return s.execute(select(Membership).where(Membership.firebase_uid == uid)).scalar_one()
+
+    def test_two_active_docs_merge_to_one_row(self):
+        stats = self._run([
+            {'id': 'm_teacher', 'org_id': 'org1', 'uid': 'u1', 'roles': ['teacher'], 'status': 'active'},
+            {'id': 'm_student', 'org_id': 'org1', 'uid': 'u1', 'roles': ['student'], 'status': 'active'},
+        ])
+        self.assertEqual(stats['memberships']['inserted'], 1)
+        self.assertEqual(stats['memberships']['updated'], 1)  # the merge, not an error
+        self.assertEqual(stats['memberships']['errors'], [])
+        self.assertEqual(len(stats['memberships']['warnings']), 1)
+        with Session(_engine) as s:
+            self.assertEqual(self._count(s, Membership), 1)
+        self.assertEqual(set(self._sole_row_for('u1').roles), {'teacher', 'student'})
+
+    def test_student_first_then_teacher_same_result(self):
+        # Order independence: the reverse order yields the same single merged row.
+        self._run([
+            {'id': 'm_student', 'org_id': 'org1', 'uid': 'u1', 'roles': ['student'], 'status': 'active'},
+            {'id': 'm_teacher', 'org_id': 'org1', 'uid': 'u1', 'roles': ['teacher'], 'status': 'active'},
+        ])
+        with Session(_engine) as s:
+            self.assertEqual(self._count(s, Membership), 1)
+        self.assertEqual(set(self._sole_row_for('u1').roles), {'teacher', 'student'})
+
+    def test_rerun_idempotent_keeps_union(self):
+        docs = [
+            {'id': 'm_teacher', 'org_id': 'org1', 'uid': 'u1', 'roles': ['teacher'], 'status': 'active'},
+            {'id': 'm_student', 'org_id': 'org1', 'uid': 'u1', 'roles': ['student'], 'status': 'active'},
+        ]
+        self._run(docs)
+        # Re-run: the UPDATE branch (primary doc, matched by legacy id) must UNION,
+        # not overwrite — otherwise the merged 'student' role would be clobbered out.
+        self._run(docs, with_org=False)
+        with Session(_engine) as s:
+            self.assertEqual(self._count(s, Membership), 1)
+        self.assertEqual(set(self._sole_row_for('u1').roles), {'teacher', 'student'})
+
+    def test_removed_sibling_inserts_separately(self):
+        # A removed doc is outside the partial-unique index, so it does NOT merge.
+        stats = self._run([
+            {'id': 'm_active', 'org_id': 'org1', 'uid': 'u1', 'roles': ['student'], 'status': 'active'},
+            {'id': 'm_removed', 'org_id': 'org1', 'uid': 'u1', 'roles': ['teacher'], 'status': 'removed'},
+        ])
+        self.assertEqual(stats['memberships']['errors'], [])
+        with Session(_engine) as s:
+            self.assertEqual(self._count(s, Membership), 2)
+
+    def test_production_like_admin_teacher_plus_student(self):
+        # Mirrors a real 2026-05-31 collision: staff doc [school_admin, teacher]
+        # (auto-id) + student doc {org}_{uid} -> one row, union of all three roles.
+        self._run([
+            {'id': 'staff_auto', 'org_id': 'org1', 'uid': 'u1',
+             'roles': ['school_admin', 'teacher'], 'status': 'active'},
+            {'id': 'org1_u1', 'org_id': 'org1', 'uid': 'u1', 'roles': ['student'], 'status': 'active'},
+        ])
+        with Session(_engine) as s:
+            self.assertEqual(self._count(s, Membership), 1)
+        self.assertEqual(set(self._sole_row_for('u1').roles), {'school_admin', 'teacher', 'student'})
+
+
 if __name__ == '__main__':
     unittest.main()

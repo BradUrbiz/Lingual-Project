@@ -66,6 +66,10 @@ class _FakeSession:
 
     def __init__(self):
         self.store: dict[tuple, object] = {}
+        # Active/invited memberships indexed by (org_id, firebase_uid) for the
+        # multi-role merge lookup (_active_membership), which the partial-unique
+        # index memberships_org_uid_active_idx makes a single-row lookup.
+        self.active_idx: dict[tuple, object] = {}
         self.added: list = []
         self.flushes = 0
 
@@ -78,6 +82,11 @@ class _FakeSession:
         fid = getattr(obj, 'legacy_firestore_id', None)
         if fid is not None:
             self.store[(type(obj), fid)] = obj
+        if isinstance(obj, Membership) and getattr(obj, 'status', None) in (
+            'active',
+            'invited',
+        ):
+            self.active_idx[(obj.org_id, obj.firebase_uid)] = obj
 
     def flush(self):
         self.flushes += 1
@@ -86,7 +95,11 @@ class _FakeSession:
         return _NullSavepoint()
 
     def execute(self, stmt):
-        model, want_id, fid = _parse_stmt(stmt)
+        parsed = _parse_stmt(stmt)
+        if parsed[0] == 'active':
+            _, org_id, firebase_uid = parsed
+            return _Result(self.active_idx.get((org_id, firebase_uid)))
+        _, model, want_id, fid = parsed
         row = self.store.get((model, fid))
         if want_id:
             return _Result(row.id if row is not None else None)
@@ -94,13 +107,23 @@ class _FakeSession:
 
 
 def _parse_stmt(stmt):
-    """Recover (model, selecting_id?, legacy_value) from a SQLAlchemy select().
+    """Recover the query intent from a SQLAlchemy select().
 
-    resolve_legacy_id -> select(Model.id).where(Model.legacy_firestore_id == X)
-    _existing         -> select(Model).where(Model.legacy_firestore_id == X)
+    Two shapes are issued by backfill.py:
+      - 1 WHERE criterion  -> legacy_firestore_id lookup:
+          resolve_legacy_id -> select(Model.id).where(Model.legacy_firestore_id == X)
+          _existing         -> select(Model).where(Model.legacy_firestore_id == X)
+        Returns ('legacy', model_cls, want_id, legacy_value).
+      - >1 WHERE criteria  -> _active_membership:
+          select(Membership).where(org_id == X, firebase_uid == Y, status.in_(...))
+        Returns ('active', org_id_value, firebase_uid_value).
     """
-    # The WHERE clause is `Model.legacy_firestore_id == <value>`.
-    crit = list(stmt._where_criteria)[0]
+    crits = list(stmt._where_criteria)
+    if len(crits) > 1:
+        # criteria order mirrors _active_membership: [org_id==, firebase_uid==, status.in_]
+        return ('active', crits[0].right.value, crits[1].right.value)
+
+    crit = crits[0]
     model = crit.left.table  # Table object
     legacy_value = crit.right.value
 
@@ -115,7 +138,7 @@ def _parse_stmt(stmt):
     # Is this select(Model.id) (resolution) or select(Model) (existence)?
     cols = list(stmt.selected_columns)
     want_id = len(cols) == 1 and cols[0].name == 'id'
-    return model_cls, want_id, legacy_value
+    return ('legacy', model_cls, want_id, legacy_value)
 
 
 # --- Fixture builders --------------------------------------------------------
@@ -420,6 +443,109 @@ class TestSummarizeStats(unittest.TestCase):
         self.assertEqual(len(error_summary), 1)
         self.assertIn('boom', error_summary[0])
         self.assertIn('enrollments', error_summary[0])
+
+
+class TestMultiRoleMembershipMerge(unittest.TestCase):
+    """A user with several roles in one org is stored in Firestore as separate
+    single-role membership docs (different write paths, different doc-ids). PG
+    models one membership per (org,uid) with a roles[] array + a partial-unique
+    index over active/invited, so the upsert UNIONs roles into the existing active
+    row instead of inserting a colliding one. See backfill._merge_roles."""
+
+    def _seed_org(self):
+        s = _FakeSession()
+        backfill.upsert_organization(s, _org_doc())
+        return s
+
+    def test_union_helper_dedupes_preserving_order(self):
+        self.assertEqual(backfill._merge_roles(['teacher'], ['student']), ['teacher', 'student'])
+        self.assertEqual(backfill._merge_roles(['student'], ['student']), ['student'])
+        self.assertEqual(backfill._merge_roles([], ['teacher']), ['teacher'])
+        self.assertEqual(backfill._merge_roles(['a', 'b'], ['b', 'c']), ['a', 'b', 'c'])
+
+    def test_second_active_doc_merges_roles_into_sibling(self):
+        s = self._seed_org()
+        warns: list = []
+        first = backfill.upsert_membership(
+            s, _membership_doc(id='m_teacher', uid='u1', roles=['teacher'], status='active'),
+            warnings=warns,
+        )
+        second = backfill.upsert_membership(
+            s, _membership_doc(id='m_student', uid='u1', roles=['student'], status='active'),
+            warnings=warns,
+        )
+        # Same row returned; no second Membership added; roles unioned.
+        self.assertIs(second, first)
+        memberships_added = [o for o in s.added if isinstance(o, Membership)]
+        self.assertEqual(len(memberships_added), 1)
+        self.assertEqual(first.roles, ['teacher', 'student'])
+        self.assertEqual(first.legacy_firestore_id, 'm_teacher')
+        self.assertEqual(len(warns), 1)
+        self.assertIn('merged roles', warns[0]['warning'])
+        self.assertEqual(warns[0]['id'], 'm_student')
+
+    def test_merge_is_order_independent(self):
+        # student-first then teacher yields the same union as the reverse.
+        s = self._seed_org()
+        backfill.upsert_membership(s, _membership_doc(id='m_s', uid='u1', roles=['student'], status='active'))
+        row = backfill.upsert_membership(s, _membership_doc(id='m_t', uid='u1', roles=['teacher'], status='active'))
+        self.assertEqual(set(row.roles), {'student', 'teacher'})
+        self.assertEqual(len([o for o in s.added if isinstance(o, Membership)]), 1)
+
+    def test_rerun_unions_not_clobbers(self):
+        # Re-running both docs (in either order) must not drop a merged role.
+        s = self._seed_org()
+        d_t = _membership_doc(id='m_t', uid='u1', roles=['teacher'], status='active')
+        d_s = _membership_doc(id='m_s', uid='u1', roles=['student'], status='active')
+        backfill.upsert_membership(s, d_t)
+        backfill.upsert_membership(s, d_s)
+        # Re-run primary doc first (its legacy-id UPDATE branch must union, not overwrite).
+        row = backfill.upsert_membership(s, d_t)
+        backfill.upsert_membership(s, d_s)
+        self.assertEqual(set(row.roles), {'teacher', 'student'})
+        self.assertEqual(len([o for o in s.added if isinstance(o, Membership)]), 1)
+
+    def test_removed_doc_does_not_merge_into_active(self):
+        # A removed doc is outside the partial-unique index, so it inserts as its
+        # own row rather than merging into the active sibling.
+        s = self._seed_org()
+        backfill.upsert_membership(s, _membership_doc(id='m_active', uid='u1', roles=['student'], status='active'))
+        backfill.upsert_membership(s, _membership_doc(id='m_removed', uid='u1', roles=['teacher'], status='removed'))
+        self.assertEqual(len([o for o in s.added if isinstance(o, Membership)]), 2)
+
+    def test_run_backfill_counts_merge_as_update_with_warning(self):
+        s = _FakeSession()
+        stats = backfill.run_backfill(
+            s,
+            organizations=[_org_doc()],
+            memberships=[
+                _membership_doc(id='m_t', uid='u1', roles=['teacher'], status='active'),
+                _membership_doc(id='m_s', uid='u1', roles=['student'], status='active'),
+            ],
+        )
+        ms = stats['memberships']
+        self.assertEqual(ms['inserted'], 1)
+        self.assertEqual(ms['updated'], 1)  # the merge, not a phantom insert
+        self.assertEqual(ms['errors'], [])
+        self.assertEqual(len(ms['warnings']), 1)
+
+    def test_dry_run_predicts_merge_as_update(self):
+        s = _FakeSession()
+        stats = backfill.run_backfill(
+            s,
+            organizations=[_org_doc()],
+            memberships=[
+                _membership_doc(id='m_t', uid='u1', roles=['teacher'], status='active'),
+                _membership_doc(id='m_s', uid='u1', roles=['student'], status='active'),
+            ],
+            dry_run=True,
+        )
+        ms = stats['memberships']
+        self.assertEqual(ms['inserted'], 1)
+        self.assertEqual(ms['updated'], 1)
+        self.assertEqual(len(ms['warnings']), 1)
+        # Dry run writes nothing.
+        self.assertEqual([o for o in s.added if isinstance(o, Membership)], [])
 
 
 if __name__ == '__main__':

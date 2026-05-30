@@ -84,6 +84,51 @@ def _resolvable(session: Any, model: Any, firestore_id: str | None, pending: dic
     return resolve_legacy_id(session, model, firestore_id) is not None
 
 
+# Statuses covered by the partial-unique index memberships_org_uid_active_idx.
+_ACTIVE_INVITED_STATUSES = ('active', 'invited')
+
+
+def _merge_roles(existing: Any, incoming: Any) -> list[str]:
+    """Union two role lists, preserving order (existing first), de-duplicated.
+
+    Firestore stores a user who holds several roles in one org as SEPARATE
+    single-role membership docs — different write paths use different doc-ids
+    (the school-approve flow auto-ids; the join-code flow uses {org}_{uid}). But
+    Postgres models ONE membership per (org,uid) with a roles[] array plus a
+    partial-unique index over active/invited. So roles ACCUMULATE by union here.
+
+    We union on the legacy-id UPDATE branch too (not just the cross-doc merge),
+    so a backfill re-run cannot clobber a merged role back out regardless of which
+    sibling doc it happens to process first — the result is order-independent and
+    convergent. Role REMOVAL within a doc is intentionally NOT mirrored: no live
+    write path removes a role (roles are set only at create_membership time; a
+    role is "added" by creating another doc), so supporting removal would need a
+    dedicated shadow rather than this additive upsert.
+    """
+    merged: list[str] = []
+    for role in list(existing or []) + list(incoming or []):
+        if role not in merged:
+            merged.append(role)
+    return merged
+
+
+def _active_membership(session: Any, org_uuid: Any, firebase_uid: str | None):
+    """The existing active/invited membership row for (org,uid), or None.
+
+    Mirrors the partial-unique index `memberships_org_uid_active_idx` (unique on
+    (org_id, firebase_uid) WHERE status in active/invited), which guarantees at
+    most one such row, so a single SELECT is sufficient.
+    """
+    if not firebase_uid:
+        return None
+    stmt = select(Membership).where(
+        Membership.org_id == org_uuid,
+        Membership.firebase_uid == firebase_uid,
+        Membership.status.in_(_ACTIVE_INVITED_STATUSES),
+    )
+    return session.execute(stmt).scalar_one_or_none()
+
+
 def upsert_organization(
     session: Any, doc: dict[str, Any], *, warnings: list[Any] | None = None
 ) -> Organization:
@@ -170,12 +215,15 @@ def upsert_membership(
             'migrated row (organizations must be backfilled first)'
         )
 
+    firebase_uid = doc.get('uid')
+    incoming_roles = coerce_str_list(doc.get('roles'))
+    incoming_status = normalize_membership_status(doc.get('status'))
     fields = {
         'org_id': org_uuid,
         # Renamed: Firestore uid -> firebase_uid.
-        'firebase_uid': doc.get('uid'),
-        'roles': coerce_str_list(doc.get('roles')),
-        'status': normalize_membership_status(doc.get('status')),
+        'firebase_uid': firebase_uid,
+        'roles': incoming_roles,
+        'status': incoming_status,
         # Deferred denormalized array (see docstring). Always [] in v1.
         'primary_class_ids': [],
         'removed_at': parse_firestore_timestamp(doc.get('removed_at')),
@@ -185,6 +233,26 @@ def upsert_membership(
 
     row = _existing(session, Membership, legacy_id)
     if row is None:
+        # Multi-role identity merge: if this active/invited doc's (org,uid) already
+        # has an active/invited row (a sibling single-role doc migrated earlier),
+        # UNION roles into it rather than INSERT a row the partial-unique index
+        # would reject. This is the faithful relational representation of a user
+        # who is e.g. both teacher and student in one org. See _merge_roles.
+        if incoming_status in _ACTIVE_INVITED_STATUSES:
+            sibling = _active_membership(session, org_uuid, firebase_uid)
+            if sibling is not None:
+                sibling.roles = _merge_roles(sibling.roles, incoming_roles)
+                if warnings is not None:
+                    warnings.append({
+                        'id': legacy_id,
+                        'warning': (
+                            f'multi-role user: merged roles {incoming_roles} into '
+                            f'existing active (org,uid) membership '
+                            f'{sibling.legacy_firestore_id!r}; no new row inserted'
+                        ),
+                    })
+                session.flush()
+                return sibling
         row = Membership(legacy_firestore_id=legacy_id, **fields)
         session.add(row)
     else:
@@ -195,6 +263,10 @@ def upsert_membership(
             # must preserve those rather than zero them back to [].
             if key == 'primary_class_ids':
                 continue
+            # roles are ADDITIVE (union, never overwrite): a re-run must not clobber
+            # a role a sibling doc merged in. Order-independent + convergent.
+            if key == 'roles':
+                value = _merge_roles(row.roles, incoming_roles)
             setattr(row, key, value)
     session.flush()
     return row
@@ -369,6 +441,10 @@ def run_backfill(
     # Dry-run only: per-model set of would-be-written legacy ids, so a child can
     # resolve a parent that this same dry pass "would" create (see _resolvable).
     pending = {model: set() for _n, model, _f in _PIPELINE} if dry_run else None
+    # Dry-run only: would-be-active (org_firestore_id, uid) pairs, so a 2nd active
+    # membership doc for the same (org,uid) is predicted as a multi-role MERGE
+    # (update) rather than a phantom insert (mirrors upsert_membership).
+    pending_active: set | None = set() if dry_run else None
 
     for name, model, upsert_fn in _PIPELINE:
         entity_stats = stats[name]
@@ -385,7 +461,9 @@ def run_backfill(
                 continue
             try:
                 if dry_run:
-                    _dry_run_one(session, name, model, doc, entity_stats, pending)
+                    _dry_run_one(
+                        session, name, model, doc, entity_stats, pending, pending_active
+                    )
                     # Reached only if no parent was unresolved: this row would be
                     # written, so its children can now resolve it.
                     pending[model].add(legacy_id)
@@ -395,8 +473,18 @@ def run_backfill(
                     # this row (reported under errors) without poisoning the
                     # outer transaction and aborting every later doc/entity.
                     with session.begin_nested():
-                        upsert_fn(session, doc, warnings=entity_stats['warnings'])
+                        result_row = upsert_fn(
+                            session, doc, warnings=entity_stats['warnings']
+                        )
                     if existed:
+                        entity_stats['updated'] += 1
+                    elif (
+                        result_row is not None
+                        and getattr(result_row, 'legacy_firestore_id', legacy_id)
+                        != legacy_id
+                    ):
+                        # Merged into a SIBLING row (multi-role membership): an
+                        # existing row was updated with an added role, not inserted.
                         entity_stats['updated'] += 1
                     else:
                         entity_stats['inserted'] += 1
@@ -413,13 +501,19 @@ def _dry_run_one(
     doc: dict[str, Any],
     entity_stats: dict[str, Any],
     pending: dict,
+    pending_active: set | None = None,
 ) -> None:
-    """Classify one doc WITHOUT writing: would-be insert/update, or unresolved.
+    """Classify one doc WITHOUT writing: would-be insert/update/merge, or unresolved.
 
     Resolves required parents against the DB OR the `pending` set of would-be-
     written ids from earlier in this same dry pass, so the chain resolves without
     persisting anything. Unresolved required parents are raised (counted as
     errors); a present-but-unresolvable optional membership FK is a warning.
+
+    `pending_active` tracks would-be-active (org,uid) membership pairs so a 2nd
+    active doc for the same (org,uid) is predicted as a multi-role MERGE (counted
+    as an update + warning) rather than a phantom insert — mirroring the real
+    upsert_membership, so the pre-flight does not over-report inserts.
     """
     legacy_id = doc.get('id')
 
@@ -429,6 +523,31 @@ def _dry_run_one(
             raise UnresolvedParentError(
                 f'membership {legacy_id!r}: organization {doc.get("org_id")!r} unresolved'
             )
+        # Predict the multi-role merge (mirrors upsert_membership): a 2nd active/
+        # invited doc for an (org,uid) that already has an active/invited row —
+        # either earlier in this dry pass or already in the DB — merges rather
+        # than inserts. _existing(legacy_id) below stays None for it, so without
+        # this branch it would be miscounted as an insert.
+        uid = doc.get('uid')
+        if normalize_membership_status(doc.get('status')) in _ACTIVE_INVITED_STATUSES and uid:
+            key = (doc.get('org_id'), uid)
+            in_pass = pending_active is not None and key in pending_active
+            in_db = False
+            if not in_pass:
+                org_uuid = resolve_legacy_id(session, Organization, doc.get('org_id'))
+                in_db = org_uuid is not None and _active_membership(session, org_uuid, uid) is not None
+            if (in_pass or in_db) and _existing(session, model, legacy_id) is None:
+                entity_stats['updated'] += 1
+                entity_stats['warnings'].append({
+                    'id': legacy_id,
+                    'warning': (
+                        f'multi-role user: would merge roles into existing active '
+                        f'(org,uid) membership for uid {uid!r}; no new row'
+                    ),
+                })
+                return
+            if pending_active is not None:
+                pending_active.add(key)
     elif name == 'classes':
         if not _resolvable(session, Organization, doc.get('org_id'), pending):
             raise UnresolvedParentError(

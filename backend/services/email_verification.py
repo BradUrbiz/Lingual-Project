@@ -64,3 +64,43 @@ def start_verification(db, uid: str, *, now: datetime | None = None) -> str:
         'resend_count': 0,
     }})
     return code
+
+
+@dataclass
+class ConfirmResult:
+    ok: bool
+    error: str | None = None
+
+
+def confirm(db, uid: str, code: str, *, now: datetime | None = None) -> ConfirmResult:
+    user = db.get_user(uid) or {}
+    record = user.get(_FIELD) or {}
+
+    if record.get('status') == STATUS_VERIFIED:
+        return ConfirmResult(ok=True)  # idempotent
+
+    code_hash = record.get('code_hash')
+    if not code_hash:
+        return ConfirmResult(ok=False, error='invalid_code')
+
+    expires_at = _parse(record.get('expires_at'))
+    if expires_at is None or _now(now) > expires_at:
+        return ConfirmResult(ok=False, error='expired')
+
+    attempts = record.get('attempts', 0)
+    if attempts >= MAX_ATTEMPTS:
+        return ConfirmResult(ok=False, error='too_many_attempts')
+
+    if hash_code(uid, str(code).strip()) != code_hash:
+        attempts += 1
+        db.update_user(uid, {_FIELD: {'attempts': attempts}})
+        if attempts >= MAX_ATTEMPTS:
+            return ConfirmResult(ok=False, error='too_many_attempts')
+        return ConfirmResult(ok=False, error='invalid_code')
+
+    db.update_user(uid, {_FIELD: {
+        'status': STATUS_VERIFIED,
+        'verified_at': _now(now).isoformat(),
+        'code_hash': None,
+    }})
+    return ConfirmResult(ok=True)

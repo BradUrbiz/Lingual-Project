@@ -37,3 +37,48 @@ class StartVerificationTest(unittest.TestCase):
         self.assertTrue(ev.is_pending(self.db.users["u1"]))
         self.assertFalse(ev.is_pending({}))
         self.assertFalse(ev.is_pending(None))
+
+
+class ConfirmTest(unittest.TestCase):
+    def setUp(self):
+        self.db = FakeEvDb()
+        self.db.users["u1"] = make_user(uid="u1", email="a@b.test")
+        self.code = ev.start_verification(self.db, "u1")
+
+    def test_correct_code_verifies_and_clears_hash(self):
+        result = ev.confirm(self.db, "u1", self.code)
+        self.assertTrue(result.ok)
+        record = self.db.users["u1"]["email_verification"]
+        self.assertEqual(record["status"], ev.STATUS_VERIFIED)
+        self.assertIsNone(record["code_hash"])
+        self.assertIn("verified_at", record)
+
+    def test_wrong_code_increments_attempts(self):
+        result = ev.confirm(self.db, "u1", "000000")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error, "invalid_code")
+        self.assertEqual(self.db.users["u1"]["email_verification"]["attempts"], 1)
+
+    def test_lockout_after_max_attempts(self):
+        for _ in range(ev.MAX_ATTEMPTS):
+            ev.confirm(self.db, "u1", "000000")
+        result = ev.confirm(self.db, "u1", self.code)  # correct code, but locked
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error, "too_many_attempts")
+
+    def test_expired_code(self):
+        future = datetime.now(UTC) + timedelta(minutes=11)
+        result = ev.confirm(self.db, "u1", self.code, now=future)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error, "expired")
+
+    def test_confirm_when_no_code_present(self):
+        self.db.users["u2"] = make_user(uid="u2")
+        result = ev.confirm(self.db, "u2", "123456")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error, "invalid_code")
+
+    def test_confirm_is_idempotent_when_already_verified(self):
+        ev.confirm(self.db, "u1", self.code)
+        result = ev.confirm(self.db, "u1", "anything")
+        self.assertTrue(result.ok)

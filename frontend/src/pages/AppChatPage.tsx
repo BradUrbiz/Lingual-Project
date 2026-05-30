@@ -272,56 +272,37 @@ export function AppChatPage() {
   const userAvatar = avatarUrl || null;
   const [searchParams] = useSearchParams();
   const requestedChatId = searchParams.get('chatId');
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  const [historyMessages, setHistoryMessages] = useState<ChatMessage[]>([]);
-  const [loadingSessions, setLoadingSessions] = useState(true);
-  const [loadingChat, setLoadingChat] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [assessmentResults, setAssessmentResults] = useState<AssessmentResults | null>(null);
-  const [profileSummary, setProfileSummary] = useState<UserProfile>();
-  const [languageMixLevel, setLanguageMixLevel] = useState<LanguageMixLevel>(DEFAULT_LANGUAGE_MIX_LEVEL);
-  const [languageMixNotice, setLanguageMixNotice] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(appChatReducer, undefined, createInitialAppChatState);
+  const {
+    sessions,
+    currentChatId,
+    historyMessages,
+    loadingSessions,
+    loadingChat,
+    error,
+    isConnecting,
+    assessmentResults,
+    profileSummary,
+    languageMixLevel,
+    languageMixNotice,
+    mode,
+    inputValue,
+    isSendingText,
+    isSidebarExpanded,
+    isSidebarDialogOpen,
+    textAvatar,
+    isAvatarEnabled,
+    isDesktop,
+  } = state;
   const [speakingSpeed, setSpeakingSpeed] = useRealtimeSpeakingSpeed();
-
-  // Chat mode state
-  type Mode = 'text' | 'realtime';
-  const [mode, setMode] = useState<Mode>('realtime');
-  const [inputValue, setInputValue] = useState('');
-  const [isSendingText, setIsSendingText] = useState(false);
   const isDeletingChatRef = useRef(false);
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
-  const [isSidebarDialogOpen, setIsSidebarDialogOpen] = useState(false);
-  const [textAvatarActivity, setTextAvatarActivity] = useState<AvatarActivity>('idle');
-  const [textAssistantTranscriptDelta, setTextAssistantTranscriptDelta] = useState('');
-  const [textAssistantTranscriptFinal, setTextAssistantTranscriptFinal] = useState('');
-  const [textAssistantSpeechStartedAt, setTextAssistantSpeechStartedAt] = useState<number | null>(null);
-  const [textAssistantSpeechEndedAt, setTextAssistantSpeechEndedAt] = useState<number | null>(null);
-  const [isAvatarEnabled, setIsAvatarEnabled] = useState(() => {
-    if (!CHAT_AVATAR_AVAILABLE) return false;
-    try {
-      const stored = window.localStorage.getItem(CHAT_AVATAR_ENABLED_KEY);
-      if (stored === null) return false;
-      return stored === 'true';
-    } catch {
-      return true;
-    }
-  });
-  const [isDesktop, setIsDesktop] = useState(() => {
-    try {
-      return window.matchMedia?.('(min-width: 1024px)')?.matches ?? false;
-    } catch {
-      return false;
-    }
-  });
 
   const updateAvatarEnabled = useCallback((enabled: boolean) => {
     if (!CHAT_AVATAR_AVAILABLE) {
-      setIsAvatarEnabled(false);
+      dispatch({ type: 'patch', payload: { isAvatarEnabled: false } });
       return;
     }
-    setIsAvatarEnabled(enabled);
+    dispatch({ type: 'patch', payload: { isAvatarEnabled: enabled } });
     try {
       window.localStorage.setItem(CHAT_AVATAR_ENABLED_KEY, String(enabled));
     } catch {
@@ -344,10 +325,12 @@ export function AppChatPage() {
   }, []);
 
   const resetTextAvatarPerformance = useCallback(() => {
-    setTextAssistantTranscriptDelta('');
-    setTextAssistantTranscriptFinal('');
-    setTextAssistantSpeechStartedAt(null);
-    setTextAssistantSpeechEndedAt(null);
+    dispatch({ type: 'patchTextAvatar', payload: {
+      transcriptDelta: '',
+      transcriptFinal: '',
+      speechStartedAt: null,
+      speechEndedAt: null,
+    } });
   }, []);
 
   const resetRealtimePersistence = useCallback((messageCount = 0) => {
@@ -359,18 +342,13 @@ export function AppChatPage() {
     clearTextAvatarTimeout();
 
     if (!content.trim()) {
-      setTextAvatarActivity('idle');
+      dispatch({ type: 'patchTextAvatar', payload: { activity: 'idle' } });
       return;
     }
 
-    setTextAssistantTranscriptDelta(content);
-    setTextAssistantTranscriptFinal(content);
-    setTextAssistantSpeechStartedAt(getClientNow());
-    setTextAssistantSpeechEndedAt(null);
-    setTextAvatarActivity('speaking');
+    dispatch({ type: 'setTextAvatarSpeaking', content, startedAt: getClientNow() });
     textAvatarTimeoutRef.current = window.setTimeout(() => {
-      setTextAvatarActivity('idle');
-      setTextAssistantSpeechEndedAt(getClientNow());
+      dispatch({ type: 'setTextAvatarSpeechEnded', endedAt: getClientNow() });
       textAvatarTimeoutRef.current = null;
     }, getTextAvatarSpeechDuration(content));
   }, [clearTextAvatarTimeout]);
@@ -383,9 +361,9 @@ export function AppChatPage() {
     const sortOrder = nextRealtimeMessageOrderRef.current;
     nextRealtimeMessageOrderRef.current += 1;
 
-    setSessions((prev) => {
-      const target = prev.find((session) => session.id === chatId);
-      if (!target) return prev;
+    dispatch({ type: 'updateSessions', updater: (currentSessions) => {
+      const target = currentSessions.find((session) => session.id === chatId);
+      if (!target) return currentSessions;
       const updatedTitle =
         target.message_count === 0 && role === 'user'
           ? content.length > 30
@@ -399,8 +377,8 @@ export function AppChatPage() {
         message_count: target.message_count + 1,
         last_message: content,
       };
-      return [updated, ...prev.filter((session) => session.id !== chatId)];
-    });
+      return [updated, ...currentSessions.filter((session) => session.id !== chatId)];
+    } });
 
     const currentSaveQueue = realtimeSaveQueueRef.current;
     realtimeSaveQueueRef.current = currentSaveQueue
@@ -409,11 +387,14 @@ export function AppChatPage() {
         const response = await saveMessageToChat(chatId, role, content, { timestamp, sortOrder });
         const resolvedTitle = response.title?.trim();
         if (!resolvedTitle) return;
-        setSessions((prev) => prev.map((session) => (
-          session.id === chatId
-            ? { ...session, title: resolvedTitle }
-            : session
-        )));
+        dispatch({
+          type: 'updateSessions',
+          updater: (currentSessions) => currentSessions.map((session) => (
+            session.id === chatId
+              ? { ...session, title: resolvedTitle }
+              : session
+          )),
+        });
       })
       .catch((err) => {
         console.error('Failed to save realtime message:', err);

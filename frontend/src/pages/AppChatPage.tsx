@@ -462,15 +462,15 @@ export function AppChatPage() {
       mode,
       isConnected: true,
       isListening: false,
-      isSpeaking: textAvatarActivity === 'speaking',
+      isSpeaking: textAvatar.activity === 'speaking',
       remoteAudioStream: null,
       assistantTranscriptDelta:
-        textAvatarActivity === 'thinking' && !textAssistantTranscriptDelta
+        textAvatar.activity === 'thinking' && !textAvatar.transcriptDelta
           ? '…'
-          : textAssistantTranscriptDelta,
-      assistantTranscriptFinal: textAssistantTranscriptFinal,
-      assistantSpeechStartedAt: textAssistantSpeechStartedAt,
-      assistantSpeechEndedAt: textAssistantSpeechEndedAt,
+          : textAvatar.transcriptDelta,
+      assistantTranscriptFinal: textAvatar.transcriptFinal,
+      assistantSpeechStartedAt: textAvatar.speechStartedAt,
+      assistantSpeechEndedAt: textAvatar.speechEndedAt,
       avatarDirective: null,
     };
   }, [
@@ -484,11 +484,11 @@ export function AppChatPage() {
     legacyRealtimeSession.isSpeaking,
     mode,
     remoteAudioStream,
-    textAssistantSpeechEndedAt,
-    textAssistantSpeechStartedAt,
-    textAssistantTranscriptDelta,
-    textAssistantTranscriptFinal,
-      textAvatarActivity,
+    textAvatar.activity,
+    textAvatar.speechEndedAt,
+    textAvatar.speechStartedAt,
+    textAvatar.transcriptDelta,
+    textAvatar.transcriptFinal,
   ]);
 
   const live2dPerformance = useAvatarPerformance(avatarSource);
@@ -533,16 +533,16 @@ export function AppChatPage() {
       return statusLabel;
     }
 
-    if (textAvatarActivity === 'thinking') {
+    if (textAvatar.activity === 'thinking') {
       return t('app.learn.status.aiResponding');
     }
 
-    if (textAvatarActivity === 'speaking') {
+    if (textAvatar.activity === 'speaking') {
       return t('app.learn.status.aiSpeaking');
     }
 
     return t('app.learn.status.ready');
-  }, [mode, statusLabel, t, textAvatarActivity]);
+  }, [mode, statusLabel, t, textAvatar.activity]);
 
   const micButtonLabel = useMemo(() => {
     if (isConnecting) return t('app.learn.status.connecting');
@@ -567,11 +567,9 @@ export function AppChatPage() {
   }, [clearTextAvatarTimeout]);
 
   const loadChat = useCallback(async (chatId: string) => {
-    setLoadingChat(true);
-    setError(null);
+    dispatch({ type: 'patch', payload: { loadingChat: true, error: null } });
     clearTextAvatarTimeout();
-    setTextAvatarActivity('idle');
-    resetTextAvatarPerformance();
+    dispatch({ type: 'resetTextAvatar' });
     clearMessages();
     disconnect();
 
@@ -584,23 +582,23 @@ export function AppChatPage() {
         timestamp: msg.timestamp,
       }));
       resetRealtimePersistence(formattedMessages.length);
-      setHistoryMessages(formattedMessages);
-      setCurrentChatId(chatId);
-      setLanguageMixLevel(chat.languageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL);
-      setLanguageMixNotice(null);
+      dispatch({
+        type: 'chatLoaded',
+        chatId,
+        messages: formattedMessages,
+        languageMixLevel: chat.languageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL,
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load chat');
+      dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : 'Failed to load chat' } });
     } finally {
-      setLoadingChat(false);
+      dispatch({ type: 'patch', payload: { loadingChat: false } });
     }
-  }, [clearMessages, clearTextAvatarTimeout, disconnect, resetRealtimePersistence, resetTextAvatarPerformance]);
+  }, [clearMessages, clearTextAvatarTimeout, disconnect, resetRealtimePersistence]);
 
   const createNewChat = useCallback(async () => {
-    setLoadingChat(true);
-    setError(null);
+    dispatch({ type: 'patch', payload: { loadingChat: true, error: null } });
     clearTextAvatarTimeout();
-    setTextAvatarActivity('idle');
-    resetTextAvatarPerformance();
+    dispatch({ type: 'resetTextAvatar' });
     clearMessages();
     disconnect();
 
@@ -616,29 +614,28 @@ export function AppChatPage() {
         languageMixLevel: createdLanguageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL,
       };
       resetRealtimePersistence(0);
-      setSessions((prev) => [newSession, ...prev]);
-      setHistoryMessages([]);
-      setCurrentChatId(chatId);
-      setLanguageMixLevel(createdLanguageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL);
-      setLanguageMixNotice(null);
+      dispatch({
+        type: 'chatCreated',
+        session: newSession,
+        languageMixLevel: createdLanguageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL,
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create chat');
+      dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : 'Failed to create chat' } });
     } finally {
-      setLoadingChat(false);
+      dispatch({ type: 'patch', payload: { loadingChat: false } });
     }
-  }, [clearMessages, clearTextAvatarTimeout, disconnect, resetRealtimePersistence, resetTextAvatarPerformance]);
+  }, [clearMessages, clearTextAvatarTimeout, disconnect, resetRealtimePersistence]);
 
   // react-doctor-disable-next-line react-doctor/no-initialize-state -- profileSummary already starts undefined and is populated by an async profile fetch.
   useEffect(() => {
     let isActive = true;
 
     const init = async () => {
-      setLoadingSessions(true);
-      setError(null);
+      dispatch({ type: 'patch', payload: { loadingSessions: true, error: null } });
       try {
         const chatSessions = await getChatSessions();
         if (!isActive) return;
-        setSessions(chatSessions);
+        dispatch({ type: 'setSessions', sessions: chatSessions });
 
         const requestedSession = requestedChatId
           ? chatSessions.find((session) => session.id === requestedChatId)
@@ -653,9 +650,9 @@ export function AppChatPage() {
         }
       } catch (err) {
         if (!isActive) return;
-        setError(err instanceof Error ? err.message : 'Failed to load sessions');
+        dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : 'Failed to load sessions' } });
       } finally {
-        if (isActive) setLoadingSessions(false);
+        if (isActive) dispatch({ type: 'patch', payload: { loadingSessions: false } });
       }
     };
 
@@ -673,13 +670,13 @@ export function AppChatPage() {
       try {
         const profile = await getUserProfile();
         if (!isActive) return;
-        setProfileSummary(profile);
+        dispatch({ type: 'patch', payload: { profileSummary: profile } });
 
         if (profile.assessed) {
           try {
             const results = await getAssessmentResults();
             if (!isActive) return;
-            setAssessmentResults(results);
+            dispatch({ type: 'patch', payload: { assessmentResults: results } });
           } catch (err) {
             console.error('Failed to load assessment results:', err);
           }

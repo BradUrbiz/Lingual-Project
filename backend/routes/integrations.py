@@ -106,8 +106,9 @@ def create_integrations_blueprint(deps: RouteDeps) -> Blueprint:
                 name=canvas_course_name or f'Canvas Course {canvas_course_id}',
                 teacher_membership_ids=[ctx.active_membership_id],
                 canvas_course_id=canvas_course_id,
+                sql_engine=deps.sql_engine,
             )
-            deps.db.add_primary_class_to_membership(ctx.active_membership_id, class_id)
+            deps.db.add_primary_class_to_membership(ctx.active_membership_id, class_id, sql_engine=deps.sql_engine)
 
         connection_id = deps.db.create_canvas_connection(
             membership_id=ctx.active_membership_id,

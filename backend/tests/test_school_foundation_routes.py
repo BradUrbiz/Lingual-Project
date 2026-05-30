@@ -124,6 +124,7 @@ class FakeSchoolDb:
         grade_band='',
         status='active',
         class_id=None,
+        sql_engine=None,
     ):
         self.class_counter += 1
         class_id = class_id or f'class-{self.class_counter}'
@@ -142,7 +143,7 @@ class FakeSchoolDb:
         }
         return class_id
 
-    def add_primary_class_to_membership(self, membership_id, class_id):
+    def add_primary_class_to_membership(self, membership_id, class_id, sql_engine=None):
         membership = self.memberships[membership_id]
         if class_id not in membership['primaryClassIds']:
             membership['primaryClassIds'].append(class_id)

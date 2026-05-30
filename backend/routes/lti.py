@@ -272,8 +272,9 @@ def create_lti_blueprint(deps: RouteDeps) -> Blueprint:
                         name=canvas_course_title or f'Canvas Course {canvas_course_id}',
                         teacher_membership_ids=[membership_id],
                         canvas_course_id=str(canvas_course_id),
+                        sql_engine=deps.sql_engine,
                     )
-                    deps.db.add_primary_class_to_membership(membership_id, class_id)
+                    deps.db.add_primary_class_to_membership(membership_id, class_id, sql_engine=deps.sql_engine)
 
                     # Create canvas_connection with LTI auth
                     platform = _platform_for_launch(issuer, client_id, deployment_id)

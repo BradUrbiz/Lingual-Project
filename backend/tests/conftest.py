@@ -487,15 +487,35 @@ class FakeDbBase:
         self.memberships[mem["id"]] = mem
         return mem["id"]
 
-    def create_class(self, org_id: str, name: str, learning_locale: str = "fr-FR", teacher_membership_ids=None, class_id=None, **kwargs) -> str:
+    def create_class(self, org_id: str, name: str, learning_locale: str = "fr-FR", teacher_membership_ids=None, class_id=None, sql_engine=None, **kwargs) -> str:
+        # sql_engine is the slice-2c dual-write opt-in; the fake ignores it and
+        # must not forward it to make_class.
         cls = make_class(class_id=class_id, org_id=org_id, name=name, learning_locale=learning_locale, teacher_membership_ids=teacher_membership_ids, **kwargs)
         self.classes[cls["id"]] = cls
         return cls["id"]
 
-    def add_primary_class_to_membership(self, membership_id: str, class_id: str):
+    def add_primary_class_to_membership(self, membership_id: str, class_id: str, sql_engine=None):
         mem = self.memberships.get(membership_id)
         if mem and class_id not in mem.get("primaryClassIds", []):
             mem.setdefault("primaryClassIds", []).append(class_id)
+
+    def remove_primary_class_from_membership(self, membership_id: str, class_id: str, sql_engine=None):
+        mem = self.memberships.get(membership_id)
+        if mem and class_id in mem.get("primaryClassIds", []):
+            mem["primaryClassIds"].remove(class_id)
+
+    def generate_teacher_invite_code(self, org_id: str, sql_engine=None) -> str:
+        org = self.organizations.get(org_id)
+        code = "TEACH1"
+        if org is not None:
+            org["teacher_invite_code"] = code
+            org["teacher_invite_code_active"] = True
+        return code
+
+    def deactivate_teacher_invite_code(self, org_id: str, sql_engine=None):
+        org = self.organizations.get(org_id)
+        if org is not None:
+            org["teacher_invite_code_active"] = False
 
     # -- Enrollments --
 

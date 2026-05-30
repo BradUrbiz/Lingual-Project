@@ -27,7 +27,7 @@ import uuid
 import backend.db.models  # noqa: F401  (populate metadata)
 from backend.db import dual_write_school_chain as sc
 from backend.db.base import Base
-from backend.db.models.org import Membership, Organization
+from backend.db.models.org import Class, Membership, Organization
 from backend.db.repository import backfill
 
 _engine = None
@@ -245,6 +245,95 @@ class TestMembershipShadowEndToEnd(unittest.TestCase):
                 select(Membership).where(Membership.legacy_firestore_id == 'org1_uidA')
             ).scalar_one()
             self.assertEqual(mem.primary_class_ids, [class_uuid])
+
+
+class TestClassAndPrimaryShadowEndToEnd(unittest.TestCase):
+    def setUp(self):
+        self._orig = os.environ.get(FLAG)
+        os.environ[FLAG] = '1'
+        with Session(_engine) as s:
+            s.query(Membership).delete()
+            s.query(Class).delete()
+            s.query(Organization).delete()
+            s.commit()
+        sc.shadow_create_organization(lambda: _engine, org_id='org1', org_data=_org_data())
+        sc.shadow_create_membership(
+            lambda: _engine, membership_id='org1_uidA',
+            membership_data={'org_id': 'org1', 'uid': 'uidA', 'roles': ['student'], 'status': 'active'},
+        )
+
+    def tearDown(self):
+        if self._orig is None:
+            os.environ.pop(FLAG, None)
+        else:
+            os.environ[FLAG] = self._orig
+
+    def _p(self):
+        return lambda: _engine
+
+    def _cdata(self):
+        return {'org_id': 'org1', 'name': 'Spanish I', 'learning_locale': 'es-ES', 'status': 'active'}
+
+    def _membership(self, s):
+        return s.execute(
+            select(Membership).where(Membership.legacy_firestore_id == 'org1_uidA')
+        ).scalar_one()
+
+    def test_create_class_lands_with_resolved_org_fk(self):
+        sc.shadow_create_class(self._p(), class_id='class1', class_data=self._cdata())
+        with Session(_engine) as s:
+            org_uuid = s.execute(
+                select(Organization.id).where(Organization.legacy_firestore_id == 'org1')
+            ).scalar_one()
+            cls = s.execute(select(Class).where(Class.legacy_firestore_id == 'class1')).scalar_one()
+            self.assertEqual(cls.org_id, org_uuid)
+            self.assertEqual(cls.learning_locale, 'es-ES')
+
+    def test_add_primary_class_appends_resolved_uuid(self):
+        sc.shadow_create_class(self._p(), class_id='class1', class_data=self._cdata())
+        sc.shadow_add_primary_class(self._p(), membership_id='org1_uidA', class_id='class1')
+        with Session(_engine) as s:
+            class_uuid = s.execute(
+                select(Class.id).where(Class.legacy_firestore_id == 'class1')
+            ).scalar_one()
+            self.assertEqual(self._membership(s).primary_class_ids, [class_uuid])
+
+    def test_add_primary_class_idempotent(self):
+        sc.shadow_create_class(self._p(), class_id='class1', class_data=self._cdata())
+        for _ in range(2):
+            sc.shadow_add_primary_class(self._p(), membership_id='org1_uidA', class_id='class1')
+        with Session(_engine) as s:
+            self.assertEqual(len(self._membership(s).primary_class_ids), 1)
+
+    def test_add_primary_class_noop_when_class_unresolved(self):
+        sc.shadow_add_primary_class(self._p(), membership_id='org1_uidA', class_id='ghost')
+        with Session(_engine) as s:
+            self.assertEqual(self._membership(s).primary_class_ids, [])
+
+    def test_remove_primary_class(self):
+        sc.shadow_create_class(self._p(), class_id='class1', class_data=self._cdata())
+        sc.shadow_add_primary_class(self._p(), membership_id='org1_uidA', class_id='class1')
+        sc.shadow_remove_primary_class(self._p(), membership_id='org1_uidA', class_id='class1')
+        with Session(_engine) as s:
+            self.assertEqual(self._membership(s).primary_class_ids, [])
+
+    def test_invite_code_generate_then_deactivate(self):
+        sc.shadow_update_org_invite_code(self._p(), org_id='org1', code='ABC123')
+        with Session(_engine) as s:
+            org = s.execute(
+                select(Organization).where(Organization.legacy_firestore_id == 'org1')
+            ).scalar_one()
+            self.assertEqual(org.teacher_invite_code, 'ABC123')
+            self.assertTrue(org.teacher_invite_code_active)
+            # Stable field untouched.
+            self.assertEqual(org.name, 'Springfield High')
+        sc.shadow_deactivate_org_invite_code(self._p(), org_id='org1')
+        with Session(_engine) as s:
+            org = s.execute(
+                select(Organization).where(Organization.legacy_firestore_id == 'org1')
+            ).scalar_one()
+            self.assertFalse(org.teacher_invite_code_active)
+            self.assertEqual(org.teacher_invite_code, 'ABC123')  # code preserved, only active flipped
 
 
 if __name__ == '__main__':

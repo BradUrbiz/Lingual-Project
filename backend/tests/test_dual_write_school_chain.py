@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import unittest
+import uuid
 from unittest.mock import MagicMock, patch
 
 from sqlalchemy.dialects import postgresql
@@ -232,6 +233,77 @@ class TestShadowMembership(_FlagMixin):
         self.assertIn('org1_uidA', params.values())
 
 
+class TestShadowClassAndPrimary(_FlagMixin):
+    def setUp(self):
+        super().setUp()
+        self._on()
+
+    def test_create_class_builds_doc_with_id(self):
+        captured, fake_run = _capture_run()
+        seen = {}
+        with patch.object(sc, '_run', fake_run), patch(
+            'backend.db.repository.backfill.upsert_class', lambda s, doc: seen.update(doc)
+        ):
+            sc.shadow_create_class(
+                lambda: object(), class_id='class1',
+                class_data={'org_id': 'org1', 'name': 'Spanish I', 'learning_locale': 'es-ES'},
+            )
+        self.assertEqual(captured['op'], 'create_class')
+        self.assertEqual(seen['id'], 'class1')
+        self.assertEqual(seen['org_id'], 'org1')
+
+    def test_add_primary_class_array_append_when_class_resolves(self):
+        captured, fake_run = _capture_run()
+        with patch.object(sc, '_run', fake_run), patch(
+            'backend.db.repository.resolution.resolve_legacy_id', lambda s, m, fid: uuid.uuid4()
+        ):
+            sc.shadow_add_primary_class(lambda: object(), membership_id='org1_uidA', class_id='class1')
+        sql, _params = _update_params(captured['session'])
+        self.assertIn('UPDATE memberships', sql)
+        self.assertIn('array_append', sql.lower())
+
+    def test_add_primary_class_noop_when_class_unresolved(self):
+        captured, fake_run = _capture_run()
+        with patch.object(sc, '_run', fake_run), patch(
+            'backend.db.repository.resolution.resolve_legacy_id', lambda s, m, fid: None
+        ):
+            sc.shadow_add_primary_class(lambda: object(), membership_id='org1_uidA', class_id='ghost')
+        self.assertEqual(captured['session'].executed, [])
+
+    def test_remove_primary_class_array_remove(self):
+        captured, fake_run = _capture_run()
+        with patch.object(sc, '_run', fake_run), patch(
+            'backend.db.repository.resolution.resolve_legacy_id', lambda s, m, fid: uuid.uuid4()
+        ):
+            sc.shadow_remove_primary_class(lambda: object(), membership_id='org1_uidA', class_id='class1')
+        sql, _params = _update_params(captured['session'])
+        self.assertIn('array_remove', sql.lower())
+
+
+class TestShadowInviteCode(_FlagMixin):
+    def setUp(self):
+        super().setUp()
+        self._on()
+
+    def test_update_invite_code_targeted(self):
+        captured, fake_run = _capture_run()
+        with patch.object(sc, '_run', fake_run):
+            sc.shadow_update_org_invite_code(lambda: object(), org_id='org1', code='ABC123')
+        sql, params = _update_params(captured['session'])
+        self.assertIn('UPDATE organizations', sql)
+        self.assertEqual(params['teacher_invite_code'], 'ABC123')
+        self.assertEqual(params['teacher_invite_code_active'], True)
+        self.assertNotIn('name', params)
+
+    def test_deactivate_invite_code_targeted(self):
+        captured, fake_run = _capture_run()
+        with patch.object(sc, '_run', fake_run):
+            sc.shadow_deactivate_org_invite_code(lambda: object(), org_id='org1')
+        sql, params = _update_params(captured['session'])
+        self.assertIn('UPDATE organizations', sql)
+        self.assertEqual(params['teacher_invite_code_active'], False)
+
+
 class _FakeBatch:
     def update(self, *a, **k):
         pass
@@ -311,6 +383,48 @@ class TestDatabaseWiring(_FlagMixin):
             )
         shadow.assert_called_once()
         self.assertEqual(shadow.call_args.kwargs['membership_id'], 'o1_u1')
+
+    def test_create_class_shadows_when_engine_passed(self):
+        ref = MagicMock()
+        ref.id = 'class1'
+        with patch.object(self.database, 'get_class_ref', return_value=ref), patch(
+            'backend.db.dual_write_school_chain.shadow_create_class'
+        ) as shadow:
+            self.database.create_class('o1', 'Spanish I', class_id='class1', sql_engine=lambda: object())
+        shadow.assert_called_once()
+        self.assertEqual(shadow.call_args.kwargs['class_id'], 'class1')
+
+    def test_add_primary_class_shadows_when_engine_passed(self):
+        with patch.object(self.database, 'get_membership_ref', return_value=MagicMock()), patch(
+            'backend.db.dual_write_school_chain.shadow_add_primary_class'
+        ) as shadow:
+            self.database.add_primary_class_to_membership('o1_u1', 'class1', sql_engine=lambda: object())
+        shadow.assert_called_once()
+
+    def test_lti_bypass_calls_shadow_add_primary_class(self):
+        from backend.services.lti import identity
+
+        class _Db:
+            def get_membership(self, mid):
+                return {'id': mid, 'primary_class_ids': []}  # class not yet present
+
+            def get_membership_ref(self, mid):
+                return MagicMock()
+
+            def get_student_class_enrollment(self, class_id, uid):
+                return {'id': f'{class_id}_{uid}', 'status': 'active'}  # short-circuits enrollment create
+
+        with patch('backend.services.lti.identity._firestore') as mock_fs, patch(
+            'backend.db.dual_write_school_chain.shadow_add_primary_class'
+        ) as shadow:
+            mock_fs.ArrayUnion = MagicMock(return_value=['class-1'])
+            mock_fs.SERVER_TIMESTAMP = 'TS'
+            identity.auto_enroll_student(
+                _Db(), uid='u1', org_id='o1', class_id='class-1',
+                membership_id='o1_u1', sql_engine=lambda: object(),
+            )
+        shadow.assert_called_once()
+        self.assertEqual(shadow.call_args.kwargs['class_id'], 'class-1')
 
 
 if __name__ == '__main__':

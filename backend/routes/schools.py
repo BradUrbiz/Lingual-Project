@@ -214,8 +214,9 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
                 subject=subject,
                 teacher_membership_ids=[membership_id],
                 grade_band=grade_band,
+                sql_engine=deps.sql_engine,
             )
-            deps.db.add_primary_class_to_membership(membership_id, class_id)
+            deps.db.add_primary_class_to_membership(membership_id, class_id, sql_engine=deps.sql_engine)
             deps.db.update_user_profile(uid, school_name=org_name)
 
             context = deps.set_active_school_membership(membership_id)
@@ -299,7 +300,7 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
                     sql_engine=deps.sql_engine,
                 )
             else:
-                deps.db.add_primary_class_to_membership(membership_id, class_id)
+                deps.db.add_primary_class_to_membership(membership_id, class_id, sql_engine=deps.sql_engine)
 
             if existing and existing.get("status") == "inactive":
                 deps.db.reactivate_enrollment(class_id, uid, sql_engine=deps.sql_engine)
@@ -377,7 +378,7 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
 
             membership_id = _normalize_string(enrollment.get("student_membership_id"))
             if membership_id:
-                deps.db.remove_primary_class_from_membership(membership_id, class_id)
+                deps.db.remove_primary_class_from_membership(membership_id, class_id, sql_engine=deps.sql_engine)
             deps.db.deactivate_enrollment(class_id, uid, sql_engine=deps.sql_engine)
 
             class_record = deps.db.get_class(class_id)
@@ -407,7 +408,7 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
             org_id = ctx.active_organization_id
             if not org_id:
                 return jsonify({"success": False, "error": "No active organization."}), 400
-            code = deps.db.generate_teacher_invite_code(org_id)
+            code = deps.db.generate_teacher_invite_code(org_id, sql_engine=deps.sql_engine)
             return jsonify({"success": True, "inviteCode": code})
         except SchoolContextPermissionError as exc:
             return jsonify({"success": False, "error": str(exc)}), 403
@@ -436,7 +437,7 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
         try:
             ctx = deps.get_school_request_context()
             ctx.require_any_role({"school_admin"})
-            deps.db.deactivate_teacher_invite_code(ctx.active_organization_id)
+            deps.db.deactivate_teacher_invite_code(ctx.active_organization_id, sql_engine=deps.sql_engine)
             return jsonify({"success": True})
         except SchoolContextPermissionError as exc:
             return jsonify({"success": False, "error": str(exc)}), 403

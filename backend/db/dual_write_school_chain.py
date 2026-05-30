@@ -182,3 +182,122 @@ def shadow_remove_membership(sql_engine: Any, *, membership_id: str, actor_uid: 
         )
 
     _run(sql_engine, 'remove_membership', op)
+
+
+# --- Classes + primary_class_ids ARRAY writes + invite codes (slice 2c-3) ----
+
+
+def shadow_create_class(sql_engine: Any, *, class_id: str, class_data: dict[str, Any]) -> None:
+    """Mirror a class CREATE into Postgres (idempotent upsert).
+
+    upsert_class resolves org_id -> UUID (UnresolvedParentError = quiet no-op if
+    the org is not in Postgres yet). teacher_membership_ids -> the class_teachers
+    junction is intentionally DEFERRED (upsert_class omits it; class_teachers stays
+    empty until a reconciliation slice — teacher-class reads are not yet on PG).
+    """
+    if not _enabled_school_chain():
+        return
+    from backend.db.repository import backfill
+
+    doc = {**_strip_sentinels(class_data), 'id': class_id}
+    _run(sql_engine, 'create_class', lambda s: backfill.upsert_class(s, doc))
+
+
+def shadow_add_primary_class(sql_engine: Any, *, membership_id: str, class_id: str) -> None:
+    """Mirror an ArrayUnion add of a class onto a membership's primary_class_ids.
+
+    Resolves the Firestore class_id to a UUID (no-op if the class is not in
+    Postgres yet), then array_append-s it onto the membership keyed by
+    legacy_firestore_id. The `NOT = ANY` guard makes it idempotent (mirrors
+    Firestore ArrayUnion's no-duplicate semantics); no-op if the membership row
+    is absent or already holds the class.
+    """
+    if not _enabled_school_chain():
+        return
+    from sqlalchemy import func, update
+
+    from backend.db.models.org import Class, Membership
+    from backend.db.repository.resolution import resolve_legacy_id
+
+    def op(session: Any) -> None:
+        class_uuid = resolve_legacy_id(session, Class, class_id)
+        if class_uuid is None:
+            return
+        session.execute(
+            update(Membership)
+            .where(Membership.legacy_firestore_id == membership_id)
+            .where(~Membership.primary_class_ids.any(class_uuid))
+            .values(
+                primary_class_ids=func.array_append(Membership.primary_class_ids, class_uuid),
+                updated_at=_utcnow(),
+            )
+        )
+
+    _run(sql_engine, 'add_primary_class', op)
+
+
+def shadow_remove_primary_class(sql_engine: Any, *, membership_id: str, class_id: str) -> None:
+    """Mirror an ArrayRemove of a class from a membership's primary_class_ids."""
+    if not _enabled_school_chain():
+        return
+    from sqlalchemy import func, update
+
+    from backend.db.models.org import Class, Membership
+    from backend.db.repository.resolution import resolve_legacy_id
+
+    def op(session: Any) -> None:
+        class_uuid = resolve_legacy_id(session, Class, class_id)
+        if class_uuid is None:
+            return
+        session.execute(
+            update(Membership)
+            .where(Membership.legacy_firestore_id == membership_id)
+            .values(
+                primary_class_ids=func.array_remove(Membership.primary_class_ids, class_uuid),
+                updated_at=_utcnow(),
+            )
+        )
+
+    _run(sql_engine, 'remove_primary_class', op)
+
+
+def shadow_update_org_invite_code(sql_engine: Any, *, org_id: str, code: str) -> None:
+    """Mirror generate_teacher_invite_code: targeted UPDATE of the invite-code
+    fields ONLY (never upsert_organization — that would clobber stable fields)."""
+    if not _enabled_school_chain():
+        return
+    from sqlalchemy import update
+
+    from backend.db.models.org import Organization
+
+    def op(session: Any) -> None:
+        session.execute(
+            update(Organization)
+            .where(Organization.legacy_firestore_id == org_id)
+            .values(
+                teacher_invite_code=code,
+                teacher_invite_code_active=True,
+                teacher_invite_code_generated_at=_utcnow(),
+                updated_at=_utcnow(),
+            )
+        )
+
+    _run(sql_engine, 'update_org_invite_code', op)
+
+
+def shadow_deactivate_org_invite_code(sql_engine: Any, *, org_id: str) -> None:
+    """Mirror deactivate_teacher_invite_code: targeted UPDATE active=False only."""
+    if not _enabled_school_chain():
+        return
+    from sqlalchemy import update
+
+    from backend.db.models.org import Organization
+
+    def op(session: Any) -> None:
+        session.execute(
+            update(Organization)
+            .where(Organization.legacy_firestore_id == org_id)
+            .values(teacher_invite_code_active=False, updated_at=_utcnow())
+        )
+
+    _run(sql_engine, 'deactivate_org_invite_code', op)

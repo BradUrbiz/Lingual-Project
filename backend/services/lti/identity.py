@@ -164,13 +164,17 @@ def auto_enroll_student(db, *, uid, org_id, class_id, membership_id='', sql_engi
     if membership_doc:
         existing_class_ids = membership_doc.get('primary_class_ids', [])
         if class_id not in existing_class_ids:
-            # NOTE: this ArrayUnion is a MEMBERSHIP write; its Postgres shadow is
-            # deferred to slice 2c (full-chain dual-write). Slice 2b mirrors only
-            # the enrollment writes below.
+            # This ArrayUnion is a MEMBERSHIP write that bypasses the database.py
+            # helpers, so its Postgres shadow (slice 2c-3) is wired explicitly.
             db.get_membership_ref(actual_membership_id).update({
                 'primary_class_ids': _firestore.ArrayUnion([class_id]),
                 'updated_at': _firestore.SERVER_TIMESTAMP,
             })
+            if sql_engine is not None:
+                from backend.db import dual_write_school_chain as _sc
+                _sc.shadow_add_primary_class(
+                    sql_engine, membership_id=actual_membership_id, class_id=class_id
+                )
 
     # 3. Ensure enrollment exists
     existing_enrollment = db.get_student_class_enrollment(class_id, uid)

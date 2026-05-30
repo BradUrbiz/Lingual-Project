@@ -315,9 +315,10 @@ def create_teacher_blueprint(deps: RouteDeps) -> Blueprint:
                 subject=subject,
                 teacher_membership_ids=teacher_membership_ids,
                 grade_band=grade_band,
+                sql_engine=deps.sql_engine,
             )
             if context.active_membership_id:
-                deps.db.add_primary_class_to_membership(context.active_membership_id, class_id)
+                deps.db.add_primary_class_to_membership(context.active_membership_id, class_id, sql_engine=deps.sql_engine)
 
             return jsonify({
                 "success": True,

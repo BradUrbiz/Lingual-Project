@@ -1674,8 +1674,12 @@ def create_class(
     status='active',
     class_id=None,
     canvas_course_id='',
+    sql_engine=None,
 ):
-    """Create a class document."""
+    """Create a class document.
+
+    `sql_engine` (deps.sql_engine) opts into the fail-open Postgres parent-chain
+    dual-write (slice 2c), gated on DUAL_WRITE_SCHOOL_CHAIN."""
     doc_ref = get_class_ref(class_id) if class_id else get_classes_collection().document()
     class_data = {
         'org_id': org_id,
@@ -1691,25 +1695,34 @@ def create_class(
         'updated_at': firestore.SERVER_TIMESTAMP,
     }
     doc_ref.set(class_data)
+    if sql_engine is not None:
+        from backend.db import dual_write_school_chain as _sc
+        _sc.shadow_create_class(sql_engine, class_id=doc_ref.id, class_data=class_data)
     return doc_ref.id
 
 
-def add_primary_class_to_membership(membership_id, class_id):
+def add_primary_class_to_membership(membership_id, class_id, sql_engine=None):
     """Attach a class to a membership's primary class list."""
     membership_ref = get_membership_ref(membership_id)
     membership_ref.update({
         'primary_class_ids': firestore.ArrayUnion([class_id]),
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
+    if sql_engine is not None:
+        from backend.db import dual_write_school_chain as _sc
+        _sc.shadow_add_primary_class(sql_engine, membership_id=membership_id, class_id=class_id)
 
 
-def remove_primary_class_from_membership(membership_id, class_id):
+def remove_primary_class_from_membership(membership_id, class_id, sql_engine=None):
     """Detach a class from a membership's primary class list."""
     membership_ref = get_membership_ref(membership_id)
     membership_ref.update({
         'primary_class_ids': firestore.ArrayRemove([class_id]),
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
+    if sql_engine is not None:
+        from backend.db import dual_write_school_chain as _sc
+        _sc.shadow_remove_primary_class(sql_engine, membership_id=membership_id, class_id=class_id)
 
 
 def get_class(class_id):
@@ -3889,7 +3902,7 @@ def record_school_request_pre_invites(*, org_id, requester_uid, emails):
 # Teacher invite codes
 # ---------------------------------------------------------------------------
 
-def generate_teacher_invite_code(org_id):
+def generate_teacher_invite_code(org_id, sql_engine=None):
     """Generate or regenerate a 6-char teacher invite code for an org."""
     code = ''.join(secrets.choice(JOIN_CODE_ALPHABET) for _ in range(JOIN_CODE_LENGTH))
     get_organization_ref(org_id).update({
@@ -3898,6 +3911,9 @@ def generate_teacher_invite_code(org_id):
         'teacher_invite_code_generated_at': firestore.SERVER_TIMESTAMP,
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
+    if sql_engine is not None:
+        from backend.db import dual_write_school_chain as _sc
+        _sc.shadow_update_org_invite_code(sql_engine, org_id=org_id, code=code)
     return code
 
 
@@ -3918,12 +3934,15 @@ def get_org_by_teacher_invite_code(code):
     return None
 
 
-def deactivate_teacher_invite_code(org_id):
+def deactivate_teacher_invite_code(org_id, sql_engine=None):
     """Deactivate the teacher invite code."""
     get_organization_ref(org_id).update({
         'teacher_invite_code_active': False,
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
+    if sql_engine is not None:
+        from backend.db import dual_write_school_chain as _sc
+        _sc.shadow_deactivate_org_invite_code(sql_engine, org_id=org_id)
 
 
 # ---------------------------------------------------------------------------

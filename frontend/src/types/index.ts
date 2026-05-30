@@ -13,6 +13,7 @@ export interface User {
   intendedRole?: 'student' | 'teacher' | 'admin' | null;
   onboardingState?: string | null;
   requiresLegacyRolePick?: boolean;
+  emailVerificationRequired?: boolean;
 }
 
 // Profile form data for GeneralPage

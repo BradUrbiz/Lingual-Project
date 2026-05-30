@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { migrateRole } from './auth';
+import { migrateRole, confirmEmailVerification, resendEmailVerification } from './auth';
 import api from './index';
 
 vi.mock('./index');
@@ -14,6 +14,36 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe('email verification api', () => {
+  it('posts the code to confirm and returns the body', async () => {
+    mockedApi.post.mockResolvedValue({ data: { success: true } });
+    const res = await confirmEmailVerification('123456');
+    expect(mockedApi.post).toHaveBeenCalledWith(
+      '/auth/email-verification/confirm',
+      { code: '123456' },
+      { validateStatus: expect.any(Function) },
+    );
+    expect(res.success).toBe(true);
+  });
+
+  it('returns the body (does not throw) on a failure status', async () => {
+    mockedApi.post.mockResolvedValue({ data: { success: false, error: 'invalid_code' } });
+    const res = await confirmEmailVerification('000000');
+    expect(res.error).toBe('invalid_code');
+  });
+
+  it('posts to resend and returns cooldown', async () => {
+    mockedApi.post.mockResolvedValue({ data: { success: true, cooldownSeconds: 60 } });
+    const res = await resendEmailVerification();
+    expect(mockedApi.post).toHaveBeenCalledWith(
+      '/auth/email-verification/resend',
+      {},
+      { validateStatus: expect.any(Function) },
+    );
+    expect(res.cooldownSeconds).toBe(60);
+  });
 });
 
 describe('migrateRole', () => {

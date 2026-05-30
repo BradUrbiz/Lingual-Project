@@ -104,3 +104,47 @@ def confirm(db, uid: str, code: str, *, now: datetime | None = None) -> ConfirmR
         'code_hash': None,
     }})
     return ConfirmResult(ok=True)
+
+
+@dataclass
+class ResendResult:
+    allowed: bool
+    code: str | None = None
+    cooldown_seconds: int = 0
+
+
+def resend(db, uid: str, *, now: datetime | None = None) -> ResendResult:
+    ts = _now(now)
+    user = db.get_user(uid) or {}
+    record = user.get(_FIELD) or {}
+
+    if record.get('status') == STATUS_VERIFIED:
+        return ResendResult(allowed=False)
+
+    last_sent = _parse(record.get('last_sent_at'))
+    if last_sent is not None:
+        elapsed = (ts - last_sent).total_seconds()
+        if elapsed < RESEND_COOLDOWN.total_seconds():
+            return ResendResult(
+                allowed=False,
+                cooldown_seconds=int(RESEND_COOLDOWN.total_seconds() - elapsed),
+            )
+
+    resend_count = record.get('resend_count', 0)
+    if resend_count >= MAX_RESENDS:
+        return ResendResult(allowed=False)
+
+    code = generate_code()
+    db.update_user(uid, {_FIELD: {
+        'status': STATUS_PENDING,
+        'code_hash': hash_code(uid, code),
+        'expires_at': (ts + CODE_TTL).isoformat(),
+        'attempts': 0,
+        'last_sent_at': ts.isoformat(),
+        'resend_count': resend_count + 1,
+    }})
+    return ResendResult(
+        allowed=True,
+        code=code,
+        cooldown_seconds=int(RESEND_COOLDOWN.total_seconds()),
+    )

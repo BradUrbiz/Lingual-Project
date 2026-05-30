@@ -82,3 +82,34 @@ class ConfirmTest(unittest.TestCase):
         ev.confirm(self.db, "u1", self.code)
         result = ev.confirm(self.db, "u1", "anything")
         self.assertTrue(result.ok)
+
+
+class ResendTest(unittest.TestCase):
+    def setUp(self):
+        self.db = FakeEvDb()
+        self.db.users["u1"] = make_user(uid="u1", email="a@b.test")
+        self.t0 = datetime(2026, 5, 31, 12, 0, 0, tzinfo=UTC)
+        ev.start_verification(self.db, "u1", now=self.t0)
+
+    def test_resend_within_cooldown_blocked(self):
+        result = ev.resend(self.db, "u1", now=self.t0 + timedelta(seconds=30))
+        self.assertFalse(result.allowed)
+        self.assertGreater(result.cooldown_seconds, 0)
+
+    def test_resend_after_cooldown_allowed_with_new_code(self):
+        old_hash = self.db.users["u1"]["email_verification"]["code_hash"]
+        result = ev.resend(self.db, "u1", now=self.t0 + timedelta(seconds=61))
+        self.assertTrue(result.allowed)
+        self.assertRegex(result.code, r"^\d{6}$")
+        new_hash = self.db.users["u1"]["email_verification"]["code_hash"]
+        self.assertNotEqual(new_hash, old_hash)
+        self.assertEqual(self.db.users["u1"]["email_verification"]["resend_count"], 1)
+
+    def test_resend_cap(self):
+        t = self.t0
+        for _ in range(ev.MAX_RESENDS):
+            t = t + timedelta(seconds=61)
+            self.assertTrue(ev.resend(self.db, "u1", now=t).allowed)
+        t = t + timedelta(seconds=61)
+        result = ev.resend(self.db, "u1", now=t)
+        self.assertFalse(result.allowed)

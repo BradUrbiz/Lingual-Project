@@ -55,7 +55,7 @@ export function WizardStep3Integration({ state, dispatch }: WizardStep3Props) {
   // Every nested array gets its own default. The reducer's SET_FIELD on
   // `curriculum.gradeRanges` creates a partial curriculum object (with the
   // other two arrays undefined), so a top-level `state.curriculum ?? {...}`
-  // wasn't enough — `.join()` / `.includes()` would crash on the undefined
+  // wasn't enough - `.join()` / `.includes()` would crash on the undefined
   // siblings. Normalize each field defensively here, mirroring the same
   // pattern WizardStep1Organization uses for location.
   const curriculum = {
@@ -103,7 +103,7 @@ export function WizardStep3Integration({ state, dispatch }: WizardStep3Props) {
           <div className="space-y-3 rounded-md border-2 border-foreground/40 bg-muted/30 p-4">
             <WizardField label="Canvas instance URL" htmlFor="canvasUrl"
                          helper="Example: ssfs.instructure.com">
-              <input id="canvasUrl" type="text"
+              <input id="canvasUrl" aria-label="Canvas instance URL" type="text"
                      className="w-full rounded-md border px-3 py-2"
                      value={integration?.canvasUrl ?? ''}
                      onChange={(e) => setField(dispatch, 'integration.canvasUrl', e.target.value)} />
@@ -166,12 +166,16 @@ export function WizardStep3Integration({ state, dispatch }: WizardStep3Props) {
                      helper="Comma-separated ISO codes (es, fr, ko, etc.)">
           <input
             id="languages"
+            aria-label="Languages taught"
             type="text"
             className="w-full rounded-md border px-3 py-2"
             value={curriculum.languagesTaught.join(', ')}
             onChange={(e) =>
               setField(dispatch, 'curriculum.languagesTaught',
-                e.target.value.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))
+                e.target.value.split(',').flatMap((s) => {
+                  const value = s.trim().toLowerCase();
+                  return value ? [value] : [];
+                }))
             }
           />
         </WizardField>
@@ -202,11 +206,4 @@ export function WizardStep3Integration({ state, dispatch }: WizardStep3Props) {
       </section>
     </div>
   );
-}
-
-export interface ValidationResult { ok: boolean; errors: Record<string, string>; }
-
-export function validateStep3(_state: Partial<WizardSubmitPayload>): ValidationResult {
-  // Step 3 is entirely optional; nothing to validate.
-  return { ok: true, errors: {} };
 }

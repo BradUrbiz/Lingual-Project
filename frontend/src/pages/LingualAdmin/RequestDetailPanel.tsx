@@ -10,20 +10,20 @@ export interface RequestDetailPanelProps {
 }
 
 function textOrDash(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (value === null || value === undefined || value === '') return '-';
   return String(value);
 }
 
 function listOrDash(values?: string[] | null): string {
   const cleaned = (values ?? []).filter(Boolean);
-  return cleaned.length ? cleaned.join(', ') : '—';
+  return cleaned.length ? cleaned.join(', ') : '-';
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <dt className="text-neutral-500">{label}</dt>
-      <dd className="break-words">{value || <span className="text-neutral-400">—</span>}</dd>
+      <dd className="break-words">{value || <span className="text-neutral-400">-</span>}</dd>
     </div>
   );
 }
@@ -46,7 +46,7 @@ export function RequestDetailPanel(props: RequestDetailPanelProps) {
           <h2 className="text-lg font-semibold">{request.schoolName}</h2>
           <p className="text-sm text-neutral-500">{request.status}</p>
         </div>
-        <button onClick={onClose} aria-label="Close" className="text-neutral-500 hover:text-neutral-900">×</button>
+        <button type="button" onClick={onClose} aria-label="Close" className="text-neutral-500 hover:text-neutral-900">×</button>
       </div>
 
       <dl className="mt-6 space-y-3 text-sm">
@@ -61,7 +61,7 @@ export function RequestDetailPanel(props: RequestDetailPanelProps) {
             request.location?.county,
             request.location?.state,
             request.location?.country,
-          ].filter(Boolean).join(', ') || '—'}
+          ].filter(Boolean).join(', ') || '-'}
         />
         <DetailRow label="Org type" value={`${textOrDash(request.orgType)} / ${textOrDash(request.schoolType)}`} />
         <DetailRow label="Public / private" value={textOrDash(request.publicPrivate)} />
@@ -87,7 +87,7 @@ export function RequestDetailPanel(props: RequestDetailPanelProps) {
         <div>
           <dt className="text-neutral-500">Pre-invited teachers</dt>
           <dd className="mt-1 flex flex-wrap gap-1">
-            {preInvitedTeachers.length === 0 && <span className="text-neutral-400">—</span>}
+            {preInvitedTeachers.length === 0 && <span className="text-neutral-400">-</span>}
             {preInvitedTeachers.map(t => (
               <span key={t} className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs">{t}</span>
             ))}
@@ -96,19 +96,20 @@ export function RequestDetailPanel(props: RequestDetailPanelProps) {
         <div>
           <dt className="text-neutral-500">Attestation</dt>
           <dd className="font-mono text-xs">
-            confirmed_at={attestation?.confirmedAt || '—'}{' '}
-            ip_hash={attestation?.ipHash || '—'}{' '}
-            ua={attestation?.userAgent?.slice(0, 40) || '—'}
+            confirmed_at={attestation?.confirmedAt || '-'}{' '}
+            ip_hash={attestation?.ipHash || '-'}{' '}
+            ua={attestation?.userAgent?.slice(0, 40) || '-'}
           </dd>
         </div>
       </dl>
 
       {request.status === 'pending' && (
         <div className="mt-8 space-y-3">
-          <label className="block text-xs uppercase tracking-wide text-neutral-500">
+          <label htmlFor="request-internal-note" className="block text-xs uppercase tracking-wide text-neutral-500">
             Internal note (optional)
           </label>
           <textarea
+            id="request-internal-note"
             value={note}
             onChange={e => setNote(e.target.value)}
             rows={3}
@@ -116,7 +117,7 @@ export function RequestDetailPanel(props: RequestDetailPanelProps) {
             maxLength={2000}
           />
           <div className="flex gap-2">
-            <button
+            <button type="button"
               disabled={busy}
               onClick={async () => {
                 setBusy(true);
@@ -126,7 +127,7 @@ export function RequestDetailPanel(props: RequestDetailPanelProps) {
             >
               Approve
             </button>
-            <button
+            <button type="button"
               disabled={busy}
               onClick={() => setShowDecline(true)}
               className="rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"

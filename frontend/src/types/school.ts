@@ -374,7 +374,7 @@ export interface DeletionRequestDetail {
 }
 
 // --- School requests (onboarding approval flow) ---
-// SchoolRequest has moved to ./schoolRequest.ts (Plan 3 — wizard payload types).
+// SchoolRequest has moved to ./schoolRequest.ts (Plan 3 - wizard payload types).
 
 export interface TeacherInvitation {
   id: string;

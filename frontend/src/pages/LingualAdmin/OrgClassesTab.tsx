@@ -39,17 +39,15 @@ export function OrgClassesTab({ orgId }: { orgId: string }) {
       <tbody className="divide-y divide-neutral-200">
         {items.map((c) => (
           <tr key={c.id}>
-            <td className="py-2 font-medium">{c.name || '—'}</td>
-            <td>{c.term || '—'}</td>
-            <td>{c.subject || '—'}</td>
+            <td className="py-2 font-medium">{c.name || '-'}</td>
+            <td>{c.term || '-'}</td>
+            <td>{c.subject || '-'}</td>
             <td>{c.teacherMembershipIds.length}</td>
-            <td className="text-neutral-500">{c.createdAt || '—'}</td>
-            <td className="text-neutral-500">{c.lastActivityAt || '—'}</td>
+            <td className="text-neutral-500">{c.createdAt || '-'}</td>
+            <td className="text-neutral-500">{c.lastActivityAt || '-'}</td>
           </tr>
         ))}
       </tbody>
     </table>
   );
 }
-
-export default OrgClassesTab;

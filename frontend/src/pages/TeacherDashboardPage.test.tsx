@@ -352,7 +352,7 @@ describe('TeacherDashboardPage', () => {
       // simply not being open yet.
       await screen.findByText('Carol');
       expect(
-        screen.queryByText(/Canvas roster — not yet joined/i),
+        screen.queryByText(/Canvas roster - not yet joined/i),
       ).not.toBeInTheDocument();
     });
 

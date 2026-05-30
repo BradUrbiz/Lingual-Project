@@ -79,7 +79,7 @@ describe('AdminPendingPage', () => {
     renderPage();
     // Flush the initial render promise so the component mounts with 'pending'.
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    // Advance past the 30s poll interval — this triggers the second getMySchoolRequest
+    // Advance past the 30s poll interval - this triggers the second getMySchoolRequest
     // which returns 'approved', then refreshUser(), then navigate(SCHOOL_ADMIN_HOME_ROUTE).
     await act(async () => { vi.advanceTimersByTime(31000); });
     // Flush the async chain (getMySchoolRequest → setReq → refreshUser → navigate).

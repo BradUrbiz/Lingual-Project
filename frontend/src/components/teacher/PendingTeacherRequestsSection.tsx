@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useReducer } from 'react';
 import { Button, Card, Input } from '@/components/ui';
 import {
     listPendingTeacherRequests,
@@ -7,52 +7,90 @@ import {
 } from '@/api/teacherRequests';
 import type { PendingTeacherRequestRow } from '@/types/teacherJoin';
 
+type PendingRequestsState = {
+    rows: PendingTeacherRequestRow[];
+    loading: boolean;
+    declineFor: PendingTeacherRequestRow | null;
+    reason: string;
+    submitting: boolean;
+    error: string | null;
+};
+
+type PendingRequestsAction =
+    | { type: 'patch'; payload: Partial<PendingRequestsState> }
+    | { type: 'start-load' }
+    | { type: 'load-success'; rows: PendingTeacherRequestRow[] }
+    | { type: 'load-error'; error: string }
+    | { type: 'close-decline' };
+
+const initialPendingRequestsState: PendingRequestsState = {
+    rows: [],
+    loading: false,
+    declineFor: null,
+    reason: '',
+    submitting: false,
+    error: null,
+};
+
+function pendingRequestsReducer(
+    state: PendingRequestsState,
+    action: PendingRequestsAction
+): PendingRequestsState {
+    switch (action.type) {
+        case 'patch':
+            return { ...state, ...action.payload };
+        case 'start-load':
+            return { ...state, loading: true };
+        case 'load-success':
+            return { ...state, rows: action.rows, loading: false };
+        case 'load-error':
+            return { ...state, error: action.error, loading: false };
+        case 'close-decline':
+            return { ...state, declineFor: null, reason: '' };
+        default:
+            return state;
+    }
+}
+
 export function PendingTeacherRequestsSection() {
-    const [rows, setRows] = useState<PendingTeacherRequestRow[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [declineFor, setDeclineFor] = useState<PendingTeacherRequestRow | null>(null);
-    const [reason, setReason] = useState('');
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [state, dispatch] = useReducer(pendingRequestsReducer, initialPendingRequestsState);
+    const { rows, loading, declineFor, reason, submitting, error } = state;
 
     const refresh = useCallback(async () => {
-        setLoading(true);
+        dispatch({ type: 'start-load' });
         try {
             const out = await listPendingTeacherRequests();
-            setRows(out);
+            dispatch({ type: 'load-success', rows: out });
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'Failed to load requests.');
-        } finally {
-            setLoading(false);
+            dispatch({ type: 'load-error', error: e instanceof Error ? e.message : 'Failed to load requests.' });
         }
     }, []);
 
     useEffect(() => { refresh(); }, [refresh]);
 
     async function onApprove(row: PendingTeacherRequestRow) {
-        setSubmitting(true);
+        dispatch({ type: 'patch', payload: { submitting: true } });
         try {
             await approveTeacherJoinRequest(row.requestId);
             await refresh();
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'Approve failed.');
+            dispatch({ type: 'patch', payload: { error: e instanceof Error ? e.message : 'Approve failed.' } });
         } finally {
-            setSubmitting(false);
+            dispatch({ type: 'patch', payload: { submitting: false } });
         }
     }
 
     async function onDeclineSubmit() {
         if (!declineFor || !reason.trim()) return;
-        setSubmitting(true);
+        dispatch({ type: 'patch', payload: { submitting: true } });
         try {
             await declineTeacherJoinRequest(declineFor.requestId, reason.trim());
-            setDeclineFor(null);
-            setReason('');
+            dispatch({ type: 'close-decline' });
             await refresh();
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'Decline failed.');
+            dispatch({ type: 'patch', payload: { error: e instanceof Error ? e.message : 'Decline failed.' } });
         } finally {
-            setSubmitting(false);
+            dispatch({ type: 'patch', payload: { submitting: false } });
         }
     }
 
@@ -85,7 +123,12 @@ export function PendingTeacherRequestsSection() {
                             <Button size="sm" onClick={() => onApprove(row)} disabled={submitting}>
                                 Approve
                             </Button>
-                            <Button size="sm" variant="outline" onClick={() => setDeclineFor(row)} disabled={submitting}>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => dispatch({ type: 'patch', payload: { declineFor: row } })}
+                                disabled={submitting}
+                            >
                                 Decline
                             </Button>
                         </div>
@@ -98,20 +141,20 @@ export function PendingTeacherRequestsSection() {
                     <p className="text-sm">
                         Decline request from <strong>{declineFor.name || declineFor.email}</strong>?
                     </p>
-                    <label className="block text-sm">
+                    <div className="block text-sm">
                         <span className="block mb-1">Reason</span>
                         <Input
-                            aria-label="reason"
+                            aria-label="Decline reason"
                             value={reason}
-                            onChange={(e) => setReason(e.target.value)}
+                            onChange={(e) => dispatch({ type: 'patch', payload: { reason: e.target.value } })}
                             placeholder="Shared with the requester."
                         />
-                    </label>
+                    </div>
                     <div className="flex gap-2">
                         <Button onClick={onDeclineSubmit} disabled={submitting || !reason.trim()}>
-                            Submit
+                            Decline request
                         </Button>
-                        <Button variant="ghost" onClick={() => { setDeclineFor(null); setReason(''); }}>
+                        <Button variant="ghost" onClick={() => dispatch({ type: 'close-decline' })}>
                             Cancel
                         </Button>
                     </div>
@@ -120,5 +163,3 @@ export function PendingTeacherRequestsSection() {
         </Card>
     );
 }
-
-export default PendingTeacherRequestsSection;

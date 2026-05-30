@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -83,7 +83,7 @@ export function TeacherAssignmentBuilderPage() {
     setTeacherClasses(classes);
     setAssignments(classAssignments);
 
-    // Load Canvas content (best-effort — not all classes have Canvas).
+    // Load Canvas content (best-effort - not all classes have Canvas).
     try {
       const items = await getCanvasContentForClass(nextClassId);
       setCanvasContent(items);
@@ -381,7 +381,7 @@ export function TeacherAssignmentBuilderPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -438,14 +438,14 @@ export function TeacherAssignmentBuilderPage() {
 
       {successMessage && (
         <Alert>
-          <CheckCircle2 className="h-4 w-4" />
+          <CheckCircle2 className="size-4" />
           <AlertDescription>{successMessage}</AlertDescription>
         </Alert>
       )}
 
       <Card className="border-3 border-foreground p-6 shadow-stamp">
         <div className="flex items-center gap-3 mb-6">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
+          <div className="flex size-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
             <Sparkles size={22} strokeWidth={2.5} />
           </div>
           <div>
@@ -560,7 +560,7 @@ export function TeacherAssignmentBuilderPage() {
                   }}
                   className="h-11 w-full rounded-xl border-2 border-border bg-card px-4 text-sm text-foreground focus:border-primary focus:outline-none"
                 >
-                  <option value="">Select a Canvas page or assignment...</option>
+                  <option value="">Select a Canvas page or assignment…</option>
                   {groupCanvasItemsByModule(canvasContent).map((group) => (
                     <optgroup key={group.moduleName} label={group.moduleName}>
                       {group.items.map((item) => (
@@ -877,7 +877,7 @@ export function TeacherAssignmentBuilderPage() {
                           {
                             value: 'english_first',
                             label: 'English-first',
-                            hint: 'Novice-friendly — English leads, target language introduced alongside English meanings.',
+                            hint: 'Novice-friendly - English leads, target language introduced alongside English meanings.',
                           },
                           {
                             value: 'english_led',
@@ -897,7 +897,7 @@ export function TeacherAssignmentBuilderPage() {
                           {
                             value: 'target_only',
                             label: 'Target-language-only',
-                            hint: 'Best for advanced classes — AI replies stay in the target language.',
+                            hint: 'Best for advanced classes - AI replies stay in the target language.',
                           },
                         ] as Array<{ value: TargetLanguageIntensity; label: string; hint: string }>
                       ).map((option) => {
@@ -1004,7 +1004,7 @@ export function TeacherAssignmentBuilderPage() {
       {/* Assignments list */}
       <Card className="border-3 border-foreground p-6 shadow-stamp">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
+            <div className="flex size-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
               <GraduationCap size={22} strokeWidth={2.5} />
             </div>
             <div>
@@ -1080,7 +1080,7 @@ function groupCanvasItemsByModule(items: CanvasCourseContentItem[]): CanvasItemG
   }
   return Array.from(byModule.entries()).map(([moduleName, groupItems]) => ({
     moduleName,
-    items: [...groupItems].sort((a, b) => a.itemPosition - b.itemPosition),
+    items: Array.from(groupItems).sort((a, b) => a.itemPosition - b.itemPosition),
   }));
 }
 
@@ -1106,6 +1106,16 @@ function TagListEditor({
   ariaLabel?: string;
 }) {
   const [newValue, setNewValue] = useState('');
+  const itemIdsRef = useRef<string[]>([]);
+  const nextItemIdRef = useRef(0);
+
+  while (itemIdsRef.current.length < items.length) {
+    itemIdsRef.current.push(`tag-item-${nextItemIdRef.current}`);
+    nextItemIdRef.current += 1;
+  }
+  if (itemIdsRef.current.length > items.length) {
+    itemIdsRef.current.length = items.length;
+  }
 
   const handleAdd = () => {
     const trimmed = newValue.trim();
@@ -1116,6 +1126,7 @@ function TagListEditor({
   };
 
   const handleRemove = (index: number) => {
+    itemIdsRef.current.splice(index, 1);
     onChange(items.filter((_, i) => i !== index));
   };
 
@@ -1128,7 +1139,7 @@ function TagListEditor({
   return (
     <div className="space-y-2" aria-label={ariaLabel}>
       {items.map((item, i) => (
-        <div key={i} className="flex items-center gap-2">
+        <div key={itemIdsRef.current[i]} className="flex items-center gap-2">
           <Input
             value={item}
             onChange={(event) => handleEdit(i, event.target.value)}

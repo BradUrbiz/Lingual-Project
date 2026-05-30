@@ -1,4 +1,4 @@
-// Plan 3 — admin wizard + school request shape.
+// Plan 3 - admin wizard + school request shape.
 
 export type SchoolType =
   | 'middle' | 'high' | 'k12' | 'university'
@@ -31,7 +31,7 @@ export interface WizardAdminIdentityInput {
   fullName: string;
   schoolEmail: string;
   roleTitle: string;
-  /** Client-side flag — the SERVER stamps the actual attestation record. */
+  /** Client-side flag - the SERVER stamps the actual attestation record. */
   authorizationAttested: boolean;
 }
 
@@ -82,7 +82,7 @@ export interface WizardDraft {
   updatedAt: string | null;
 }
 
-/** Full SchoolRequest shape — superset of the Plan 1 legacy shape. */
+/** Full SchoolRequest shape - superset of the Plan 1 legacy shape. */
 export interface SchoolRequest {
   id: string;
   requesterUid: string;

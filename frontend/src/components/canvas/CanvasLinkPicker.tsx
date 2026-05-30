@@ -55,7 +55,7 @@ export function CanvasLinkPicker({ items, linkedItemId, onLink, onUnlink }: Prop
         className="w-full rounded-md border px-3 py-2 text-sm"
         aria-label="Select Canvas item to link"
       >
-        <option value="">Select a Canvas item...</option>
+        <option value="">Select a Canvas item…</option>
         {sortedModules.map((mod) => (
           <optgroup key={mod.name} label={mod.name}>
             {mod.items

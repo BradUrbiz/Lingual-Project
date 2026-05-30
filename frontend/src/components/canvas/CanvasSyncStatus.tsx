@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCanvasStatus, syncCanvas, disconnectCanvas } from '@/api/canvas';
 import type { CanvasConnectionStatus, CanvasSyncRosterResult } from '@/types/canvas';
@@ -8,19 +8,55 @@ interface Props {
   classId: string;
 }
 
+type CanvasSyncState = {
+  connectionStatus: CanvasConnectionStatus | null;
+  syncing: boolean;
+  error: string | null;
+  lastRoster: CanvasSyncRosterResult | null;
+};
+
+type CanvasSyncAction =
+  | { type: 'loaded'; connectionStatus: CanvasConnectionStatus }
+  | { type: 'syncStarted' }
+  | { type: 'syncCompleted'; lastRoster: CanvasSyncRosterResult | null }
+  | { type: 'failed'; error: string }
+  | { type: 'disconnected' };
+
+const INITIAL_CANVAS_SYNC_STATE: CanvasSyncState = {
+  connectionStatus: null,
+  syncing: false,
+  error: null,
+  lastRoster: null,
+};
+
+function canvasSyncReducer(state: CanvasSyncState, action: CanvasSyncAction): CanvasSyncState {
+  switch (action.type) {
+    case 'loaded':
+      return { ...state, connectionStatus: action.connectionStatus };
+    case 'syncStarted':
+      return { ...state, syncing: true, error: null };
+    case 'syncCompleted':
+      return { ...state, syncing: false, lastRoster: action.lastRoster };
+    case 'failed':
+      return { ...state, syncing: false, error: action.error };
+    case 'disconnected':
+      return { ...state, connectionStatus: { connected: false } };
+    default:
+      return state;
+  }
+}
+
 export function CanvasSyncStatus({ classId }: Props) {
   const navigate = useNavigate();
-  const [status, setStatus] = useState<CanvasConnectionStatus | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastRoster, setLastRoster] = useState<CanvasSyncRosterResult | null>(null);
+  const [state, dispatch] = useReducer(canvasSyncReducer, INITIAL_CANVAS_SYNC_STATE);
+  const { connectionStatus, syncing, error, lastRoster } = state;
 
   const loadStatus = useCallback(async () => {
     try {
       const data = await getCanvasStatus(classId);
-      setStatus(data);
+      dispatch({ type: 'loaded', connectionStatus: data });
     } catch {
-      // Non-critical — just means status unavailable
+      // Non-critical - just means status unavailable
     }
   }, [classId]);
 
@@ -29,31 +65,28 @@ export function CanvasSyncStatus({ classId }: Props) {
   }, [loadStatus]);
 
   const handleSync = async () => {
-    setSyncing(true);
-    setError(null);
+    dispatch({ type: 'syncStarted' });
     try {
       const result = await syncCanvas(classId);
-      setLastRoster(result.roster ?? null);
+      dispatch({ type: 'syncCompleted', lastRoster: result.roster ?? null });
       await loadStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sync failed');
-    } finally {
-      setSyncing(false);
+      dispatch({ type: 'failed', error: err instanceof Error ? err.message : 'Sync failed' });
     }
   };
 
   const handleDisconnect = async () => {
     try {
       await disconnectCanvas(classId);
-      setStatus({ connected: false });
+      dispatch({ type: 'disconnected' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Disconnect failed');
+      dispatch({ type: 'failed', error: err instanceof Error ? err.message : 'Disconnect failed' });
     }
   };
 
-  if (!status) return null;
+  if (!connectionStatus) return null;
 
-  if (!status.connected) {
+  if (!connectionStatus.connected) {
     return (
       <Button
         variant="outline"
@@ -66,11 +99,11 @@ export function CanvasSyncStatus({ classId }: Props) {
   }
 
   const statusLabel =
-    status.syncStatus === 'completed'
+    connectionStatus.syncStatus === 'completed'
       ? 'Synced'
-      : status.syncStatus === 'syncing'
+      : connectionStatus.syncStatus === 'syncing'
         ? 'Syncing...'
-        : status.syncStatus === 'error'
+        : connectionStatus.syncStatus === 'error'
           ? 'Sync error'
           : 'Never synced';
 
@@ -78,13 +111,13 @@ export function CanvasSyncStatus({ classId }: Props) {
     <div className="flex flex-col gap-2" data-testid="canvas-sync-status">
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">
-          Canvas: {status.canvasCourseName || status.canvasCourseId}
+          Canvas: {connectionStatus.canvasCourseName || connectionStatus.canvasCourseId}
         </span>
         <span
           className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-            status.syncStatus === 'completed'
+            connectionStatus.syncStatus === 'completed'
               ? 'bg-green-100 text-green-700'
-              : status.syncStatus === 'error'
+              : connectionStatus.syncStatus === 'error'
                 ? 'bg-red-100 text-red-700'
                 : 'bg-gray-100 text-gray-600'
           }`}
@@ -101,7 +134,7 @@ export function CanvasSyncStatus({ classId }: Props) {
       </div>
       <p className="text-xs text-muted-foreground">
         Updates the Canvas roster list and refreshes course content. Does not add or remove
-        students from your class — share your class code to enroll students.
+        students from your class - share your class code to enroll students.
       </p>
       {lastRoster && (
         <p className="text-xs text-muted-foreground" data-testid="canvas-roster-result">

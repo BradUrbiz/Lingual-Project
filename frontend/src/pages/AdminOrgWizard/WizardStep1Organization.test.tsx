@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { WizardStep1Organization, validateStep1 } from './WizardStep1Organization';
+import { WizardStep1Organization } from './WizardStep1Organization';
+import { validateStep1 } from './wizardValidation';
 
 const noopDispatch = vi.fn();
 

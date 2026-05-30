@@ -22,9 +22,11 @@ interface ModuleGroup {
   items: CanvasCourseContentItem[];
 }
 
+const EMPTY_LINKED_ASSIGNMENTS: Record<string, string> = {};
+
 export function CanvasModuleView({
   items,
-  linkedAssignments = {},
+  linkedAssignments = EMPTY_LINKED_ASSIGNMENTS,
   onLaunchAssignment,
   isTeacherView = false,
   onCreatePractice,
@@ -66,7 +68,7 @@ export function CanvasModuleView({
             </button>
             {isExpanded && (
               <ul className="border-t border-border">
-                {mod.items
+                {Array.from(mod.items)
                   .sort((a, b) => a.itemPosition - b.itemPosition)
                   .map((item) => {
                     const assignmentId = linkedAssignments[item.canvasItemId];
@@ -163,5 +165,5 @@ function groupByModule(items: CanvasCourseContentItem[]): ModuleGroup[] {
   }
   // Sort ascending so Canvas module position 1 renders before position 2,
   // matching the order students see in Canvas itself.
-  return Object.values(map).sort((a, b) => a.position - b.position);
+  return Array.from(Object.values(map)).sort((a, b) => a.position - b.position);
 }

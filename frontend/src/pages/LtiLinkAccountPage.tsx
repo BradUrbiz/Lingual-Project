@@ -27,7 +27,7 @@ export function LtiLinkAccountPage() {
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -37,7 +37,7 @@ export function LtiLinkAccountPage() {
       <div className="w-full max-w-md">
         <Card className="border-3 border-foreground p-8 shadow-stamp space-y-6">
           <div className="text-center space-y-3">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-foreground bg-primary/10 text-primary">
+            <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border-2 border-foreground bg-primary/10 text-primary">
               <Link2 size={28} strokeWidth={2.5} />
             </div>
             <h1 className="text-2xl font-display font-bold text-foreground">
@@ -68,12 +68,12 @@ export function LtiLinkAccountPage() {
               <Button onClick={handleLinkAccount} className="w-full" loading={loading}>
                 {loading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Linking...
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Linking…
                   </>
                 ) : (
                   <>
-                    <Link2 className="mr-2 h-4 w-4" />
+                    <Link2 className="mr-2 size-4" />
                     Link Account
                   </>
                 )}
@@ -87,7 +87,7 @@ export function LtiLinkAccountPage() {
               </p>
               <Link to="/login" className="block">
                 <Button className="w-full">
-                  <LogIn className="mr-2 h-4 w-4" />
+                  <LogIn className="mr-2 size-4" />
                   Sign Up / Log In
                 </Button>
               </Link>

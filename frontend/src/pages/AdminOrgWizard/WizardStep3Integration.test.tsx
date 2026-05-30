@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { WizardStep3Integration, validateStep3 } from './WizardStep3Integration';
+import { WizardStep3Integration } from './WizardStep3Integration';
+import { validateStep3 } from './wizardValidation';
 
 describe('WizardStep3Integration', () => {
   it('hides Canvas fields by default', () => {

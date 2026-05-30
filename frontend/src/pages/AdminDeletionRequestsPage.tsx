@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -46,7 +46,7 @@ const SCOPE_LABELS: Record<DeletionScopeType, string> = {
 };
 
 function formatTimestamp(value?: string | null) {
-  if (!value) return '—';
+  if (!value) return '-';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString();
@@ -59,47 +59,356 @@ function StatusBadge({ status }: { status: DeletionRequestStatus }) {
 
 function StatusIcon({ status }: { status: DeletionRequestStatus }) {
   switch (status) {
-    case 'requested': return <Clock className="w-4 h-4 text-amber-500" />;
-    case 'approved': return <CheckCircle2 className="w-4 h-4 text-blue-500" />;
-    case 'rejected': return <XCircle className="w-4 h-4 text-gray-400" />;
-    case 'in_progress': return <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />;
-    case 'completed': return <CheckCircle2 className="w-4 h-4 text-green-500" />;
-    case 'failed': return <AlertTriangle className="w-4 h-4 text-red-500" />;
-    case 'partially_completed': return <AlertTriangle className="w-4 h-4 text-orange-500" />;
+    case 'requested': return <Clock className="size-4 text-amber-500" />;
+    case 'approved': return <CheckCircle2 className="size-4 text-blue-500" />;
+    case 'rejected': return <XCircle className="size-4 text-gray-400" />;
+    case 'in_progress': return <Loader2 className="size-4 text-indigo-500 animate-spin" />;
+    case 'completed': return <CheckCircle2 className="size-4 text-green-500" />;
+    case 'failed': return <AlertTriangle className="size-4 text-red-500" />;
+    case 'partially_completed': return <AlertTriangle className="size-4 text-orange-500" />;
   }
+}
+
+type AdminDeletionState = {
+  requests: DeletionRequest[];
+  loading: boolean;
+  error: string | null;
+  actionLoading: string | null;
+  statusMessage: string | null;
+  showNewForm: boolean;
+  newScopeType: DeletionScopeType;
+  newScopeId: string;
+  newReason: string;
+  creating: boolean;
+  reviewNotes: string;
+};
+
+type AdminDeletionAction =
+  | { type: 'load-start' }
+  | { type: 'load-success'; requests: DeletionRequest[] }
+  | { type: 'load-error'; error: string }
+  | { type: 'set-action-loading'; requestId: string | null }
+  | { type: 'set-error'; error: string | null }
+  | { type: 'set-status-message'; statusMessage: string | null }
+  | { type: 'toggle-new-form' }
+  | { type: 'set-new-form-field'; field: 'newScopeId' | 'newReason'; value: string }
+  | { type: 'set-new-scope-type'; value: DeletionScopeType }
+  | { type: 'create-start' }
+  | { type: 'create-success' }
+  | { type: 'create-finished' }
+  | { type: 'set-review-notes'; reviewNotes: string };
+
+const initialAdminDeletionState: AdminDeletionState = {
+  requests: [],
+  loading: true,
+  error: null,
+  actionLoading: null,
+  statusMessage: null,
+  showNewForm: false,
+  newScopeType: 'student',
+  newScopeId: '',
+  newReason: '',
+  creating: false,
+  reviewNotes: '',
+};
+
+function adminDeletionReducer(
+  state: AdminDeletionState,
+  action: AdminDeletionAction
+): AdminDeletionState {
+  switch (action.type) {
+    case 'load-start':
+      return { ...state, loading: true, error: null };
+    case 'load-success':
+      return { ...state, requests: action.requests, loading: false };
+    case 'load-error':
+      return { ...state, error: action.error, loading: false };
+    case 'set-action-loading':
+      return { ...state, actionLoading: action.requestId };
+    case 'set-error':
+      return { ...state, error: action.error };
+    case 'set-status-message':
+      return { ...state, statusMessage: action.statusMessage };
+    case 'toggle-new-form':
+      return { ...state, showNewForm: !state.showNewForm };
+    case 'set-new-form-field':
+      return { ...state, [action.field]: action.value };
+    case 'set-new-scope-type':
+      return { ...state, newScopeType: action.value };
+    case 'create-start':
+      return { ...state, creating: true, error: null };
+    case 'create-success':
+      return {
+        ...state,
+        showNewForm: false,
+        newScopeId: '',
+        newReason: '',
+        statusMessage: 'Deletion request created successfully.',
+      };
+    case 'create-finished':
+      return { ...state, creating: false };
+    case 'set-review-notes':
+      return { ...state, reviewNotes: action.reviewNotes };
+    default:
+      return state;
+  }
+}
+
+type NewDeletionRequestFormProps = {
+  scopeType: DeletionScopeType;
+  scopeId: string;
+  reason: string;
+  creating: boolean;
+  onScopeTypeChange: (value: DeletionScopeType) => void;
+  onScopeIdChange: (value: string) => void;
+  onReasonChange: (value: string) => void;
+  onCreate: () => void;
+  onCancel: () => void;
+};
+
+function NewDeletionRequestForm({
+  scopeType,
+  scopeId,
+  reason,
+  creating,
+  onScopeTypeChange,
+  onScopeIdChange,
+  onReasonChange,
+  onCreate,
+  onCancel,
+}: NewDeletionRequestFormProps) {
+  return (
+    <Card className="p-4 space-y-3 border-dashed">
+      <h3 className="text-sm font-medium">Create Deletion Request</h3>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="deletion-scope-type" className="text-xs text-muted-foreground">Scope Type</label>
+          <select
+            id="deletion-scope-type"
+            className="w-full mt-1 px-3 py-2 rounded-md border text-sm bg-background"
+            value={scopeType}
+            onChange={(e) => onScopeTypeChange(e.target.value as DeletionScopeType)}
+          >
+            <option value="student">Student</option>
+            <option value="class">Class</option>
+            <option value="org">Organization</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="deletion-scope-id" className="text-xs text-muted-foreground">
+            {scopeType === 'student' ? 'Student UID' : scopeType === 'class' ? 'Class ID' : 'Organization ID'}
+          </label>
+          <Input
+            id="deletion-scope-id"
+            className="mt-1"
+            placeholder={`Enter ${scopeType} ID`}
+            value={scopeId}
+            onChange={(e) => onScopeIdChange(e.target.value)}
+          />
+        </div>
+      </div>
+      <div>
+        <label htmlFor="deletion-reason" className="text-xs text-muted-foreground">Reason (optional)</label>
+        <Input
+          id="deletion-reason"
+          className="mt-1"
+          placeholder="e.g., Parent deletion request under COPPA"
+          value={reason}
+          onChange={(e) => onReasonChange(e.target.value)}
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={onCreate} disabled={creating || !scopeId.trim()}>
+          {creating && <Loader2 className="size-3 mr-1 animate-spin" />}
+          Submit Request
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+type DeletionRequestListProps = {
+  requests: DeletionRequest[];
+  loading: boolean;
+  creating: boolean;
+  actionLoading: string | null;
+  reviewNotes: string;
+  onReviewNotesChange: (requestId: string, value: string) => void;
+  onApprove: (requestId: string) => void;
+  onReject: (requestId: string) => void;
+  onExecute: (requestId: string) => void;
+  onRetry: (requestId: string) => void;
+};
+
+function DeletionRequestList({
+  requests,
+  loading,
+  creating,
+  actionLoading,
+  reviewNotes,
+  onReviewNotesChange,
+  onApprove,
+  onReject,
+  onExecute,
+  onRetry,
+}: DeletionRequestListProps) {
+  if (loading && requests.length === 0) {
+    return (
+      <div className="flex justify-center py-12">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (requests.length === 0) {
+    return (
+      <Card className="p-8 text-center text-muted-foreground">
+        No deletion requests found.
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {requests.map((req) => (
+        <Card key={req.id} className="p-4">
+          <div className="flex items-start gap-3">
+            <StatusIcon status={req.status} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <StatusBadge status={req.status} />
+                <Badge variant="outline">{SCOPE_LABELS[req.scopeType]}</Badge>
+                <span className="text-xs text-muted-foreground font-mono truncate">
+                  {req.scopeId}
+                </span>
+              </div>
+              {req.requestReason && (
+                <p className="text-sm text-muted-foreground mt-1">{req.requestReason}</p>
+              )}
+              {req.reviewNotes && (
+                <p className="text-xs text-muted-foreground mt-1 italic">
+                  Review: {req.reviewNotes}
+                </p>
+              )}
+              <div className="text-xs text-muted-foreground mt-2 flex gap-4">
+                <span>Created: {formatTimestamp(req.createdAt)}</span>
+                {req.completedAt && <span>Completed: {formatTimestamp(req.completedAt)}</span>}
+              </div>
+
+              {req.executionSummary && typeof req.executionSummary === 'object' && 'firestoreCounts' in req.executionSummary && (
+                <div className="text-xs mt-2 p-2 bg-muted/50 rounded">
+                  {(() => {
+                    const counts = req.executionSummary as Record<string, unknown>;
+                    const fc = counts.firestoreCounts as Record<string, number> | undefined;
+                    return fc ? (
+                      <span>
+                        Firestore: {fc.deleted ?? 0} deleted / {fc.targeted ?? 0} targeted
+                        {fc.failed ? ` / ${fc.failed} failed` : ''}
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1 shrink-0">
+              {req.status === 'requested' && (
+                <>
+                  <Input
+                    placeholder="Review notes"
+                    className="text-xs h-7 w-40"
+                    value={actionLoading === req.id ? reviewNotes : ''}
+                    onChange={(e) => onReviewNotesChange(req.id, e.target.value)}
+                    onFocus={() => onReviewNotesChange(req.id, reviewNotes)}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-7"
+                    disabled={actionLoading === req.id && creating}
+                    onClick={() => onApprove(req.id)}
+                  >
+                    <CheckCircle2 className="size-3 mr-1" /> Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs h-7"
+                    disabled={actionLoading === req.id && creating}
+                    onClick={() => onReject(req.id)}
+                  >
+                    <XCircle className="size-3 mr-1" /> Reject
+                  </Button>
+                </>
+              )}
+              {req.status === 'approved' && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="text-xs h-7"
+                  disabled={actionLoading === req.id}
+                  onClick={() => onExecute(req.id)}
+                >
+                  {actionLoading === req.id
+                    ? <Loader2 className="size-3 mr-1 animate-spin" />
+                    : <Play className="size-3 mr-1" />}
+                  Execute
+                </Button>
+              )}
+              {(req.status === 'failed' || req.status === 'partially_completed') && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs h-7"
+                  disabled={actionLoading === req.id}
+                  onClick={() => onRetry(req.id)}
+                >
+                  {actionLoading === req.id
+                    ? <Loader2 className="size-3 mr-1 animate-spin" />
+                    : <RefreshCw className="size-3 mr-1" />}
+                  Retry
+                </Button>
+              )}
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
 }
 
 export function AdminDeletionRequestsPage() {
   const navigate = useNavigate();
   const { hasRole } = useMembership();
   const isAdmin = hasRole('school_admin');
-
-  const [requests, setRequests] = useState<DeletionRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-
-  // New request form
-  const [showNewForm, setShowNewForm] = useState(false);
-  const [newScopeType, setNewScopeType] = useState<DeletionScopeType>('student');
-  const [newScopeId, setNewScopeId] = useState('');
-  const [newReason, setNewReason] = useState('');
-  const [creating, setCreating] = useState(false);
-
-  // Review notes
-  const [reviewNotes, setReviewNotes] = useState('');
+  const [state, dispatch] = useReducer(adminDeletionReducer, initialAdminDeletionState);
+  const {
+    requests,
+    loading,
+    error,
+    actionLoading,
+    statusMessage,
+    showNewForm,
+    newScopeType,
+    newScopeId,
+    newReason,
+    creating,
+    reviewNotes,
+  } = state;
 
   const loadRequests = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
+      dispatch({ type: 'load-start' });
       const data = await listDeletionRequests();
-      setRequests(data);
+      dispatch({ type: 'load-success', requests: data });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load deletion requests.');
-    } finally {
-      setLoading(false);
+      dispatch({
+        type: 'load-error',
+        error: err instanceof Error ? err.message : 'Failed to load deletion requests.',
+      });
     }
   }, []);
 
@@ -110,77 +419,73 @@ export function AdminDeletionRequestsPage() {
   const handleCreate = async () => {
     if (!newScopeId.trim()) return;
     try {
-      setCreating(true);
-      setError(null);
+      dispatch({ type: 'create-start' });
       const payload: CreateDeletionRequestPayload = {
         scopeType: newScopeType,
         scopeId: newScopeId.trim(),
         requestReason: newReason.trim() || undefined,
       };
       await createDeletionRequest(payload);
-      setShowNewForm(false);
-      setNewScopeId('');
-      setNewReason('');
-      setStatusMessage('Deletion request created successfully.');
+      dispatch({ type: 'create-success' });
       await loadRequests();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create request.');
+      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : 'Failed to create request.' });
     } finally {
-      setCreating(false);
+      dispatch({ type: 'create-finished' });
     }
   };
 
   const handleApprove = async (requestId: string) => {
     try {
-      setActionLoading(requestId);
+      dispatch({ type: 'set-action-loading', requestId });
       await approveDeletionRequest(requestId, reviewNotes);
-      setReviewNotes('');
-      setStatusMessage('Request approved.');
+      dispatch({ type: 'set-review-notes', reviewNotes: '' });
+      dispatch({ type: 'set-status-message', statusMessage: 'Request approved.' });
       await loadRequests();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to approve.');
+      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : 'Failed to approve.' });
     } finally {
-      setActionLoading(null);
+      dispatch({ type: 'set-action-loading', requestId: null });
     }
   };
 
   const handleReject = async (requestId: string) => {
     try {
-      setActionLoading(requestId);
+      dispatch({ type: 'set-action-loading', requestId });
       await rejectDeletionRequest(requestId, reviewNotes);
-      setReviewNotes('');
-      setStatusMessage('Request rejected.');
+      dispatch({ type: 'set-review-notes', reviewNotes: '' });
+      dispatch({ type: 'set-status-message', statusMessage: 'Request rejected.' });
       await loadRequests();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reject.');
+      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : 'Failed to reject.' });
     } finally {
-      setActionLoading(null);
+      dispatch({ type: 'set-action-loading', requestId: null });
     }
   };
 
   const handleExecute = async (requestId: string) => {
     try {
-      setActionLoading(requestId);
+      dispatch({ type: 'set-action-loading', requestId });
       await executeDeletionRequest(requestId);
-      setStatusMessage('Deletion executed.');
+      dispatch({ type: 'set-status-message', statusMessage: 'Deletion executed.' });
       await loadRequests();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Execution failed.');
+      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : 'Execution failed.' });
     } finally {
-      setActionLoading(null);
+      dispatch({ type: 'set-action-loading', requestId: null });
     }
   };
 
   const handleRetry = async (requestId: string) => {
     try {
-      setActionLoading(requestId);
+      dispatch({ type: 'set-action-loading', requestId });
       await retryDeletionRequest(requestId);
-      setStatusMessage('Retry executed.');
+      dispatch({ type: 'set-status-message', statusMessage: 'Retry executed.' });
       await loadRequests();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Retry failed.');
+      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : 'Retry failed.' });
     } finally {
-      setActionLoading(null);
+      dispatch({ type: 'set-action-loading', requestId: null });
     }
   };
 
@@ -201,11 +506,11 @@ export function AdminDeletionRequestsPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate('/app/teacher')}>
-          <ArrowLeft className="w-4 h-4 mr-1" /> Back
+          <ArrowLeft className="size-4 mr-1" /> Back
         </Button>
         <div className="flex-1">
           <h1 className="text-xl font-semibold flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5" />
+            <ShieldAlert className="size-5" />
             Data Deletion Requests
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -213,198 +518,57 @@ export function AdminDeletionRequestsPage() {
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={loadRequests} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
+          <RefreshCw className={`size-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
         </Button>
-        <Button size="sm" onClick={() => setShowNewForm(!showNewForm)}>
-          <Trash2 className="w-4 h-4 mr-1" /> New Request
+        <Button size="sm" onClick={() => dispatch({ type: 'toggle-new-form' })}>
+          <Trash2 className="size-4 mr-1" /> New Request
         </Button>
       </div>
 
       {/* Status messages */}
       {statusMessage && (
         <Alert>
-          <CheckCircle2 className="w-4 h-4" />
+          <CheckCircle2 className="size-4" />
           <AlertDescription>{statusMessage}</AlertDescription>
         </Alert>
       )}
       {error && (
         <Alert variant="destructive">
-          <AlertTriangle className="w-4 h-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
       {/* New request form */}
       {showNewForm && (
-        <Card className="p-4 space-y-3 border-dashed">
-          <h3 className="text-sm font-medium">Create Deletion Request</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground">Scope Type</label>
-              <select
-                className="w-full mt-1 px-3 py-2 rounded-md border text-sm bg-background"
-                value={newScopeType}
-                onChange={(e) => setNewScopeType(e.target.value as DeletionScopeType)}
-              >
-                <option value="student">Student</option>
-                <option value="class">Class</option>
-                <option value="org">Organization</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">
-                {newScopeType === 'student' ? 'Student UID' : newScopeType === 'class' ? 'Class ID' : 'Organization ID'}
-              </label>
-              <Input
-                className="mt-1"
-                placeholder={`Enter ${newScopeType} ID`}
-                value={newScopeId}
-                onChange={(e) => setNewScopeId(e.target.value)}
-              />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Reason (optional)</label>
-            <Input
-              className="mt-1"
-              placeholder="e.g., Parent deletion request under COPPA"
-              value={newReason}
-              onChange={(e) => setNewReason(e.target.value)}
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={handleCreate} disabled={creating || !newScopeId.trim()}>
-              {creating && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-              Submit Request
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setShowNewForm(false)}>
-              Cancel
-            </Button>
-          </div>
-        </Card>
+        <NewDeletionRequestForm
+          scopeType={newScopeType}
+          scopeId={newScopeId}
+          reason={newReason}
+          creating={creating}
+          onScopeTypeChange={(value) => dispatch({ type: 'set-new-scope-type', value })}
+          onScopeIdChange={(value) => dispatch({ type: 'set-new-form-field', field: 'newScopeId', value })}
+          onReasonChange={(value) => dispatch({ type: 'set-new-form-field', field: 'newReason', value })}
+          onCreate={handleCreate}
+          onCancel={() => dispatch({ type: 'toggle-new-form' })}
+        />
       )}
 
-      {/* Request list */}
-      {loading && requests.length === 0 ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : requests.length === 0 ? (
-        <Card className="p-8 text-center text-muted-foreground">
-          No deletion requests found.
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {requests.map((req) => (
-            <Card key={req.id} className="p-4">
-              <div className="flex items-start gap-3">
-                <StatusIcon status={req.status} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <StatusBadge status={req.status} />
-                    <Badge variant="outline">{SCOPE_LABELS[req.scopeType]}</Badge>
-                    <span className="text-xs text-muted-foreground font-mono truncate">
-                      {req.scopeId}
-                    </span>
-                  </div>
-                  {req.requestReason && (
-                    <p className="text-sm text-muted-foreground mt-1">{req.requestReason}</p>
-                  )}
-                  {req.reviewNotes && (
-                    <p className="text-xs text-muted-foreground mt-1 italic">
-                      Review: {req.reviewNotes}
-                    </p>
-                  )}
-                  <div className="text-xs text-muted-foreground mt-2 flex gap-4">
-                    <span>Created: {formatTimestamp(req.createdAt)}</span>
-                    {req.completedAt && <span>Completed: {formatTimestamp(req.completedAt)}</span>}
-                  </div>
-
-                  {/* Execution summary */}
-                  {req.executionSummary && typeof req.executionSummary === 'object' && 'firestoreCounts' in req.executionSummary && (
-                    <div className="text-xs mt-2 p-2 bg-muted/50 rounded">
-                      {(() => {
-                        const counts = req.executionSummary as Record<string, unknown>;
-                        const fc = counts.firestoreCounts as Record<string, number> | undefined;
-                        return fc ? (
-                          <span>
-                            Firestore: {fc.deleted ?? 0} deleted / {fc.targeted ?? 0} targeted
-                            {fc.failed ? ` / ${fc.failed} failed` : ''}
-                          </span>
-                        ) : null;
-                      })()}
-                    </div>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <div className="flex flex-col gap-1 shrink-0">
-                  {req.status === 'requested' && (
-                    <>
-                      <Input
-                        placeholder="Review notes"
-                        className="text-xs h-7 w-40"
-                        value={actionLoading === req.id ? reviewNotes : ''}
-                        onChange={(e) => {
-                          setActionLoading(req.id);
-                          setReviewNotes(e.target.value);
-                        }}
-                        onFocus={() => setActionLoading(req.id)}
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs h-7"
-                        disabled={actionLoading === req.id && creating}
-                        onClick={() => handleApprove(req.id)}
-                      >
-                        <CheckCircle2 className="w-3 h-3 mr-1" /> Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-xs h-7"
-                        disabled={actionLoading === req.id && creating}
-                        onClick={() => handleReject(req.id)}
-                      >
-                        <XCircle className="w-3 h-3 mr-1" /> Reject
-                      </Button>
-                    </>
-                  )}
-                  {req.status === 'approved' && (
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="text-xs h-7"
-                      disabled={actionLoading === req.id}
-                      onClick={() => handleExecute(req.id)}
-                    >
-                      {actionLoading === req.id
-                        ? <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        : <Play className="w-3 h-3 mr-1" />}
-                      Execute
-                    </Button>
-                  )}
-                  {(req.status === 'failed' || req.status === 'partially_completed') && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-xs h-7"
-                      disabled={actionLoading === req.id}
-                      onClick={() => handleRetry(req.id)}
-                    >
-                      {actionLoading === req.id
-                        ? <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        : <RefreshCw className="w-3 h-3 mr-1" />}
-                      Retry
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
+      <DeletionRequestList
+        requests={requests}
+        loading={loading}
+        creating={creating}
+        actionLoading={actionLoading}
+        reviewNotes={reviewNotes}
+        onReviewNotesChange={(requestId, value) => {
+          dispatch({ type: 'set-action-loading', requestId });
+          dispatch({ type: 'set-review-notes', reviewNotes: value });
+        }}
+        onApprove={(requestId) => void handleApprove(requestId)}
+        onReject={(requestId) => void handleReject(requestId)}
+        onExecute={(requestId) => void handleExecute(requestId)}
+        onRetry={(requestId) => void handleRetry(requestId)}
+      />
     </div>
   );
 }

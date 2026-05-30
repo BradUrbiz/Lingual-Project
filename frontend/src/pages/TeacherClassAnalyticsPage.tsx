@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -11,6 +11,7 @@ import {
   Loader2,
   MessageSquareText,
   ShieldCheck,
+  type LucideIcon,
   Users,
   X,
 } from 'lucide-react';
@@ -28,32 +29,339 @@ const STATUS_OPTIONS = [
   { value: 'archived', label: 'Archived' },
 ];
 
+const SELECT_STYLE = 'h-9 rounded-xl border-2 border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none';
+
+type ClassAnalyticsState = {
+  loading: boolean;
+  error: string | null;
+  analytics: ClassAnalyticsData | null;
+  dateFrom: string;
+  dateTo: string;
+  appliedDateFrom: string;
+  appliedDateTo: string;
+  statusFilter: string;
+};
+
+type ClassAnalyticsAction =
+  | { type: 'invalid-class' }
+  | { type: 'load-start' }
+  | { type: 'load-success'; analytics: ClassAnalyticsData }
+  | { type: 'load-error'; error: string }
+  | { type: 'set-date-from'; value: string }
+  | { type: 'set-date-to'; value: string }
+  | { type: 'set-status-filter'; value: string }
+  | { type: 'apply-date-filter' }
+  | { type: 'clear-date-filter' };
+
+const initialClassAnalyticsState: ClassAnalyticsState = {
+  loading: true,
+  error: null,
+  analytics: null,
+  dateFrom: '',
+  dateTo: '',
+  appliedDateFrom: '',
+  appliedDateTo: '',
+  statusFilter: '',
+};
+
+function classAnalyticsReducer(
+  state: ClassAnalyticsState,
+  action: ClassAnalyticsAction
+): ClassAnalyticsState {
+  switch (action.type) {
+    case 'invalid-class':
+      return { ...state, loading: false, error: 'Class id is required.' };
+    case 'load-start':
+      return { ...state, loading: true };
+    case 'load-success':
+      return { ...state, loading: false, analytics: action.analytics, error: null };
+    case 'load-error':
+      return { ...state, loading: false, error: action.error };
+    case 'set-date-from':
+      return { ...state, dateFrom: action.value };
+    case 'set-date-to':
+      return { ...state, dateTo: action.value };
+    case 'set-status-filter':
+      return { ...state, statusFilter: action.value };
+    case 'apply-date-filter':
+      return { ...state, appliedDateFrom: state.dateFrom, appliedDateTo: state.dateTo };
+    case 'clear-date-filter':
+      return { ...state, dateFrom: '', dateTo: '', appliedDateFrom: '', appliedDateTo: '' };
+    default:
+      return state;
+  }
+}
+
+type AnalyticsStat = {
+  label: string;
+  value: ReactNode;
+  icon: LucideIcon;
+  accent: string;
+};
+
+function AnalyticsStatsGrid({ stats }: { stats: AnalyticsStat[] }) {
+  return (
+    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-6">
+      {stats.map((stat) => (
+        <Card key={stat.label} className="border-3 border-foreground p-5 shadow-stamp">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-foreground ${stat.accent}`}>
+              <stat.icon size={22} strokeWidth={2.5} />
+            </div>
+          </div>
+          <p className="text-3xl font-display font-bold text-foreground">{stat.value}</p>
+          <p className="mt-1 text-sm font-medium text-muted-foreground">{stat.label}</p>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+type ClassAnalyticsFiltersProps = {
+  dateFrom: string;
+  dateTo: string;
+  appliedDateFrom: string;
+  appliedDateTo: string;
+  statusFilter: string;
+  loading: boolean;
+  hasActiveDateFilter: boolean;
+  onDateFromChange: (value: string) => void;
+  onDateToChange: (value: string) => void;
+  onStatusFilterChange: (value: string) => void;
+  onApplyDateFilter: () => void;
+  onClearDateFilter: () => void;
+};
+
+function ClassAnalyticsFilters({
+  dateFrom,
+  dateTo,
+  appliedDateFrom,
+  appliedDateTo,
+  statusFilter,
+  loading,
+  hasActiveDateFilter,
+  onDateFromChange,
+  onDateToChange,
+  onStatusFilterChange,
+  onApplyDateFilter,
+  onClearDateFilter,
+}: ClassAnalyticsFiltersProps) {
+  return (
+    <Card className="border-2 border-border p-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Filter size={16} />
+          Filters
+        </div>
+        <label className="space-y-1">
+          <span className="text-xs font-medium text-muted-foreground">From</span>
+          <div className="relative">
+            <Calendar className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => onDateFromChange(e.target.value)}
+              className={SELECT_STYLE + ' pl-8 w-[160px]'}
+            />
+          </div>
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs font-medium text-muted-foreground">To</span>
+          <div className="relative">
+            <Calendar className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => onDateToChange(e.target.value)}
+              className={SELECT_STYLE + ' pl-8 w-[160px]'}
+            />
+          </div>
+        </label>
+        <Button size="sm" onClick={onApplyDateFilter} disabled={loading || (!dateFrom && !dateTo)}>
+          {loading ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : null}
+          Apply
+        </Button>
+        {hasActiveDateFilter && (
+          <Button variant="ghost" size="sm" onClick={onClearDateFilter} disabled={loading}>
+            <X size={14} className="mr-1" />
+            Clear dates
+          </Button>
+        )}
+        <div className="ml-auto">
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Assignment status</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => onStatusFilterChange(e.target.value)}
+              className={SELECT_STYLE + ' w-[150px]'}
+            >
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+      {hasActiveDateFilter && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Showing sessions from{' '}
+          <strong>{appliedDateFrom || 'the beginning'}</strong>
+          {' to '}
+          <strong>{appliedDateTo || 'now'}</strong>
+        </p>
+      )}
+    </Card>
+  );
+}
+
+type AssignmentActivityCardProps = {
+  assignments: ClassAnalyticsData['assignments'];
+  classId: string | undefined;
+  statusFilter: string;
+  onOpenAssignment: (assignmentId: string) => void;
+};
+
+function AssignmentActivityCard({
+  assignments,
+  classId,
+  statusFilter,
+  onOpenAssignment,
+}: AssignmentActivityCardProps) {
+  return (
+    <Card className="border-3 border-foreground p-6 shadow-stamp">
+      <div className="flex items-center gap-3">
+        <div className="flex size-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
+          <ClipboardList size={22} strokeWidth={2.5} />
+        </div>
+        <div>
+          <h2 className="text-xl font-display font-bold text-foreground">Assignments</h2>
+          <p className="text-sm text-muted-foreground">
+            Per-assignment practice activity
+            {statusFilter ? ` (${statusFilter})` : ''}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-3">
+        {assignments.length === 0 ? (
+          <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
+            {statusFilter
+              ? `No ${statusFilter} assignments found.`
+              : 'No assignments have been created for this class yet.'}
+          </div>
+        ) : (
+          assignments.map((assignment) => (
+            <button
+              type="button"
+              key={assignment.id}
+              className="w-full cursor-pointer rounded-2xl border-2 border-border bg-secondary/40 p-4 text-left transition-colors hover:border-foreground/30"
+              onClick={() => onOpenAssignment(assignment.id)}
+              disabled={!classId}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-foreground">{assignment.title}</p>
+                <Badge variant={assignment.status === 'published' ? 'success' : 'outline'} size="sm">
+                  {assignment.status}
+                </Badge>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                <span>{assignment.sessionCount} sessions</span>
+                <span>{assignment.uniqueStudentCount} students</span>
+                <span>{formatSpeakingMinutes(assignment.estimatedSpeakingTimeSeconds)} min speaking</span>
+                <span>{assignment.selfCorrectionCount} self-corrections</span>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+    </Card>
+  );
+}
+
+type StudentSummaryCardProps = {
+  students: ClassAnalyticsData['students'];
+  classId: string | undefined;
+  onOpenStudent: (studentUid: string) => void;
+};
+
+function StudentSummaryCard({ students, classId, onOpenStudent }: StudentSummaryCardProps) {
+  return (
+    <Card className="border-3 border-foreground p-6 shadow-stamp">
+      <div className="flex items-center gap-3">
+        <div className="flex size-11 items-center justify-center rounded-2xl border-2 border-foreground bg-success text-success-foreground">
+          <Users size={22} strokeWidth={2.5} />
+        </div>
+        <div>
+          <h2 className="text-xl font-display font-bold text-foreground">Students</h2>
+          <p className="text-sm text-muted-foreground">Per-student practice summary</p>
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-3">
+        {students.length === 0 ? (
+          <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
+            No students have practiced in this class yet.
+          </div>
+        ) : (
+          students.map((student) => (
+            <button
+              type="button"
+              key={student.uid}
+              className="w-full cursor-pointer rounded-2xl border-2 border-border bg-secondary/40 p-4 text-left transition-colors hover:border-foreground/30"
+              onClick={() => onOpenStudent(student.uid)}
+              disabled={!classId}
+            >
+              <p className="text-sm font-semibold text-foreground">{student.displayName}</p>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                <span>{student.sessionCount} sessions</span>
+                <span>{formatSpeakingMinutes(student.estimatedSpeakingTimeSeconds)} min speaking</span>
+                <span>{student.totalStudentTurns} turns</span>
+                <span>
+                  {student.averageStudentWordsPerTurn > 0
+                    ? `${student.averageStudentWordsPerTurn} words/turn`
+                    : 'no turns yet'}
+                </span>
+                {student.selfCorrectionCount > 0 && (
+                  <span>{student.selfCorrectionCount} self-corrections</span>
+                )}
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+    </Card>
+  );
+}
+
 export function TeacherClassAnalyticsPage() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [analytics, setAnalytics] = useState<ClassAnalyticsData | null>(null);
-
-  // Filter state
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [appliedDateFrom, setAppliedDateFrom] = useState('');
-  const [appliedDateTo, setAppliedDateTo] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [state, dispatch] = useReducer(classAnalyticsReducer, initialClassAnalyticsState);
+  const {
+    loading,
+    error,
+    analytics,
+    dateFrom,
+    dateTo,
+    appliedDateFrom,
+    appliedDateTo,
+    statusFilter,
+  } = state;
 
   const load = useCallback(
     async (filters?: { dateFrom?: string; dateTo?: string }) => {
       if (!classId) return;
-      setLoading(true);
+      dispatch({ type: 'load-start' });
       try {
         const data = await getClassAnalytics(classId, filters);
-        setAnalytics(data);
-        setError(null);
+        dispatch({ type: 'load-success', analytics: data });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load class analytics.');
-      } finally {
-        setLoading(false);
+        dispatch({
+          type: 'load-error',
+          error: err instanceof Error ? err.message : 'Failed to load class analytics.',
+        });
       }
     },
     [classId],
@@ -61,16 +369,14 @@ export function TeacherClassAnalyticsPage() {
 
   useEffect(() => {
     if (!classId) {
-      setLoading(false);
-      setError('Class id is required.');
+      dispatch({ type: 'invalid-class' });
       return;
     }
     void load();
   }, [classId, load]);
 
   const applyDateFilter = () => {
-    setAppliedDateFrom(dateFrom);
-    setAppliedDateTo(dateTo);
+    dispatch({ type: 'apply-date-filter' });
     const filters: { dateFrom?: string; dateTo?: string } = {};
     if (dateFrom) filters.dateFrom = new Date(dateFrom).toISOString();
     if (dateTo) {
@@ -83,10 +389,7 @@ export function TeacherClassAnalyticsPage() {
   };
 
   const clearDateFilter = () => {
-    setDateFrom('');
-    setDateTo('');
-    setAppliedDateFrom('');
-    setAppliedDateTo('');
+    dispatch({ type: 'clear-date-filter' });
     void load();
   };
 
@@ -102,7 +405,7 @@ export function TeacherClassAnalyticsPage() {
   if (loading && !analytics) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -133,8 +436,6 @@ export function TeacherClassAnalyticsPage() {
     { label: 'Self-corrections', value: analytics.summary.selfCorrectionCount, icon: CheckCircle2, accent: 'bg-primary/5 text-foreground' },
     { label: 'Repeated errors', value: analytics.summary.repeatedErrorCount, icon: AlertTriangle, accent: 'bg-destructive/10 text-destructive' },
   ];
-
-  const selectStyle = 'h-9 rounded-xl border-2 border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none';
 
   return (
     <div className="space-y-6">
@@ -173,7 +474,7 @@ export function TeacherClassAnalyticsPage() {
 
       {analytics.limitations.map((message) => (
         <Alert key={message}>
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ))}
@@ -194,185 +495,40 @@ export function TeacherClassAnalyticsPage() {
           />
           <OnboardingHint
             show={analytics.summary.enrolledStudentCount > 0 && analytics.assignments.length > 0 && analytics.assignments.every((a: { sessionCount?: number }) => (a.sessionCount ?? 0) === 0)}
-            message="Your assignments are ready — students can start practicing."
+            message="Your assignments are ready - students can start practicing."
           />
         </>
       )}
 
-      {/* Date range filter */}
-      <Card className="border-2 border-border p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Filter size={16} />
-            Filters
-          </div>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">From</span>
-            <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className={selectStyle + ' pl-8 w-[160px]'}
-              />
-            </div>
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">To</span>
-            <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className={selectStyle + ' pl-8 w-[160px]'}
-              />
-            </div>
-          </label>
-          <Button size="sm" onClick={applyDateFilter} disabled={loading || (!dateFrom && !dateTo)}>
-            {loading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-            Apply
-          </Button>
-          {hasActiveDateFilter && (
-            <Button variant="ghost" size="sm" onClick={clearDateFilter} disabled={loading}>
-              <X size={14} className="mr-1" />
-              Clear dates
-            </Button>
-          )}
-          <div className="ml-auto">
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">Assignment status</span>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className={selectStyle + ' w-[150px]'}
-              >
-                {STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </div>
-        {hasActiveDateFilter && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Showing sessions from{' '}
-            <strong>{appliedDateFrom || 'the beginning'}</strong>
-            {' to '}
-            <strong>{appliedDateTo || 'now'}</strong>
-          </p>
-        )}
-      </Card>
+      <ClassAnalyticsFilters
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        appliedDateFrom={appliedDateFrom}
+        appliedDateTo={appliedDateTo}
+        statusFilter={statusFilter}
+        loading={loading}
+        hasActiveDateFilter={Boolean(hasActiveDateFilter)}
+        onDateFromChange={(value) => dispatch({ type: 'set-date-from', value })}
+        onDateToChange={(value) => dispatch({ type: 'set-date-to', value })}
+        onStatusFilterChange={(value) => dispatch({ type: 'set-status-filter', value })}
+        onApplyDateFilter={applyDateFilter}
+        onClearDateFilter={clearDateFilter}
+      />
 
-      {/* Summary stats */}
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-6">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="border-3 border-foreground p-5 shadow-stamp">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-foreground ${stat.accent}`}>
-                <stat.icon size={22} strokeWidth={2.5} />
-              </div>
-            </div>
-            <p className="text-3xl font-display font-bold text-foreground">{stat.value}</p>
-            <p className="mt-1 text-sm font-medium text-muted-foreground">{stat.label}</p>
-          </Card>
-        ))}
-      </div>
+      <AnalyticsStatsGrid stats={stats} />
 
       <div className="grid gap-6 xl:grid-cols-2">
-        {/* Assignment breakdown */}
-        <Card className="border-3 border-foreground p-6 shadow-stamp">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
-              <ClipboardList size={22} strokeWidth={2.5} />
-            </div>
-            <div>
-              <h2 className="text-xl font-display font-bold text-foreground">Assignments</h2>
-              <p className="text-sm text-muted-foreground">
-                Per-assignment practice activity
-                {statusFilter ? ` (${statusFilter})` : ''}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-3">
-            {filteredAssignments.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
-                {statusFilter
-                  ? `No ${statusFilter} assignments found.`
-                  : 'No assignments have been created for this class yet.'}
-              </div>
-            ) : (
-              filteredAssignments.map((assignment) => (
-                <div
-                  key={assignment.id}
-                  className="cursor-pointer rounded-2xl border-2 border-border bg-secondary/40 p-4 transition-colors hover:border-foreground/30"
-                  onClick={() => navigate(`/app/teacher/classes/${classId}/assignments/${assignment.id}/analytics`)}
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold text-foreground">{assignment.title}</p>
-                    <Badge variant={assignment.status === 'published' ? 'success' : 'outline'} size="sm">
-                      {assignment.status}
-                    </Badge>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                    <span>{assignment.sessionCount} sessions</span>
-                    <span>{assignment.uniqueStudentCount} students</span>
-                    <span>{formatSpeakingMinutes(assignment.estimatedSpeakingTimeSeconds)} min speaking</span>
-                    <span>{assignment.selfCorrectionCount} self-corrections</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
-
-        {/* Student roster */}
-        <Card className="border-3 border-foreground p-6 shadow-stamp">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-success text-success-foreground">
-              <Users size={22} strokeWidth={2.5} />
-            </div>
-            <div>
-              <h2 className="text-xl font-display font-bold text-foreground">Students</h2>
-              <p className="text-sm text-muted-foreground">Per-student practice summary</p>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-3">
-            {analytics.students.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
-                No students have practiced in this class yet.
-              </div>
-            ) : (
-              analytics.students.map((student) => (
-                <div
-                  key={student.uid}
-                  className="cursor-pointer rounded-2xl border-2 border-border bg-secondary/40 p-4 transition-colors hover:border-foreground/30"
-                  onClick={() => navigate(`/app/teacher/classes/${classId}/students/${student.uid}/analytics`)}
-                >
-                  <p className="text-sm font-semibold text-foreground">{student.displayName}</p>
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                    <span>{student.sessionCount} sessions</span>
-                    <span>{formatSpeakingMinutes(student.estimatedSpeakingTimeSeconds)} min speaking</span>
-                    <span>{student.totalStudentTurns} turns</span>
-                    <span>
-                      {student.averageStudentWordsPerTurn > 0
-                        ? `${student.averageStudentWordsPerTurn} words/turn`
-                        : 'no turns yet'}
-                    </span>
-                    {student.selfCorrectionCount > 0 && (
-                      <span>{student.selfCorrectionCount} self-corrections</span>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
+        <AssignmentActivityCard
+          assignments={filteredAssignments}
+          classId={classId}
+          statusFilter={statusFilter}
+          onOpenAssignment={(assignmentId) => navigate(`/app/teacher/classes/${classId}/assignments/${assignmentId}/analytics`)}
+        />
+        <StudentSummaryCard
+          students={analytics.students}
+          classId={classId}
+          onOpenStudent={(studentUid) => navigate(`/app/teacher/classes/${classId}/students/${studentUid}/analytics`)}
+        />
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ export interface CanvasPracticeSuggestions {
   suggestedTitle: string;
   suggestedDescription: string;
   teacherNotes: string;
-  // Optional — the backend may or may not return suggested learning objectives
+  // Optional - the backend may or may not return suggested learning objectives
   // alongside the other fields. Teachers can still author objectives manually.
   objectives?: string[];
 }

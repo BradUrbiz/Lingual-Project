@@ -79,7 +79,7 @@ export function TeacherDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [savingClass, setSavingClass] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dashboard, setDashboard] = useState<TeacherDashboardData | null>(null);
+  const [dashboard, setDashboard] = useState<TeacherDashboardData>();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [classForm, setClassForm] = useState<CreateTeacherClassPayload>(DEFAULT_CLASS_FORM);
   const [classFilter, setClassFilter] = useState('');
@@ -137,6 +137,7 @@ export function TeacherDashboardPage() {
   };
 
   useEffect(() => {
+    // react-doctor-disable-next-line react-doctor/no-initialize-state -- dashboard already starts undefined and is populated by an async dashboard fetch.
     loadDashboard();
   }, []);
 
@@ -177,7 +178,7 @@ export function TeacherDashboardPage() {
       const data = await getClassJoinCode(classId);
       setJoinCodeData(data);
     } catch {
-      // No active code — that's fine, user can generate one
+      // No active code - that's fine, user can generate one
       setJoinCodeData(null);
     } finally {
       setJoinCodeLoading(false);
@@ -226,20 +227,23 @@ export function TeacherDashboardPage() {
     setCanvasRosterSummary(null);
     setRosterLoading(true);
     try {
+      if (activeRosterClassIdRef.current !== classId) return;
       const [students, gapResponse] = await Promise.all([
         getClassRoster(classId),
         getClassCanvasRosterGap(classId),
       ]);
       // Bail if the teacher clicked a different class's roster button
-      // before this fetch resolved — applying stale data would show
+      // before this fetch resolved - applying stale data would show
       // class A's roster under class B's dialog title.
-      if (activeRosterClassIdRef.current !== classId) return;
-      setRoster(students);
-      setCanvasRosterGap(gapResponse.gap);
-      setCanvasRosterSummary(gapResponse.summary);
+      if (activeRosterClassIdRef.current === classId) {
+        setRoster(students);
+        setCanvasRosterGap(gapResponse.gap);
+        setCanvasRosterSummary(gapResponse.summary);
+      }
     } catch (err) {
-      if (activeRosterClassIdRef.current !== classId) return;
-      setError(err instanceof Error ? err.message : 'Failed to load roster.');
+      if (activeRosterClassIdRef.current === classId) {
+        setError(err instanceof Error ? err.message : 'Failed to load roster.');
+      }
     } finally {
       if (activeRosterClassIdRef.current === classId) {
         setRosterLoading(false);
@@ -287,6 +291,7 @@ export function TeacherDashboardPage() {
   }, [isSchoolAdmin]);
 
   useEffect(() => {
+    // react-doctor-disable-next-line react-doctor/no-derived-state -- teacherInviteCodeLoading is an async request flag reused by load, generate, and refresh actions.
     loadTeamData();
   }, [loadTeamData]);
 
@@ -368,7 +373,7 @@ export function TeacherDashboardPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -446,7 +451,7 @@ export function TeacherDashboardPage() {
         <div className="grid gap-3">
           {dashboard.alerts.map((message) => (
             <Alert key={message}>
-              <AlertTriangle className="h-4 w-4" />
+              <AlertTriangle className="size-4" />
               <AlertDescription>{message}</AlertDescription>
             </Alert>
           ))}
@@ -473,7 +478,7 @@ export function TeacherDashboardPage() {
             ))}
           </select>
           {classFilter && (
-            <button
+            <button type="button"
               onClick={() => setClassFilter('')}
               className="text-xs text-muted-foreground hover:text-foreground"
             >
@@ -537,7 +542,7 @@ export function TeacherDashboardPage() {
               <div key={item.id} className="rounded-2xl border-2 border-border bg-secondary/60 p-4">
                 <div className="flex items-start gap-3">
                   <div
-                    className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-full border-2 ${
+                    className={`mt-0.5 flex size-8 items-center justify-center rounded-full border-2 ${
                       item.completed
                         ? 'border-success bg-success/15 text-success'
                         : 'border-border bg-card text-muted-foreground'
@@ -571,7 +576,7 @@ export function TeacherDashboardPage() {
 
           {filteredClasses.length === 0 ? (
             <div className="mt-6 rounded-3xl border-3 border-dashed border-border bg-secondary/40 p-8 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-foreground bg-card">
+              <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border-2 border-foreground bg-card">
                 <BookOpen size={24} strokeWidth={2.5} />
               </div>
               <h3 className="mt-4 text-xl font-display font-bold text-foreground">No classes yet</h3>
@@ -589,19 +594,12 @@ export function TeacherDashboardPage() {
                 const goToClass = () =>
                   navigate(`/app/teacher/classes/${classSummary.id}/analytics`);
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={classSummary.id}
-                    role="button"
-                    tabIndex={0}
                     onClick={goToClass}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        goToClass();
-                      }
-                    }}
                     aria-label={`Open ${classSummary.name} analytics`}
-                    className="cursor-pointer rounded-2xl border-2 border-border bg-secondary/50 p-5 transition-colors hover:border-primary hover:bg-secondary focus:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className="w-full cursor-pointer rounded-2xl border-2 border-border bg-secondary/50 p-5 text-left transition-colors hover:border-primary hover:bg-secondary focus:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"
                   >
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div>
@@ -672,7 +670,7 @@ export function TeacherDashboardPage() {
                         className={classSummary.canvasLinked ? 'group' : undefined}
                         aria-label={
                           classSummary.canvasLinked
-                            ? 'Canvas linked — click to manage or resync'
+                            ? 'Canvas linked - click to manage or resync'
                             : 'Connect Canvas'
                         }
                         onClick={(event) => {
@@ -705,7 +703,7 @@ export function TeacherDashboardPage() {
                         )}
                       </Button>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -719,7 +717,7 @@ export function TeacherDashboardPage() {
           {/* Teacher Invite Code card */}
           <Card className="border-3 border-foreground p-6 shadow-stamp">
             <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-foreground bg-primary/10 text-primary">
+              <div className="flex size-10 items-center justify-center rounded-2xl border-2 border-foreground bg-primary/10 text-primary">
                 <ShieldCheck size={20} strokeWidth={2.5} />
               </div>
               <div>
@@ -730,7 +728,7 @@ export function TeacherDashboardPage() {
 
             {teacherInviteCodeLoading ? (
               <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <Loader2 className="size-6 animate-spin text-primary" />
               </div>
             ) : teacherInviteCode?.active && teacherInviteCode.inviteCode ? (
               <div className="space-y-4">
@@ -738,7 +736,7 @@ export function TeacherDashboardPage() {
                   <span className="font-mono text-4xl font-bold tracking-[0.4em] text-foreground">
                     {teacherInviteCode.inviteCode}
                   </span>
-                  <button
+                  <button type="button"
                     onClick={() => handleCopyTeacherInviteCode(teacherInviteCode.inviteCode)}
                     className="rounded-lg border border-border bg-card p-2 text-muted-foreground hover:text-foreground transition-colors"
                     title="Copy code"
@@ -784,7 +782,7 @@ export function TeacherDashboardPage() {
       {isSchoolAdmin && (
         <Card className="border-3 border-foreground p-6 shadow-stamp">
           <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-foreground bg-primary/10 text-primary">
+            <div className="flex size-10 items-center justify-center rounded-2xl border-2 border-foreground bg-primary/10 text-primary">
               <LinkIcon size={20} strokeWidth={2.5} />
             </div>
             <div>
@@ -797,7 +795,7 @@ export function TeacherDashboardPage() {
 
           {ltiLoading ? (
             <div className="flex justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <Loader2 className="size-6 animate-spin text-primary" />
             </div>
           ) : ltiPlatform ? (
             <div className="space-y-5">
@@ -1037,7 +1035,7 @@ export function TeacherDashboardPage() {
           <div className="py-4">
             {joinCodeLoading ? (
               <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <Loader2 className="size-6 animate-spin text-primary" />
               </div>
             ) : joinCodeData?.active ? (
               <div className="space-y-4">
@@ -1045,7 +1043,7 @@ export function TeacherDashboardPage() {
                   <span className="font-mono text-4xl font-bold tracking-[0.4em] text-foreground">
                     {joinCodeData.joinCode}
                   </span>
-                  <button
+                  <button type="button"
                     onClick={() => handleCopyCode(joinCodeData.joinCode)}
                     className="rounded-lg border border-border bg-card p-2 text-muted-foreground hover:text-foreground transition-colors"
                     title="Copy code"
@@ -1096,11 +1094,11 @@ export function TeacherDashboardPage() {
           <div className="py-2 max-h-[400px] overflow-y-auto">
             {rosterLoading ? (
               <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <Loader2 className="size-6 animate-spin text-primary" />
               </div>
             ) : roster.length === 0 ? (
               <div className="text-center py-8">
-                <Users className="mx-auto h-10 w-10 text-muted-foreground" />
+                <Users className="mx-auto size-10 text-muted-foreground" />
                 <p className="mt-3 text-muted-foreground">No students enrolled yet.</p>
                 <Button
                   variant="outline"
@@ -1163,7 +1161,7 @@ export function TeacherDashboardPage() {
                           className="text-destructive hover:text-destructive"
                         >
                           {removingUid === student.uid ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="size-4 animate-spin" />
                           ) : (
                             <Trash2 size={14} />
                           )}
@@ -1178,7 +1176,7 @@ export function TeacherDashboardPage() {
               <div className="mt-6 space-y-2 border-t border-border pt-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-foreground">
-                    Canvas roster — not yet joined
+                    Canvas roster - not yet joined
                   </h3>
                   <span className="text-xs text-muted-foreground">
                     {canvasRosterSummary.joined} of {canvasRosterSummary.canvas_total}{' '}

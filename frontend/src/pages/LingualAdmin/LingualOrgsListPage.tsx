@@ -1,15 +1,63 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchOrgs } from '@/api/lingualAdmin';
 import type { OrgSummary, OrgStatus } from '@/types/lingualAdmin';
 
+type OrgsListState = {
+  items: OrgSummary[];
+  nextCursor: { nameLower: string; id: string } | null;
+  status: '' | OrgStatus;
+  schoolType: string;
+  country: string;
+  error: string | null;
+};
+
+type OrgsListAction =
+  | { type: 'setStatus'; status: '' | OrgStatus }
+  | { type: 'setSchoolType'; schoolType: string }
+  | { type: 'setCountry'; country: string }
+  | {
+      type: 'loaded';
+      reset: boolean;
+      items: OrgSummary[];
+      nextCursor: { nameLower: string; id: string } | null;
+    }
+  | { type: 'failed'; error: string };
+
+const INITIAL_ORGS_LIST_STATE: OrgsListState = {
+  items: [],
+  nextCursor: null,
+  status: '',
+  schoolType: '',
+  country: '',
+  error: null,
+};
+
+function orgsListReducer(state: OrgsListState, action: OrgsListAction): OrgsListState {
+  switch (action.type) {
+    case 'setStatus':
+      return { ...state, status: action.status };
+    case 'setSchoolType':
+      return { ...state, schoolType: action.schoolType };
+    case 'setCountry':
+      return { ...state, country: action.country };
+    case 'loaded':
+      return {
+        ...state,
+        items: action.reset ? action.items : [...state.items, ...action.items],
+        nextCursor: action.nextCursor,
+        error: null,
+      };
+    case 'failed':
+      return { ...state, error: action.error };
+    default:
+      return state;
+  }
+}
+
 export function LingualOrgsListPage() {
-  const [items, setItems] = useState<OrgSummary[]>([]);
-  const [nextCursor, setNextCursor] = useState<{ nameLower: string; id: string } | null>(null);
-  const [status, setStatus] = useState<'' | OrgStatus>('');
-  const [schoolType, setSchoolType] = useState('');
-  const [country, setCountry] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(orgsListReducer, INITIAL_ORGS_LIST_STATE);
+  const { items, nextCursor, status, schoolType, country, error } = state;
 
   async function load(reset: boolean) {
     try {
@@ -19,14 +67,18 @@ export function LingualOrgsListPage() {
         country: country || undefined,
         cursor: reset ? undefined : nextCursor || undefined,
       });
-      setItems(prev => reset ? result.items : [...prev, ...result.items]);
-      setNextCursor(result.nextCursor);
+      dispatch({
+        type: 'loaded',
+        reset,
+        items: result.items,
+        nextCursor: result.nextCursor,
+      });
     } catch (e: any) {
-      setError(e.message || 'unknown');
+      dispatch({ type: 'failed', error: e.message || 'unknown' });
     }
   }
 
-  useEffect(() => { load(true); /* eslint-disable-next-line */ }, [status, schoolType, country]);
+  useEffect(() => { void load(true); /* eslint-disable-next-line */ }, [status, schoolType, country]);
 
   return (
     <div>
@@ -35,7 +87,7 @@ export function LingualOrgsListPage() {
       <div className="mt-4 flex gap-3 text-sm">
         <label className="flex items-center gap-2">
           Status
-          <select aria-label="Status" value={status} onChange={e => setStatus(e.target.value as any)} className="rounded-md border border-neutral-300 px-2 py-1">
+          <select aria-label="Status" value={status} onChange={e => dispatch({ type: 'setStatus', status: e.target.value as '' | OrgStatus })} className="rounded-md border border-neutral-300 px-2 py-1">
             <option value="">All</option>
             <option value="active">Active</option>
             <option value="suspended">Suspended</option>
@@ -44,7 +96,7 @@ export function LingualOrgsListPage() {
         </label>
         <label className="flex items-center gap-2">
           Type
-          <select value={schoolType} onChange={e => setSchoolType(e.target.value)} className="rounded-md border border-neutral-300 px-2 py-1">
+          <select value={schoolType} onChange={e => dispatch({ type: 'setSchoolType', schoolType: e.target.value })} className="rounded-md border border-neutral-300 px-2 py-1">
             <option value="">All</option>
             <option value="elementary">Elementary</option>
             <option value="middle">Middle</option>
@@ -54,7 +106,7 @@ export function LingualOrgsListPage() {
         </label>
         <label className="flex items-center gap-2">
           Country
-          <input value={country} onChange={e => setCountry(e.target.value)} className="rounded-md border border-neutral-300 px-2 py-1" placeholder="US" />
+          <input value={country} onChange={e => dispatch({ type: 'setCountry', country: e.target.value })} className="rounded-md border border-neutral-300 px-2 py-1" placeholder="US" />
         </label>
       </div>
 
@@ -75,8 +127,8 @@ export function LingualOrgsListPage() {
                 </Link>
               </td>
               <td>{o.status}</td>
-              <td>{o.schoolType || '—'}</td>
-              <td>{o.county || '—'}</td>
+              <td>{o.schoolType || '-'}</td>
+              <td>{o.county || '-'}</td>
               <td>{o.memberCount}</td>
             </tr>
           ))}
@@ -84,7 +136,7 @@ export function LingualOrgsListPage() {
       </table>
 
       {nextCursor && (
-        <button onClick={() => load(false)} className="mt-4 rounded-md border border-neutral-300 px-3 py-1 text-sm">
+        <button type="button" onClick={() => load(false)} className="mt-4 rounded-md border border-neutral-300 px-3 py-1 text-sm">
           Load more
         </button>
       )}

@@ -36,7 +36,7 @@ beforeEach(() => {
     searchMock.mockReset();
 });
 
-describe('Pane A — entry', () => {
+describe('Pane A - entry', () => {
     it('shows two options', () => {
         renderPage();
         expect(screen.getByRole('button', { name: /invite code/i })).toBeInTheDocument();
@@ -44,7 +44,7 @@ describe('Pane A — entry', () => {
     });
 });
 
-describe('Pane B — invite code', () => {
+describe('Pane B - invite code', () => {
     it('submits 6-char code and navigates to pending', async () => {
         submitMock.mockResolvedValue({
             requestId: 'tjr-1', orgId: 'org-1', orgName: 'SF Friends',
@@ -73,7 +73,7 @@ describe('Pane B — invite code', () => {
     });
 });
 
-describe('Pane C — search', () => {
+describe('Pane C - search', () => {
     it('searches and shows results', async () => {
         searchMock.mockResolvedValue([
             { id: 'org-1', name: 'SF Friends', city: 'SF', state: 'CA', school_type: 'k12' },

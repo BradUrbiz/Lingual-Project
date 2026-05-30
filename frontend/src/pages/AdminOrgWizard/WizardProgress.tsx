@@ -22,14 +22,13 @@ export function WizardProgress({ current, total }: WizardProgressProps) {
     );
   }
   return (
-    <div
-      className="flex items-center gap-2"
-      role="progressbar"
-      aria-valuemin={1}
-      aria-valuemax={total}
-      aria-valuenow={current}
-    >
-      {dots}
-    </div>
+    <>
+      <progress className="sr-only" value={current} max={total}>
+        Step {current} of {total}
+      </progress>
+      <div className="flex items-center gap-2">
+        {dots}
+      </div>
+    </>
   );
 }

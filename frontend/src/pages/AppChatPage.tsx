@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   RefreshCcw,
@@ -68,6 +68,7 @@ const DEFAULT_LANGUAGE_MIX_LEVEL: LanguageMixLevel = 'balanced';
 const Live2DAvatarPanel = lazy(() => import('@/components/avatar/Live2DAvatarPanel'));
 
 type AvatarActivity = 'idle' | 'listening' | 'thinking' | 'speaking';
+type Mode = 'text' | 'realtime';
 
 const domainBadgeStyles: Record<string, string> = {
   grammar: 'bg-primary/10 text-primary border border-primary/20',
@@ -96,6 +97,172 @@ function getClientNow(): number {
     return window.performance?.now() ?? Date.now();
   } catch {
     return Date.now();
+  }
+}
+
+function getInitialChatAvatarEnabled(): boolean {
+  if (!CHAT_AVATAR_AVAILABLE) return false;
+  try {
+    const stored = window.localStorage.getItem(CHAT_AVATAR_ENABLED_KEY);
+    if (stored === null) return false;
+    return stored === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function getInitialDesktopMatch(): boolean {
+  try {
+    return window.matchMedia?.('(min-width: 1024px)')?.matches ?? false;
+  } catch {
+    return false;
+  }
+}
+
+interface TextAvatarState {
+  activity: AvatarActivity;
+  transcriptDelta: string;
+  transcriptFinal: string;
+  speechStartedAt: number | null;
+  speechEndedAt: number | null;
+}
+
+interface AppChatState {
+  sessions: ChatSession[];
+  currentChatId: string | null;
+  historyMessages: ChatMessage[];
+  loadingSessions: boolean;
+  loadingChat: boolean;
+  error: string | null;
+  isConnecting: boolean;
+  assessmentResults: AssessmentResults | null;
+  profileSummary?: UserProfile;
+  languageMixLevel: LanguageMixLevel;
+  languageMixNotice: string | null;
+  mode: Mode;
+  inputValue: string;
+  isSendingText: boolean;
+  isSidebarExpanded: boolean;
+  isSidebarDialogOpen: boolean;
+  textAvatar: TextAvatarState;
+  isAvatarEnabled: boolean;
+  isDesktop: boolean;
+}
+
+type AppChatAction =
+  | { type: 'patch'; payload: Partial<AppChatState> }
+  | { type: 'patchTextAvatar'; payload: Partial<TextAvatarState> }
+  | { type: 'resetTextAvatar' }
+  | { type: 'setSessions'; sessions: ChatSession[] }
+  | { type: 'updateSessions'; updater: (sessions: ChatSession[]) => ChatSession[] }
+  | { type: 'chatLoaded'; chatId: string; messages: ChatMessage[]; languageMixLevel: LanguageMixLevel }
+  | { type: 'chatCreated'; session: ChatSession; languageMixLevel: LanguageMixLevel }
+  | { type: 'appendHistoryMessage'; message: ChatMessage }
+  | { type: 'setTextAvatarSpeaking'; content: string; startedAt: number }
+  | { type: 'setTextAvatarSpeechEnded'; endedAt: number }
+  | { type: 'languageMixUpdated'; chatId: string; languageMixLevel: LanguageMixLevel }
+  | { type: 'deleteSession'; chatId: string };
+
+const initialTextAvatarState: TextAvatarState = {
+  activity: 'idle',
+  transcriptDelta: '',
+  transcriptFinal: '',
+  speechStartedAt: null,
+  speechEndedAt: null,
+};
+
+function createInitialAppChatState(): AppChatState {
+  return {
+    sessions: [],
+    currentChatId: null,
+    historyMessages: [],
+    loadingSessions: true,
+    loadingChat: false,
+    error: null,
+    isConnecting: false,
+    assessmentResults: null,
+    profileSummary: undefined,
+    languageMixLevel: DEFAULT_LANGUAGE_MIX_LEVEL,
+    languageMixNotice: null,
+    mode: 'realtime',
+    inputValue: '',
+    isSendingText: false,
+    isSidebarExpanded: false,
+    isSidebarDialogOpen: false,
+    textAvatar: initialTextAvatarState,
+    isAvatarEnabled: getInitialChatAvatarEnabled(),
+    isDesktop: getInitialDesktopMatch(),
+  };
+}
+
+function appChatReducer(state: AppChatState, action: AppChatAction): AppChatState {
+  switch (action.type) {
+    case 'patch':
+      return { ...state, ...action.payload };
+    case 'patchTextAvatar':
+      return { ...state, textAvatar: { ...state.textAvatar, ...action.payload } };
+    case 'resetTextAvatar':
+      return { ...state, textAvatar: initialTextAvatarState };
+    case 'setSessions':
+      return { ...state, sessions: action.sessions };
+    case 'updateSessions':
+      return { ...state, sessions: action.updater(state.sessions) };
+    case 'chatLoaded':
+      return {
+        ...state,
+        historyMessages: action.messages,
+        currentChatId: action.chatId,
+        languageMixLevel: action.languageMixLevel,
+        languageMixNotice: null,
+      };
+    case 'chatCreated':
+      return {
+        ...state,
+        sessions: [action.session, ...state.sessions],
+        historyMessages: [],
+        currentChatId: action.session.id,
+        languageMixLevel: action.languageMixLevel,
+        languageMixNotice: null,
+      };
+    case 'appendHistoryMessage':
+      return { ...state, historyMessages: [...state.historyMessages, action.message] };
+    case 'setTextAvatarSpeaking':
+      return {
+        ...state,
+        textAvatar: {
+          activity: 'speaking',
+          transcriptDelta: action.content,
+          transcriptFinal: action.content,
+          speechStartedAt: action.startedAt,
+          speechEndedAt: null,
+        },
+      };
+    case 'setTextAvatarSpeechEnded':
+      return {
+        ...state,
+        textAvatar: {
+          ...state.textAvatar,
+          activity: 'idle',
+          speechEndedAt: action.endedAt,
+        },
+      };
+    case 'languageMixUpdated':
+      return {
+        ...state,
+        languageMixLevel: action.languageMixLevel,
+        sessions: state.sessions.map((session) => (
+          session.id === action.chatId
+            ? { ...session, languageMixLevel: action.languageMixLevel }
+            : session
+        )),
+      };
+    case 'deleteSession':
+      return {
+        ...state,
+        sessions: state.sessions.filter((session) => session.id !== action.chatId),
+      };
+    default:
+      return state;
   }
 }
 

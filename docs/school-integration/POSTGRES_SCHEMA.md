@@ -654,6 +654,7 @@ The backfill cannot be a straight column copy. Firestore carries retired vocabul
 - `canvas_course_content.due_at`, `lti_sessions.token_expires_at`: raw Canvas string or `None` -> `timestamptz` / `null`.
 - `assignments.objectives`: Firestore `list[str]` -> `text[]` (verify it is not `list[dict]`).
 - `modality_override`, snapshot/payload columns: `None` -> `{}` / `[]`.
+- Legacy default-blank scalars stored as `''` in Firestore (`enrollments.canvas_user_id` / `canvas_email` / `canvas_name` / `student_number`, `classes.canvas_course_id`) -> `null` on backfill. Lossless: the columns are nullable and `''` carries no meaning.
 
 ### ID resolution (the load-bearing rule)
 

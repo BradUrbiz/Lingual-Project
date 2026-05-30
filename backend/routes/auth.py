@@ -1,12 +1,13 @@
 from flask import Blueprint, current_app, jsonify, request, session
 
 from backend.route_deps import RouteDeps
+from backend.services import email_verification
 from database import ALLOWED_INTENDED_ROLES
 
 ALLOWED_MIGRATE_ROLES = frozenset({'student', 'teacher', 'admin'})
 
 
-def build_auth_user_payload(uid, email, name, school_context):
+def build_auth_user_payload(uid, email, name, school_context, email_verification_required=False):
     """Build the auth payload returned to the frontend."""
     return {
         'uid': uid,
@@ -20,7 +21,29 @@ def build_auth_user_payload(uid, email, name, school_context):
         'onboardingState': school_context.get('onboarding_state'),
         'requiresLegacyRolePick': bool(school_context.get('requires_legacy_role_pick')),
         'lingualAdmin': bool(school_context.get('lingual_admin')),
+        'emailVerificationRequired': bool(email_verification_required),
     }
+
+
+def _resolve_email_verification(deps, decoded_token, existing_user, uid, email, name):
+    """Return True if this account must verify its email before using the app.
+
+    Starts verification (and emails a code) only for brand-new accounts whose
+    provider has not already verified the email — so Google (email_verified
+    claim True) is auto-verified and existing accounts are never re-gated.
+    """
+    is_new_account = existing_user is None
+    provider_verified = bool(decoded_token.get('email_verified'))
+
+    if is_new_account and not provider_verified:
+        try:
+            code = email_verification.start_verification(deps.db, uid)
+            email_verification.send_verification_code_email(email, name, code)
+        except Exception as exc:  # delivery/start failure must not block signup
+            print(f'[email-verification] start failed for {uid}: {exc}')
+        return True
+
+    return email_verification.is_pending(existing_user)
 
 
 def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
@@ -54,7 +77,11 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
             email = decoded_token.get('email', '')
             name = decoded_token.get('name', email.split('@')[0] if email else 'User')
 
+            existing_user = deps.db.get_user(uid)
             deps.db.get_or_create_user(uid, email, name)
+            email_verification_required = _resolve_email_verification(
+                deps, decoded_token, existing_user, uid, email, name,
+            )
 
             if intended_role:
                 # Persist only on first-time users — existing memberships always win.
@@ -82,11 +109,14 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
                 'email': email,
                 'name': name,
                 'active_membership_id': school_context.get('active_membership_id'),
+                'email_verified': not email_verification_required,
             }
 
             return jsonify({
                 'success': True,
-                'user': build_auth_user_payload(uid, email, name, school_context),
+                'user': build_auth_user_payload(
+                    uid, email, name, school_context, email_verification_required,
+                ),
             })
 
         except deps.firebase_auth.InvalidIdTokenError:

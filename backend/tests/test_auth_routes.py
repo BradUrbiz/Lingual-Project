@@ -79,6 +79,18 @@ class FakeFirebaseAuth:
                 "email": "test@example.com",
                 "name": "Test User",
             },
+            "new-password-token": {
+                "uid": "new-pw-uid",
+                "email": "newpw@example.com",
+                "name": "New PW User",
+                "email_verified": False,
+            },
+            "google-token": {
+                "uid": "google-uid",
+                "email": "g@example.com",
+                "name": "Google User",
+                "email_verified": True,
+            },
         }
         self._raise_on_verify: type[Exception] | None = None
 
@@ -481,6 +493,59 @@ class TestInitialOnboarding(unittest.TestCase):
         data = resp.get_json()
         self.assertFalse(data["success"])
         self.assertIn("Invalid learning locale", data["error"])
+
+
+class TestEmailVerificationGating(unittest.TestCase):
+    """New email/password accounts get gated; Google + existing don't."""
+
+    def test_new_password_account_is_pending(self):
+        app, db, _ = _build_app()
+        client = app.test_client()
+
+        resp = client.post("/api/auth/verify", json={"idToken": "new-password-token"})
+        self.assertEqual(resp.status_code, 200)
+        user = resp.get_json()["user"]
+        self.assertTrue(user["emailVerificationRequired"])
+
+        record = db.users["new-pw-uid"]["email_verification"]
+        self.assertEqual(record["status"], "pending")
+
+        with client.session_transaction() as sess:
+            self.assertFalse(sess["user"]["email_verified"])
+
+    def test_new_google_account_is_not_pending(self):
+        app, db, _ = _build_app()
+        client = app.test_client()
+
+        resp = client.post("/api/auth/verify", json={"idToken": "google-token"})
+        self.assertEqual(resp.status_code, 200)
+        user = resp.get_json()["user"]
+        self.assertFalse(user["emailVerificationRequired"])
+        self.assertNotIn("email_verification", db.users["google-uid"])
+
+        with client.session_transaction() as sess:
+            self.assertTrue(sess["user"]["email_verified"])
+
+    def test_existing_account_not_regated(self):
+        db = FakeAuthDb()
+        db.users["test-uid"] = make_user(uid="test-uid", email="test@example.com")
+        app, db, _ = _build_app(db=db)
+        client = app.test_client()
+
+        resp = _login_session(client)  # valid-token, existing user, no email_verified claim
+        user = resp.get_json()["user"]
+        self.assertFalse(user["emailVerificationRequired"])
+        self.assertNotIn("email_verification", db.users["test-uid"])
+
+    def test_returning_pending_account_is_regated(self):
+        db = FakeAuthDb()
+        db.users["test-uid"] = make_user(uid="test-uid", email="test@example.com")
+        db.users["test-uid"]["email_verification"] = {"status": "pending"}
+        app, db, _ = _build_app(db=db)
+        client = app.test_client()
+
+        resp = _login_session(client)
+        self.assertTrue(resp.get_json()["user"]["emailVerificationRequired"])
 
 
 if __name__ == "__main__":

@@ -548,5 +548,61 @@ class TestEmailVerificationGating(unittest.TestCase):
         self.assertTrue(resp.get_json()["user"]["emailVerificationRequired"])
 
 
+class TestEmailVerificationEndpoints(unittest.TestCase):
+    def _seed_pending(self, db, uid="test-uid"):
+        from backend.services import email_verification
+        db.users[uid] = make_user(uid=uid, email="test@example.com")
+        return email_verification.start_verification(db, uid)
+
+    def test_confirm_success_clears_gate(self):
+        db = FakeAuthDb()
+        code = self._seed_pending(db)
+        app, db, _ = _build_app(db=db)
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess["user"] = {"uid": "test-uid", "email": "test@example.com",
+                            "name": "T", "email_verified": False}
+
+        resp = client.post("/api/auth/email-verification/confirm", json={"code": code})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        with client.session_transaction() as sess:
+            self.assertTrue(sess["user"]["email_verified"])
+
+    def test_confirm_wrong_code(self):
+        db = FakeAuthDb()
+        self._seed_pending(db)
+        app, db, _ = _build_app(db=db)
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess["user"] = {"uid": "test-uid", "email": "test@example.com",
+                            "name": "T", "email_verified": False}
+
+        resp = client.post("/api/auth/email-verification/confirm", json={"code": "000000"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.get_json()["error"], "invalid_code")
+
+    def test_confirm_requires_session(self):
+        app, _, _ = _build_app()
+        client = app.test_client()
+        resp = client.post("/api/auth/email-verification/confirm", json={"code": "123456"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_resend_returns_429_on_cooldown(self):
+        db = FakeAuthDb()
+        self._seed_pending(db)
+        app, db, _ = _build_app(db=db)
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess["user"] = {"uid": "test-uid", "email": "test@example.com",
+                            "name": "T", "email_verified": False}
+
+        # start_verification set last_sent_at = now, so an immediate resend hits
+        # the cooldown → 429. Deterministic.
+        resp = client.post("/api/auth/email-verification/resend", json={})
+        self.assertEqual(resp.status_code, 429)
+        self.assertGreater(resp.get_json()["cooldownSeconds"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

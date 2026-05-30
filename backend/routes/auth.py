@@ -212,6 +212,51 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
             'domain_bands': results.get('domain_bands', {}),
         })
 
+    @bp.route('/api/auth/email-verification/confirm', methods=['POST'])
+    def confirm_email_verification():
+        user = session.get('user')
+        if not user or not user.get('uid'):
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+
+        data = request.get_json(silent=True) or {}
+        code = str(data.get('code', '')).strip()
+        result = email_verification.confirm(deps.db, user['uid'], code)
+
+        if not result.ok:
+            return jsonify({'success': False, 'error': result.error}), 400
+
+        try:
+            deps.firebase_auth.update_user(user['uid'], email_verified=True)
+        except Exception as exc:  # best-effort sync; Firestore is authoritative
+            print(f"[email-verification] firebase sync failed for {user['uid']}: {exc}")
+
+        session['user']['email_verified'] = True
+        session.modified = True
+        return jsonify({'success': True})
+
+    @bp.route('/api/auth/email-verification/resend', methods=['POST'])
+    def resend_email_verification():
+        user = session.get('user')
+        if not user or not user.get('uid'):
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+
+        result = email_verification.resend(deps.db, user['uid'])
+        if not result.allowed:
+            return jsonify({
+                'success': False,
+                'error': 'cooldown',
+                'cooldownSeconds': result.cooldown_seconds,
+            }), 429
+
+        try:
+            email_verification.send_verification_code_email(
+                user.get('email', ''), user.get('name'), result.code,
+            )
+        except Exception as exc:
+            print(f"[email-verification] resend enqueue failed for {user['uid']}: {exc}")
+
+        return jsonify({'success': True, 'cooldownSeconds': result.cooldown_seconds})
+
     @bp.route('/api/set-language', methods=['POST'])
     def api_set_language():
         data = request.get_json() or {}

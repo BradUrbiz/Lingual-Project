@@ -124,7 +124,8 @@ For implementation detail, see `TECH_SPEC.md` and `docs/superpowers/plans/`.
 - **Phase 6 — Compliance.** Voice gating + `voice_allowed` enforcement, `textFallbackEnabled` downgrade, pronunciation policy gating, disclosure logging on key endpoints, class-scoped bulk consent + audit export, Epic A guardian packets (issue/resend/cancel + secure-link decision), Epic B deletion requests (admin approve/execute/retry, sync worker), school-wide admin compliance dashboard.
 - **Phase 7 (partial) — Pilot readiness.** Contextual onboarding hints, public `/compliance` page, Firestore rules emulator tests (`firebase-tests/`, 44 cases).
 - **Realtime model.** Upgraded to `gpt-realtime-mini-2025-12-15` (May 2026); turn detection is `semantic_vad` eagerness=auto.
-- **Outbox email infrastructure.** Firestore `outbox_emails/` + `send_outbox_email` Cloud Function, 9 templates wired (school-request approve/decline, teacher-invitation, teacher-join admin/approve/decline, org-suspended, org-restored, school-request-to-Lingual).
+- **Outbox email infrastructure.** Firestore `outbox_emails/` + `send_outbox_email` Cloud Function, 10 templates wired (school-request approve/decline, teacher-invitation, teacher-join admin/approve/decline, org-suspended, org-restored, school-request-to-Lingual, email-verification-code).
+- **Email verification at signup (2026-05-31).** New email/password signups must enter a 6-digit code (outbox→Resend) before using the app; gated by a `login_required` session flag. Google auto-verified, existing accounts grandfathered. See LIMITATIONS #46.
 
 ## Definition of done for beta entry — met
 

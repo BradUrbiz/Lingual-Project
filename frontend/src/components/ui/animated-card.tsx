@@ -1,4 +1,4 @@
-import { motion, type HTMLMotionProps } from 'framer-motion';
+import { m, type HTMLMotionProps } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { cardVariants } from '@/lib/animations';
 
@@ -12,7 +12,7 @@ export function AnimatedCard({
   ...props
 }: AnimatedCardProps) {
   return (
-    <motion.div
+    <m.div
       variants={cardVariants}
       initial="initial"
       animate="animate"
@@ -23,6 +23,6 @@ export function AnimatedCard({
       {...props}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }

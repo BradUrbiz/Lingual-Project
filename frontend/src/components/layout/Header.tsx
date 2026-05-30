@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
@@ -13,7 +13,7 @@ export function Header() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
-    <motion.header
+    <m.header
       initial={{ y: -60, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
@@ -21,7 +21,7 @@ export function Header() {
     >
       <div className="h-full max-w-7xl mx-auto px-4 flex items-center justify-between">
         {/* Logo */}
-        <button
+        <button type="button"
           onClick={() => navigate('/')}
           className="flex items-center gap-2 hover:opacity-80 transition-opacity"
         >
@@ -41,9 +41,9 @@ export function Header() {
             onClick={() => setMobileNavOpen(!mobileNavOpen)}
           >
             {mobileNavOpen ? (
-              <X className="h-5 w-5" />
+              <X className="size-5" />
             ) : (
-              <Menu className="h-5 w-5" />
+              <Menu className="size-5" />
             )}
           </Button>
         </div>
@@ -51,6 +51,6 @@ export function Header() {
 
       {/* Mobile Navigation */}
       <MobileNav isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
-    </motion.header>
+    </m.header>
   );
 }

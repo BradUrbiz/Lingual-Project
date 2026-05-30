@@ -66,7 +66,7 @@ export function RolePicker({ value, onChange, disabled }: RolePickerProps) {
                   : 'hover:border-primary/60',
               )}
             >
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border-2 border-foreground bg-primary/10">
+              <div className="mb-4 flex size-12 items-center justify-center rounded-xl border-2 border-foreground bg-primary/10">
                 <Icon size={24} strokeWidth={2} />
               </div>
               <p className="font-display text-lg font-bold">{title}</p>

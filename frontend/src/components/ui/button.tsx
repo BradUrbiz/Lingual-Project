@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
@@ -72,43 +71,40 @@ export interface ButtonProps
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
   loading?: boolean;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  (
-    {
-      className,
-      variant,
-      size,
-      selected,
-      asChild = false,
-      loading,
-      children,
-      disabled,
-      ...props
-    },
-    ref
-  ) => {
-    const Comp = asChild ? Slot : 'button';
-    return (
-      <Comp
-        className={cn(buttonVariants({ variant, size, selected, className }))}
-        ref={ref}
-        disabled={disabled || loading}
-        {...props}
-      >
-        {loading ? (
-          <span className="flex items-center gap-2">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Loading...</span>
-          </span>
-        ) : (
-          children
-        )}
-      </Comp>
-    );
-  }
-);
+function Button({
+  className,
+  variant,
+  size,
+  selected,
+  asChild = false,
+  loading,
+  children,
+  disabled,
+  ref,
+  ...props
+}: ButtonProps) {
+  const Comp = asChild ? Slot : 'button';
+  return (
+    <Comp
+      className={cn(buttonVariants({ variant, size, selected, className }))}
+      ref={ref}
+      disabled={disabled || loading}
+      {...props}
+    >
+      {loading ? (
+        <span className="flex items-center gap-2">
+          <Loader2 className="size-5 animate-spin" />
+          <span>Loading…</span>
+        </span>
+      ) : (
+        children
+      )}
+    </Comp>
+  );
+}
 Button.displayName = 'Button';
 
-export { Button, buttonVariants };
+export { Button };

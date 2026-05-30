@@ -13,7 +13,7 @@ export function OnboardingHint({ show, message, ctaLabel, ctaTo }: OnboardingHin
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200">
-      <Lightbulb className="h-5 w-5 shrink-0" />
+      <Lightbulb className="size-5 shrink-0" />
       <span className="flex-1">{message}</span>
       {ctaLabel && ctaTo && (
         <Link

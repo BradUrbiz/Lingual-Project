@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { pageVariants } from '@/lib/animations';
 
@@ -9,7 +9,7 @@ interface AnimatedPageProps {
 
 export function AnimatedPage({ children, className = '' }: AnimatedPageProps) {
   return (
-    <motion.div
+    <m.div
       variants={pageVariants}
       initial="initial"
       animate="animate"
@@ -17,6 +17,6 @@ export function AnimatedPage({ children, className = '' }: AnimatedPageProps) {
       className={className}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }

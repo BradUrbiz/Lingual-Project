@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { createContext, use, useCallback, useEffect, useMemo, useReducer, useRef, ReactNode } from 'react';
 import {
   EmailAuthProvider,
   onAuthStateChanged,
@@ -81,6 +81,55 @@ const getAuthErrorMessage = (err: unknown, fallback: string) => {
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 
+type AuthState = {
+  user: User | null;
+  firebaseUser: FirebaseUser | null;
+  loading: boolean;
+  error: string | null;
+  avatarUrl: string | null;
+};
+
+type AuthAction =
+  | { type: 'set-user'; user: User | null }
+  | { type: 'set-firebase-user'; firebaseUser: FirebaseUser | null }
+  | { type: 'set-loading'; loading: boolean }
+  | { type: 'set-error'; error: string | null }
+  | { type: 'set-avatar-url'; avatarUrl: string | null }
+  | { type: 'verify-success'; user: User }
+  | { type: 'verify-failed'; error: string }
+  | { type: 'maybe-update-membership'; user: User };
+
+const initialAuthState: AuthState = {
+  user: null,
+  firebaseUser: null,
+  loading: true,
+  error: null,
+  avatarUrl: null,
+};
+
+function authReducer(state: AuthState, action: AuthAction): AuthState {
+  switch (action.type) {
+    case 'set-user':
+      return { ...state, user: action.user };
+    case 'set-firebase-user':
+      return { ...state, firebaseUser: action.firebaseUser };
+    case 'set-loading':
+      return { ...state, loading: action.loading };
+    case 'set-error':
+      return { ...state, error: action.error };
+    case 'set-avatar-url':
+      return { ...state, avatarUrl: action.avatarUrl };
+    case 'verify-success':
+      return { ...state, user: action.user, error: null };
+    case 'verify-failed':
+      return { ...state, user: null, error: action.error };
+    case 'maybe-update-membership':
+      return hasMembershipDiff(state.user, action.user) ? { ...state, user: action.user } : state;
+    default:
+      return state;
+  }
+}
+
 export function hasMembershipDiff(prev: User | null, next: User | null): boolean {
   if (!prev || !next) return prev !== next;
   if (prev.lingualAdmin !== next.lingualAdmin) return true;
@@ -100,21 +149,26 @@ export function hasMembershipDiff(prev: User | null, next: User | null): boolean
   return prevMems !== nextMems;
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+async function verifyE2eUser(): Promise<User | null> {
+  const res = await fetch('/api/test/verify', { credentials: 'include' });
+  const data = await res.json();
+  return data.success && data.user ? data.user as User : null;
+}
+
+function useAuthProviderController() {
+  const [state, dispatch] = useReducer(authReducer, initialAuthState);
+  const { user, firebaseUser, loading, error, avatarUrl } = state;
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const updateAvatarUrl = (url: string) => setAvatarUrl(url);
+  const updateAvatarUrl = useCallback((url: string) => {
+    dispatch({ type: 'set-avatar-url', avatarUrl: url });
+  }, []);
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     const currentUser = auth.currentUser;
 
     if (!currentUser) {
-      setUser(null);
+      dispatch({ type: 'set-user', user: null });
       return;
     }
 
@@ -122,21 +176,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await verifyToken(idToken);
 
     if (result.success && result.user) {
-      setUser(result.user);
-      setError(null);
+      dispatch({ type: 'verify-success', user: result.user });
       return;
     }
 
-    setUser(null);
-    setError(result.error || 'Failed to verify token');
-  };
+    dispatch({ type: 'verify-failed', error: result.error || 'Failed to verify token' });
+  }, []);
 
-  const handleLegacyRolePick = async (role: IntendedRole) => {
+  const handleLegacyRolePick = useCallback(async (role: IntendedRole) => {
     await migrateRole(role);
     // Refresh the user state so `requiresLegacyRolePick` flips to false
     // and the modal unmounts. Errors propagate to the modal's catch.
     await refreshUser();
-  };
+  }, [refreshUser]);
 
   useEffect(() => {
     // E2E test bypass: when localStorage has __e2e_uid__, fetch user from the test
@@ -146,44 +198,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (e2eUid) {
       (async () => {
         try {
-          const res = await fetch('/api/test/verify', { credentials: 'include' });
-          const data = await res.json();
-          if (data.success && data.user) {
-            setUser(data.user as User);
-          }
+          const testUser = await verifyE2eUser();
+          if (testUser) dispatch({ type: 'set-user', user: testUser });
         } catch {
           // Fall through to normal Firebase auth
         }
-        setLoading(false);
+        dispatch({ type: 'set-loading', loading: false });
       })();
       return;
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      setFirebaseUser(fbUser);
+      dispatch({ type: 'set-firebase-user', firebaseUser: fbUser });
 
       if (fbUser) {
         try {
           await refreshUser();
         } catch {
-          setError('Failed to authenticate');
-          setUser(null);
+          dispatch({ type: 'verify-failed', error: 'Failed to authenticate' });
         }
       } else {
-        setUser(null);
+        dispatch({ type: 'set-user', user: null });
       }
 
-      setLoading(false);
+      dispatch({ type: 'set-loading', loading: false });
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [refreshUser]);
 
   // Periodic re-verify so role/membership/suspension changes made by an admin
   // propagate to the active session without requiring sign-out.
   // See LIMITATIONS #28.
+  const userId = user?.uid;
+
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
@@ -198,7 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const result = await verifyToken(idToken);
         if (!result.success || !result.user) return;
         const next = result.user as User;
-        setUser((prev) => (hasMembershipDiff(prev, next) ? next : prev));
+        dispatch({ type: 'maybe-update-membership', user: next });
       } catch (err) {
         console.warn('[auth] periodic verify failed', err);
       }
@@ -209,15 +259,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         pollRef.current = null;
       }
     };
-    // We intentionally key only on user?.uid; the effect body uses setUser(prev
+    // We intentionally key only on userId; the effect body uses setUser(prev
     // => …) and reads auth.currentUser directly, so the latest `user` object
     // is not needed inside the interval callback.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid]);
+  }, [userId]);
 
-  const signInWithEmail = async (email: string, password: string) => {
-    setLoading(true);
-    setError(null);
+  const signInWithEmail = useCallback(async (email: string, password: string) => {
+    dispatch({ type: 'set-loading', loading: true });
+    dispatch({ type: 'set-error', error: null });
 
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
@@ -225,26 +274,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const verifyResult = await verifyToken(idToken);
 
       if (verifyResult.success && verifyResult.user) {
-        setUser(verifyResult.user);
+        dispatch({ type: 'set-user', user: verifyResult.user });
       } else {
         throw new Error(verifyResult.error || 'Failed to verify token');
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sign in failed';
-      setError(message);
+      dispatch({ type: 'set-error', error: message });
       throw err;
     } finally {
-      setLoading(false);
+      dispatch({ type: 'set-loading', loading: false });
     }
-  };
+  }, []);
 
-  const signUpWithEmail = async (
+  const signUpWithEmail = useCallback(async (
     email: string,
     password: string,
     options?: AuthRoleOptions,
   ) => {
-    setLoading(true);
-    setError(null);
+    dispatch({ type: 'set-loading', loading: true });
+    dispatch({ type: 'set-error', error: null });
 
     try {
       const result = await createUserWithEmailAndPassword(auth, email, password);
@@ -252,21 +301,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const verifyResult = await verifyToken(idToken, options);
 
       if (verifyResult.success && verifyResult.user) {
-        setUser(verifyResult.user);
+        dispatch({ type: 'set-user', user: verifyResult.user });
       } else {
         throw new Error(verifyResult.error || 'Failed to verify token');
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sign up failed';
-      setError(message);
+      dispatch({ type: 'set-error', error: message });
       throw err;
     } finally {
-      setLoading(false);
+      dispatch({ type: 'set-loading', loading: false });
     }
-  };
+  }, []);
 
-  const sendPasswordReset = async (email: string) => {
-    setError(null);
+  const sendPasswordReset = useCallback(async (email: string) => {
+    dispatch({ type: 'set-error', error: null });
     const trimmedEmail = email.trim();
 
     if (!trimmedEmail) {
@@ -281,13 +330,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const message = getAuthErrorMessage(err, 'Failed to send password reset email');
-      setError(message);
+      dispatch({ type: 'set-error', error: message });
       throw new Error(message);
     }
-  };
+  }, []);
 
-  const changePassword = async (currentPassword: string, newPassword: string) => {
-    setError(null);
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    dispatch({ type: 'set-error', error: null });
 
     if (!auth.currentUser) {
       throw new Error('No authenticated user');
@@ -303,14 +352,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await updatePassword(auth.currentUser, newPassword);
     } catch (err) {
       const message = getAuthErrorMessage(err, 'Failed to change password');
-      setError(message);
+      dispatch({ type: 'set-error', error: message });
       throw new Error(message);
     }
-  };
+  }, []);
 
-  const signInWithGoogle = async (options?: AuthRoleOptions) => {
-    setLoading(true);
-    setError(null);
+  const signInWithGoogle = useCallback(async (options?: AuthRoleOptions) => {
+    dispatch({ type: 'set-loading', loading: true });
+    dispatch({ type: 'set-error', error: null });
 
     try {
       const result = await signInWithPopup(auth, googleProvider);
@@ -318,83 +367,115 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const verifyResult = await verifyToken(idToken, options);
 
       if (verifyResult.success && verifyResult.user) {
-        setUser(verifyResult.user);
+        dispatch({ type: 'set-user', user: verifyResult.user });
       } else {
         throw new Error(verifyResult.error || 'Failed to verify token');
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Google sign in failed';
-      setError(message);
+      dispatch({ type: 'set-error', error: message });
       throw err;
     } finally {
-      setLoading(false);
+      dispatch({ type: 'set-loading', loading: false });
     }
-  };
+  }, []);
 
-  const refreshFirebaseUser = async () => {
+  const refreshFirebaseUser = useCallback(async () => {
     if (auth.currentUser) {
       await auth.currentUser.reload();
-      setFirebaseUser(auth.currentUser);
+      dispatch({ type: 'set-firebase-user', firebaseUser: auth.currentUser });
     }
-  };
+  }, []);
 
-  const linkWithProvider = async (provider: FirebaseAuthProvider) => {
+  const linkWithProvider = useCallback(async (provider: FirebaseAuthProvider) => {
     if (!auth.currentUser) {
       throw new Error('No authenticated user');
     }
 
     await linkWithPopup(auth.currentUser, provider);
     await refreshFirebaseUser();
-  };
+  }, [refreshFirebaseUser]);
 
-  const linkWithGoogle = () => linkWithProvider(googleProvider);
-  const linkWithGithub = () => linkWithProvider(githubProvider);
-  const linkWithFacebook = () => linkWithProvider(facebookProvider);
+  const linkWithGoogle = useCallback(() => linkWithProvider(googleProvider), [linkWithProvider]);
+  const linkWithGithub = useCallback(() => linkWithProvider(githubProvider), [linkWithProvider]);
+  const linkWithFacebook = useCallback(() => linkWithProvider(facebookProvider), [linkWithProvider]);
 
-  const unlinkProvider = async (providerId: string) => {
+  const unlinkProvider = useCallback(async (providerId: string) => {
     if (!auth.currentUser) {
       throw new Error('No authenticated user');
     }
 
     await unlink(auth.currentUser, providerId);
     await refreshFirebaseUser();
-  };
+  }, [refreshFirebaseUser]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await signOut(auth);
-      setUser(null);
+      dispatch({ type: 'set-user', user: null });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Logout failed';
-      setError(message);
+      dispatch({ type: 'set-error', error: message });
     }
-  };
+  }, []);
 
-  const clearError = () => setError(null);
+  const clearError = useCallback(() => dispatch({ type: 'set-error', error: null }), []);
+
+  const value = useMemo(
+    () => ({
+      user,
+      firebaseUser,
+      loading,
+      error,
+      avatarUrl,
+      updateAvatarUrl,
+      refreshUser,
+      signInWithEmail,
+      signUpWithEmail,
+      sendPasswordReset,
+      changePassword,
+      signInWithGoogle,
+      linkWithGoogle,
+      linkWithGithub,
+      linkWithFacebook,
+      unlinkProvider,
+      logout,
+      clearError,
+    }),
+    [
+      user,
+      firebaseUser,
+      loading,
+      error,
+      avatarUrl,
+      updateAvatarUrl,
+      refreshUser,
+      signInWithEmail,
+      signUpWithEmail,
+      sendPasswordReset,
+      changePassword,
+      signInWithGoogle,
+      linkWithGoogle,
+      linkWithGithub,
+      linkWithFacebook,
+      unlinkProvider,
+      logout,
+      clearError,
+    ]
+  );
+
+  return {
+    value,
+    user,
+    handleLegacyRolePick,
+  };
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const { value, user, handleLegacyRolePick } = useAuthProviderController();
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        firebaseUser,
-        loading,
-        error,
-        avatarUrl,
-        updateAvatarUrl,
-        refreshUser,
-        signInWithEmail,
-        signUpWithEmail,
-        sendPasswordReset,
-        changePassword,
-        signInWithGoogle,
-        linkWithGoogle,
-        linkWithGithub,
-        linkWithFacebook,
-        unlinkProvider,
-        logout,
-        clearError,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
       {user?.requiresLegacyRolePick && (
         <LegacyRoleMigrationModal onPicked={handleLegacyRolePick} />
@@ -404,7 +485,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
+  const context = use(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }

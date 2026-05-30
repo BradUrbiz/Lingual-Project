@@ -1,7 +1,6 @@
-/* eslint-disable react-refresh/only-export-components */
 import * as React from 'react';
 import * as ProgressPrimitive from '@radix-ui/react-progress';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
@@ -46,35 +45,34 @@ const indicatorVariants = cva('h-full rounded-lg', {
 });
 
 interface ProgressProps
-  extends Omit<React.ComponentPropsWithoutRef<typeof ProgressPrimitive.Root>, 'color'>,
+  extends Omit<React.ComponentPropsWithRef<typeof ProgressPrimitive.Root>, 'color'>,
     VariantProps<typeof progressVariants>,
     VariantProps<typeof indicatorVariants> {
   value?: number;
 }
 
-const Progress = React.forwardRef<
-  React.ComponentRef<typeof ProgressPrimitive.Root>,
-  ProgressProps
->(({ className, value = 0, variant, size, color, ...props }, ref) => (
-  <ProgressPrimitive.Root
-    ref={ref}
-    className={cn(progressVariants({ variant, size }), className)}
-    {...props}
-  >
-    <ProgressPrimitive.Indicator asChild>
-      <motion.div
-        className={cn(indicatorVariants({ color }))}
-        initial={{ width: 0 }}
-        animate={{ width: `${value}%` }}
-        transition={{
-          type: 'spring',
-          stiffness: 300,
-          damping: 30,
-        }}
-      />
-    </ProgressPrimitive.Indicator>
-  </ProgressPrimitive.Root>
-));
+function Progress({ className, value = 0, variant, size, color, ref, ...props }: ProgressProps) {
+  return (
+    <ProgressPrimitive.Root
+      ref={ref}
+      className={cn(progressVariants({ variant, size }), className)}
+      {...props}
+    >
+      <ProgressPrimitive.Indicator asChild>
+        <m.div
+          className={cn(indicatorVariants({ color }))}
+          initial={{ width: 0 }}
+          animate={{ width: `${value}%` }}
+          transition={{
+            type: 'spring',
+            stiffness: 300,
+            damping: 30,
+          }}
+        />
+      </ProgressPrimitive.Indicator>
+    </ProgressPrimitive.Root>
+  );
+}
 Progress.displayName = ProgressPrimitive.Root.displayName;
 
-export { Progress, progressVariants };
+export { Progress };

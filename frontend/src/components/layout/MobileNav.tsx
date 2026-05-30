@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'framer-motion';
 import { User, LogOut } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -21,27 +21,27 @@ interface MobileNavProps {
   onClose: () => void;
 }
 
+const getInitials = (name?: string, email?: string) => {
+  if (name) {
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  }
+  if (email) {
+    return email[0].toUpperCase();
+  }
+  return 'U';
+};
+
 export function MobileNav({ isOpen, onClose }: MobileNavProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { t } = useLanguage();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-
-  const getInitials = (name?: string, email?: string) => {
-    if (name) {
-      return name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2);
-    }
-    if (email) {
-      return email[0].toUpperCase();
-    }
-    return 'U';
-  };
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -70,7 +70,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
         {isOpen && (
           <>
             {/* Backdrop */}
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -79,7 +79,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
             />
 
             {/* Slide-in Menu */}
-            <motion.div
+            <m.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
@@ -90,7 +90,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                 {/* User Info */}
                 <div className="p-4 border-b border-border">
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-12 w-12 border-2 border-accent/20">
+                    <Avatar className="size-12 border-2 border-accent/20">
                       <AvatarFallback className="bg-accent text-white">
                         {getInitials(user.name, user.email)}
                       </AvatarFallback>
@@ -104,11 +104,11 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
 
                 {/* Navigation Links */}
                 <nav className="flex-1 p-2">
-                  <button
+                  <button type="button"
                     onClick={() => handleNavigate('/profile')}
                     className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-accent/10 transition-colors"
                   >
-                    <User className="h-5 w-5" />
+                    <User className="size-5" />
                     <span>{t('nav.profile') || 'Profile'}</span>
                   </button>
                 </nav>
@@ -120,12 +120,12 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                     className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => setShowLogoutDialog(true)}
                   >
-                    <LogOut className="h-5 w-5" />
+                    <LogOut className="size-5" />
                     <span>{t('nav.logout') || 'Logout'}</span>
                   </Button>
                 </div>
               </div>
-            </motion.div>
+            </m.div>
           </>
         )}
       </AnimatePresence>

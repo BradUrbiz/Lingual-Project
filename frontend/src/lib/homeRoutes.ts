@@ -25,9 +25,12 @@ export const ROLE_PICKER_ROUTE = '/signup';
 export const LEARNER_SETUP_ROUTE = STUDENT_SETUP_ROUTE;
 
 function activeRoles(user: User): Set<SchoolRole> {
-  const fromMemberships = (user.memberships ?? [])
-    .filter((m) => (m.status ?? 'active') === 'active')
-    .flatMap((m) => m.roles ?? []);
+  const fromMemberships = (user.memberships ?? []).reduce<SchoolRole[]>((roles, membership) => {
+    if ((membership.status ?? 'active') === 'active') {
+      roles.push(...(membership.roles ?? []));
+    }
+    return roles;
+  }, []);
   return new Set<SchoolRole>([...(user.activeRoles ?? []), ...fromMemberships]);
 }
 
@@ -78,7 +81,7 @@ export function getPrivilegedHomeRoute(user: User | null | undefined): string | 
 export function getOnboardingDestination(user: User | null | undefined): string | null {
   if (!user) return null;
 
-  // 0) Legacy user awaiting modal — do NOT navigate; AuthProvider mounts
+  // 0) Legacy user awaiting modal - do NOT navigate; AuthProvider mounts
   //    `LegacyRoleMigrationModal` (Plan 6 Task 5). Callers MUST treat null
   //    as "stay on current page" so the modal can take over.
   if (user.requiresLegacyRolePick) return null;
@@ -115,6 +118,6 @@ export function getOnboardingDestination(user: User | null | undefined): string 
   }
   if (user.intendedRole === 'admin') return ADMIN_ORG_WIZARD_ROUTE;
 
-  // 5) Brand-new signup that somehow has no signals — force role pick.
+  // 5) Brand-new signup that somehow has no signals - force role pick.
   return ROLE_PICKER_ROUTE;
 }

@@ -1,5 +1,5 @@
 export type AgeRange = {
-  /** Canonical English label — the stable value used for selection matching. */
+  /** Canonical English label - the stable value used for selection matching. */
   label: string;
   /** i18n key for display; translate via t(). */
   i18nKey: string;

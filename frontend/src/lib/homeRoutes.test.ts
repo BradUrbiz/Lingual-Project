@@ -115,7 +115,7 @@ describe('getOnboardingDestination', () => {
     expect(dest).toBe(ADMIN_PENDING_ROUTE);
   });
 
-  it('returns null for requiresLegacyRolePick=true (Plan 6 — modal handles routing)', () => {
+  it('returns null for requiresLegacyRolePick=true (Plan 6 - modal handles routing)', () => {
     const user: User = {
       uid: 'u',
       email: 'a@x.com',
@@ -183,11 +183,11 @@ describe('Plan 5 routing additions', () => {
   });
 });
 
-describe('Plan 6 — legacy modal gating', () => {
+describe('Plan 6 - legacy modal gating', () => {
   it('returns null for requiresLegacyRolePick=true even when active memberships exist (defense-in-depth)', () => {
     // This should never happen in practice (the backend will not flag a user
     // with active memberships as legacy), but if the flag is somehow true,
-    // the dispatcher MUST yield to the modal — better a brief blank screen
+    // the dispatcher MUST yield to the modal - better a brief blank screen
     // than a broken modal experience.
     const user: User = {
       uid: 'u',

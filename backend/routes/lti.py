@@ -308,6 +308,7 @@ def create_lti_blueprint(deps: RouteDeps) -> Blueprint:
                             org_id=org_id,
                             class_id=cls['id'],
                             membership_id=membership_id,
+                            sql_engine=deps.sql_engine,
                         )
                         break
 
@@ -548,6 +549,7 @@ def create_lti_blueprint(deps: RouteDeps) -> Blueprint:
                         org_id=org_id,
                         class_id=cls['id'],
                         membership_id=membership_id,
+                        sql_engine=deps.sql_engine,
                     )
                     break
 

@@ -428,13 +428,27 @@ def register_domain_blueprints():
         allowed_minigame_types=ALLOWED_MINIGAME_TYPES,
         supported_ui_languages=SUPPORTED_UI_LANGUAGES,
         audit_logger=AuditLogger(),
-        # Inert Postgres engine provider (Cloud SQL). When no Cloud SQL target
-        # is configured, wire the None-returning sentinel so the provider's
-        # "None means unavailable -> fall back to Firestore" contract holds;
+        # Postgres engine provider (Cloud SQL). When no Cloud SQL target is
+        # configured, wire the None-returning sentinel so the provider's "None
+        # means unavailable -> fall back to Firestore" contract holds;
         # get_engine() would otherwise raise. No engine is built until first
-        # call (post-fork). No route uses it yet; runtime stays Firestore.
+        # call (post-fork). Consumed by the slice-2b enrollment dual-write
+        # (fail-open SHADOW, gated on DUAL_WRITE_ENROLLMENTS); Firestore stays
+        # the system of record.
         sql_engine=(get_engine if sql_enabled() else _no_sql_engine),
     )
+
+    # Surface the dual-write toggle at startup: confirm when ON, warn loudly when
+    # ON without a Postgres target (every shadow write would be a silent no-op).
+    if os.environ.get('DUAL_WRITE_ENROLLMENTS') == '1':
+        if sql_enabled():
+            print('[startup] DUAL_WRITE_ENROLLMENTS=1 — enrollment writes shadow to Postgres')
+        else:
+            print(
+                '[startup warning] DUAL_WRITE_ENROLLMENTS=1 but no Cloud SQL target '
+                '(INSTANCE_CONNECTION_NAME/DATABASE_URL) set — enrollment shadow writes '
+                'are a no-op until one is configured'
+            )
 
     app.register_blueprint(create_auth_blueprint(deps))
     app.register_blueprint(create_chat_blueprint(deps))

@@ -34,7 +34,7 @@ test-emulator:  ## Run Firestore emulator integration tests (requires Java)
 # DATABASE_URL if set, otherwise spins up an ephemeral postgres:18 in Docker.
 # uuidv7() requires Postgres 18. Host port 55432 avoids colliding with any
 # local Postgres already on the default 5432.
-PG_TESTS := backend.tests.test_postgres_schema backend.tests.test_postgres_migration backend.tests.test_backfill_postgres
+PG_TESTS := backend.tests.test_postgres_schema backend.tests.test_postgres_migration backend.tests.test_backfill_postgres backend.tests.test_dual_write_enrollments_pg
 PG_HOST_PORT := 55432
 PG_DSN := postgresql+pg8000://lingual:lingual@127.0.0.1:$(PG_HOST_PORT)/lingual
 

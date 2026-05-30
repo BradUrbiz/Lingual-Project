@@ -299,13 +299,14 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
                 deps.db.add_primary_class_to_membership(membership_id, class_id)
 
             if existing and existing.get("status") == "inactive":
-                deps.db.reactivate_enrollment(class_id, uid)
+                deps.db.reactivate_enrollment(class_id, uid, sql_engine=deps.sql_engine)
             else:
                 deps.db.create_enrollment(
                     class_id=class_id,
                     student_uid=uid,
                     student_membership_id=membership_id,
                     join_source="join_code",
+                    sql_engine=deps.sql_engine,
                 )
 
             # Pilot: auto-grant voice + guardian consent on enrollment.
@@ -374,7 +375,7 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
             membership_id = _normalize_string(enrollment.get("student_membership_id"))
             if membership_id:
                 deps.db.remove_primary_class_from_membership(membership_id, class_id)
-            deps.db.deactivate_enrollment(class_id, uid)
+            deps.db.deactivate_enrollment(class_id, uid, sql_engine=deps.sql_engine)
 
             class_record = deps.db.get_class(class_id)
             return jsonify({

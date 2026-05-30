@@ -269,12 +269,12 @@ class FakeSchoolDb:
         }
         return enrollment_id
 
-    def deactivate_enrollment(self, class_id, student_uid):
+    def deactivate_enrollment(self, class_id, student_uid, sql_engine=None):
         enrollment_id = f'{class_id}_{student_uid}'
         if enrollment_id in self.enrollments:
             self.enrollments[enrollment_id]['status'] = 'inactive'
 
-    def reactivate_enrollment(self, class_id, student_uid):
+    def reactivate_enrollment(self, class_id, student_uid, sql_engine=None):
         enrollment_id = f'{class_id}_{student_uid}'
         if enrollment_id in self.enrollments:
             self.enrollments[enrollment_id]['status'] = 'active'

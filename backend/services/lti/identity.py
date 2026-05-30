@@ -118,7 +118,7 @@ def match_lti_user(db, *, issuer, email, canvas_user_id, roles, client_id='', de
     }
 
 
-def auto_enroll_student(db, *, uid, org_id, class_id, membership_id=''):
+def auto_enroll_student(db, *, uid, org_id, class_id, membership_id='', sql_engine=None):
     """Ensure a student is enrolled in a class, creating membership and
     enrollment records as needed.
 
@@ -136,6 +136,8 @@ def auto_enroll_student(db, *, uid, org_id, class_id, membership_id=''):
         class_id: The class to enroll into.
         membership_id: An existing membership ID to reuse. If empty, a
             deterministic ID ``{org_id}_{uid}`` is used.
+        sql_engine: deps.sql_engine — opts the enrollment writes into the
+            fail-open Postgres dual-write (slice 2b). None disables shadowing.
 
     Returns:
         The enrollment ID.
@@ -161,6 +163,9 @@ def auto_enroll_student(db, *, uid, org_id, class_id, membership_id=''):
     if membership_doc:
         existing_class_ids = membership_doc.get('primary_class_ids', [])
         if class_id not in existing_class_ids:
+            # NOTE: this ArrayUnion is a MEMBERSHIP write; its Postgres shadow is
+            # deferred to slice 2c (full-chain dual-write). Slice 2b mirrors only
+            # the enrollment writes below.
             db.get_membership_ref(actual_membership_id).update({
                 'primary_class_ids': _firestore.ArrayUnion([class_id]),
                 'updated_at': _firestore.SERVER_TIMESTAMP,
@@ -171,13 +176,22 @@ def auto_enroll_student(db, *, uid, org_id, class_id, membership_id=''):
     if existing_enrollment:
         enrollment_id = existing_enrollment.get('id')
         if existing_enrollment.get('status') == 'inactive':
-            # Reactivate and update join_source
+            # Reactivate and update join_source (a DIRECT ref update that bypasses
+            # the database.py helpers, so its shadow is wired explicitly here).
             db.get_enrollment_ref(enrollment_id).update({
                 'status': 'active',
                 'join_source': 'lti',
                 'student_membership_id': actual_membership_id,
                 'updated_at': _firestore.SERVER_TIMESTAMP,
             })
+            if sql_engine is not None:
+                from backend.db import dual_write
+                dual_write.shadow_lti_reactivate(
+                    sql_engine,
+                    class_id=class_id,
+                    student_uid=uid,
+                    student_membership_id=actual_membership_id,
+                )
         return enrollment_id
 
     # Create new enrollment with join_source = 'lti'
@@ -187,6 +201,7 @@ def auto_enroll_student(db, *, uid, org_id, class_id, membership_id=''):
         student_membership_id=actual_membership_id,
         status='active',
         join_source='lti',
+        sql_engine=sql_engine,
     )
     # Pilot: auto-grant voice + guardian consent on enrollment.
     auto_grant_voice_consent_for_pilot(db, org_id=org_id, student_uid=uid)

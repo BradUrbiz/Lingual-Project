@@ -27,14 +27,27 @@ import threading
 from typing import Any
 
 # Pool sized to the fixed gunicorn ceiling (--workers 1 --threads 8, Dockerfile).
+# pool_timeout is deliberately SHORT (3s): the first runtime user is the
+# enrollment dual-write (slice 2b), a fail-open SHADOW that must never make a
+# live request wait long for a pool slot. A bounded wait here, a connect timeout
+# below, and a transaction-scoped statement_timeout in dual_write.py together cap
+# worst-case shadow latency even when Postgres is unhealthy. Single-engine, so
+# this also applies to the offline backfill (fine — it wants to fail fast too).
 _POOL_KWARGS = dict(
     pool_size=8,
     max_overflow=2,
     pool_pre_ping=True,
     pool_recycle=1800,
-    pool_timeout=30,
+    pool_timeout=3,
     future=True,
 )
+
+# Socket-connect ceiling (seconds), applied to BOTH connection paths so a dead /
+# slow Postgres host fails fast instead of hanging a new-connection checkout.
+# pg8000 accepts `timeout` for the connection attempt; the Cloud SQL connector
+# forwards it to the driver. NOTE: this bounds CONNECT only — query hangs on an
+# already-open connection are bounded by dual_write's SET LOCAL statement_timeout.
+_CONNECT_TIMEOUT_SECONDS = 10
 
 _engine: Any = None
 _connector: Any = None
@@ -92,6 +105,9 @@ def _getconn() -> Any:
         'user': db_user,
         'db': db_name,
         'ip_type': os.environ.get('DB_IP_TYPE', 'PUBLIC'),
+        # Bound the connection attempt (forwarded to pg8000) so an unhealthy
+        # instance fails fast rather than hanging a dual-write checkout.
+        'timeout': _CONNECT_TIMEOUT_SECONDS,
     }
     if use_iam:
         kwargs['enable_iam_auth'] = True
@@ -109,8 +125,13 @@ def _build_engine() -> Any:
 
     database_url = os.environ.get('DATABASE_URL')
     if database_url:
-        # Local / CI TCP path. The connector is never touched.
-        return create_engine(database_url, **_POOL_KWARGS)
+        # Local / CI TCP path. The connector is never touched. connect_args is
+        # honored here (no `creator=`), so pg8000 gets the connect timeout.
+        return create_engine(
+            database_url,
+            connect_args={'timeout': _CONNECT_TIMEOUT_SECONDS},
+            **_POOL_KWARGS,
+        )
 
     if not os.environ.get('INSTANCE_CONNECTION_NAME'):
         raise RuntimeError(_missing_var('INSTANCE_CONNECTION_NAME'))

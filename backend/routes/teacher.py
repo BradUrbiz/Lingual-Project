@@ -868,7 +868,7 @@ def create_teacher_blueprint(deps: RouteDeps) -> Blueprint:
             enrollment = deps.db.get_student_class_enrollment(class_id, student_uid)
             if not enrollment:
                 return jsonify({"success": False, "error": "Student enrollment not found."}), 404
-            deps.db.deactivate_enrollment(class_id, student_uid)
+            deps.db.deactivate_enrollment(class_id, student_uid, sql_engine=deps.sql_engine)
             return jsonify({"success": True})
         except SchoolContextPermissionError as exc:
             return jsonify({"success": False, "error": str(exc)}), 403

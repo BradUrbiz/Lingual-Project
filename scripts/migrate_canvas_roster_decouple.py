@@ -120,6 +120,18 @@ def main():
                         help='Write changes to Firestore. Default is dry-run.')
     args = parser.parse_args()
 
+    # This migration mutates enrollment docs via direct Firestore .update()/.delete()
+    # that bypass the database.py helpers — so the slice-2b enrollment dual-write
+    # would NOT mirror them, silently desyncing Postgres. Refuse to run while the
+    # shadow is live; the operator should disable it, migrate, then re-sync via
+    # scripts/backfill_postgres_school_domain.py.
+    if os.environ.get('DUAL_WRITE_ENROLLMENTS') == '1':
+        sys.exit(
+            'ERROR: DUAL_WRITE_ENROLLMENTS=1 is set. Disable it before running this '
+            'migration (its direct Firestore writes are not shadowed to Postgres), '
+            'then re-sync with scripts/backfill_postgres_school_domain.py --write.'
+        )
+
     mode = 'COMMIT' if args.commit else 'DRY-RUN'
     print(f'Canvas roster decouple migration - mode={mode}')
 

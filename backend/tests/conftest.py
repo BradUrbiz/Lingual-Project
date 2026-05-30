@@ -499,7 +499,9 @@ class FakeDbBase:
 
     # -- Enrollments --
 
-    def create_enrollment(self, class_id: str, student_uid: str, student_membership_id: str = "", join_source: str = "", **kwargs) -> str:
+    def create_enrollment(self, class_id: str, student_uid: str, student_membership_id: str = "", join_source: str = "", sql_engine=None, **kwargs) -> str:
+        # sql_engine is the slice-2b dual-write opt-in; the fake ignores it (no
+        # Postgres) and must not forward it to make_enrollment.
         enr = make_enrollment(class_id=class_id, student_uid=student_uid, join_source=join_source, student_membership_id=student_membership_id, **kwargs)
         self.enrollments[enr["id"]] = enr
         return enr["id"]
@@ -514,12 +516,12 @@ class FakeDbBase:
             if e.get("class_id") == class_id and (not status or e.get("status") == status)
         ]
 
-    def deactivate_enrollment(self, class_id: str, student_uid: str):
+    def deactivate_enrollment(self, class_id: str, student_uid: str, sql_engine=None):
         key = f"{class_id}_{student_uid}"
         if key in self.enrollments:
             self.enrollments[key]["status"] = "inactive"
 
-    def reactivate_enrollment(self, class_id: str, student_uid: str):
+    def reactivate_enrollment(self, class_id: str, student_uid: str, sql_engine=None):
         key = f"{class_id}_{student_uid}"
         if key in self.enrollments:
             self.enrollments[key]["status"] = "active"

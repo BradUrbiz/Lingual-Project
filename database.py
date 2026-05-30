@@ -1736,8 +1736,14 @@ def create_enrollment(
     canvas_user_id='',
     canvas_email='',
     canvas_name='',
+    sql_engine=None,
 ):
-    """Create an enrollment document."""
+    """Create an enrollment document.
+
+    `sql_engine` (deps.sql_engine) opts this write into the Postgres dual-write
+    (slice 2b). It is a fail-open shadow gated on DUAL_WRITE_ENROLLMENTS; callers
+    that omit it (e.g. the E2E test harness) never touch Postgres.
+    """
     deterministic_enrollment_id = enrollment_id or f'{class_id}_{student_uid}'
     doc_ref = get_enrollment_ref(deterministic_enrollment_id)
     enrollment_data = {
@@ -1754,7 +1760,23 @@ def create_enrollment(
         'created_at': firestore.SERVER_TIMESTAMP,
         'updated_at': firestore.SERVER_TIMESTAMP,
     }
-    doc_ref.set(enrollment_data)
+    doc_ref.set(enrollment_data)  # Firestore is the system of record — write it first.
+    if sql_engine is not None:
+        from backend.db import dual_write
+        dual_write.shadow_create_enrollment(
+            sql_engine,
+            class_id=class_id,
+            student_uid=student_uid,
+            enrollment_id=doc_ref.id,
+            student_membership_id=student_membership_id,
+            status=status,
+            join_source=join_source,
+            student_number=student_number,
+            guardian_contact_required=bool(guardian_contact_required),
+            canvas_user_id=canvas_user_id or '',
+            canvas_email=canvas_email or '',
+            canvas_name=canvas_name or '',
+        )
     return doc_ref.id
 
 
@@ -1832,22 +1854,36 @@ def get_class_by_join_code(code):
     return None
 
 
-def deactivate_enrollment(class_id, student_uid):
-    """Set an enrollment to inactive (soft-delete)."""
+def deactivate_enrollment(class_id, student_uid, sql_engine=None):
+    """Set an enrollment to inactive (soft-delete).
+
+    `sql_engine` opts into the fail-open Postgres dual-write (slice 2b)."""
     enrollment_id = f'{class_id}_{student_uid}'
     get_enrollment_ref(enrollment_id).update({
         'status': 'inactive',
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
+    if sql_engine is not None:
+        from backend.db import dual_write
+        dual_write.shadow_set_enrollment_status(
+            sql_engine, class_id=class_id, student_uid=student_uid, status='inactive'
+        )
 
 
-def reactivate_enrollment(class_id, student_uid):
-    """Reactivate a previously deactivated enrollment."""
+def reactivate_enrollment(class_id, student_uid, sql_engine=None):
+    """Reactivate a previously deactivated enrollment.
+
+    `sql_engine` opts into the fail-open Postgres dual-write (slice 2b)."""
     enrollment_id = f'{class_id}_{student_uid}'
     get_enrollment_ref(enrollment_id).update({
         'status': 'active',
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
+    if sql_engine is not None:
+        from backend.db import dual_write
+        dual_write.shadow_set_enrollment_status(
+            sql_engine, class_id=class_id, student_uid=student_uid, status='active'
+        )
 
 
 def get_student_compliance_record(org_id, student_uid):

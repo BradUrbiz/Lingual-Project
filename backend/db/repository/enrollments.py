@@ -19,6 +19,7 @@ Nothing here is wired into a route yet.
 
 from __future__ import annotations
 
+import datetime
 import uuid
 from typing import Any
 
@@ -28,6 +29,11 @@ from backend.db.models.org import Enrollment
 
 # Firestore-shaped keys, in the order routes expect them.
 _RENAME = {'student_firebase_uid': 'student_uid'}
+
+
+def _utcnow() -> datetime.datetime:
+    """Timezone-aware now() for explicit updated_at bumps (no onupdate trigger)."""
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _serialize(row: Enrollment) -> dict[str, Any]:
@@ -136,6 +142,10 @@ def _set_status(session: Any, class_id: uuid.UUID, student_uid: str, status: str
     row = session.execute(stmt).scalar_one_or_none()
     if row is not None:
         row.status = status
+        # updated_at has a server_default but NO onupdate trigger (see base.py),
+        # so a status change must bump it explicitly or the roster's newest-first
+        # ordering and parity field-checks would see a stale timestamp.
+        row.updated_at = _utcnow()
         session.flush()
 
 
@@ -147,3 +157,30 @@ def deactivate_enrollment(session: Any, class_id: uuid.UUID, student_uid: str) -
 def reactivate_enrollment(session: Any, class_id: uuid.UUID, student_uid: str) -> None:
     """Reactivate a previously deactivated enrollment."""
     _set_status(session, class_id, student_uid, 'active')
+
+
+def lti_reactivate_enrollment(
+    session: Any,
+    class_id: uuid.UUID,
+    student_uid: str,
+    *,
+    student_membership_id: uuid.UUID | None = None,
+) -> None:
+    """Reactivate AND stamp the LTI-specific fields the LTI launch path writes.
+
+    The plain `reactivate_enrollment` only flips status. The LTI reactivation
+    path (services/lti/identity.py) additionally rewrites join_source='lti' and
+    the resolved student_membership_id, so its Postgres shadow must mirror all
+    three. No-op when the (class, student) row is not present in Postgres yet.
+    """
+    stmt = select(Enrollment).where(
+        Enrollment.class_id == class_id,
+        Enrollment.student_firebase_uid == student_uid,
+    )
+    row = session.execute(stmt).scalar_one_or_none()
+    if row is not None:
+        row.status = 'active'
+        row.join_source = 'lti'
+        row.student_membership_id = student_membership_id
+        row.updated_at = _utcnow()
+        session.flush()

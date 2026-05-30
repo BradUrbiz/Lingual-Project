@@ -468,6 +468,21 @@ class FakeDbBase:
     def get_user(self, uid: str):
         return self.users.get(uid)
 
+    def update_user(self, uid: str, updates: dict):
+        """Mimic database.update_user (Firestore set(merge=True)).
+
+        One-level deep-merge: a nested dict value merges into an existing
+        nested dict (e.g. the email_verification map), matching how
+        set(merge=True) treats nested maps. Everything else is assigned.
+        """
+        user = self.users.setdefault(uid, {})
+        for key, value in (updates or {}).items():
+            if isinstance(value, dict) and isinstance(user.get(key), dict):
+                user[key].update(value)
+            else:
+                user[key] = value
+        return uid
+
     def get_organization(self, org_id: str):
         return self.organizations.get(org_id)
 

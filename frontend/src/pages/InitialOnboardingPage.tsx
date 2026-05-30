@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { m } from 'framer-motion';
 import { Languages, ClipboardCheck, Loader2, ArrowRight } from 'lucide-react';
 import { AnimatedPage } from '@/components/layout';
 import { Card, Button, Alert, AlertDescription } from '@/components/ui';
@@ -12,16 +12,61 @@ import { getOnboardingDestination, LEARNER_HOME_ROUTE, LEARNER_SETUP_ROUTE } fro
 import { LEARNING_LOCALES } from '@/lib/learningLocales';
 import type { AssessmentPreference, LearningLocale } from '@/types';
 
+type InitialOnboardingState = {
+  loading: boolean;
+  saving: boolean;
+  error: string | null;
+  learningLocale: LearningLocale;
+  assessmentPreference: AssessmentPreference | null;
+};
+
+type InitialOnboardingAction =
+  | { type: 'load-finished' }
+  | { type: 'profile-locale'; learningLocale: LearningLocale }
+  | { type: 'set-locale'; learningLocale: LearningLocale }
+  | { type: 'set-assessment-preference'; assessmentPreference: AssessmentPreference }
+  | { type: 'save-start' }
+  | { type: 'save-error'; error: string }
+  | { type: 'set-error'; error: string | null };
+
+const initialOnboardingState: InitialOnboardingState = {
+  loading: true,
+  saving: false,
+  error: null,
+  learningLocale: 'ko-KR',
+  assessmentPreference: null,
+};
+
+function initialOnboardingReducer(
+  state: InitialOnboardingState,
+  action: InitialOnboardingAction
+): InitialOnboardingState {
+  switch (action.type) {
+    case 'load-finished':
+      return { ...state, loading: false };
+    case 'profile-locale':
+    case 'set-locale':
+      return { ...state, learningLocale: action.learningLocale };
+    case 'set-assessment-preference':
+      return { ...state, assessmentPreference: action.assessmentPreference };
+    case 'save-start':
+      return { ...state, saving: true, error: null };
+    case 'save-error':
+      return { ...state, saving: false, error: action.error };
+    case 'set-error':
+      return { ...state, error: action.error };
+    default:
+      return state;
+  }
+}
+
 export function InitialOnboardingPage() {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { setLearningLocale } = useLearningLocale();
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [learningLocale, setLocale] = useState<LearningLocale>('ko-KR');
-  const [assessmentPreference, setAssessmentPreference] = useState<AssessmentPreference | null>(null);
+  const [state, dispatch] = useReducer(initialOnboardingReducer, initialOnboardingState);
+  const { loading, saving, error, learningLocale, assessmentPreference } = state;
 
   useEffect(() => {
     let isActive = true;
@@ -48,14 +93,14 @@ export function InitialOnboardingPage() {
         }
 
         if (profile.learningLocale) {
-          setLocale(profile.learningLocale);
+          dispatch({ type: 'profile-locale', learningLocale: profile.learningLocale });
         }
       } catch {
         if (isActive) {
           navigate(LEARNER_SETUP_ROUTE, { replace: true });
         }
       } finally {
-        if (isActive) setLoading(false);
+        if (isActive) dispatch({ type: 'load-finished' });
       }
     };
 
@@ -68,12 +113,14 @@ export function InitialOnboardingPage() {
 
   const handleContinue = async () => {
     if (!assessmentPreference) {
-      setError(t('onboarding.initial.errorChoice') || 'Please choose how you want to start.');
+      dispatch({
+        type: 'set-error',
+        error: t('onboarding.initial.errorChoice') || 'Please choose how you want to start.',
+      });
       return;
     }
 
-    setSaving(true);
-    setError(null);
+    dispatch({ type: 'save-start' });
 
     try {
       await saveInitialOnboarding(learningLocale, assessmentPreference);
@@ -85,18 +132,19 @@ export function InitialOnboardingPage() {
         navigate(LEARNER_HOME_ROUTE);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save onboarding preferences.');
-    } finally {
-      setSaving(false);
+      dispatch({
+        type: 'save-error',
+        error: err instanceof Error ? err.message : 'Failed to save onboarding preferences.',
+      });
     }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}>
-          <Loader2 className="h-10 w-10 text-primary" strokeWidth={3} />
-        </motion.div>
+        <m.div animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}>
+          <Loader2 className="size-10 text-primary" strokeWidth={3} />
+        </m.div>
       </div>
     );
   }
@@ -134,7 +182,7 @@ export function InitialOnboardingPage() {
               <button
                 type="button"
                 key={option.value}
-                onClick={() => setLocale(option.value)}
+                onClick={() => dispatch({ type: 'set-locale', learningLocale: option.value })}
                 className={`rounded-2xl border-2 p-4 text-left transition-colors ${
                   learningLocale === option.value
                     ? 'border-primary bg-primary/10'
@@ -163,7 +211,7 @@ export function InitialOnboardingPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <button
               type="button"
-              onClick={() => setAssessmentPreference('take')}
+              onClick={() => dispatch({ type: 'set-assessment-preference', assessmentPreference: 'take' })}
               className={`rounded-2xl border-2 p-4 text-left transition-colors ${
                 assessmentPreference === 'take'
                   ? 'border-primary bg-primary/10'
@@ -179,7 +227,7 @@ export function InitialOnboardingPage() {
             </button>
             <button
               type="button"
-              onClick={() => setAssessmentPreference('skip')}
+              onClick={() => dispatch({ type: 'set-assessment-preference', assessmentPreference: 'skip' })}
               className={`rounded-2xl border-2 p-4 text-left transition-colors ${
                 assessmentPreference === 'skip'
                   ? 'border-primary bg-primary/10'

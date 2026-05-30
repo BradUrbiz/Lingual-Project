@@ -1,7 +1,7 @@
 // WordMatch - Warm Brutalism Edition
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useMemo, useReducer } from 'react';
+import { m } from 'framer-motion';
 import { X, Trophy, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui';
 
@@ -18,61 +18,129 @@ interface WordMatchProps {
   onClose: () => void;
 }
 
+type WordMatchState = {
+  selectedLeft: number | null;
+  selectedRight: number | null;
+  matched: { left: number[]; right: number[] };
+  score: number;
+  gameOver: boolean;
+};
+
+type WordMatchAction =
+  | {
+      type: 'select';
+      side: 'left' | 'right';
+      idx: number;
+      wordPairs: WordPair[];
+      leftWords: string[];
+      rightWords: string[];
+    }
+  | { type: 'clearSelection' };
+
+const INITIAL_WORD_MATCH_STATE: WordMatchState = {
+  selectedLeft: null,
+  selectedRight: null,
+  matched: { left: [], right: [] },
+  score: 0,
+  gameOver: false,
+};
+
+function shuffleWords(words: string[]): string[] {
+  return Array.from(words).sort(() => Math.random() - 0.5);
+}
+
+function isWordMatch(
+  wordPairs: WordPair[],
+  leftWords: string[],
+  rightWords: string[],
+  leftIdx: number,
+  rightIdx: number
+) {
+  return wordPairs.some(
+    (pair) => pair.korean === leftWords[leftIdx] && pair.english === rightWords[rightIdx]
+  );
+}
+
+function wordMatchReducer(state: WordMatchState, action: WordMatchAction): WordMatchState {
+  switch (action.type) {
+    case 'select': {
+      if (state.matched[action.side].includes(action.idx)) return state;
+      const selectedLeft = action.side === 'left' ? action.idx : state.selectedLeft;
+      const selectedRight = action.side === 'right' ? action.idx : state.selectedRight;
+      const hasPair = selectedLeft !== null && selectedRight !== null;
+      const alreadyMatched =
+        hasPair &&
+        state.matched.left.includes(selectedLeft) &&
+        state.matched.right.includes(selectedRight);
+
+      if (!hasPair || alreadyMatched) {
+        return { ...state, selectedLeft, selectedRight };
+      }
+
+      const matched = isWordMatch(
+        action.wordPairs,
+        action.leftWords,
+        action.rightWords,
+        selectedLeft,
+        selectedRight
+      );
+      if (!matched) {
+        return { ...state, selectedLeft, selectedRight };
+      }
+
+      const nextMatched = {
+        left: [...state.matched.left, selectedLeft],
+        right: [...state.matched.right, selectedRight],
+      };
+      return {
+        ...state,
+        selectedLeft,
+        selectedRight,
+        matched: nextMatched,
+        score: state.score + 10,
+        gameOver: nextMatched.left.length === action.wordPairs.length,
+      };
+    }
+    case 'clearSelection':
+      return { ...state, selectedLeft: null, selectedRight: null };
+    default:
+      return state;
+  }
+}
+
 export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
   // Shuffle words for columns
-  const [leftWords] = useState(() => wordPairs.map((w) => w.korean).sort(() => Math.random() - 0.5));
-  const [rightWords] = useState(() =>
-    wordPairs.map((w) => w.english).sort(() => Math.random() - 0.5)
+  const leftWords = useMemo(() => shuffleWords(wordPairs.map((w) => w.korean)), [wordPairs]);
+  const rightWords = useMemo(
+    () => shuffleWords(wordPairs.map((w) => w.english)),
+    [wordPairs]
   );
-  const [selectedLeft, setSelectedLeft] = useState<number | null>(null);
-  const [selectedRight, setSelectedRight] = useState<number | null>(null);
-  const [matched, setMatched] = useState<{ left: number[]; right: number[] }>({ left: [], right: [] });
-  const [score, setScore] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
-
-  // Find the original pair for checking
-  const isMatch = (leftIdx: number, rightIdx: number) => {
-    return wordPairs.some(
-      (pair) => pair.korean === leftWords[leftIdx] && pair.english === rightWords[rightIdx]
-    );
-  };
+  const [wordMatchState, dispatchWordMatch] = useReducer(
+    wordMatchReducer,
+    INITIAL_WORD_MATCH_STATE
+  );
+  const { selectedLeft, selectedRight, matched, score, gameOver } = wordMatchState;
 
   // Handle selection and matching
   const handleSelect = (side: 'left' | 'right', idx: number) => {
     if (matched[side].includes(idx)) return;
-    if (side === 'left') setSelectedLeft(idx);
-    else setSelectedRight(idx);
-  };
-
-  // Check for match when both selected
-  if (
-    selectedLeft !== null &&
-    selectedRight !== null &&
-    !matched.left.includes(selectedLeft) &&
-    !matched.right.includes(selectedRight)
-  ) {
-    if (isMatch(selectedLeft, selectedRight)) {
-      setMatched((prev) => ({
-        left: [...prev.left, selectedLeft],
-        right: [...prev.right, selectedRight],
-      }));
-      setScore((s) => s + 10);
-      if (matched.left.length + 1 === wordPairs.length) setGameOver(true);
+    const willCompletePair =
+      (side === 'left' && selectedRight !== null) ||
+      (side === 'right' && selectedLeft !== null);
+    dispatchWordMatch({ type: 'select', side, idx, wordPairs, leftWords, rightWords });
+    if (willCompletePair) {
+      setTimeout(() => dispatchWordMatch({ type: 'clearSelection' }), 500);
     }
-    setTimeout(() => {
-      setSelectedLeft(null);
-      setSelectedRight(null);
-    }, 500);
   }
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-foreground/60 flex items-center justify-center z-50 p-4"
     >
-      <motion.div
+      <m.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 max-w-2xl w-full relative max-h-[90vh] flex flex-col"
@@ -81,7 +149,7 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center shadow-stamp-sm overflow-hidden">
+            <div className="size-12 rounded-xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center shadow-stamp-sm overflow-hidden">
               {wordMatchLogo ? (
                 <img src={wordMatchLogo} alt="Word Match Logo" className="w-full h-full object-cover" />
               ) : (
@@ -95,7 +163,7 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
               <span className="text-2xl font-display font-bold text-foreground">Word Match</span>
             </div>
           </div>
-          <button
+          <button type="button"
             onClick={onClose}
             aria-label="Close word match"
             title="Close"
@@ -120,7 +188,7 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
         {/* Game Over */}
         {gameOver ? (
           <div className="flex flex-col items-center justify-center py-12">
-            <div className="w-20 h-20 rounded-2xl bg-accent text-accent-foreground border-3 border-foreground flex items-center justify-center mb-6 shadow-stamp">
+            <div className="size-20 rounded-2xl bg-accent text-accent-foreground border-3 border-foreground flex items-center justify-center mb-6 shadow-stamp">
               <Trophy size={40} strokeWidth={2.5} />
             </div>
             <div className="text-4xl font-display font-bold text-foreground mb-2">Excellent!</div>
@@ -142,8 +210,8 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
                 Korean
               </p>
               {leftWords.map((word, i) => (
-                <button
-                  key={i}
+                <button type="button"
+                  key={word}
                   className={`
                     px-6 py-3 rounded-xl border-2 text-lg font-display font-bold transition-all
                     ${matched.left.includes(i) ? 'bg-success/10 text-success border-success cursor-default' : ''}
@@ -169,8 +237,8 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
                 English
               </p>
               {rightWords.map((word, i) => (
-                <button
-                  key={i}
+                <button type="button"
+                  key={word}
                   className={`
                     px-6 py-3 rounded-xl border-2 text-lg font-medium transition-all
                     ${matched.right.includes(i) ? 'bg-success/10 text-success border-success cursor-default' : ''}
@@ -193,7 +261,7 @@ export function WordMatch({ wordPairs, onClose }: WordMatchProps) {
             Click a word on each side to match them together
           </p>
         )}
-      </motion.div>
-    </motion.div>
+      </m.div>
+    </m.div>
   );
 }

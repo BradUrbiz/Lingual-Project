@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Hand, History, Loader2, MessageSquareText, Mic } from 'lucide-react';
 import {
   createAssignmentPracticeSession,
@@ -11,7 +11,7 @@ import { Alert, AlertDescription, Button, Dialog, DialogContent, DialogDescripti
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRealtimeChat } from '@/hooks/useRealtimeChat';
 import { useRealtimeSpeakingSpeed } from '@/hooks/useRealtimeSpeakingSpeed';
-import type { AssignmentBootstrapData, AssignmentWorkspaceData, ChatMessage as ChatMessageType, PracticeSessionDto } from '@/types';
+import type { AssignmentBootstrapData, AssignmentWorkspaceData, ChatMessage as ChatMessageType, Language, PracticeSessionDto } from '@/types';
 import { AssignmentContextPanel } from './AssignmentContextPanel';
 import { AssignmentThreadSidebar } from './AssignmentThreadSidebar';
 
@@ -34,6 +34,19 @@ function buildRealtimeSessionParams(
   };
 }
 
+async function queuePracticeEvent(
+  practiceSessionId: string,
+  eventType: string,
+  turnIndex: number | null,
+  payload: Record<string, unknown>,
+) {
+  await reportPracticeSessionEvent(practiceSessionId, {
+    eventType,
+    turnIndex,
+    payload,
+  });
+}
+
 function mergeActivePracticeSessionIntoWorkspace(
   workspace: AssignmentWorkspaceData,
   practiceSession: PracticeSessionDto | null | undefined,
@@ -46,13 +59,13 @@ function mergeActivePracticeSessionIntoWorkspace(
 
   let foundThread = false;
   const threads = workspace.threads.map((thread) => {
-    const attemptsWithoutDuplicate = thread.attempts
-      .filter((attempt) => attempt.id !== practiceSession.id)
-      .map((attempt) => (
-        attempt.status === 'active'
-          ? { ...attempt, status: 'completed' }
-          : attempt
-      ));
+    const attemptsWithoutDuplicate = thread.attempts.reduce<typeof thread.attempts>((acc, attempt) => {
+      if (attempt.id === practiceSession.id) {
+        return acc;
+      }
+      acc.push(attempt.status === 'active' ? { ...attempt, status: 'completed' } : attempt);
+      return acc;
+    }, []);
 
     if (thread.chatId !== chatId) {
       const latestPracticeSession = thread.latestPracticeSession?.status === 'active'
@@ -95,25 +108,567 @@ function mergeActivePracticeSessionIntoWorkspace(
   };
 }
 
-export function AssignmentPracticeWorkspace({
+type AssignmentThread = AssignmentWorkspaceData['threads'][number];
+
+interface AssignmentWorkspaceState {
+  workspace: AssignmentWorkspaceData | null;
+  selectedChatId: string | null;
+  historyMessages: ChatMessageType[];
+  loading: boolean;
+  loadingChat: boolean;
+  isMutating: boolean;
+  isConnecting: boolean;
+  isSendingText: boolean;
+  isSidebarExpanded: boolean;
+  isScopeExpanded: boolean;
+  isHistoryExpanded: boolean;
+  textInput: string;
+  error: string | null;
+}
+
+type AssignmentWorkspaceAction =
+  | { type: 'patch'; payload: Partial<AssignmentWorkspaceState> }
+  | { type: 'workspaceLoaded'; workspace: AssignmentWorkspaceData; selectedChatId: string | null }
+  | { type: 'mergeActivePracticeSession'; practiceSession: PracticeSessionDto; fallbackTitle: string; selectedChatId: string | null }
+  | { type: 'toggleSidebar' }
+  | { type: 'toggleScope' }
+  | { type: 'toggleHistory' }
+  | { type: 'appendHistoryMessages'; messages: ChatMessageType[] };
+
+const initialAssignmentWorkspaceState: AssignmentWorkspaceState = {
+  workspace: null,
+  selectedChatId: null,
+  historyMessages: [],
+  loading: false,
+  loadingChat: false,
+  isMutating: false,
+  isConnecting: false,
+  isSendingText: false,
+  isSidebarExpanded: true,
+  isScopeExpanded: true,
+  isHistoryExpanded: true,
+  textInput: '',
+  error: null,
+};
+
+function assignmentWorkspaceReducer(
+  state: AssignmentWorkspaceState,
+  action: AssignmentWorkspaceAction,
+): AssignmentWorkspaceState {
+  switch (action.type) {
+    case 'patch':
+      return { ...state, ...action.payload };
+    case 'workspaceLoaded':
+      return {
+        ...state,
+        workspace: action.workspace,
+        selectedChatId: action.selectedChatId,
+      };
+    case 'mergeActivePracticeSession':
+      return {
+        ...state,
+        workspace: state.workspace
+          ? mergeActivePracticeSessionIntoWorkspace(state.workspace, action.practiceSession, action.fallbackTitle)
+          : state.workspace,
+        selectedChatId: action.selectedChatId,
+      };
+    case 'toggleSidebar':
+      return { ...state, isSidebarExpanded: !state.isSidebarExpanded };
+    case 'toggleScope':
+      return { ...state, isScopeExpanded: !state.isScopeExpanded };
+    case 'toggleHistory':
+      return { ...state, isHistoryExpanded: !state.isHistoryExpanded };
+    case 'appendHistoryMessages':
+      return { ...state, historyMessages: [...state.historyMessages, ...action.messages] };
+    default:
+      return state;
+  }
+}
+
+interface SidebarExpansionState {
+  sidebar: boolean;
+  scope: boolean;
+  history: boolean;
+}
+
+interface CollapsibleSidebarSectionProps {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  expanded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+  contentClassName?: string;
+}
+
+function CollapsibleSidebarSection({
+  icon,
+  title,
+  description,
+  expanded,
+  onToggle,
+  children,
+  contentClassName = 'p-3',
+}: CollapsibleSidebarSectionProps) {
+  return (
+    <section className="overflow-hidden rounded-2xl border-2 border-border bg-card">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-secondary/50"
+      >
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-secondary text-foreground">
+            {icon}
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-foreground">{title}</span>
+            <span className="block truncate text-xs text-muted-foreground">{description}</span>
+          </span>
+        </span>
+        <ChevronDown
+          className={`size-4 shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {expanded ? (
+        <div className={`border-t-2 border-border ${contentClassName}`}>
+          {children}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+interface CollapsedAssignmentSidebarActionsProps {
+  onOpenScope: () => void;
+  onOpenHistory: () => void;
+}
+
+function CollapsedAssignmentSidebarActions({
+  onOpenScope,
+  onOpenHistory,
+}: CollapsedAssignmentSidebarActionsProps) {
+  return (
+    <div className="hidden min-h-0 flex-1 flex-col items-center gap-3 px-3 py-4 lg:flex">
+      <button
+        type="button"
+        onClick={onOpenScope}
+        aria-label="Open assignment scope"
+        className="flex size-10 items-center justify-center rounded-xl border-2 border-border bg-card text-foreground transition-colors hover:bg-secondary"
+      >
+        <BookOpen className="size-4" />
+      </button>
+      <button
+        type="button"
+        onClick={onOpenHistory}
+        aria-label="Open chat history"
+        className="flex size-10 items-center justify-center rounded-xl border-2 border-border bg-card text-foreground transition-colors hover:bg-secondary"
+      >
+        <History className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+interface AssignmentWorkspaceSidebarProps {
+  bootstrap: AssignmentBootstrapData;
+  workspace: AssignmentWorkspaceData;
+  lang: Language;
+  selectedChatId: string | null;
+  expansion: SidebarExpansionState;
+  onToggleSidebar: () => void;
+  onToggleScope: () => void;
+  onToggleHistory: () => void;
+  onOpenScope: () => void;
+  onOpenHistory: () => void;
+  onSelectThread: (chatId: string) => void;
+  onNewAttempt: () => void;
+}
+
+function AssignmentWorkspaceSidebar({
+  bootstrap,
+  workspace,
+  lang,
+  selectedChatId,
+  expansion,
+  onToggleSidebar,
+  onToggleScope,
+  onToggleHistory,
+  onOpenScope,
+  onOpenHistory,
+  onSelectThread,
+  onNewAttempt,
+}: AssignmentWorkspaceSidebarProps) {
+  return (
+    <aside
+      className={`flex min-h-0 shrink-0 flex-col border-b-2 border-border bg-secondary/20 transition-[height,width] duration-200 lg:h-full lg:border-b-0 lg:border-r-2 ${
+        expansion.sidebar
+          ? 'max-lg:max-h-[50%] lg:basis-1/2'
+          : 'max-lg:h-[4.5rem] lg:basis-[4.5rem]'
+      }`}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b-2 border-border bg-card p-3">
+        {expansion.sidebar ? (
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Assignment workspace
+            </p>
+            <p className="mt-1 truncate text-sm font-semibold text-foreground">
+              Scope and attempt history
+            </p>
+          </div>
+        ) : (
+          <span className="sr-only">Assignment workspace sidebar</span>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={onToggleSidebar}
+          aria-label={expansion.sidebar ? 'Collapse assignment sidebar' : 'Expand assignment sidebar'}
+          className="size-10 shrink-0 border-2 shadow-none"
+        >
+          {expansion.sidebar ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+        </Button>
+      </div>
+
+      {expansion.sidebar ? (
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 sm:p-4">
+          <CollapsibleSidebarSection
+            icon={<BookOpen className="size-4" />}
+            title="Assignment scope"
+            description="Objectives, scenario, teacher guidance"
+            expanded={expansion.scope}
+            onToggle={onToggleScope}
+            contentClassName="max-h-[34vh] overflow-y-auto p-3"
+          >
+            <AssignmentContextPanel bootstrap={bootstrap} lang={lang} />
+          </CollapsibleSidebarSection>
+
+          <CollapsibleSidebarSection
+            icon={<History className="size-4" />}
+            title="Chat history"
+            description="Assignment-only attempts and resumes"
+            expanded={expansion.history}
+            onToggle={onToggleHistory}
+          >
+            <AssignmentThreadSidebar
+              threads={workspace.threads}
+              selectedChatId={selectedChatId}
+              onSelectThread={onSelectThread}
+              onNewAttempt={onNewAttempt}
+            />
+          </CollapsibleSidebarSection>
+        </div>
+      ) : (
+        <CollapsedAssignmentSidebarActions onOpenScope={onOpenScope} onOpenHistory={onOpenHistory} />
+      )}
+    </aside>
+  );
+}
+
+interface AssignmentConversationHeaderProps {
+  selectedThread: AssignmentThread | null;
+  selectedActivePracticeSession: PracticeSessionDto | null;
+  onEndSession: () => void;
+  status: {
+    isMutating: boolean;
+    isConnecting: boolean;
+    isConnected: boolean;
+    isListening: boolean;
+    isSpeaking: boolean;
+  };
+}
+
+function AssignmentConversationHeader({
+  selectedThread,
+  selectedActivePracticeSession,
+  onEndSession,
+  status,
+}: AssignmentConversationHeaderProps) {
+  return (
+    <div className="shrink-0 border-b-2 border-border px-4 py-4 sm:px-6">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Conversation</p>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <h3 className="text-lg font-semibold text-foreground">
+          {selectedThread?.title || 'Select a thread'}
+        </h3>
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedActivePracticeSession ? (
+            <Button size="sm" variant="outline" onClick={onEndSession} disabled={status.isMutating}>
+              End session
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      {selectedActivePracticeSession ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Status: {selectedActivePracticeSession.status} · Voice {selectedActivePracticeSession.voiceEnabled ? 'on' : 'off'} ·
+          Text {selectedActivePracticeSession.textEnabled ? 'on' : 'off'} ·
+          Connected {status.isConnecting ? 'connecting' : status.isConnected ? 'yes' : 'no'} ·
+          Listening {status.isListening ? 'yes' : 'no'} · Speaking {status.isSpeaking ? 'yes' : 'no'}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+interface AssignmentMessagesPaneProps {
+  loadingChat: boolean;
+  messages: ChatMessageType[];
+}
+
+function AssignmentMessagesPane({ loadingChat, messages }: AssignmentMessagesPaneProps) {
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto bg-secondary/30 px-4 py-4 sm:px-6">
+      {loadingChat ? (
+        <div className="flex h-full min-h-[260px] items-center justify-center">
+          <Loader2 className="size-6 animate-spin text-primary" />
+        </div>
+      ) : messages.length > 0 ? (
+        <div className="space-y-3">
+          {messages.map((message) => (
+            <ChatMessage key={message.id} role={message.role} content={message.content} />
+          ))}
+        </div>
+      ) : (
+        <div className="flex min-h-[260px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-secondary/20 px-6 text-center">
+          <MessageSquareText className="size-6 text-muted-foreground" />
+          <p className="mt-3 text-sm text-muted-foreground">
+            Open a thread to review assignment conversation history.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface HoldButtonLabels {
+  release: string;
+  active: string;
+  inactive: string;
+}
+
+interface AssignmentComposerState {
+  canUseVoice: boolean;
+  canUseText: boolean;
+  isConnecting: boolean;
+  isMutating: boolean;
+  isConnected: boolean;
+  isTutorHoldActive: boolean;
+  hasHeldTutorResponse: boolean;
+  isSendingText: boolean;
+  speakingSpeed: number;
+  textInput: string;
+  voiceStatusLabel: string;
+}
+
+interface AssignmentComposerPanelProps {
+  state: AssignmentComposerState;
+  holdLabels: HoldButtonLabels;
+  selectedActivePracticeSession: PracticeSessionDto | null;
+  selectedChatId: string | null;
+  onSpeakingSpeedChange: (nextSpeed: number) => void;
+  onTutorHoldChange: (nextValue: boolean) => void;
+  onVoiceToggle: () => void;
+  onTextChange: (nextText: string) => void;
+  onSendText: () => void;
+}
+
+function AssignmentComposerPanel({
+  state,
+  holdLabels,
+  selectedActivePracticeSession,
+  selectedChatId,
+  onSpeakingSpeedChange,
+  onTutorHoldChange,
+  onVoiceToggle,
+  onTextChange,
+  onSendText,
+}: AssignmentComposerPanelProps) {
+  return (
+    <div className="shrink-0 space-y-3 border-t-2 border-border bg-card px-4 py-4 sm:px-6">
+      {state.canUseVoice ? (
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <SpeakingSpeedControl
+              value={state.speakingSpeed}
+              onChange={onSpeakingSpeedChange}
+              disabled={state.isConnecting || state.isMutating}
+            />
+            <div className="flex min-h-12 items-center rounded-2xl border-2 border-border bg-background px-4 text-sm font-semibold text-muted-foreground">
+              {state.voiceStatusLabel}
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => onTutorHoldChange(!state.isTutorHoldActive)}
+              disabled={!state.isConnected || state.isConnecting || state.isMutating}
+              aria-pressed={state.isTutorHoldActive}
+              aria-label={state.isTutorHoldActive ? holdLabels.release : holdLabels.inactive}
+              title={state.isTutorHoldActive ? holdLabels.release : holdLabels.inactive}
+              className={`flex h-14 shrink-0 items-center gap-2 rounded-2xl border-3 border-foreground px-3 text-sm font-bold transition-all ${
+                state.isTutorHoldActive
+                  ? 'bg-warning text-warning-foreground shadow-stamp'
+                  : 'bg-background text-foreground hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--foreground)]'
+              } disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none`}
+            >
+              <Hand className="size-5" />
+              <span className="hidden sm:inline">
+                {state.isTutorHoldActive
+                  ? state.hasHeldTutorResponse
+                    ? holdLabels.release
+                    : holdLabels.active
+                  : holdLabels.inactive}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={onVoiceToggle}
+              disabled={state.isConnecting || state.isMutating}
+              aria-label={state.voiceStatusLabel}
+              className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border-3 border-foreground transition-all ${
+                state.isConnected
+                  ? 'bg-success text-success-foreground shadow-stamp'
+                  : 'bg-primary text-primary-foreground shadow-stamp hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--foreground)]'
+              } disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none`}
+            >
+              {state.isConnecting ? <Loader2 className="size-5 animate-spin" /> : <Mic className="size-5" />}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {state.canUseText ? (
+        <ChatInput
+          value={state.textInput}
+          onChange={onTextChange}
+          onSend={onSendText}
+          disabled={state.isSendingText || state.isMutating || !selectedChatId}
+          placeholder={
+            selectedActivePracticeSession
+              ? 'Type your assignment response...'
+              : 'Type to continue this assignment thread...'
+          }
+        />
+      ) : null}
+    </div>
+  );
+}
+
+interface AssignmentConversationViewProps {
+  selectedThread: AssignmentThread | null;
+  selectedActivePracticeSession: PracticeSessionDto | null;
+  selectedChatId: string | null;
+  messages: ChatMessageType[];
+  loadingChat: boolean;
+  status: AssignmentConversationHeaderProps['status'];
+  composerState: AssignmentComposerState;
+  holdLabels: HoldButtonLabels;
+  onEndSession: () => void;
+  onSpeakingSpeedChange: (nextSpeed: number) => void;
+  onTutorHoldChange: (nextValue: boolean) => void;
+  onVoiceToggle: () => void;
+  onTextChange: (nextText: string) => void;
+  onSendText: () => void;
+}
+
+function AssignmentConversationView({
+  selectedThread,
+  selectedActivePracticeSession,
+  selectedChatId,
+  messages,
+  loadingChat,
+  status,
+  composerState,
+  holdLabels,
+  onEndSession,
+  onSpeakingSpeedChange,
+  onTutorHoldChange,
+  onVoiceToggle,
+  onTextChange,
+  onSendText,
+}: AssignmentConversationViewProps) {
+  return (
+    <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
+      <AssignmentConversationHeader
+        selectedThread={selectedThread}
+        selectedActivePracticeSession={selectedActivePracticeSession}
+        onEndSession={onEndSession}
+        status={status}
+      />
+      <AssignmentMessagesPane loadingChat={loadingChat} messages={messages} />
+      {selectedThread ? (
+        <AssignmentComposerPanel
+          state={composerState}
+          holdLabels={holdLabels}
+          selectedActivePracticeSession={selectedActivePracticeSession}
+          selectedChatId={selectedChatId}
+          onSpeakingSpeedChange={onSpeakingSpeedChange}
+          onTutorHoldChange={onTutorHoldChange}
+          onVoiceToggle={onVoiceToggle}
+          onTextChange={onTextChange}
+          onSendText={onSendText}
+        />
+      ) : null}
+    </main>
+  );
+}
+
+interface AssignmentPracticeWorkspaceController {
+  lang: Language;
+  workspace: AssignmentWorkspaceData | null;
+  selectedChatId: string | null;
+  selectedThread: AssignmentThread | null;
+  selectedActivePracticeSession: PracticeSessionDto | null;
+  loading: boolean;
+  loadingChat: boolean;
+  error: string | null;
+  displayMessages: ChatMessageType[];
+  sidebarExpansion: SidebarExpansionState;
+  conversationStatus: AssignmentConversationHeaderProps['status'];
+  composerState: AssignmentComposerState;
+  holdLabels: HoldButtonLabels;
+  handleClose: () => void;
+  handleToggleSidebar: () => void;
+  handleToggleScope: () => void;
+  handleToggleHistory: () => void;
+  handleOpenScope: () => void;
+  handleOpenHistory: () => void;
+  handleSelectThread: (nextChatId: string) => void;
+  handleNewAttempt: () => Promise<void>;
+  handleEndSession: () => Promise<void>;
+  handleSpeakingSpeedChange: (nextSpeed: number) => void;
+  setTutorHoldActive: (nextValue: boolean) => void;
+  handleVoiceToggle: () => Promise<void>;
+  handleTextChange: (nextText: string) => void;
+  handleSendText: () => Promise<void>;
+}
+
+function useAssignmentPracticeWorkspaceController({
   open,
   bootstrap,
   onClose,
-}: AssignmentPracticeWorkspaceProps) {
+}: AssignmentPracticeWorkspaceProps): AssignmentPracticeWorkspaceController {
   const { lang, t } = useLanguage();
-  const [workspace, setWorkspace] = useState<AssignmentWorkspaceData | null>(null);
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
-  const [historyMessages, setHistoryMessages] = useState<ChatMessageType[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingChat, setLoadingChat] = useState(false);
-  const [isMutating, setIsMutating] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isSendingText, setIsSendingText] = useState(false);
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
-  const [isScopeExpanded, setIsScopeExpanded] = useState(true);
-  const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
-  const [textInput, setTextInput] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(assignmentWorkspaceReducer, initialAssignmentWorkspaceState);
+  const {
+    workspace,
+    selectedChatId,
+    historyMessages,
+    loading,
+    loadingChat,
+    isMutating,
+    isConnecting,
+    isSendingText,
+    isSidebarExpanded,
+    isScopeExpanded,
+    isHistoryExpanded,
+    textInput,
+    error,
+  } = state;
   const [speakingSpeed, setSpeakingSpeed] = useRealtimeSpeakingSpeed();
   const selectedChatIdRef = useRef<string | null>(null);
   const nextMessageOrderRef = useRef(0);
@@ -144,23 +699,14 @@ export function AssignmentPracticeWorkspace({
     activePracticeSessionRef.current = activePracticeSession;
   }, [activePracticeSession]);
 
+  const getActivePracticeSession = useCallback(() => activePracticeSessionRef.current, []);
+  const getSelectedChatId = useCallback(() => selectedChatIdRef.current, []);
+  const shouldCloseWithoutAbandon = useCallback(() => closeWithoutAbandonRef.current, []);
+
   const realtimeSessionParams = useMemo(
     () => (bootstrap ? buildRealtimeSessionParams(bootstrap, selectedActivePracticeSession) : undefined),
     [bootstrap, selectedActivePracticeSession],
   );
-
-  const queuePracticeEvent = async (
-    practiceSessionId: string,
-    eventType: string,
-    turnIndex: number | null,
-    payload: Record<string, unknown>,
-  ) => {
-    await reportPracticeSessionEvent(practiceSessionId, {
-      eventType,
-      turnIndex,
-      payload,
-    });
-  };
 
   const clearRealtimePersistenceTarget = () => {
     realtimePersistenceTargetRef.current = null;
@@ -199,7 +745,10 @@ export function AssignmentPracticeWorkspace({
         },
       );
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Failed to save realtime assignment message.');
+      dispatch({
+        type: 'patch',
+        payload: { error: saveError instanceof Error ? saveError.message : 'Failed to save realtime assignment message.' },
+      });
     }
   };
 
@@ -235,20 +784,21 @@ export function AssignmentPracticeWorkspace({
     optimisticThreadTitle = 'Assignment thread',
   ) => {
     if (!bootstrap) return;
-    setLoading(true);
-    setError(null);
+    dispatch({ type: 'patch', payload: { loading: true, error: null } });
     try {
       const fetchedWorkspace = await getStudentAssignmentWorkspace(bootstrap.assignment.id);
       const nextWorkspace = optimisticActiveSession
         ? mergeActivePracticeSessionIntoWorkspace(fetchedWorkspace, optimisticActiveSession, optimisticThreadTitle)
         : fetchedWorkspace;
-      setWorkspace(nextWorkspace);
       const nextSelectedChatId = preferredChatId || nextWorkspace.selectedChatId || nextWorkspace.threads[0]?.chatId || null;
-      setSelectedChatId(nextSelectedChatId);
+      dispatch({ type: 'workspaceLoaded', workspace: nextWorkspace, selectedChatId: nextSelectedChatId });
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Failed to load assignment workspace.');
+      dispatch({
+        type: 'patch',
+        payload: { error: loadError instanceof Error ? loadError.message : 'Failed to load assignment workspace.' },
+      });
     } finally {
-      setLoading(false);
+      dispatch({ type: 'patch', payload: { loading: false } });
     }
   }, [bootstrap]);
 
@@ -256,14 +806,14 @@ export function AssignmentPracticeWorkspace({
     practiceSession: PracticeSessionDto,
     fallbackTitle: string,
   ) => {
-    setWorkspace((currentWorkspace) => (
-      currentWorkspace
-        ? mergeActivePracticeSessionIntoWorkspace(currentWorkspace, practiceSession, fallbackTitle)
-        : currentWorkspace
-    ));
     const nextChatId = practiceSession.chatId?.trim() || selectedChatIdRef.current || null;
     selectedChatIdRef.current = nextChatId;
-    setSelectedChatId(nextChatId);
+    dispatch({
+      type: 'mergeActivePracticeSession',
+      practiceSession,
+      fallbackTitle,
+      selectedChatId: nextChatId,
+    });
   };
 
   useEffect(() => {
@@ -275,12 +825,11 @@ export function AssignmentPracticeWorkspace({
   useEffect(() => {
     let isActive = true;
     if (!open || !selectedChatId) {
-      setHistoryMessages([]);
       return;
     }
 
     const loadChat = async () => {
-      setLoadingChat(true);
+      dispatch({ type: 'patch', payload: { loadingChat: true } });
       clearRealtimePersistenceTarget();
       clearMessages();
       disconnect();
@@ -294,12 +843,15 @@ export function AssignmentPracticeWorkspace({
           timestamp: message.timestamp,
         }));
         nextMessageOrderRef.current = formattedMessages.length;
-        setHistoryMessages(formattedMessages);
+        dispatch({ type: 'patch', payload: { historyMessages: formattedMessages } });
       } catch (chatError) {
         if (!isActive) return;
-        setError(chatError instanceof Error ? chatError.message : 'Failed to load assignment thread.');
+        dispatch({
+          type: 'patch',
+          payload: { error: chatError instanceof Error ? chatError.message : 'Failed to load assignment thread.' },
+        });
       } finally {
-        if (isActive) setLoadingChat(false);
+        if (isActive) dispatch({ type: 'patch', payload: { loadingChat: false } });
       }
     };
 
@@ -346,8 +898,7 @@ export function AssignmentPracticeWorkspace({
 
   const handleNewAttempt = async () => {
     if (!bootstrap) return;
-    setIsMutating(true);
-    setError(null);
+    dispatch({ type: 'patch', payload: { isMutating: true, error: null } });
     try {
       clearRealtimePersistenceTarget();
       if (activePracticeSession) {
@@ -362,15 +913,18 @@ export function AssignmentPracticeWorkspace({
       });
       await loadWorkspace(createdChat.chatId, createdPracticeSession, createdChat.title);
     } catch (mutationError) {
-      setError(mutationError instanceof Error ? mutationError.message : 'Failed to start a new attempt.');
+      dispatch({
+        type: 'patch',
+        payload: { error: mutationError instanceof Error ? mutationError.message : 'Failed to start a new attempt.' },
+      });
     } finally {
-      setIsMutating(false);
+      dispatch({ type: 'patch', payload: { isMutating: false } });
     }
   };
 
   const handleVoiceToggle = async () => {
     if (!bootstrap || !selectedThread || isConnecting || isMutating) return;
-    setError(null);
+    dispatch({ type: 'patch', payload: { error: null } });
 
     if (isConnected) {
       clearRealtimePersistenceTarget();
@@ -378,13 +932,12 @@ export function AssignmentPracticeWorkspace({
       return;
     }
 
-    setIsMutating(true);
-    setIsConnecting(true);
+    dispatch({ type: 'patch', payload: { isMutating: true, isConnecting: true } });
     try {
       const practiceSession = await ensureActivePracticeSessionForSelectedThread();
       if (!practiceSession) return;
       if (!practiceSession.voiceEnabled) {
-        setError('Voice is not enabled for this assignment attempt.');
+        dispatch({ type: 'patch', payload: { error: 'Voice is not enabled for this assignment attempt.' } });
         return;
       }
       activePracticeSessionRef.current = practiceSession;
@@ -396,17 +949,18 @@ export function AssignmentPracticeWorkspace({
       });
     } catch (mutationError) {
       clearRealtimePersistenceTarget();
-      setError(mutationError instanceof Error ? mutationError.message : 'Failed to connect assignment voice session.');
+      dispatch({
+        type: 'patch',
+        payload: { error: mutationError instanceof Error ? mutationError.message : 'Failed to connect assignment voice session.' },
+      });
     } finally {
-      setIsConnecting(false);
-      setIsMutating(false);
+      dispatch({ type: 'patch', payload: { isConnecting: false, isMutating: false } });
     }
   };
 
   const handleEndSession = async () => {
     if (!selectedActivePracticeSession) return;
-    setIsMutating(true);
-    setError(null);
+    dispatch({ type: 'patch', payload: { isMutating: true, error: null } });
     try {
       clearRealtimePersistenceTarget();
       await reportPracticeSessionEvent(selectedActivePracticeSession.id, {
@@ -421,9 +975,12 @@ export function AssignmentPracticeWorkspace({
       disconnect();
       await loadWorkspace(selectedActivePracticeSession.chatId || null);
     } catch (endError) {
-      setError(endError instanceof Error ? endError.message : 'Failed to end this practice session.');
+      dispatch({
+        type: 'patch',
+        payload: { error: endError instanceof Error ? endError.message : 'Failed to end this practice session.' },
+      });
     } finally {
-      setIsMutating(false);
+      dispatch({ type: 'patch', payload: { isMutating: false } });
     }
   };
 
@@ -432,20 +989,18 @@ export function AssignmentPracticeWorkspace({
       return;
     }
     if (bootstrap.launch.modality.mode !== 'text_only') {
-      setError('Text practice is not enabled for this assignment launch.');
+      dispatch({ type: 'patch', payload: { error: 'Text practice is not enabled for this assignment launch.' } });
       return;
     }
 
     const message = textInput.trim();
-    setIsSendingText(true);
-    setError(null);
-    setTextInput('');
+    dispatch({ type: 'patch', payload: { isSendingText: true, error: null, textInput: '' } });
 
     try {
       const practiceSession = await ensureActivePracticeSessionForSelectedThread();
       if (!practiceSession) return;
       if (!practiceSession.textEnabled) {
-        setError('Text practice is not enabled for this assignment attempt.');
+        dispatch({ type: 'patch', payload: { error: 'Text practice is not enabled for this assignment attempt.' } });
         return;
       }
       const userTurnIndex = nextMessageOrderRef.current;
@@ -456,21 +1011,23 @@ export function AssignmentPracticeWorkspace({
         practiceSessionId: practiceSession.id,
         uiLanguage: lang,
       });
-      setHistoryMessages((current) => [
-        ...current,
-        {
-          id: `${selectedChatId}-user-${userTurnIndex}`,
-          role: 'user',
-          content: message,
-          timestamp: new Date().toISOString(),
-        },
-        {
-          id: `${selectedChatId}-assistant-${assistantTurnIndex}`,
-          role: 'assistant',
-          content: response.response,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
+      dispatch({
+        type: 'appendHistoryMessages',
+        messages: [
+          {
+            id: `${selectedChatId}-user-${userTurnIndex}`,
+            role: 'user',
+            content: message,
+            timestamp: new Date().toISOString(),
+          },
+          {
+            id: `${selectedChatId}-assistant-${assistantTurnIndex}`,
+            role: 'assistant',
+            content: response.response,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      });
       await queuePracticeEvent(practiceSession.id, 'student.turn', userTurnIndex, {
         chatId: selectedChatId,
         content: message,
@@ -482,9 +1039,12 @@ export function AssignmentPracticeWorkspace({
         source: 'text',
       });
     } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : 'Failed to send assignment message.');
+      dispatch({
+        type: 'patch',
+        payload: { error: sendError instanceof Error ? sendError.message : 'Failed to send assignment message.' },
+      });
     } finally {
-      setIsSendingText(false);
+      dispatch({ type: 'patch', payload: { isSendingText: false } });
     }
   };
 
@@ -498,9 +1058,9 @@ export function AssignmentPracticeWorkspace({
 
   useEffect(() => {
     return () => {
-      const practiceSession = activePracticeSessionRef.current;
+      const practiceSession = getActivePracticeSession();
       clearRealtimePersistenceTarget();
-      if (!practiceSession || closeWithoutAbandonRef.current) {
+      if (!practiceSession || shouldCloseWithoutAbandon()) {
         disconnect();
         return;
       }
@@ -510,16 +1070,16 @@ export function AssignmentPracticeWorkspace({
         payload: {
           reason: 'page_leave',
           status: 'abandoned',
-          chatId: selectedChatIdRef.current,
+          chatId: getSelectedChatId(),
         },
       });
       disconnect();
     };
-  }, [disconnect]);
+  }, [disconnect, getActivePracticeSession, getSelectedChatId, shouldCloseWithoutAbandon]);
 
   const displayMessages = useMemo(
-    () => [...historyMessages, ...realtimeMessages],
-    [historyMessages, realtimeMessages],
+    () => (open && selectedChatId ? [...historyMessages, ...realtimeMessages] : []),
+    [historyMessages, open, realtimeMessages, selectedChatId],
   );
   const isTextLaunch = bootstrap?.launch.modality.mode === 'text_only';
   const canUseVoice = Boolean(selectedThread && (selectedActivePracticeSession?.voiceEnabled || (!selectedActivePracticeSession && bootstrap?.launch.voiceAllowed)));
@@ -536,6 +1096,145 @@ export function AssignmentPracticeWorkspace({
         ? t('app.learn.status.tutorHold')
         : 'Voice connected'
       : 'Tap the mic to connect';
+  const sidebarExpansion = useMemo(
+    () => ({
+      sidebar: isSidebarExpanded,
+      scope: isScopeExpanded,
+      history: isHistoryExpanded,
+    }),
+    [isHistoryExpanded, isScopeExpanded, isSidebarExpanded],
+  );
+  const conversationStatus = useMemo(
+    () => ({
+      isMutating,
+      isConnecting,
+      isConnected,
+      isListening,
+      isSpeaking,
+    }),
+    [isConnected, isConnecting, isListening, isMutating, isSpeaking],
+  );
+  const composerState = useMemo<AssignmentComposerState>(
+    () => ({
+      canUseVoice,
+      canUseText,
+      isConnecting,
+      isMutating,
+      isConnected,
+      isTutorHoldActive,
+      hasHeldTutorResponse,
+      isSendingText,
+      speakingSpeed,
+      textInput,
+      voiceStatusLabel,
+    }),
+    [
+      canUseText,
+      canUseVoice,
+      hasHeldTutorResponse,
+      isConnected,
+      isConnecting,
+      isMutating,
+      isSendingText,
+      isTutorHoldActive,
+      speakingSpeed,
+      textInput,
+      voiceStatusLabel,
+    ],
+  );
+  const holdLabels = useMemo(
+    () => ({
+      release: t('app.learn.chat.hold.release'),
+      active: t('app.learn.chat.hold.active'),
+      inactive: t('app.learn.chat.hold.inactive'),
+    }),
+    [t],
+  );
+  const handleToggleSidebar = useCallback(() => {
+    dispatch({ type: 'toggleSidebar' });
+  }, []);
+  const handleToggleScope = useCallback(() => {
+    dispatch({ type: 'toggleScope' });
+  }, []);
+  const handleToggleHistory = useCallback(() => {
+    dispatch({ type: 'toggleHistory' });
+  }, []);
+  const handleSelectThread = useCallback((nextChatId: string) => {
+    dispatch({ type: 'patch', payload: { selectedChatId: nextChatId } });
+  }, []);
+  const handleOpenScope = useCallback(() => {
+    dispatch({ type: 'patch', payload: { isSidebarExpanded: true, isScopeExpanded: true } });
+  }, []);
+  const handleOpenHistory = useCallback(() => {
+    dispatch({ type: 'patch', payload: { isSidebarExpanded: true, isHistoryExpanded: true } });
+  }, []);
+  const handleTextChange = useCallback((nextText: string) => {
+    dispatch({ type: 'patch', payload: { textInput: nextText } });
+  }, []);
+
+  return {
+    lang,
+    workspace,
+    selectedChatId,
+    selectedThread,
+    selectedActivePracticeSession,
+    loading,
+    loadingChat,
+    error,
+    displayMessages,
+    sidebarExpansion,
+    conversationStatus,
+    composerState,
+    holdLabels,
+    handleClose,
+    handleToggleSidebar,
+    handleToggleScope,
+    handleToggleHistory,
+    handleOpenScope,
+    handleOpenHistory,
+    handleSelectThread,
+    handleNewAttempt,
+    handleEndSession,
+    handleSpeakingSpeedChange,
+    setTutorHoldActive,
+    handleVoiceToggle,
+    handleTextChange,
+    handleSendText,
+  };
+}
+
+export function AssignmentPracticeWorkspace(props: AssignmentPracticeWorkspaceProps) {
+  const { open, bootstrap } = props;
+  const controller = useAssignmentPracticeWorkspaceController(props);
+  const {
+    lang,
+    workspace,
+    selectedChatId,
+    selectedThread,
+    selectedActivePracticeSession,
+    loading,
+    loadingChat,
+    error,
+    displayMessages,
+    sidebarExpansion,
+    conversationStatus,
+    composerState,
+    holdLabels,
+    handleClose,
+    handleToggleSidebar,
+    handleToggleScope,
+    handleToggleHistory,
+    handleOpenScope,
+    handleOpenHistory,
+    handleSelectThread,
+    handleNewAttempt,
+    handleEndSession,
+    handleSpeakingSpeedChange,
+    setTutorHoldActive,
+    handleVoiceToggle,
+    handleTextChange,
+    handleSendText,
+  } = controller;
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
@@ -553,7 +1252,7 @@ export function AssignmentPracticeWorkspace({
 
         {loading ? (
           <div className="flex min-h-[420px] items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <Loader2 className="size-8 animate-spin text-primary" />
           </div>
         ) : error ? (
           <div className="p-6">
@@ -563,251 +1262,36 @@ export function AssignmentPracticeWorkspace({
           </div>
         ) : bootstrap && workspace ? (
           <div className="flex min-h-0 overflow-hidden bg-background max-lg:flex-col">
-            <aside
-              className={`flex min-h-0 shrink-0 flex-col border-b-2 border-border bg-secondary/20 transition-[height,width] duration-200 lg:h-full lg:border-b-0 lg:border-r-2 ${
-                isSidebarExpanded
-                  ? 'max-lg:max-h-[50%] lg:basis-1/2'
-                  : 'max-lg:h-[4.5rem] lg:basis-[4.5rem]'
-              }`}
-            >
-              <div className="flex shrink-0 items-center justify-between gap-3 border-b-2 border-border bg-card px-3 py-3">
-                {isSidebarExpanded ? (
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                      Assignment workspace
-                    </p>
-                    <p className="mt-1 truncate text-sm font-semibold text-foreground">
-                      Scope and attempt history
-                    </p>
-                  </div>
-                ) : (
-                  <span className="sr-only">Assignment workspace sidebar</span>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setIsSidebarExpanded((current) => !current)}
-                  aria-label={isSidebarExpanded ? 'Collapse assignment sidebar' : 'Expand assignment sidebar'}
-                  className="h-10 w-10 shrink-0 border-2 shadow-none"
-                >
-                  {isSidebarExpanded ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </Button>
-              </div>
-
-              {isSidebarExpanded ? (
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 sm:p-4">
-                  <section className="overflow-hidden rounded-2xl border-2 border-border bg-card">
-                    <button
-                      type="button"
-                      onClick={() => setIsScopeExpanded((current) => !current)}
-                      aria-expanded={isScopeExpanded}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-secondary/50"
-                    >
-                      <span className="flex min-w-0 items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-secondary text-foreground">
-                          <BookOpen className="h-4 w-4" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block text-sm font-semibold text-foreground">Assignment scope</span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            Objectives, scenario, teacher guidance
-                          </span>
-                        </span>
-                      </span>
-                      <ChevronDown
-                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
-                          isScopeExpanded ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </button>
-                    {isScopeExpanded ? (
-                      <div className="max-h-[34vh] overflow-y-auto border-t-2 border-border p-3">
-                        <AssignmentContextPanel bootstrap={bootstrap} lang={lang} />
-                      </div>
-                    ) : null}
-                  </section>
-
-                  <section className="overflow-hidden rounded-2xl border-2 border-border bg-card">
-                    <button
-                      type="button"
-                      onClick={() => setIsHistoryExpanded((current) => !current)}
-                      aria-expanded={isHistoryExpanded}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-secondary/50"
-                    >
-                      <span className="flex min-w-0 items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border-2 border-border bg-secondary text-foreground">
-                          <History className="h-4 w-4" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block text-sm font-semibold text-foreground">Chat history</span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            Assignment-only attempts and resumes
-                          </span>
-                        </span>
-                      </span>
-                      <ChevronDown
-                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
-                          isHistoryExpanded ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </button>
-                    {isHistoryExpanded ? (
-                      <div className="border-t-2 border-border p-3">
-                        <AssignmentThreadSidebar
-                          threads={workspace.threads}
-                          selectedChatId={selectedChatId}
-                          onSelectThread={setSelectedChatId}
-                          onNewAttempt={() => void handleNewAttempt()}
-                        />
-                      </div>
-                    ) : null}
-                  </section>
-                </div>
-              ) : (
-                <div className="hidden min-h-0 flex-1 flex-col items-center gap-3 px-3 py-4 lg:flex">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSidebarExpanded(true);
-                      setIsScopeExpanded(true);
-                    }}
-                    aria-label="Open assignment scope"
-                    className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-foreground transition-colors hover:bg-secondary"
-                  >
-                    <BookOpen className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSidebarExpanded(true);
-                      setIsHistoryExpanded(true);
-                    }}
-                    aria-label="Open chat history"
-                    className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-foreground transition-colors hover:bg-secondary"
-                  >
-                    <History className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-            </aside>
-
-            <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
-              <div className="shrink-0 border-b-2 border-border px-4 py-4 sm:px-6">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Conversation</p>
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-semibold text-foreground">
-                    {selectedThread?.title || 'Select a thread'}
-                  </h3>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {selectedActivePracticeSession ? (
-                      <Button size="sm" variant="outline" onClick={() => void handleEndSession()} disabled={isMutating}>
-                        End session
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-                {selectedActivePracticeSession ? (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Status: {selectedActivePracticeSession.status} · Voice {selectedActivePracticeSession.voiceEnabled ? 'on' : 'off'} ·
-                    Text {selectedActivePracticeSession.textEnabled ? 'on' : 'off'} ·
-                    Connected {isConnecting ? 'connecting' : isConnected ? 'yes' : 'no'} ·
-                    Listening {isListening ? 'yes' : 'no'} · Speaking {isSpeaking ? 'yes' : 'no'}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto bg-secondary/30 px-4 py-4 sm:px-6">
-                {loadingChat ? (
-                  <div className="flex h-full min-h-[260px] items-center justify-center">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  </div>
-                ) : displayMessages.length > 0 ? (
-                  <div className="space-y-3">
-                    {displayMessages.map((message) => (
-                      <ChatMessage key={message.id} role={message.role} content={message.content} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex min-h-[260px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-secondary/20 px-6 text-center">
-                    <MessageSquareText className="h-6 w-6 text-muted-foreground" />
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      Open a thread to review assignment conversation history.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {selectedThread ? (
-                <div className="shrink-0 space-y-3 border-t-2 border-border bg-card px-4 py-4 sm:px-6">
-                  {canUseVoice ? (
-                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-                      <div className="flex min-w-0 flex-1 flex-col gap-2">
-                        <SpeakingSpeedControl
-                          value={speakingSpeed}
-                          onChange={handleSpeakingSpeedChange}
-                          disabled={isConnecting || isMutating}
-                        />
-                        <div className="flex min-h-12 items-center rounded-2xl border-2 border-border bg-background px-4 text-sm font-semibold text-muted-foreground">
-                          {voiceStatusLabel}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-end gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setTutorHoldActive(!isTutorHoldActive)}
-                          disabled={!isConnected || isConnecting || isMutating}
-                          aria-pressed={isTutorHoldActive}
-                          aria-label={isTutorHoldActive ? t('app.learn.chat.hold.release') : t('app.learn.chat.hold.inactive')}
-                          title={isTutorHoldActive ? t('app.learn.chat.hold.release') : t('app.learn.chat.hold.inactive')}
-                          className={`flex h-14 shrink-0 items-center gap-2 rounded-2xl border-3 border-foreground px-3 text-sm font-bold transition-all ${
-                            isTutorHoldActive
-                              ? 'bg-warning text-warning-foreground shadow-stamp'
-                              : 'bg-background text-foreground hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--foreground)]'
-                          } disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none`}
-                        >
-                          <Hand className="h-5 w-5" />
-                          <span className="hidden sm:inline">
-                            {isTutorHoldActive
-                              ? hasHeldTutorResponse
-                                ? t('app.learn.chat.hold.release')
-                                : t('app.learn.chat.hold.active')
-                              : t('app.learn.chat.hold.inactive')}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleVoiceToggle()}
-                          disabled={isConnecting || isMutating}
-                          aria-label={voiceStatusLabel}
-                          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border-3 border-foreground transition-all ${
-                            isConnected
-                              ? 'bg-success text-success-foreground shadow-stamp'
-                              : 'bg-primary text-primary-foreground shadow-stamp hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--foreground)]'
-                          } disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none`}
-                        >
-                          {isConnecting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {canUseText ? (
-                    <ChatInput
-                      value={textInput}
-                      onChange={setTextInput}
-                      onSend={() => void handleSendText()}
-                      disabled={isSendingText || isMutating || !selectedChatId}
-                      placeholder={
-                        selectedActivePracticeSession
-                          ? 'Type your assignment response...'
-                          : 'Type to continue this assignment thread...'
-                      }
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-            </main>
+            <AssignmentWorkspaceSidebar
+              bootstrap={bootstrap}
+              workspace={workspace}
+              lang={lang}
+              selectedChatId={selectedChatId}
+              expansion={sidebarExpansion}
+              onToggleSidebar={handleToggleSidebar}
+              onToggleScope={handleToggleScope}
+              onToggleHistory={handleToggleHistory}
+              onOpenScope={handleOpenScope}
+              onOpenHistory={handleOpenHistory}
+              onSelectThread={handleSelectThread}
+              onNewAttempt={() => void handleNewAttempt()}
+            />
+            <AssignmentConversationView
+              selectedThread={selectedThread}
+              selectedActivePracticeSession={selectedActivePracticeSession}
+              selectedChatId={selectedChatId}
+              messages={displayMessages}
+              loadingChat={loadingChat}
+              status={conversationStatus}
+              composerState={composerState}
+              holdLabels={holdLabels}
+              onEndSession={() => void handleEndSession()}
+              onSpeakingSpeedChange={handleSpeakingSpeedChange}
+              onTutorHoldChange={setTutorHoldActive}
+              onVoiceToggle={() => void handleVoiceToggle()}
+              onTextChange={handleTextChange}
+              onSendText={() => void handleSendText()}
+            />
           </div>
         ) : null}
       </DialogContent>

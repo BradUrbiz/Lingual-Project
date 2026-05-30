@@ -67,7 +67,7 @@ export function LearningPathCard({ assessmentResults, profileSummary, t }: Learn
           <p className="text-xs text-muted-foreground mt-1">
             {t('app.learn.path.empty.description')}
           </p>
-          <button
+          <button type="button"
             onClick={() => (window.location.href = '/assessment')}
             className="mt-2 inline-flex items-center gap-2 text-xs font-bold text-primary hover:text-primary/80 underline underline-offset-4"
           >

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { m } from 'framer-motion';
 import { ArrowLeft, Loader2, Languages, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button, Card } from '@/components/ui';
@@ -23,7 +23,7 @@ export function SignupPage() {
   const [role, setRole] = useState<SignupRole | null>(initialRole);
   const [step, setStep] = useState<Step>(1);
 
-  // Returning users land here only by accident — bounce them through the dispatcher.
+  // Returning users land here only by accident - bounce them through the dispatcher.
   useEffect(() => {
     if (user && !loading) {
       const dest = getOnboardingDestination(user);
@@ -36,12 +36,12 @@ export function SignupPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <motion.div
+        <m.div
           animate={{ rotate: 360 }}
           transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
         >
-          <Loader2 className="h-10 w-10 text-primary" strokeWidth={3} />
-        </motion.div>
+          <Loader2 className="size-10 text-primary" strokeWidth={3} />
+        </m.div>
       </div>
     );
   }
@@ -59,7 +59,7 @@ export function SignupPage() {
 
       <Card className="p-8 w-full max-w-3xl">
         <div className="mb-8 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-primary text-primary-foreground border-2 border-foreground flex items-center justify-center shadow-stamp-sm">
+          <div className="size-12 rounded-xl bg-primary text-primary-foreground border-2 border-foreground flex items-center justify-center shadow-stamp-sm">
             <Languages size={24} strokeWidth={2.5} />
           </div>
           <div>
@@ -89,7 +89,7 @@ export function SignupPage() {
                 onClick={() => setStep(2)}
                 disabled={!role}
               >
-                Continue
+                Continue to account setup
               </Button>
             </div>
             <p className="text-center text-muted-foreground">
@@ -111,7 +111,7 @@ export function SignupPage() {
               onSuccess={() => {
                 // Navigation is handled by the useEffect at the top of this component
                 // once AuthContext finishes the /api/auth/verify round-trip and updates
-                // `user`. We deliberately do NOT navigate here — `user` would still be
+                // `user`. We deliberately do NOT navigate here - `user` would still be
                 // null at call time because the AuthContext state update hasn't
                 // re-rendered this component yet.
               }}

@@ -216,7 +216,7 @@ const PRACTICE_SESSION: PracticeSessionDto = {
   },
 };
 
-describe('AssignmentLaunchPage — blocked state and teacher preview', () => {
+describe('AssignmentLaunchPage - blocked state and teacher preview', () => {
   beforeEach(() => {
     navigateMock.mockReset();
     bootstrapStudentAssignmentMock.mockReset();

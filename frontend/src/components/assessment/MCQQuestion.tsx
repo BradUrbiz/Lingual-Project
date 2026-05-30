@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { staggerContainer, staggerItem } from '@/lib/animations';
@@ -17,14 +17,14 @@ interface MCQQuestionProps {
 export function MCQQuestion({ options, selectedId, onChange }: MCQQuestionProps) {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   return (
-    <motion.div
+    <m.div
       variants={staggerContainer}
       initial="initial"
       animate="animate"
       className="space-y-3"
     >
       {options.map((option, index) => (
-        <motion.button
+        <m.button
           key={option.id}
           variants={staggerItem}
           onClick={() => onChange(option.id)}
@@ -55,9 +55,9 @@ export function MCQQuestion({ options, selectedId, onChange }: MCQQuestionProps)
           >
             {option.text}
           </span>
-          {selectedId === option.id && <Check className="h-4 w-4 text-primary" />}
-        </motion.button>
+          {selectedId === option.id && <Check className="size-4 text-primary" />}
+        </m.button>
       ))}
-    </motion.div>
+    </m.div>
   );
 }

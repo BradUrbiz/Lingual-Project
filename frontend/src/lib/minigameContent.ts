@@ -41,7 +41,7 @@ const PARTICLE_FAMILIES: string[][] = [
   ['으로', '로'],
 ];
 
-const PARTICLES_BY_LENGTH = [...new Set(PARTICLE_FAMILIES.flat())].sort(
+const PARTICLES_BY_LENGTH = Array.from(new Set(PARTICLE_FAMILIES.flat())).sort(
   (left, right) => right.length - left.length
 );
 
@@ -136,7 +136,10 @@ export function buildGrammarChallengeQuestions(
   const curatedQuestions = (selectedScenario.grammar_challenges ?? [])
     .slice(0, Math.max(1, count))
     .map((question, index) => {
-      const normalizedChoices = [...new Set(question.choices.map((choice) => choice.trim()).filter(Boolean))];
+      const normalizedChoices = [...new Set(question.choices.flatMap((choice) => {
+        const value = choice.trim();
+        return value ? [value] : [];
+      }))];
       const answer = question.answer.trim();
       const choices = normalizedChoices.includes(answer)
         ? shuffle(normalizedChoices)
@@ -180,7 +183,8 @@ export function buildGrammarChallengeQuestions(
       `${target.stem}(__)`
     );
     const choices = buildChoiceSet(target.particle);
-    const correctIndex = choices.findIndex((choice) => choice === target.particle);
+    const choiceIndexByValue = new Map(choices.map((choice, index) => [choice, index]));
+    const correctIndex = choiceIndexByValue.get(target.particle) ?? -1;
 
     questions.push({
       id: `grammar-${selectedScenario.id}-${questions.length}`,

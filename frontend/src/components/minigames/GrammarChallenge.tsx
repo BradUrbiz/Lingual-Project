@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useMemo, useReducer } from 'react';
+import { m } from 'framer-motion';
 import { Puzzle, X, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui';
 import type { GrammarChallengeQuestion } from '@/lib/minigameContent';
@@ -12,17 +12,64 @@ interface GrammarChallengeProps {
   onComplete: (result: MinigameCompletionResult) => void;
 }
 
+type GrammarChallengeState = {
+  currentIndex: number;
+  correctAnswers: number;
+  selectedIndex: number | null;
+  isAnswered: boolean;
+  gameOver: boolean;
+};
+
+type GrammarChallengeAction =
+  | { type: 'answer'; selectedIndex: number; isCorrect: boolean }
+  | { type: 'advance' }
+  | { type: 'finish' };
+
+const INITIAL_GRAMMAR_CHALLENGE_STATE: GrammarChallengeState = {
+  currentIndex: 0,
+  correctAnswers: 0,
+  selectedIndex: null,
+  isAnswered: false,
+  gameOver: false,
+};
+
+function grammarChallengeReducer(
+  state: GrammarChallengeState,
+  action: GrammarChallengeAction
+): GrammarChallengeState {
+  switch (action.type) {
+    case 'answer':
+      return {
+        ...state,
+        selectedIndex: action.selectedIndex,
+        isAnswered: true,
+        correctAnswers: action.isCorrect ? state.correctAnswers + 1 : state.correctAnswers,
+      };
+    case 'advance':
+      return {
+        ...state,
+        currentIndex: state.currentIndex + 1,
+        selectedIndex: null,
+        isAnswered: false,
+      };
+    case 'finish':
+      return { ...state, gameOver: true };
+    default:
+      return state;
+  }
+}
+
 export function GrammarChallenge({
   questions,
   scenarioTitle,
   onClose,
   onComplete,
 }: GrammarChallengeProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [correctAnswers, setCorrectAnswers] = useState(0);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [gameOver, setGameOver] = useState(false);
+  const [challengeState, dispatchChallenge] = useReducer(
+    grammarChallengeReducer,
+    INITIAL_GRAMMAR_CHALLENGE_STATE
+  );
+  const { currentIndex, correctAnswers, selectedIndex, isAnswered, gameOver } = challengeState;
 
   const currentQuestion = questions[currentIndex];
   const totalQuestions = questions.length;
@@ -41,28 +88,21 @@ export function GrammarChallenge({
       durationSeconds,
       metadata: { scenarioTitle },
     });
-    setGameOver(true);
+    dispatchChallenge({ type: 'finish' });
   };
 
   const handleSelectChoice = (index: number) => {
     if (!currentQuestion || isAnswered) return;
-    setSelectedIndex(index);
-    setIsAnswered(true);
-
     const isCorrect = index === currentQuestion.correctIndex;
     const nextCorrect = isCorrect ? correctAnswers + 1 : correctAnswers;
-    if (isCorrect) {
-      setCorrectAnswers(nextCorrect);
-    }
+    dispatchChallenge({ type: 'answer', selectedIndex: index, isCorrect });
 
     window.setTimeout(() => {
       if (currentIndex >= totalQuestions - 1) {
         finishGame(nextCorrect);
         return;
       }
-      setCurrentIndex((prev) => prev + 1);
-      setSelectedIndex(null);
-      setIsAnswered(false);
+      dispatchChallenge({ type: 'advance' });
     }, 650);
   };
 
@@ -71,13 +111,13 @@ export function GrammarChallenge({
   }
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-foreground/60 flex items-center justify-center z-50 p-4"
     >
-      <motion.div
+      <m.div
         initial={{ scale: 0.94, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 w-full max-w-2xl"
@@ -85,7 +125,7 @@ export function GrammarChallenge({
       >
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-primary text-primary-foreground border-2 border-foreground flex items-center justify-center">
+            <div className="size-12 rounded-xl bg-primary text-primary-foreground border-2 border-foreground flex items-center justify-center">
               <Puzzle size={24} strokeWidth={2.5} />
             </div>
             <div>
@@ -93,7 +133,7 @@ export function GrammarChallenge({
               <h2 className="text-2xl font-display font-bold text-foreground">Grammar Challenge</h2>
             </div>
           </div>
-          <button
+          <button type="button"
             onClick={onClose}
             aria-label="Close grammar challenge"
             className="p-2 rounded-xl border-2 border-transparent hover:border-border hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
@@ -104,7 +144,7 @@ export function GrammarChallenge({
 
         {gameOver ? (
           <div className="text-center py-8">
-            <div className="w-20 h-20 rounded-2xl bg-accent text-accent-foreground border-3 border-foreground flex items-center justify-center mx-auto mb-6 shadow-stamp">
+            <div className="size-20 rounded-2xl bg-accent text-accent-foreground border-3 border-foreground flex items-center justify-center mx-auto mb-6 shadow-stamp">
               <Trophy size={38} strokeWidth={2.5} />
             </div>
             <h3 className="text-3xl font-display font-bold text-foreground mb-2">Challenge Complete</h3>
@@ -148,7 +188,7 @@ export function GrammarChallenge({
                 const isSelected = selectedIndex === index;
 
                 return (
-                  <button
+                  <button type="button"
                     key={`${currentQuestion.id}-${choice}`}
                     onClick={() => handleSelectChoice(index)}
                     disabled={isAnswered}
@@ -173,7 +213,7 @@ export function GrammarChallenge({
             )}
           </>
         )}
-      </motion.div>
-    </motion.div>
+      </m.div>
+    </m.div>
   );
 }

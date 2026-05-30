@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useReducer, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'framer-motion';
 import { Loader2, ChevronLeft, ChevronRight, Check, AlertTriangle } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import {
@@ -34,6 +34,77 @@ const RIGOR_OPTIONS: { id: Rigor; labelKey: string; description: string }[] = [
 ];
 
 const TOTAL_STEPS = 4;
+const DEFAULT_PROFILE_FORM_DATA: ProfileFormData = {
+  displayName: '',
+  age: null,
+  gender: null,
+  rigor: null,
+  frequency: 3,
+  frequencyUnit: 'week',
+  levelObjective: '',
+};
+
+type GeneralPageState = {
+  loading: boolean;
+  currentStep: number;
+  direction: number;
+  formData: ProfileFormData;
+  isSubmitting: boolean;
+  error: string | null;
+};
+
+type GeneralPageAction =
+  | { type: 'loaded'; formData?: ProfileFormData }
+  | { type: 'updateField'; field: keyof ProfileFormData; value: ProfileFormData[keyof ProfileFormData] }
+  | { type: 'nextStep' }
+  | { type: 'previousStep' }
+  | { type: 'setSubmitting'; isSubmitting: boolean }
+  | { type: 'setError'; error: string | null };
+
+const INITIAL_GENERAL_PAGE_STATE: GeneralPageState = {
+  loading: true,
+  currentStep: 1,
+  direction: 0,
+  formData: DEFAULT_PROFILE_FORM_DATA,
+  isSubmitting: false,
+  error: null,
+};
+
+function generalPageReducer(state: GeneralPageState, action: GeneralPageAction): GeneralPageState {
+  switch (action.type) {
+    case 'loaded':
+      return {
+        ...state,
+        loading: false,
+        formData: action.formData ?? state.formData,
+      };
+    case 'updateField':
+      return {
+        ...state,
+        formData: { ...state.formData, [action.field]: action.value },
+      };
+    case 'nextStep':
+      return {
+        ...state,
+        direction: 1,
+        currentStep: state.currentStep + 1,
+        error: null,
+      };
+    case 'previousStep':
+      return {
+        ...state,
+        direction: -1,
+        currentStep: state.currentStep - 1,
+        error: null,
+      };
+    case 'setSubmitting':
+      return { ...state, isSubmitting: action.isSubmitting };
+    case 'setError':
+      return { ...state, error: action.error };
+    default:
+      return state;
+  }
+}
 
 // Animation variants for step transitions
 const stepVariants = {
@@ -51,6 +122,174 @@ const stepVariants = {
   }),
 };
 
+type Translate = ReturnType<typeof useLanguage>['t'];
+type UpdateProfileField = <K extends keyof ProfileFormData>(
+  field: K,
+  value: ProfileFormData[K]
+) => void;
+
+function GeneralStepContent({
+  currentStep,
+  formData,
+  updateField,
+  t,
+}: {
+  currentStep: number;
+  formData: ProfileFormData;
+  updateField: UpdateProfileField;
+  t: Translate;
+}) {
+  switch (currentStep) {
+    case 1:
+      return (
+        <div className="space-y-6">
+          <div className="text-center mb-8">
+            <m.img
+              src="/imgs/c-notalk.png"
+              alt="Lingu"
+              className="size-24 mx-auto mb-4 object-contain"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+            />
+            <m.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="text-muted-foreground"
+            >
+              {t('general.welcomeMessage') || "Let's get to know you!"}
+            </m.p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="name" className="text-foreground">
+              {t('general.nameLabel')} *
+            </Label>
+            <Input
+              id="name"
+              type="text"
+              placeholder={t('general.namePlaceholder') || 'Enter your name'}
+              value={formData.displayName}
+              onChange={(e) => updateField('displayName', e.target.value)}
+              autoFocus
+              className="bg-card border-border focus:border-primary focus:ring-primary/20"
+            />
+          </div>
+        </div>
+      );
+    case 2:
+      return (
+        <div className="space-y-6">
+          <div className="text-center mb-6">
+            <h2 className="text-xl font-display font-semibold text-foreground">
+              {t('general.aboutYou')}
+            </h2>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-foreground">
+              {t('general.ageLabel')} *
+            </Label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {AGE_RANGES.map((range) => (
+                <m.div key={range.midpoint} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
+                  <Button
+                    variant="option"
+                    selected={ageToRangeLabel(formData.age) === range.label}
+                    aria-pressed={ageToRangeLabel(formData.age) === range.label}
+                    onClick={() => updateField('age', range.midpoint)}
+                    className="text-sm"
+                  >
+                    {t(range.i18nKey)}
+                  </Button>
+                </m.div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-foreground">{t('general.genderLabel')} *</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {GENDER_OPTIONS.map(({ id, labelKey }) => (
+                <m.div key={id} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
+                  <Button
+                    variant="option"
+                    selected={formData.gender === id}
+                    onClick={() => updateField('gender', id)}
+                    className="text-sm rounded-xl border-border bg-card hover:border-primary hover:text-foreground"
+                  >
+                    {t(labelKey)}
+                  </Button>
+                </m.div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    case 3:
+      return (
+        <div className="space-y-6">
+          <div className="text-center mb-6">
+            <h2 className="text-xl font-display font-semibold text-foreground">
+              {t('general.rigorLabel')} *
+            </h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              {t('general.rigorDescription')}
+            </p>
+          </div>
+
+          <div className="grid gap-3">
+            {RIGOR_OPTIONS.map(({ id, labelKey, description }) => (
+              <m.div key={id} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
+                <Button
+                  variant="option"
+                  selected={formData.rigor === id}
+                  onClick={() => updateField('rigor', id)}
+                  className="w-full justify-between h-auto p-4 rounded-2xl border-border bg-card hover:border-primary"
+                >
+                  <span className="font-medium">{t(labelKey)}</span>
+                  <span className="text-sm text-muted-foreground">{description}</span>
+                </Button>
+              </m.div>
+            ))}
+          </div>
+        </div>
+      );
+    case 4:
+      return (
+        <div className="space-y-6">
+          <div className="text-center mb-6">
+            <h2 className="text-xl font-display font-semibold text-foreground">
+              {t('general.levelObjectiveLabel')}
+            </h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              {t('general.levelObjectiveDescription')}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Input
+              id="levelObjective"
+              type="text"
+              placeholder={t('general.levelObjectivePlaceholder')}
+              value={formData.levelObjective}
+              onChange={(e) => updateField('levelObjective', e.target.value)}
+              autoFocus
+              className="bg-card border-border focus:border-primary focus:ring-primary/20"
+            />
+          </div>
+
+          <p className="text-xs text-muted-foreground text-center">
+            {t('general.optionalField') || 'This field is optional'}
+          </p>
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
 export function GeneralPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -58,21 +297,8 @@ export function GeneralPage() {
   const { t } = useLanguage();
   const { user } = useAuth();
 
-  const [loading, setLoading] = useState(true);
-  const [currentStep, setCurrentStep] = useState(1);
-  const [direction, setDirection] = useState(0);
-  const [formData, setFormData] = useState<ProfileFormData>({
-    displayName: '',
-    age: null,
-    gender: null,
-    rigor: null,
-    frequency: 3,
-    frequencyUnit: 'week',
-    levelObjective: '',
-  });
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(generalPageReducer, INITIAL_GENERAL_PAGE_STATE);
+  const { loading, currentStep, direction, formData, isSubmitting, error } = state;
 
   const checkExistingProfile = useCallback(async () => {
     try {
@@ -100,7 +326,7 @@ export function GeneralPage() {
 
       // Pre-fill the form with existing data (for both new and edit mode)
       if (profile.displayName || profile.age || profile.gender) {
-        setFormData({
+        dispatch({ type: 'loaded', formData: {
           displayName: profile.displayName || '',
           age: profile.age || null,
           gender: profile.gender || null,
@@ -108,12 +334,13 @@ export function GeneralPage() {
           frequency: profile.frequency || 3,
           frequencyUnit: profile.frequencyUnit || 'week',
           levelObjective: profile.levelObjective || '',
-        });
+        } });
+        return;
       }
     } catch {
       // First time user or error, show empty form
     } finally {
-      setLoading(false);
+      dispatch({ type: 'loaded' });
     }
   }, [isEditMode, navigate, user]);
 
@@ -125,7 +352,7 @@ export function GeneralPage() {
     field: K,
     value: ProfileFormData[K]
   ) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    dispatch({ type: 'updateField', field, value });
   };
 
   const isStepValid = (step: number): boolean => {
@@ -145,28 +372,27 @@ export function GeneralPage() {
 
   const goToNextStep = () => {
     if (currentStep < TOTAL_STEPS && isStepValid(currentStep)) {
-      setDirection(1);
-      setCurrentStep((prev) => prev + 1);
-      setError(null);
+      dispatch({ type: 'nextStep' });
     }
   };
 
   const goToPrevStep = () => {
     if (currentStep > 1) {
-      setDirection(-1);
-      setCurrentStep((prev) => prev - 1);
-      setError(null);
+      dispatch({ type: 'previousStep' });
     }
   };
 
   const handleSubmit = async () => {
     if (!isStepValid(currentStep)) {
-      setError(t('general.fillRequired') || 'Please fill in all required fields');
+      dispatch({
+        type: 'setError',
+        error: t('general.fillRequired') || 'Please fill in all required fields',
+      });
       return;
     }
 
-    setIsSubmitting(true);
-    setError(null);
+    dispatch({ type: 'setSubmitting', isSubmitting: true });
+    dispatch({ type: 'setError', error: null });
 
     try {
       await updateProfile(formData, isEditMode);
@@ -176,185 +402,27 @@ export function GeneralPage() {
         navigate('/onboarding');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save profile');
+      dispatch({
+        type: 'setError',
+        error: err instanceof Error ? err.message : 'Failed to save profile',
+      });
     } finally {
-      setIsSubmitting(false);
+      dispatch({ type: 'setSubmitting', isSubmitting: false });
     }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <motion.div
+        <m.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
         >
-          <Loader2 className="h-8 w-8 text-primary" />
-        </motion.div>
+          <Loader2 className="size-8 text-primary" />
+        </m.div>
       </div>
     );
   }
-
-  // Step content renderers
-  const renderStep1 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-8">
-        <motion.img
-          src="/imgs/c-notalk.png"
-          alt="Lingu"
-          className="w-24 h-24 mx-auto mb-4 object-contain"
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-        />
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="text-muted-foreground"
-        >
-          {t('general.welcomeMessage') || "Let's get to know you!"}
-        </motion.p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="name" className="text-foreground">
-          {t('general.nameLabel')} *
-        </Label>
-        <Input
-          id="name"
-          type="text"
-          placeholder={t('general.namePlaceholder') || 'Enter your name'}
-          value={formData.displayName}
-          onChange={(e) => updateField('displayName', e.target.value)}
-          autoFocus
-          className="bg-card border-border focus:border-primary focus:ring-primary/20"
-        />
-      </div>
-    </div>
-  );
-
-  const renderStep2 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <h2 className="text-xl font-display font-semibold text-foreground">
-          {t('general.aboutYou')}
-        </h2>
-      </div>
-
-      <div className="space-y-2">
-        <Label className="text-foreground">
-          {t('general.ageLabel')} *
-        </Label>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {AGE_RANGES.map((range) => (
-            <motion.div key={range.midpoint} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
-              <Button
-                variant="option"
-                selected={ageToRangeLabel(formData.age) === range.label}
-                aria-pressed={ageToRangeLabel(formData.age) === range.label}
-                onClick={() => updateField('age', range.midpoint)}
-                className="text-sm"
-              >
-                {t(range.i18nKey)}
-              </Button>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label className="text-foreground">{t('general.genderLabel')} *</Label>
-        <div className="grid grid-cols-2 gap-2">
-          {GENDER_OPTIONS.map(({ id, labelKey }) => (
-            <motion.div key={id} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
-              <Button
-                variant="option"
-                selected={formData.gender === id}
-                onClick={() => updateField('gender', id)}
-                className="text-sm rounded-xl border-border bg-card hover:border-primary hover:text-foreground"
-              >
-                {t(labelKey)}
-              </Button>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderStep3 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <h2 className="text-xl font-display font-semibold text-foreground">
-          {t('general.rigorLabel')} *
-        </h2>
-        <p className="text-sm text-muted-foreground mt-2">
-          {t('general.rigorDescription')}
-        </p>
-      </div>
-
-      <div className="grid gap-3">
-        {RIGOR_OPTIONS.map(({ id, labelKey, description }) => (
-          <motion.div key={id} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
-            <Button
-              variant="option"
-              selected={formData.rigor === id}
-              onClick={() => updateField('rigor', id)}
-              className="w-full justify-between h-auto py-4 px-4 rounded-2xl border-border bg-card hover:border-primary"
-            >
-              <span className="font-medium">{t(labelKey)}</span>
-              <span className="text-sm text-muted-foreground">{description}</span>
-            </Button>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderStep4 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <h2 className="text-xl font-display font-semibold text-foreground">
-          {t('general.levelObjectiveLabel')}
-        </h2>
-        <p className="text-sm text-muted-foreground mt-2">
-          {t('general.levelObjectiveDescription')}
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Input
-          id="levelObjective"
-          type="text"
-          placeholder={t('general.levelObjectivePlaceholder')}
-          value={formData.levelObjective}
-          onChange={(e) => updateField('levelObjective', e.target.value)}
-          autoFocus
-          className="bg-card border-border focus:border-primary focus:ring-primary/20"
-        />
-      </div>
-
-      <p className="text-xs text-muted-foreground text-center">
-        {t('general.optionalField') || 'This field is optional'}
-      </p>
-    </div>
-  );
-
-  const renderCurrentStep = () => {
-    switch (currentStep) {
-      case 1:
-        return renderStep1();
-      case 2:
-        return renderStep2();
-      case 3:
-        return renderStep3();
-      case 4:
-        return renderStep4();
-      default:
-        return null;
-    }
-  };
 
   return (
     <AnimatedPage className="min-h-screen bg-background flex items-center justify-center p-6">
@@ -375,7 +443,7 @@ export function GeneralPage() {
             )}
           </div>
           <div className="h-2 bg-secondary rounded-full overflow-hidden">
-            <motion.div
+            <m.div
               className="h-full bg-primary rounded-full"
               initial={{ width: 0 }}
               animate={{ width: `${(currentStep / TOTAL_STEPS) * 100}%` }}
@@ -390,7 +458,7 @@ export function GeneralPage() {
               return (
                 <div key={step} className="flex flex-col items-center gap-2">
                   <div
-                    className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
+                    className={`size-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
                       isComplete
                         ? 'bg-primary text-primary-foreground border-2 border-foreground'
                         : isActive
@@ -417,24 +485,24 @@ export function GeneralPage() {
           {/* Error message */}
           <AnimatePresence mode="wait">
             {error && (
-              <motion.div
+              <m.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 className="mb-4"
               >
                 <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTriangle className="size-4" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
 
           {/* Step content with animation */}
           <div className="min-h-[320px] relative">
             <AnimatePresence mode="wait" custom={direction}>
-              <motion.div
+              <m.div
                 key={currentStep}
                 custom={direction}
                 variants={stepVariants}
@@ -443,8 +511,13 @@ export function GeneralPage() {
                 exit="exit"
                 transition={{ duration: 0.3, ease: 'easeInOut' }}
               >
-                {renderCurrentStep()}
-              </motion.div>
+                <GeneralStepContent
+                  currentStep={currentStep}
+                  formData={formData}
+                  updateField={updateField}
+                  t={t}
+                />
+              </m.div>
             </AnimatePresence>
           </div>
         </div>
@@ -457,7 +530,7 @@ export function GeneralPage() {
               onClick={goToPrevStep}
               className="flex-1 rounded-xl"
             >
-              <ChevronLeft className="h-4 w-4 mr-1" />
+              <ChevronLeft className="size-4 mr-1" />
               {t('general.back') || 'Back'}
             </Button>
           )}
@@ -469,7 +542,7 @@ export function GeneralPage() {
               className="flex-1 rounded-xl"
             >
               {t('general.next') || 'Next'}
-              <ChevronRight className="h-4 w-4 ml-1" />
+              <ChevronRight className="size-4 ml-1" />
             </Button>
           ) : (
             <Button

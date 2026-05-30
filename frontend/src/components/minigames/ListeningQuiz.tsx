@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useMemo, useReducer } from 'react';
+import { m } from 'framer-motion';
 import { Headphones, Volume2, X, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui';
 import type { ListeningQuizQuestion } from '@/lib/minigameContent';
@@ -20,6 +20,53 @@ interface ListeningQuizProps {
   onComplete: (result: MinigameCompletionResult) => void;
 }
 
+type ListeningQuizState = {
+  currentIndex: number;
+  correctAnswers: number;
+  selectedIndex: number | null;
+  isAnswered: boolean;
+  gameOver: boolean;
+};
+
+type ListeningQuizAction =
+  | { type: 'answer'; selectedIndex: number; isCorrect: boolean }
+  | { type: 'advance' }
+  | { type: 'finish' };
+
+const INITIAL_LISTENING_QUIZ_STATE: ListeningQuizState = {
+  currentIndex: 0,
+  correctAnswers: 0,
+  selectedIndex: null,
+  isAnswered: false,
+  gameOver: false,
+};
+
+function listeningQuizReducer(
+  state: ListeningQuizState,
+  action: ListeningQuizAction
+): ListeningQuizState {
+  switch (action.type) {
+    case 'answer':
+      return {
+        ...state,
+        selectedIndex: action.selectedIndex,
+        isAnswered: true,
+        correctAnswers: action.isCorrect ? state.correctAnswers + 1 : state.correctAnswers,
+      };
+    case 'advance':
+      return {
+        ...state,
+        currentIndex: state.currentIndex + 1,
+        selectedIndex: null,
+        isAnswered: false,
+      };
+    case 'finish':
+      return { ...state, gameOver: true };
+    default:
+      return state;
+  }
+}
+
 export function ListeningQuiz({
   questions,
   locale,
@@ -27,11 +74,11 @@ export function ListeningQuiz({
   onClose,
   onComplete,
 }: ListeningQuizProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [correctAnswers, setCorrectAnswers] = useState(0);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [gameOver, setGameOver] = useState(false);
+  const [quizState, dispatchQuiz] = useReducer(
+    listeningQuizReducer,
+    INITIAL_LISTENING_QUIZ_STATE
+  );
+  const { currentIndex, correctAnswers, selectedIndex, isAnswered, gameOver } = quizState;
 
   const currentQuestion = questions[currentIndex];
   const totalQuestions = questions.length;
@@ -59,28 +106,22 @@ export function ListeningQuiz({
       durationSeconds,
       metadata: { scenarioTitle },
     });
-    setGameOver(true);
+    dispatchQuiz({ type: 'finish' });
   };
 
   const handleSelectChoice = (index: number) => {
     if (!currentQuestion || isAnswered) return;
 
-    setSelectedIndex(index);
-    setIsAnswered(true);
     const isCorrect = index === currentQuestion.correctIndex;
     const nextCorrect = isCorrect ? correctAnswers + 1 : correctAnswers;
-    if (isCorrect) {
-      setCorrectAnswers(nextCorrect);
-    }
+    dispatchQuiz({ type: 'answer', selectedIndex: index, isCorrect });
 
     window.setTimeout(() => {
       if (currentIndex >= totalQuestions - 1) {
         finishGame(nextCorrect);
         return;
       }
-      setCurrentIndex((prev) => prev + 1);
-      setSelectedIndex(null);
-      setIsAnswered(false);
+      dispatchQuiz({ type: 'advance' });
     }, 650);
   };
 
@@ -89,13 +130,13 @@ export function ListeningQuiz({
   }
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-foreground/60 flex items-center justify-center z-50 p-4"
     >
-      <motion.div
+      <m.div
         initial={{ scale: 0.94, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 w-full max-w-2xl"
@@ -103,7 +144,7 @@ export function ListeningQuiz({
       >
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center">
+            <div className="size-12 rounded-xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center">
               <Headphones size={24} strokeWidth={2.5} />
             </div>
             <div>
@@ -111,7 +152,7 @@ export function ListeningQuiz({
               <h2 className="text-2xl font-display font-bold text-foreground">Listening Quiz</h2>
             </div>
           </div>
-          <button
+          <button type="button"
             onClick={onClose}
             aria-label="Close listening quiz"
             className="p-2 rounded-xl border-2 border-transparent hover:border-border hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
@@ -122,7 +163,7 @@ export function ListeningQuiz({
 
         {gameOver ? (
           <div className="text-center py-8">
-            <div className="w-20 h-20 rounded-2xl bg-success text-white border-3 border-foreground flex items-center justify-center mx-auto mb-6 shadow-stamp">
+            <div className="size-20 rounded-2xl bg-success text-white border-3 border-foreground flex items-center justify-center mx-auto mb-6 shadow-stamp">
               <Trophy size={38} strokeWidth={2.5} />
             </div>
             <h3 className="text-3xl font-display font-bold text-foreground mb-2">Session Complete</h3>
@@ -167,7 +208,7 @@ export function ListeningQuiz({
                 const isSelected = selectedIndex === index;
 
                 return (
-                  <button
+                  <button type="button"
                     key={choice}
                     onClick={() => handleSelectChoice(index)}
                     disabled={isAnswered}
@@ -188,7 +229,7 @@ export function ListeningQuiz({
             </div>
           </>
         )}
-      </motion.div>
-    </motion.div>
+      </m.div>
+    </m.div>
   );
 }

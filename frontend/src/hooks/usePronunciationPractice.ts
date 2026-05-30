@@ -152,7 +152,7 @@ const parseWords = (words: Array<Record<string, unknown>> = []): PronunciationWo
 
     const needsFallbackLabels = phonemes.length && phonemes.some((entry) => !entry.phoneme);
     if (needsFallbackLabels) {
-      const syllableLabels = parsedSyllables.map((entry) => entry.phoneme).filter(Boolean);
+      const syllableLabels = parsedSyllables.flatMap((entry) => (entry.phoneme ? [entry.phoneme] : []));
       const fallbackSource = syllableLabels.length ? syllableLabels : graphemes;
       if (fallbackSource.length) {
         const fallbackLabels = spreadLabelsToLength(fallbackSource, phonemes.length);
@@ -173,15 +173,15 @@ const parseWords = (words: Array<Record<string, unknown>> = []): PronunciationWo
 
 const getNBestPhonemeLabels = (entry: Record<string, unknown>): string[] => {
   return getNBestPhonemeCandidates(entry)
-    .map((candidate) => {
-      return pickFirstString(
+    .flatMap((candidate) => {
+      const label = pickFirstString(
         candidate['Phoneme'],
         candidate['phoneme'],
         candidate['Symbol'],
         candidate['symbol']
       );
-    })
-    .filter(Boolean);
+      return label ? [label] : [];
+    });
 };
 
 const getPhonemeAccuracy = (entry: Record<string, unknown>): number | undefined => {
@@ -248,8 +248,7 @@ const formatCancellationReason = (reason: number | string | undefined) => {
 const loadSpeechSdk = async (): Promise<SpeechSdkModule> => {
   if (speechSdkModule) return speechSdkModule;
   try {
-    const moduleName = 'microsoft-cognitiveservices-speech-sdk';
-    speechSdkModule = await import(/* @vite-ignore */ moduleName) as SpeechSdkModule;
+    speechSdkModule = await import('microsoft-cognitiveservices-speech-sdk') as SpeechSdkModule;
     return speechSdkModule;
   } catch {
     throw new Error(
@@ -306,8 +305,10 @@ export function usePronunciationPractice() {
       setError(null);
       setStatus('listening');
 
-      const SpeechSDK = await loadSpeechSdk();
-      const { token, region } = await ensureToken();
+      const [SpeechSDK, { token, region }] = await Promise.all([
+        loadSpeechSdk(),
+        ensureToken(),
+      ]);
       const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
       speechConfig.speechRecognitionLanguage = locale;
       speechConfig.outputFormat = SpeechSDK.OutputFormat.Detailed;

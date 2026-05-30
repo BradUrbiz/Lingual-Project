@@ -34,6 +34,248 @@ function formatBadgeVariant(status: string): 'success' | 'secondary' | 'outline'
   return 'outline';
 }
 
+function AssignmentDetailsPanel({
+  bootstrap,
+  lang,
+}: {
+  bootstrap: AssignmentBootstrapData;
+  lang: 'en' | 'ko';
+}) {
+  return (
+    <details open className="group">
+      <summary className="cursor-pointer list-none">
+        <Card className="border-3 border-foreground p-5 shadow-stamp transition-colors group-open:border-primary/40">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex size-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
+                <BookOpen size={22} strokeWidth={2.5} />
+              </div>
+              <div>
+                <h2 className="text-lg font-display font-bold text-foreground">About this assignment</h2>
+                <p className="text-sm text-muted-foreground">
+                  Curriculum scope, objectives, and teacher instructions
+                </p>
+              </div>
+            </div>
+            <span className="text-xs font-medium text-muted-foreground group-open:hidden">Show details</span>
+            <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">Hide details</span>
+          </div>
+        </Card>
+      </summary>
+
+      {bootstrap.assignment.taskType === 'custom_prompt' && (
+        <Card className="mt-3 border-3 border-foreground p-6 shadow-stamp">
+          <h2 className="text-lg font-display font-bold text-foreground">
+            Instructions from your teacher
+          </h2>
+          <div className="mt-4 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+            {bootstrap.assignment.studentInstructions ? (
+              <p className="whitespace-pre-wrap text-sm text-foreground">
+                {bootstrap.assignment.studentInstructions}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Your teacher did not provide additional instructions for this practice. Start when you are ready.
+              </p>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {bootstrap.assignment.taskType !== 'custom_prompt' && (
+        <>
+          <CurriculumScopeCard bootstrap={bootstrap} lang={lang} />
+          <TeacherPracticeOverlayCard bootstrap={bootstrap} />
+        </>
+      )}
+    </details>
+  );
+}
+
+function CurriculumScopeCard({
+  bootstrap,
+  lang,
+}: {
+  bootstrap: AssignmentBootstrapData;
+  lang: 'en' | 'ko';
+}) {
+  return (
+    <Card className="mt-3 border-3 border-foreground p-6 shadow-stamp">
+      <h2 className="text-lg font-display font-bold text-foreground">
+        {bootstrap.curriculum.package?.id === 'canvas-generated' ? 'Practice scope' : 'Curriculum scope'}
+      </h2>
+
+      {bootstrap.curriculum.unit && bootstrap.curriculum.module ? (
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Unit</p>
+            <p className="mt-2 font-semibold text-foreground">
+              {getLocalizedText(bootstrap.curriculum.unit.title, lang, bootstrap.curriculum.unit.id)}
+            </p>
+          </div>
+          <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Module</p>
+            <p className="mt-2 font-semibold text-foreground">
+              {getLocalizedText(bootstrap.curriculum.module.title, lang, bootstrap.curriculum.module.id)}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {getLocalizedText(bootstrap.curriculum.module.goal, lang)}
+            </p>
+          </div>
+        </div>
+      ) : bootstrap.mapping?.generatedScenario ? (
+        <div className="mt-6 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Conversation scenario</p>
+          <p className="mt-2 text-sm text-foreground">{bootstrap.mapping.generatedScenario}</p>
+          {bootstrap.mapping.sourceCanvasItemTitle ? (
+            <p className="mt-2 text-xs text-muted-foreground">Based on: {bootstrap.mapping.sourceCanvasItemTitle}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="mt-5 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Situation</p>
+        <p className="mt-2 font-semibold text-foreground">{bootstrap.curriculum.situation?.id || 'Canvas-generated'}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {formatModeLabel(bootstrap.curriculum.situation?.kind)} · {String(bootstrap.curriculum.situation?.seed?.setting || 'context not specified')}
+        </p>
+      </div>
+
+      <div className="mt-5">
+        <h3 className="text-base font-semibold text-foreground">Objectives</h3>
+        <div className="mt-3 grid gap-3">
+          {bootstrap.curriculum.objectives.map((objective) => (
+            <div key={objective.id} className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+              <p className="text-sm font-semibold text-foreground">{objective.id}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {getLocalizedText(objective.canDo, lang, objective.id)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function TeacherPracticeOverlayCard({ bootstrap }: { bootstrap: AssignmentBootstrapData }) {
+  const overlayItems = [
+    {
+      label: 'Target expressions',
+      items: bootstrap.mapping.targetExpressions.length > 0
+        ? bootstrap.mapping.targetExpressions
+        : ['No explicit target expressions configured.'],
+    },
+    {
+      label: 'Target vocabulary',
+      items: (bootstrap.mapping.targetVocabulary ?? []).length > 0
+        ? bootstrap.mapping.targetVocabulary ?? []
+        : ['No explicit target vocabulary configured.'],
+    },
+    {
+      label: 'Focus grammar',
+      items: bootstrap.mapping.focusGrammar.length > 0
+        ? bootstrap.mapping.focusGrammar
+        : ['No explicit grammar focus configured.'],
+    },
+    {
+      label: 'Success criteria',
+      items: bootstrap.assignment.successCriteria.length > 0
+        ? bootstrap.assignment.successCriteria
+        : ['Complete the task with sustained, assignment-aligned output.'],
+    },
+  ];
+
+  return (
+    <Card className="border-3 border-foreground p-6 shadow-stamp">
+      <h2 className="text-xl font-display font-bold text-foreground">Teacher-designed practice overlay</h2>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        {overlayItems.map((group) => (
+          <div key={group.label} className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{group.label}</p>
+            <ul className="mt-3 space-y-2 text-sm text-foreground">
+              {group.items.map((item) => (
+                <li key={item}>• {item}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Teacher notes</p>
+          <p className="mt-3 text-sm text-foreground">
+            {bootstrap.mapping.teacherNotes || 'No teacher notes were attached to this assignment.'}
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function PracticeWorkspaceLaunchCard({
+  bootstrap,
+  canStartPractice,
+  isTextLaunch,
+  onOpenWorkspace,
+}: {
+  bootstrap: AssignmentBootstrapData;
+  canStartPractice: boolean;
+  isTextLaunch: boolean;
+  onOpenWorkspace: () => void;
+}) {
+  return (
+    <Card className="border-3 border-foreground p-6 shadow-stamp">
+      <div className="flex items-center gap-3">
+        <div className="flex size-11 items-center justify-center rounded-2xl border-2 border-foreground bg-success text-success-foreground">
+          <Mic size={22} strokeWidth={2.5} />
+        </div>
+        <div>
+          <h2 className="text-xl font-display font-bold text-foreground">Open practice workspace</h2>
+          <p className="text-sm text-muted-foreground">
+            Practice opens in a focused assignment workspace with assignment-only history and your teacher’s goals visible while you talk.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Voice</p>
+          <p className="mt-2 font-semibold text-foreground">{bootstrap.launch.voiceAllowed ? 'Allowed' : 'Blocked'}</p>
+        </div>
+        <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Text fallback</p>
+          <p className="mt-2 font-semibold text-foreground">{bootstrap.launch.textAllowed ? 'Available' : 'Blocked'}</p>
+        </div>
+      </div>
+
+      {bootstrap.launch.retentionPolicy ? (
+        <div className="mt-4 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Retention</p>
+          <p className="mt-2 text-sm text-foreground">
+            {bootstrap.launch.retentionPolicy.label} · Raw audio{' '}
+            {bootstrap.launch.retentionPolicy.rawAudioStorageAllowed ? 'stored' : 'not stored'}
+          </p>
+        </div>
+      ) : null}
+
+      <div className="mt-4 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+        <p className="text-sm font-semibold text-foreground">How it works</p>
+        <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+          <li>• Opens an assignment-only chat workspace</li>
+          <li>• Keeps your assignment goals visible while you practice</li>
+          <li>• Saves separate attempts and lets you resume older threads</li>
+        </ul>
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-3">
+        <Button onClick={onOpenWorkspace} disabled={!canStartPractice}>
+          <PlayCircle size={16} className="mr-2" />
+          {isTextLaunch ? 'Start text practice' : 'Start assignment practice'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 export function AssignmentLaunchPage() {
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const navigate = useNavigate();
@@ -76,7 +318,7 @@ export function AssignmentLaunchPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -146,7 +388,7 @@ export function AssignmentLaunchPage() {
 
       {bootstrap.teacherPreview ? (
         <Alert>
-          <CheckCircle2 className="h-4 w-4" />
+          <CheckCircle2 className="size-4" />
           <AlertDescription>
             This launch is running in teacher preview mode. Students will only see it when they are actively enrolled
             and the assignment is published.
@@ -156,7 +398,7 @@ export function AssignmentLaunchPage() {
 
       {bootstrap.limitations.map((message) => (
         <Alert key={message}>
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ))}
@@ -169,7 +411,7 @@ export function AssignmentLaunchPage() {
 
       {showTextFallbackNotice ? (
         <Alert>
-          <MessageSquareText className="h-4 w-4" />
+          <MessageSquareText className="size-4" />
           <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span>
               {bootstrap.launch.fallbackApplied
@@ -193,215 +435,16 @@ export function AssignmentLaunchPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
-          <details open className="group">
-            <summary className="cursor-pointer list-none">
-              <Card className="border-3 border-foreground p-5 shadow-stamp transition-colors group-open:border-primary/40">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
-                      <BookOpen size={22} strokeWidth={2.5} />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-display font-bold text-foreground">About this assignment</h2>
-                      <p className="text-sm text-muted-foreground">
-                        Curriculum scope, objectives, and teacher instructions
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-medium text-muted-foreground group-open:hidden">Show details</span>
-                  <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">Hide details</span>
-                </div>
-              </Card>
-            </summary>
-
-            {bootstrap.assignment.taskType === 'custom_prompt' && (
-              <Card className="mt-3 border-3 border-foreground p-6 shadow-stamp">
-                <h2 className="text-lg font-display font-bold text-foreground">
-                  Instructions from your teacher
-                </h2>
-                <div className="mt-4 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                  {bootstrap.assignment.studentInstructions ? (
-                    <p className="whitespace-pre-wrap text-sm text-foreground">
-                      {bootstrap.assignment.studentInstructions}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Your teacher did not provide additional instructions for this practice. Start when you are ready.
-                    </p>
-                  )}
-                </div>
-              </Card>
-            )}
-
-            {bootstrap.assignment.taskType !== 'custom_prompt' && (
-            <>
-            <Card className="mt-3 border-3 border-foreground p-6 shadow-stamp">
-              <h2 className="text-lg font-display font-bold text-foreground">
-                {bootstrap.curriculum.package?.id === 'canvas-generated' ? 'Practice scope' : 'Curriculum scope'}
-              </h2>
-
-              {bootstrap.curriculum.unit && bootstrap.curriculum.module ? (
-                <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Unit</p>
-                    <p className="mt-2 font-semibold text-foreground">
-                      {getLocalizedText(bootstrap.curriculum.unit.title, lang, bootstrap.curriculum.unit.id)}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Module</p>
-                    <p className="mt-2 font-semibold text-foreground">
-                      {getLocalizedText(bootstrap.curriculum.module.title, lang, bootstrap.curriculum.module.id)}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {getLocalizedText(bootstrap.curriculum.module.goal, lang)}
-                    </p>
-                  </div>
-                </div>
-              ) : bootstrap.mapping?.generatedScenario ? (
-                <div className="mt-6 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Conversation scenario</p>
-                  <p className="mt-2 text-sm text-foreground">{bootstrap.mapping.generatedScenario}</p>
-                  {bootstrap.mapping.sourceCanvasItemTitle ? (
-                    <p className="mt-2 text-xs text-muted-foreground">Based on: {bootstrap.mapping.sourceCanvasItemTitle}</p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <div className="mt-5 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Situation</p>
-                <p className="mt-2 font-semibold text-foreground">{bootstrap.curriculum.situation?.id || 'Canvas-generated'}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {formatModeLabel(bootstrap.curriculum.situation?.kind)} · {String(bootstrap.curriculum.situation?.seed?.setting || 'context not specified')}
-                </p>
-              </div>
-
-              <div className="mt-5">
-                <h3 className="text-base font-semibold text-foreground">Objectives</h3>
-                <div className="mt-3 grid gap-3">
-                  {bootstrap.curriculum.objectives.map((objective) => (
-                    <div key={objective.id} className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                      <p className="text-sm font-semibold text-foreground">{objective.id}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {getLocalizedText(objective.canDo, lang, objective.id)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Card>
-
-            <Card className="border-3 border-foreground p-6 shadow-stamp">
-              <h2 className="text-xl font-display font-bold text-foreground">Teacher-designed practice overlay</h2>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Target expressions</p>
-                  <ul className="mt-3 space-y-2 text-sm text-foreground">
-                    {(bootstrap.mapping.targetExpressions.length > 0
-                      ? bootstrap.mapping.targetExpressions
-                      : ['No explicit target expressions configured.']
-                    ).map((item) => (
-                      <li key={item}>• {item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Target vocabulary</p>
-                  <ul className="mt-3 space-y-2 text-sm text-foreground">
-                    {((bootstrap.mapping.targetVocabulary ?? []).length > 0
-                      ? bootstrap.mapping.targetVocabulary ?? []
-                      : ['No explicit target vocabulary configured.']
-                    ).map((item) => (
-                      <li key={item}>• {item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Focus grammar</p>
-                  <ul className="mt-3 space-y-2 text-sm text-foreground">
-                    {(bootstrap.mapping.focusGrammar.length > 0
-                      ? bootstrap.mapping.focusGrammar
-                      : ['No explicit grammar focus configured.']
-                    ).map((item) => (
-                      <li key={item}>• {item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Success criteria</p>
-                  <ul className="mt-3 space-y-2 text-sm text-foreground">
-                    {(bootstrap.assignment.successCriteria.length > 0
-                      ? bootstrap.assignment.successCriteria
-                      : ['Complete the task with sustained, assignment-aligned output.']
-                    ).map((item) => (
-                      <li key={item}>• {item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Teacher notes</p>
-                  <p className="mt-3 text-sm text-foreground">
-                    {bootstrap.mapping.teacherNotes || 'No teacher notes were attached to this assignment.'}
-                  </p>
-                </div>
-              </div>
-            </Card>
-            </>
-            )}
-          </details>
+          <AssignmentDetailsPanel bootstrap={bootstrap} lang={lang} />
         </div>
 
         <div className="space-y-6">
-          <Card className="border-3 border-foreground p-6 shadow-stamp">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-success text-success-foreground">
-                <Mic size={22} strokeWidth={2.5} />
-              </div>
-              <div>
-                <h2 className="text-xl font-display font-bold text-foreground">Open practice workspace</h2>
-                <p className="text-sm text-muted-foreground">
-                  Practice opens in a focused assignment workspace with assignment-only history and your teacher’s goals visible while you talk.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Voice</p>
-                <p className="mt-2 font-semibold text-foreground">{bootstrap.launch.voiceAllowed ? 'Allowed' : 'Blocked'}</p>
-              </div>
-              <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Text fallback</p>
-                <p className="mt-2 font-semibold text-foreground">{bootstrap.launch.textAllowed ? 'Available' : 'Blocked'}</p>
-              </div>
-            </div>
-
-            {bootstrap.launch.retentionPolicy ? (
-              <div className="mt-4 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Retention</p>
-                <p className="mt-2 text-sm text-foreground">
-                  {bootstrap.launch.retentionPolicy.label} · Raw audio{' '}
-                  {bootstrap.launch.retentionPolicy.rawAudioStorageAllowed ? 'stored' : 'not stored'}
-                </p>
-              </div>
-            ) : null}
-
-            <div className="mt-4 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-              <p className="text-sm font-semibold text-foreground">How it works</p>
-              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                <li>• Opens an assignment-only chat workspace</li>
-                <li>• Keeps your assignment goals visible while you practice</li>
-                <li>• Saves separate attempts and lets you resume older threads</li>
-              </ul>
-            </div>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Button onClick={() => setIsWorkspaceOpen(true)} disabled={!canStartPractice}>
-                <PlayCircle size={16} className="mr-2" />
-                {isTextLaunch ? 'Start text practice' : 'Start assignment practice'}
-              </Button>
-            </div>
-          </Card>
+          <PracticeWorkspaceLaunchCard
+            bootstrap={bootstrap}
+            canStartPractice={canStartPractice}
+            isTextLaunch={isTextLaunch}
+            onOpenWorkspace={() => setIsWorkspaceOpen(true)}
+          />
         </div>
       </div>
 

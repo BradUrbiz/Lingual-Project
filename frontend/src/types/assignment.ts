@@ -1,7 +1,7 @@
 import type { RetentionPolicySummary } from './school';
 
 // ---------------------------------------------------------------------------
-// Curriculum primitives (inlined from the now-deleted curriculum.ts — C2).
+// Curriculum primitives (inlined from the now-deleted curriculum.ts - C2).
 // These power the assignment bootstrap/analytics DTOs and the Canvas-generated
 // activity template metadata that the resolver still emits.
 // ---------------------------------------------------------------------------

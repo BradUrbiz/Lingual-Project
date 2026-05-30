@@ -4,6 +4,7 @@ from datetime import datetime
 
 from flask import Blueprint, jsonify, request
 
+import database
 from backend.route_deps import RouteDeps
 from backend.services.compliance import auto_grant_voice_consent_for_pilot
 from backend.services.membership_context import (
@@ -12,7 +13,7 @@ from backend.services.membership_context import (
     SchoolRequestContext,
 )
 
-ORGANIZATION_TYPES = {"school", "district", "program"}
+# Org-type vocabulary is owned by database.ALLOWED_ORG_TYPES (school-only tenancy).
 TEACHER_ALLOWED_ROLES = {"teacher", "school_admin"}
 
 
@@ -186,7 +187,7 @@ def create_schools_blueprint(deps: RouteDeps) -> Blueprint:
                 raise SchoolContextPermissionError("Authentication required.")
             if not org_name:
                 return jsonify({"success": False, "error": "Organization name is required."}), 400
-            if org_type not in ORGANIZATION_TYPES:
+            if org_type not in database.ALLOWED_ORG_TYPES:
                 return jsonify({"success": False, "error": "Invalid organization type."}), 400
             if not class_name:
                 return jsonify({"success": False, "error": "Class name is required."}), 400

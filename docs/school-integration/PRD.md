@@ -1,7 +1,7 @@
 # School Integration PRD
 
-Status: Draft v0.1
-Last updated: 2026-03-13
+Status: Beta v1.0 (shipped — pilot recruitment open)
+Last updated: 2026-05-30
 Owner: Product + Engineering
 
 ## 1. Why this exists
@@ -97,15 +97,23 @@ The dashboard must help a teacher decide what to reteach, who needs support, and
 
 ### In scope for school beta
 
+Shipped (2026-05-30):
+
 - Single-school and small multi-class pilots
-- Teacher and student roles
-- School / class / roster foundation
-- Teacher-authored curriculum mappings on top of Lingual curriculum packages
-- Assignment-aware speaking practice
+- Student, teacher, school-admin, and Lingual-admin roles
+- School / class / roster foundation (org-admin wizard, teacher join-org with admin approval, class join-code)
+- Teacher-authored assignment content (Canvas-linked, AI-assisted from teacher source packets, manual advanced, scaffold-free custom prompt) — replaces the originally-planned curriculum-overlay mapping
+- Assignment-aware speaking practice with teacher targets (objectives, expressions, focus grammar, language-mix policy)
 - Teacher dashboards with class, assignment, and student drill-down
-- Consent-aware voice and audio handling
-- Basic LMS import/connectors for Google Classroom and Canvas
+- Consent-aware voice and audio handling (voice fails closed without consent; text fallback when blocked)
+- Canvas LMS connector (PAT-based + LTI 1.3 launch + grade passback)
 - Hybrid text/voice modality controls
+
+Deferred to post-beta:
+
+- Google Classroom connector
+- CSV roster import + bulk/email invitations
+- Mid-session intervention engine beyond pre-session prompt assembly
 
 ### Out of scope for initial beta
 
@@ -242,35 +250,37 @@ Average weekly speaking minutes per active student outside normal class time.
 
 ## 10. Beta milestones
 
-### Milestone 1: School foundation
+All four milestones shipped as of 2026-05-30. Pilot recruitment is the open work; see `TASKS.md` Pilot readiness.
 
-- roles
-- classes
-- roster onboarding
-- teacher route protection
+### Milestone 1: School foundation — [x] shipped
 
-### Milestone 2: Curriculum control
+- roles (student, teacher, school-admin, Lingual-admin)
+- classes (manual create + Canvas-linked)
+- roster onboarding (join-code, LTI launch, Canvas roster signal)
+- teacher and admin route protection
 
-- teacher mapping overlay
-- assignment authoring
-- assignment-aware prompt building
+### Milestone 2: Curriculum control — [x] shipped (pivoted from overlay to Canvas-first)
 
-### Milestone 3: School analytics
+- teacher assignment authoring from Canvas content, source packets, manual advanced, or scaffold-free custom prompt
+- target expressions, focus grammar, objectives, teacher notes, task type, language-mix policy
+- assignment-aware prompt assembly via `assignment_resolver`
 
-- class dashboard
-- student drill-down
-- assignment reporting
+### Milestone 3: School analytics — [x] shipped (heuristic)
 
-### Milestone 4: Compliance and pilot hardening
+- class, assignment, and student drill-down dashboards
+- learning events + per-session summaries + rubric-dimension scoring
+- (see LIMITATIONS #8 — analytics remain rule-based heuristics, not model-verified)
 
-- consent workflow
-- retention controls
-- audit logging
-- disclosure logging for sensitive data access (teacher student-data views, admin roster views)
-- contextual onboarding hints for teacher setup workflows
-- public compliance information page for school evaluators
-- Firestore rules emulator validation
-- LMS connectors
+### Milestone 4: Compliance and pilot hardening — [x] shipped
+
+- consent workflow (student self-consent, guardian packets with secure-link delivery)
+- retention controls (`no_raw_audio` + `standard_school` policies)
+- audit logging (`consent_events`, `disclosure_logs`, `lingual_admin_audit`)
+- disclosure logging on key sensitive endpoints (see LIMITATIONS #12 for coverage gaps)
+- contextual onboarding hints (3 pages, 7 hints)
+- public `/compliance` page
+- Firestore rules emulator validation (`firebase-tests/`, 44 cases)
+- Canvas LMS connector (LTI 1.3 + PAT); Google Classroom deferred
 
 ## 11. Risks and mitigations
 
@@ -311,8 +321,14 @@ Mitigation:
 
 ## 13. Open questions
 
-- Which LMS integration should ship first in beta: Google Classroom, Canvas, or both?
-- Which delivery method should the school-admin-assisted guardian workflow use first in beta: secure link, downloadable notice, or both?
-- Which role should be allowed to approve deletion requests in beta: school admin only, or org-level admin variants where available?
-- What retention defaults are acceptable across pilot schools after counsel review?
-- Should pronunciation-specific audio storage be opt-in per assignment or per organization?
+Resolved during the v1 build:
+
+- ~~Which LMS integration should ship first in beta?~~ Canvas (PAT + LTI 1.3). Google Classroom deferred.
+- ~~Which delivery method should the school-admin-assisted guardian workflow use first in beta?~~ Secure-link delivery is the primary path; `downloadable_notice` is the staff-managed fallback without a rendered handout artifact.
+- ~~Which role should be allowed to approve deletion requests in beta?~~ School admin only.
+
+Still open:
+
+- What retention defaults are acceptable across pilot schools after counsel review? (Tracks the counsel-review TASKS items for COPPA / FERPA / BIPA.)
+- Should pronunciation-specific audio storage be opt-in per assignment or per organization? (Currently no raw audio is persisted — see LIMITATIONS #16. The opt-in question only becomes live once recording infrastructure exists.)
+- How should the tutor pedagogy doctrine (short turns, scaffold ladder, anti-sycophancy, recycle cadence) be embedded into the realtime tutor without regressing instruction adherence on `gpt-realtime-mini`? Design spec: `docs/Pedagogy Research/2026-05-27-tutor-pedagogy-conversation-guidance-design.md`.

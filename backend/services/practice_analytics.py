@@ -20,6 +20,7 @@ SUPPORTED_EVENT_TYPES = {
     'metric.self_correction',
     'metric.communicative_function_signal',
     'metric.discourse_move_signal',
+    'metric.context_tag_signal',
     'metric.error_detected',
     'metric.repeated_error',
     'metric.rubric_dimension_signal',

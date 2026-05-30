@@ -1,106 +1,113 @@
 # School Integration Technical Spec
 
-Status: Draft v0.1
-Last updated: 2026-04-18
+Status: Post-beta architecture direction accepted
+Last updated: 2026-05-30
 Owner: Engineering
 
 Implementation note:
 
-Current shipped constraints and temporary shortcuts should also be recorded in `LIMITATIONS.md`.
+Current shipped constraints and temporary shortcuts are recorded in `LIMITATIONS.md`. Open work is tracked in `TASKS.md`.
 
 ## 1. Goal
 
-Build a school-ready architecture on top of the current Flask + Firebase + React stack without introducing a second persistence system during beta.
+Build a post-beta school architecture on top of the current Flask + Firebase + React stack with a clear persistence boundary:
 
-Recommended approach:
+- Firebase Auth remains the source of truth for authentication.
+- Firestore remains the source of truth for user profile, assessment state, consumer-era chats, and realtime-friendly legacy data.
+- Cloud SQL for PostgreSQL becomes the source of truth for school operations, assignment delivery, compliance records, practice-session metadata, learning events, and analytics-ready data.
 
-Pragmatic balance.
+**Current implementation status (2026-05-30):** all school-domain state — organizations, memberships, classes, enrollments, assignments, Canvas/LTI records, compliance, practice sessions, learning events — is still in Firestore today. This spec now sets the post-beta target direction: new school-domain persistence work should move toward Postgres instead of deepening Firestore as the long-term operational database.
 
-- Keep Firebase Auth, Flask sessions, Firestore, and assignment-owned scenario fields sourced from Canvas content or teacher-authored input.
-- Add an organization and assignment layer above the current `users/{uid}` model.
-- Move prompt resolution from "generic chat or sample curriculum" to "assignment-aware practice context."
-- Add compliance gating before voice features.
-- Add normalized event capture before building real teacher analytics.
+Recommended long-term approach:
+
+Post-beta SQL migration with pragmatic coexistence.
+
+- Keep Firebase Auth, Flask sessions, and `users/{uid}` identity/profile flows stable.
+- Introduce a Postgres domain layer for organizations, memberships, classes, enrollments, assignments, Canvas/LTI records, compliance, practice sessions, learning events, and analytics rollups.
+- Route new school-domain writes to Postgres first, with temporary dual-write only where legacy Firestore readers still need the same state.
+- Backfill existing Firestore school-domain records into Postgres, verify parity with dual-read checks, then cut individual read paths over to Postgres.
+- Keep assignment-owned scenario fields sourced from Canvas content or teacher-authored input, but store assignment records in Postgres after the migration boundary is introduced.
+- Continue building AI session prompts from assignment context plus learner/compliance/modality state.
 
 ## 2. Current-state findings
 
-The current codebase has the right raw ingredients, but not the right school abstractions yet.
+### Shipped foundation as of 2026-05-30
 
-### Existing strengths
+The school-integration foundation is shipped. Current state:
 
-- React app shell and typed API-client pattern already exist in `frontend/src/api/*`.
-- Canvas LMS content sync already provides a real content surface for classes.
-- Assignment launch already resolves assignment context in `backend/services/assignment_resolver.py` and `frontend/src/pages/AssignmentLaunchPage.tsx`.
-- A teacher dashboard visual shell already exists in `frontend/src/pages/TeacherDashboardPage.tsx`.
+- Auth response carries memberships + active org context; backend request-context helper resolves active membership/role/classes.
+- Domain model: `organizations`, `memberships`, `classes`, `enrollments`, `assignments`, `practice_sessions`, `learning_events`, `canvas_connections`, `canvas_course_content`, `canvas_roster_entries`, `lingual_admin_audit`, `outbox_emails`, plus the full compliance surface (`student_compliance_records`, `consent_events`, `disclosure_logs`, `guardian_consent_packets`, `deletion_requests`, `deletion_execution_runs`).
+- Role-aware route guards (`ProtectedRoute`, `AppProtectedRoute`, `TeacherRoute`, `LingualAdminRoute`, `SchoolAdminRoute`).
+- Onboarding wizards for school admin (`/signup/admin/org-wizard`, 4-step, autosave draft) and teacher join-org (`/signup/teacher/join-org` with invite-code OR org-search). Admin approval required for teacher joins (auto-approve retired by Plan 4).
+- Lingual admin panel at `/lingual-admin/*` (12 endpoints; org lifecycle suspend/restore + audit; auto-restore scheduler).
+- Canvas LMS integration: PAT-based auth (AES-256-GCM encrypted), manual re-sync, roster decoupled from enrollments (2026-04-21), per-class content surface, assignment link picker, LTI 1.3 deep-link launch + grade passback.
+- Assignment authoring: Canvas-linked, AI-assisted from teacher source packets, manual advanced, and scaffold-free `custom_prompt` mode (legacy `curriculum_mappings` removed).
+- Assignment-aware prompt assembly via `backend/services/assignment_resolver.py` (reads scenario / objectives / targets / focus_grammar / teacher notes / language-intensity directly off the assignment doc).
+- Realtime practice on `gpt-realtime-mini-2025-12-15` with `semantic_vad` eagerness=auto. Compliance gating fails closed; `textFallbackEnabled` downgrades when voice is blocked.
+- Learning events + per-session summaries + class/assignment/student analytics endpoints and UIs. Disclosure logging on key sensitive endpoints.
+- Compliance: full Epic A (guardian packets with secure-link decisions) and Epic B (deletion requests with sync execution worker). School-admin compliance dashboard with org-scoped summary, filterable roster, bulk consent, audit CSV export.
+- Outbox email infrastructure: Firestore `outbox_emails/` + `send_outbox_email` Cloud Function. 9 templates wired (Plans 1+3+4+5).
+- Firestore security rules are school-aware, validated via `firebase-tests/` emulator suite (44 tests, Java required to run).
+- Plan 6 legacy user role migration: `LegacyRoleMigrationModal` + backfill script + `POST /api/auth/migrate-role`.
 
-### Current blockers
+For known limitations on each shipped feature, see `LIMITATIONS.md`. For open work, see `TASKS.md`.
 
-- Auth is identity-only and session data only stores `uid`, `email`, `name`.
-- Firestore is user-centric; nearly everything hangs off `users/{uid}`.
-- `profile.school_name` is only a free-text field, not a real tenancy boundary.
-- Imported curriculum-package delivery is not part of the shipped beta path; assignment content comes from Canvas material or teacher-authored source text.
-- Teacher dashboard data is static and not role-protected.
-- Practice data is stored as generic chat history rather than assignment-bound session data.
-- Firestore rules are placeholder-only and not school-safe.
+### Post-beta persistence finding
 
-Relevant current files:
+The shipped school feature set is approaching the limits of Firestore as the long-term school-domain system of record. Current code already performs relational work manually:
 
-- `main.py`
-- `database.py`
-- `backend/routes/auth.py`
-- `backend/routes/chat.py`
-- `backend/routes/pronunciation.py`
-- `frontend/src/contexts/AuthContext.tsx`
-- `frontend/src/App.tsx`
-- `frontend/src/pages/AppLearningPage.tsx`
-- `frontend/src/pages/AssignmentLaunchPage.tsx`
-- `frontend/src/pages/TeacherDashboardPage.tsx`
-- `firestore.rules`
+- membership hydration reads organizations separately
+- student assignment lookup walks enrollments and class assignments
+- class summaries count enrollments and assignments per class
+- org-level counts chunk class IDs around Firestore `in` query limits
+- analytics endpoints join assignments, enrollments, sessions, events, and users in Python
+- compliance and deletion workflows depend on consistent multi-collection state transitions
 
-### Current shipped foundation as of 2026-03-09
-
-The following foundation work is now in code:
-
-- membership-aware auth response and backend request context
-- role-protected teacher area and school setup bootstrap flow
-- organization, membership, class, and enrollment data model
-- secure Firestore rules for the current school collections
-- teacher dashboard data contract backed by school records instead of hardcoded mock data
-- assignment DTOs plus backend CRUD endpoints
-- assignment bootstrap endpoint that resolves assignment context into launch data for current realtime practice
-- Canvas-linked and teacher-authored assignment generation paths with direct scenario fields stored on assignments
-- learning event capture, per-session summaries, and teacher-facing analytics (class, assignment, student drill-down)
-- compliance gating for voice sessions, pronunciation audio retention, and consent state enforcement
-- guardian consent packet lifecycle with secure-link delivery and teacher/admin management
-- class compliance roster, bulk consent operations, and audit export
-- interaction contract visibility in the teacher assignment builder and assignment launch surfaces
-
-Current limitations for these shipped features live in `LIMITATIONS.md`.
+These are natural SQL workflows. Firestore can remain operational during the migration, but new school-domain persistence design should treat Postgres as the destination rather than adding deeper Firestore-specific workarounds.
 
 ## 3. Architecture decisions
 
-### 3.1 Keep `users/{uid}` as identity, not tenancy
+### 3.1 Use Postgres for school-domain state
 
-The existing `users/{uid}` document stays as the core learner identity and profile record. It should no longer be the only organizational boundary.
-
-### 3.2 Add explicit school-domain entities
-
-Add first-class entities for:
+Cloud SQL for PostgreSQL is the post-beta source of truth for school-domain state:
 
 - organizations
-- memberships
+- memberships and roles
 - classes
 - enrollments
 - assignments
-- canvas connections and synced course content
+- Canvas/LTI integration records and roster mirrors
 - compliance state
+- guardian consent packets
+- deletion requests and execution runs
 - practice sessions
 - learning events
 - analytics rollups
 
-### 3.3 Keep assignment content on the assignment document
+Reason:
 
-Teacher-managed beta content should resolve to one assignment record that carries the AI-ready fields directly:
+The product's school model is relational. Teachers belong to organizations, teach classes, publish assignments, review enrolled students, inspect sessions and events, and operate under compliance policies. SQL gives these workflows explicit foreign keys, constraints, transactional writes, joins, aggregate queries, migrations, and operational reporting without reimplementing those behaviors in Python and Firestore composite indexes.
+
+### 3.2 Keep Firebase Auth and Firestore for identity/profile/legacy data
+
+Firebase Auth remains the authentication provider. The Firebase UID remains the stable cross-system user identifier.
+
+Firestore keeps:
+
+- `users/{uid}` identity-adjacent profile state
+- assessment state and results while the existing learner flows depend on them
+- consumer-era chats and user-owned subcollections for backward compatibility
+- realtime-friendly legacy data where direct client access is still useful and rule-covered
+
+Firestore should not own post-beta school tenancy, roster, assignment, compliance, practice-session, learning-event, or analytics state.
+
+### 3.3 Use explicit school-domain entities
+
+Represent the school domain as first-class Postgres tables. Do not overload Firebase Auth custom claims, `users/{uid}`, or profile fields with tenant state.
+
+### 3.4 Keep assignment content on the assignment row
+
+Teacher-managed content should resolve to one assignment record that carries the AI-ready fields directly:
 
 - `instructions`
 - `generated_scenario`
@@ -113,23 +120,51 @@ Teacher-managed beta content should resolve to one assignment record that carrie
 
 This keeps prompt assembly assignment-centric and avoids a second overlay collection just to resolve practice context.
 
-### 3.4 Route every teacher-managed practice session through an assignment resolver
+### 3.5 Route every teacher-managed practice session through an assignment resolver
 
 The prompt builder must no longer be called directly from a sample module selector alone. For school-managed practice, the flow becomes:
 
 assignment -> class context -> student profile -> compliance policy -> modality policy -> system prompt
 
-### 3.5 Voice gating must happen before session creation
+### 3.6 Voice gating must happen before session creation
 
 No voice-capable route should create a session unless the student's compliance record allows it.
 
-### 3.6 Normalize learning events before chasing dashboards
+### 3.7 Normalize learning events before chasing dashboards
 
 Teacher analytics should not be reverse-engineered from chat documents. Practice sessions should emit structured events that roll up into class and assignment metrics.
 
+### 3.8 Migrate through coexistence, not a flag-day rewrite
+
+The migration must be staged:
+
+1. Add a Postgres access layer and schema while Firestore remains the existing runtime.
+2. Backfill Firestore school-domain data into Postgres.
+3. Put new school-domain writes on Postgres first.
+4. Dual-write only the legacy Firestore documents that existing readers still require.
+5. Add parity checks that compare Firestore reads against Postgres projections.
+6. Move read paths one bounded area at a time.
+7. Remove Firestore school-domain writes only after the corresponding route/UI has been fully cut over and monitored.
+
+The staging above is the happy path. A schema-fidelity review against the live Firestore writers (`database.py` and the services) surfaced five gaps that the plan must close before backfill code is written. They are not optional refinements — each one either breaks a backfill or causes silent data loss:
+
+**a. ID resolution across the coexistence window.** Firestore uses deterministic composite *string* IDs (`{org_id}_{uid}`, `{class_id}_{student_uid}`) as both primary key and uniqueness guard; Postgres uses opaque `uuid` PKs with `legacy_firestore_id` for traceability. Every foreign reference needs an old-string → new-UUID lookup, and the backfill must run in parent-first dependency order. A row written to Firestore *after* its parent is backfilled but *before* read-cutover will reference a string ID that has no UUID yet. **Decided (2026-05-30): resolve cross-store references through the unique `legacy_firestore_id` index on every write — no write-freeze, no downtime, UUID PKs retained.** The resolution helper is the same one backfill uses, centralized in the repository layer behind `RouteDeps`. See `POSTGRES_SCHEMA.md` → "Backfill Normalization And ID Resolution."
+
+**b. Dual-write consistency.** Step 4 has no rollback or idempotency mechanism. A route that writes Postgres-then-Firestore (or the reverse) has no compensation if the second write fails — and today's Firestore-only writes at least fail within one store. Cross-store writes during migration need explicit compensation (an outbox-style record or per-write idempotency key), not best-effort sequencing.
+
+**c. Parity-check scope.** Step 5 will throw false diffs: snapshot columns (`analysis_state`, `session_summary`) mutate in place in Firestore, and server timestamps differ by microseconds across stores. Parity checks must compare only stable, non-mutating fields with a defined tolerance — not whole documents.
+
+**d. Active-session handling.** `practice_sessions.analysis_state` is rewritten on every learning event. Backfilling a `status='active'` session snapshots a moving target that diverges the instant the next event lands in Firestore. Drain or exclude active sessions from backfill.
+
+**e. Rollback path.** Steps 6–7 are forward-only on hot paths (analytics, event capture) during school hours. A failed cut that reads from an incomplete Postgres store shows empty analytics and zero-event sessions to live classrooms. Each route-family cut needs a feature flag that toggles reads back to Firestore without a redeploy.
+
+Two latent code bugs the migration *exposes* (fix before cutover): `metric.context_tag_signal` is emitted but missing from `SUPPORTED_EVENT_TYPES` (`practice_analytics.py:10`), and two divergent org-type constants exist (`ALLOWED_ORG_TYPES` = `{'school'}` vs `ORGANIZATION_TYPES` = `{'school','district','program'}`). Both are tracked in `TASKS.md`.
+
 ## 4. Proposed domain model
 
-### 4.1 Firestore collections
+Post-beta target: Postgres owns school operations and analytics-ready learning data. Firestore collections below describe retained identity/profile data plus the current migration-source shape for school-domain data.
+
+### 4.1 Firebase/Firestore retained data and migration source collections
 
 ### `users/{uid}`
 
@@ -339,7 +374,7 @@ The admin roster view logs org-scoped events (`student_uid=''`) rather than per-
 
 ### `guardian_consent_packets/{packetId}`
 
-Epic A model for beta guardian collection. Current beta ships secure-link guardian response plus staff-managed `downloadable_notice` packet tracking.
+Epic A model for guardian collection. Current implementation ships secure-link guardian response plus staff-managed `downloadable_notice` packet tracking.
 
 Fields:
 
@@ -367,7 +402,7 @@ Fields:
 
 Purpose:
 
-Support a school-admin-assisted guardian workflow without introducing a standalone guardian account model in beta.
+Support a school-admin-assisted guardian workflow without introducing a standalone guardian account model in the current school product.
 
 State model:
 
@@ -381,13 +416,13 @@ State model:
 
 Implementation rules:
 
-- Do not create guardian accounts for beta.
+- Do not create guardian accounts until a dedicated guardian product surface is designed.
 - Packets are school-admin-assisted artifacts, not a parent portal.
 - `token_hash` must store only a hashed token, never the raw token.
 - Every packet issuance, resend, reminder, view, grant, revoke, expire, and cancel action must emit a `consent_events` row.
 - Packet completion must write both `guardian_consent_packets` state and the derived `student_compliance_records.guardian_consent_status`.
 
-Current beta API surface:
+Current API surface:
 
 - `GET /api/teacher/classes/<class_id>/students/<student_uid>/guardian-consent-packet`
 - `POST /api/teacher/classes/<class_id>/students/<student_uid>/guardian-consent-packets`
@@ -437,13 +472,13 @@ Key rule: `student`-scope deletion removes only privacy-sensitive practice data.
 |-------|----------------|----------------|---------------------|
 | `student` | `teacher`, `school_admin` | `school_admin` | Yes, if requester is `school_admin` |
 | `class` | `teacher` (own class), `school_admin` | `school_admin` | Yes, if requester is `school_admin` |
-| `org` | `school_admin` | `school_admin` | Yes (only role with org-wide access in beta) |
+| `org` | `school_admin` | `school_admin` | Yes (only role with org-wide access in the current product) |
 
 #### Deletion SLA
 
 Target: 7 days from approval to completion.
 
-Beta execution strategy: synchronous (Flask endpoint triggers deletion immediately on approval or retry). Upgradeable to async Cloud Tasks worker post-beta.
+Current execution strategy: synchronous (Flask endpoint triggers deletion immediately on approval or retry). Upgradeable to async Cloud Tasks worker as volume grows.
 
 ### `deletion_execution_runs/{runId}`
 
@@ -594,12 +629,86 @@ Every code path below calls `enforce_org_active(org_id)` before mutating org-sco
 5. `POST /api/canvas/practice/start` (canvas_practice)
 6. `POST /api/teacher/...` (assignment write endpoints in teacher blueprint)
 
-### 4.2 Why this model fits the repo
+### 4.2 Target Postgres schema
+
+Detailed DDL blueprint: `docs/school-integration/POSTGRES_SCHEMA.md`.
+
+The first Postgres schema should use Firebase UID strings as user references instead of duplicating Firebase Auth identities. UUID primary keys are recommended for school-domain rows unless an external identifier needs a deterministic key.
+
+Core tenancy and roles:
+
+| Table | Purpose | Key constraints |
+|---|---|---|
+| `organizations` | School, district, or program tenant | `id uuid primary key`, `status`, `name_lower`, metadata fields for admin/search |
+| `memberships` | User-to-organization role assignment | `org_id references organizations`, `firebase_uid text`, `roles text[]`, unique active membership policy per `(org_id, firebase_uid)` |
+| `classes` | Teacher-managed class/course shell | `org_id references organizations`, learning locale, subject, term. Join codes live in `class_join_codes` (Firestore stores them inline on the class doc; they normalize out on backfill) |
+| `class_teachers` | Many-to-many teacher assignment | `class_id references classes`, `membership_id references memberships`, unique `(class_id, membership_id)` |
+| `class_join_codes` | Join-code lifecycle | `class_id references classes`, unique active code, generated/deactivated timestamps |
+| `enrollments` | Student enrollment in a class | `class_id references classes`, `student_firebase_uid text`, `student_membership_id references memberships`, unique `(class_id, student_firebase_uid)` |
+
+Assignments and source integrations:
+
+| Table | Purpose | Key constraints |
+|---|---|---|
+| `assignments` | Teacher-authored assignment and AI-ready prompt fields | `org_id`, `class_id`, `created_by_firebase_uid`, status, task type, modality, scenario fields |
+| `canvas_connections` | Server-only Canvas connection credentials and course mapping | `class_id references classes`, encrypted PAT or LTI linkage fields |
+| `canvas_course_content` | Synced Canvas modules/items | `connection_id references canvas_connections`, `class_id references classes`, optional `linked_assignment_id references assignments` |
+| `canvas_roster_entries` | Canvas roster mirror only | unique `(class_id, canvas_user_id)`, no access grant by itself |
+| `lti_platforms` | LTI platform registration | issuer/client/deployment identifiers, `org_id references organizations` |
+| `lti_sessions` | LTI launch/session state | user/course/assignment launch metadata tied to Firebase UID |
+
+Compliance and privacy:
+
+| Table | Purpose | Key constraints |
+|---|---|---|
+| `student_compliance_records` | Current effective consent/policy answer | unique `(org_id, student_firebase_uid)` |
+| `consent_events` | Append-only consent, disclosure, audit event stream | `org_id`, optional student/class scope, event type, actor metadata |
+| `guardian_consent_packets` | Guardian notice/secure-link lifecycle | `org_id`, `class_id`, `student_firebase_uid`, token hash only |
+| `deletion_requests` | Human approval workflow for deletion | `org_id`, scope, status, requested/approved actor fields |
+| `deletion_execution_runs` | Retryable execution attempts | `request_id references deletion_requests`, attempt number, count summaries |
+
+Practice and analytics:
+
+| Table | Purpose | Key constraints |
+|---|---|---|
+| `practice_sessions` | Assignment-scoped practice attempt metadata | `org_id`, `class_id`, `assignment_id`, `student_firebase_uid`, status, modality, prompt snapshots as JSONB |
+| `learning_events` | Append-only event stream | `session_id references practice_sessions`, `assignment_id`, `class_id`, `student_firebase_uid`, event type, JSONB payload |
+| `analytics_rollups` | Materialized aggregates by scope/period | unique `(org_id, scope_type, scope_id, period_type, period_start)` — **net-new, excluded from the initial baseline** (analytics are computed on-the-fly today; no rollup persistence exists). Gated behind a refresh-worker decision. |
+
+`organizations` also carries denormalized/inline fields the live writers depend on but that do not normalize cleanly: `lms_capabilities`, `teacher_invite_code*`, and `school_admin_uids` (the last is derived from `memberships` in Postgres, not stored — see `POSTGRES_SCHEMA.md`). The `lti_platforms` / `lti_sessions` tables are live Firestore collections (`database.py:4068`, `4185`), not PyLTI1p3 session files, so they are real migration targets. Field renames, legacy-value normalizations, type coercions, and the parent-first ID-resolution order are enumerated in `POSTGRES_SCHEMA.md` → "Backfill Normalization And ID Resolution."
+
+Recommended column conventions:
+
+- Primary keys: `uuid` generated by Postgres for domain rows.
+- User references: `firebase_uid text not null` or `student_firebase_uid text not null`.
+- Timestamps: `created_at timestamptz not null default now()`, `updated_at timestamptz not null default now()` where mutable.
+- Flexible prompt/analytics snapshots: `jsonb`, but only for bounded snapshots and event payloads. Do not use `jsonb` to avoid modeling stable relational ownership.
+- Status fields: text enums enforced by `check` constraints first; upgrade to Postgres enum types only after status vocabularies stabilize.
+- Soft deletion: prefer `status`/`archived_at` for operational entities; hard deletion only through deletion-request execution.
+
+Critical indexes:
+
+- `memberships(firebase_uid, status)`
+- `memberships(org_id, status)`
+- `classes(org_id, status, updated_at desc)`
+- `class_teachers(membership_id, class_id)`
+- `enrollments(student_firebase_uid, status, updated_at desc)`
+- `enrollments(class_id, status, updated_at desc)`
+- `assignments(class_id, status, due_at)`
+- `practice_sessions(assignment_id, student_firebase_uid, started_at desc)`
+- `practice_sessions(class_id, started_at desc)`
+- `learning_events(session_id, created_at)`
+- `learning_events(assignment_id, event_type, created_at)`
+- `consent_events(org_id, student_firebase_uid, created_at desc)`
+- `guardian_consent_packets(class_id, student_firebase_uid, updated_at desc)`
+
+### 4.3 Why this model fits the repo
 
 - It preserves the current `users/{uid}` contract for existing learner flows.
-- It avoids a full database migration for beta.
-- It gives the teacher product a real school data layer instead of relying on `profile.school_name`.
-- It can be added incrementally without breaking current routes.
+- It stops treating Firestore document IDs and denormalized arrays as the long-term replacement for relational constraints.
+- It gives the teacher product a real school data layer instead of relying on `profile.school_name` or Firestore-side lookup choreography.
+- It lets analytics use SQL joins, filters, materialized rollups, and query plans instead of loading broad Firestore result sets into Python.
+- It can be added incrementally without breaking current routes because `RouteDeps.db` already acts as a persistence boundary.
 
 ## 5. Backend design
 
@@ -744,7 +853,7 @@ Suggested mapping object shape:
   - `follow_up_pressure`
   - `allow_clarification_requests`
 
-Default beta behavior:
+Default school behavior:
 
 - realtime turns use recast first
 - same target error repeated 3 times escalates to elicitation
@@ -763,12 +872,12 @@ Rules to encode:
 - Pronunciation routes must apply the same voice gating and retention policy checks as assignment practice routes.
 - Retention policy must determine whether raw audio is stored, for how long, and where.
 - Audit trail must record consent changes and sensitive access paths.
-- Teachers and school admins may update consent records inside their authorized organization and class scope during beta.
-- Beta operational tooling should start with class-scoped bulk consent updates and class-scoped audit export from teacher workflows.
+- Teachers and school admins may update consent records inside their authorized organization and class scope.
+- Operational tooling starts with class-scoped bulk consent updates and class-scoped audit export from teacher workflows.
 - Guardian-facing consent collection requires a dedicated actor/evidence model and should not be improvised from teacher-only forms.
 - Deletion execution requires a stateful workflow that covers Firestore records and Firebase Storage audio artifacts before it is automated.
 
-Current beta implementation slice:
+Current implementation slice:
 
 - class compliance roster endpoint that joins active enrollments, user display names, guardian-contact flags, and effective compliance status
 - class-scoped bulk consent update actions for teacher and school-admin roles
@@ -777,7 +886,7 @@ Current beta implementation slice:
 - guardian packet issue/resend/cancel actions from student drill-down
 - class compliance roster and student drill-down surfaces that show guardian packet state alongside effective consent state
 - secure-link public guardian page that records `granted` / `revoked` decisions back into `student_compliance_records`
-- `downloadable_notice` delivery recorded as a staff-managed packet type without a rendered handout artifact in beta
+- `downloadable_notice` delivery recorded as a staff-managed packet type without a rendered handout artifact
 
 Remaining hardening after the current slice:
 
@@ -788,7 +897,7 @@ Remaining hardening after the current slice:
 - enumerate Firestore and Storage deletion targets from a request scope snapshot
 - broaden event taxonomy for request creation, approval, rejection, queue, retry, completion, and failure
 
-Recommended beta defaults, pending counsel validation:
+Recommended school defaults, pending counsel validation:
 
 - text practice allowed unless school policy blocks it
 - raw audio retention: 30 days
@@ -798,7 +907,7 @@ Recommended beta defaults, pending counsel validation:
 
 Hard rule:
 
-Do not build voice identity, speaker recognition, or voiceprint features for school beta.
+Do not build voice identity, speaker recognition, or voiceprint features for school deployments.
 
 ### 5.5 Analytics model
 
@@ -817,7 +926,7 @@ Initial derived metrics:
 - `voice_minutes_used`
 - `estimated_session_cost_usd`
 
-Beta computation strategy:
+Initial computation strategy:
 
 - write raw events at session time
 - compute lightweight per-session summaries synchronously
@@ -857,19 +966,25 @@ Keep `AuthContext` for identity auth, but add:
 
 ### 6.2 Route structure
 
-Keep current `/app` shell, but create a real teacher area:
+Top-level routes (outside `/app` shell):
 
-- `/app/teacher`
-- `/app/teacher/classes/:classId`
-- `/app/teacher/classes/:classId/curriculum`
-- `/app/teacher/classes/:classId/assignments/:assignmentId`
-- `/app/teacher/classes/:classId/students/:studentUid`
+- `/login`, `/signup` (split into role-aware CTAs)
+- `/signup/admin/org-wizard`, `/signup/admin/pending` — admin org creation flow (Plan 3)
+- `/signup/teacher/join-org`, `/signup/teacher/pending` — teacher join flow (Plan 4)
+- `/lingual-admin/*` — Lingual admin panel (Plan 5; bypasses AppLayout to avoid double-nesting with `LingualAdminShell`)
+- `/compliance` — public compliance information page
 
-Student practice entry point:
+Inside `/app` shell:
 
-- `/app/assignments/:assignmentId`
-
-Do not continue routing all teacher workflows through the current flat `/app/teacher` mock page.
+- `/app/learn` — student home (Free Practice + Canvas module list)
+- `/app/teacher` — teacher dashboard
+- `/app/teacher/classes/:classId` — class overview + analytics
+- `/app/teacher/classes/:classId/compliance` — class compliance roster
+- `/app/teacher/assignments/:assignmentId` — assignment analytics
+- `/app/teacher/students/:studentUid` — student drill-down
+- `/app/admin` — school-admin home + compliance + deletion requests
+- `/app/assignments/:assignmentId` — student assignment launch
+- `/app/chat`, `/app/pronunciation`, `/app/games`, `/app/settings`
 
 ### 6.3 Frontend API modules
 
@@ -908,111 +1023,69 @@ The UI should let teachers:
 
 This references stable `moduleId`, `objectiveIds`, and `situationId` values from the existing curriculum schema.
 
-## 7. File-level implementation map
+## 7. Key files
 
-### 7.1 Backend files to create
-
-- `backend/routes/schools.py`
-- `backend/routes/teacher.py`
-- `backend/routes/curriculum_admin.py`
-- `backend/routes/integrations.py`
-- `backend/services/assignment_resolver.py`
-- `backend/services/prompt_builder.py`
-- `backend/services/compliance.py`
-- `backend/services/events.py`
-- `backend/services/analytics.py`
-- `backend/services/membership_context.py`
-
-### 7.2 Backend files to modify
-
-- `main.py`
-  - register new blueprints
-  - move prompt assembly responsibilities into services
-- `backend/route_deps.py`
-  - add membership and compliance dependencies
-- `backend/routes/auth.py`
-  - return memberships and active context
-- `backend/routes/chat.py`
-  - accept `assignmentId`
-  - call compliance and assignment resolver
-- `backend/routes/pronunciation.py`
-  - enforce compliance checks
-- `database.py`
-  - keep legacy helpers
-  - add school-domain helpers only if they stay readable
-- `firestore.rules`
-  - replace placeholder rules with org/class-aware access rules
-
-### 7.3 Frontend files to create
-
-- `frontend/src/api/schools.ts`
-- `frontend/src/api/teacher.ts`
-- `frontend/src/api/assignments.ts`
-- `frontend/src/api/compliance.ts`
-- `frontend/src/types/school.ts`
-- `frontend/src/types/assignment.ts`
-- `frontend/src/contexts/MembershipContext.tsx`
-- `frontend/src/components/layout/TeacherRoute.tsx`
-- `frontend/src/pages/TeacherClassPage.tsx`
-- `frontend/src/pages/TeacherAssignmentBuilderPage.tsx`
-- `frontend/src/pages/AssignmentLaunchPage.tsx`
-- `frontend/src/pages/StudentAssignmentReportPage.tsx`
-
-### 7.4 Frontend files to modify
-
-- `frontend/src/App.tsx`
-- `frontend/src/contexts/AuthContext.tsx`
-- `frontend/src/components/layout/AppProtectedRoute.tsx`
-- `frontend/src/components/layout/AppLayout.tsx`
-- `frontend/src/pages/TeacherDashboardPage.tsx`
-- `frontend/src/pages/AppLearningPage.tsx`
-- `frontend/src/pages/TeacherAssignmentBuilderPage.tsx`
-- `frontend/src/types/index.ts`
+All of the files originally listed here as "to create" or "to modify" are now in code. For the canonical current-shape file map (blueprints, services, frontend pages, contexts, API modules), see the **Key Files** section of the top-level `CLAUDE.md`. Plan-specific surfaces are documented under `docs/superpowers/plans/` (Plan 3 admin wizard, Plan 4 teacher join-org, Plan 5 Lingual admin, Plan 6 legacy migration) and `docs/superpowers/specs/2026-04-21-canvas-roster-decouple-from-enrollment-design.md`.
 
 ## 8. Rollout phases
 
-### Phase 0: foundation
+The phases below define the accepted post-beta migration path. The current runtime is still Firestore-backed, so implementation should proceed gradually through backfill, dual-write, parity checks, and route-family cutovers rather than a flag-day rewrite.
 
-- org and membership model
-- role-aware auth response
-- route protection
-- secure Firestore rules
+### Phase 0: architecture lock
 
-### Phase 1: classes and onboarding
+- Accept ADR-0001 as the persistence decision.
+- Keep Firebase Auth and Firestore identity/profile flows stable.
+- Freeze the Postgres target schema for school-domain v1.
+- Choose the first implementation library for Flask Postgres access (`SQLAlchemy` + `Alembic` recommended).
 
-- class CRUD
-- roster import
-- teacher and student onboarding split
+### Phase 1: Postgres foundation
 
-### Phase 2: curriculum control
+- Provision Cloud SQL for PostgreSQL.
+- Add migration tooling and local development connection docs.
+- Add `backend/persistence/` or equivalent repository layer behind `RouteDeps`.
+- Create tables for organizations, memberships, classes, enrollments, assignments, Canvas/LTI records, compliance records, practice sessions, learning events, and audit/deletion workflows.
+- Add seed/backfill scripts that can run dry-run, write, and parity-check modes.
 
-- mapping overlay
-- assignment creation
-- assignment-aware prompt builder
+### Phase 2: backfill and parity
 
-### Phase 3: sessions and events
+- Backfill Firestore school-domain data into Postgres.
+- Keep Firestore IDs in `legacy_firestore_id` columns where route compatibility or traceability matters.
+- Add parity reports for counts and sampled records across organizations, classes, enrollments, assignments, sessions, events, compliance records, and guardian packets.
+- Do not cut reads over until parity reports are deterministic enough to run in CI or a release checklist.
 
-- practice session bootstrap
-- event stream
-- per-session summaries
+### Phase 3: Postgres-first writes
 
-### Phase 4: dashboards and reporting
+- Move new school-domain writes to Postgres first.
+- Dual-write only fields still required by existing Firestore-backed readers.
+- Start with low-risk domains: new organizations/classes/enrollments/assignments.
+- Then move compliance, guardian packets, deletion workflows, practice sessions, and learning events.
 
-- teacher dashboard DTO
-- student drill-down
-- assignment analytics
+### Phase 4: read cutover by route family
 
-### Phase 5: compliance and LMS hardening
+- Switch route families one at a time from Firestore reads to Postgres reads.
+- Recommended order: school context, teacher class/roster, assignments, compliance, student assignment launch, practice sessions/events, analytics.
+- For each route family, compare Firestore projection and Postgres result shape before removing the Firestore read path.
 
-- consent workflows
-- retention enforcement
-- LMS sync
-- audit logging
+### Phase 5: analytics and reporting hardening
+
+- Replace Python-side aggregation over broad Firestore result sets with SQL-backed queries and rollups.
+- Add materialized or scheduled rollups for class, assignment, and student dashboards.
+- Move retention/deletion execution to async workers if synchronous execution becomes too slow or operationally risky.
+
+### Phase 6: Firestore school-domain retirement
+
+- Remove Firestore writes for migrated school-domain collections.
+- Keep read-only archival access only where needed for audit/migration history.
+- Delete obsolete composite indexes after all production readers have been cut over and monitored.
+- Update Firestore rules so school-domain client reads are denied unless a retained legacy path explicitly requires them.
 
 ## 9. Testing strategy
 
 Backend:
 
+- SQL migration tests for schema constraints and indexes
+- repository tests for Postgres persistence boundaries
+- Firestore-to-Postgres backfill dry-run and parity tests
 - unit tests for assignment resolver
 - unit tests for compliance gating
 - unit tests for analytics aggregation
@@ -1032,8 +1105,10 @@ Integration:
 - school onboarding -> class creation -> assignment publish -> student launch -> teacher dashboard refresh
 - consent revocation blocks new voice sessions
 - budget exhaustion downgrades a session from voice to text
+- dual-write smoke test for route families that temporarily write both Postgres and Firestore
+- read-parity smoke test before cutting a route family from Firestore to Postgres
 
-## 10. Pilot readiness features
+## 10. School readiness features
 
 ### Contextual onboarding hints
 
@@ -1056,11 +1131,11 @@ Route: `<Route path="/compliance" />` in `App.tsx`, outside the `ProtectedRoute`
 
 ### Firestore rules emulator tests
 
-A standalone test project in `firebase-tests/` validates all Firestore security rules against the emulator using `@firebase/rules-unit-testing` and Vitest. Tests cover all 11 school-integration collections plus catch-all deny rules (44 test cases).
+A standalone test project in `firebase-tests/` validates Firestore security rules against the emulator using `@firebase/rules-unit-testing` and Vitest. During migration, these tests protect retained identity/profile and legacy client-read paths. Postgres-backed school-domain routes must be protected by backend authorization tests instead of Firestore rules.
 
 ## 11. Compliance references
 
-This spec is not legal advice. Counsel review is required before production rollout.
+This spec is not legal advice. Counsel review is required before expanding post-beta school deployments.
 
 Official references used to shape the architecture:
 
@@ -1078,9 +1153,13 @@ Official references used to shape the architecture:
 
 ## 12. Open technical questions
 
-- Should analytics rollups run in Flask, Cloud Functions, or scheduled GCP jobs for beta?
-- Should curriculum package payloads live fully in Firestore, Cloud Storage, or a mixed model?
-- Do we store any raw audio by default for general speaking assignments, or only for pronunciation-enabled assignments?
+- Do we store any raw audio by default for general speaking assignments, or only for pronunciation-enabled assignments? (See LIMITATIONS #16 — no raw audio is persisted today.)
+- How should the tutor pedagogy layer (shared tutor doctrine + skill packs + optional coach track) be sequenced into the assignment resolver and free-chat builders without regressing instruction adherence on `gpt-realtime-mini`? Design spec: `docs/Pedagogy Research/2026-05-27-tutor-pedagogy-conversation-guidance-design.md`.
+
+Deferred (re-open with the Postgres migration):
+
+- Where should analytics rollups run after migration — Flask, Cloud Functions, Cloud Run jobs, or scheduled SQL jobs?
+- Should curriculum package payloads live in Postgres JSONB, Cloud Storage, or a mixed model?
 
 ## 13. Teacher Join-Org Flow (Plan 4)
 

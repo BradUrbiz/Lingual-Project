@@ -133,8 +133,13 @@ def login_required(f):
     """Decorator to require authentication for API routes."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'user' not in session:
+        user = session.get('user')
+        if not user:
             return jsonify({'error': 'Authentication required', 'success': False}), 401
+        # `is False` only — legacy sessions (and Google) lack the key (None) and
+        # must pass. Only sessions explicitly marked pending are blocked.
+        if user.get('email_verified') is False:
+            return jsonify({'error': 'email_verification_required', 'success': False}), 403
         return f(*args, **kwargs)
     return decorated_function
 

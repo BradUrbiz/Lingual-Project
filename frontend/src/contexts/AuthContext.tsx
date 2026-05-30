@@ -18,6 +18,7 @@ import {
 import { auth, googleProvider, githubProvider, facebookProvider } from '../config/firebase';
 import { verifyToken, migrateRole, type AuthRoleOptions, type IntendedRole } from '../api/auth';
 import { LegacyRoleMigrationModal } from '@/components/LegacyRoleMigrationModal';
+import { EmailVerificationGate } from '@/components/EmailVerificationGate';
 import type { User } from '../types';
 
 interface AuthContextType {
@@ -396,8 +397,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-      {user?.requiresLegacyRolePick && (
-        <LegacyRoleMigrationModal onPicked={handleLegacyRolePick} />
+      {user?.emailVerificationRequired ? (
+        <EmailVerificationGate
+          email={user.email}
+          onVerified={refreshUser}
+          onSignOut={logout}
+        />
+      ) : (
+        user?.requiresLegacyRolePick && (
+          <LegacyRoleMigrationModal onPicked={handleLegacyRolePick} />
+        )
       )}
     </AuthContext.Provider>
   );

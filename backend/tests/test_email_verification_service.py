@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 from backend.services import email_verification as ev
 from backend.tests.conftest import FakeDbBase, make_user
@@ -113,3 +114,19 @@ class ResendTest(unittest.TestCase):
         t = t + timedelta(seconds=61)
         result = ev.resend(self.db, "u1", now=t)
         self.assertFalse(result.allowed)
+
+
+class SendEmailTest(unittest.TestCase):
+    def test_enqueues_with_template_and_code(self):
+        captured = {}
+
+        def fake_enqueue(**kwargs):
+            captured.update(kwargs)
+            return "outbox-1"
+
+        with patch.object(ev, "enqueue_outbox_email", fake_enqueue):
+            ev.send_verification_code_email("a@b.test", "Jamie", "123456", db=object())
+
+        self.assertEqual(captured["recipient_email"], "a@b.test")
+        self.assertEqual(captured["template"], ev.OutboxTemplate.EMAIL_VERIFICATION_CODE)
+        self.assertEqual(captured["template_data"], {"name": "Jamie", "code": "123456"})

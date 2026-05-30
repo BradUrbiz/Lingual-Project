@@ -13,6 +13,9 @@ import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+import database
+from backend.services.outbox import OutboxTemplate, enqueue_outbox_email
+
 STATUS_PENDING = 'pending'
 STATUS_VERIFIED = 'verified'
 
@@ -147,4 +150,20 @@ def resend(db, uid: str, *, now: datetime | None = None) -> ResendResult:
         allowed=True,
         code=code,
         cooldown_seconds=int(RESEND_COOLDOWN.total_seconds()),
+    )
+
+
+def send_verification_code_email(recipient_email: str, recipient_name: str | None,
+                                 code: str, *, db=None) -> None:
+    """Enqueue the verification-code email via the outbox pipeline.
+
+    Uses the real Firestore client by default (route convention). Callers wrap
+    this in try/except so a delivery-layer failure never blocks verification.
+    """
+    enqueue_outbox_email(
+        db=db if db is not None else database.get_db(),
+        recipient_email=recipient_email,
+        recipient_name=recipient_name,
+        template=OutboxTemplate.EMAIL_VERIFICATION_CODE,
+        template_data={'name': recipient_name or '', 'code': code},
     )

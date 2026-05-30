@@ -95,6 +95,9 @@ _TEMPLATE_SUBJECTS = {
         lambda data: f"{data['org_name']} has been suspended on Lingual",
     'org_restored':
         lambda data: f"{data['org_name']} access has been restored on Lingual",
+    # Email verification at signup
+    'email_verification_code':
+        lambda data: "Verify your Lingual email",
 }
 
 

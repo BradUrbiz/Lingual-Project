@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111;max-width:560px;margin:0 auto;padding:32px 16px;line-height:1.5;">
+  <h1 style="margin:0 0 16px;font-size:22px;">Verify your email</h1>
+  <p>Hi {{ name | e if name else 'there' }}, use this code to finish setting up your Lingual account:</p>
+  <p style="margin:24px 0;">
+    <span style="display:inline-block;font-size:32px;letter-spacing:8px;font-weight:700;background:#f4f4f5;border-radius:8px;padding:16px 24px;">{{ code | e }}</span>
+  </p>
+  <p style="color:#555;font-size:13px;">This code expires in 10 minutes.</p>
+  <p style="color:#555;font-size:13px;">If you didn't sign up for Lingual, you can safely ignore this email.</p>
+  <hr style="border:none;border-top:1px solid #eee;margin:32px 0;">
+  <p style="color:#888;font-size:12px;">Lingual — Teacher-designed practice, AI-executed at student scale.</p>
+</body>
+</html>

@@ -32,11 +32,13 @@ This file lists **active and open work only.** Completed phases are summarized a
 
 ### Implementation track
 
-- [ ] Choose first implementation stack for Flask Postgres access (`SQLAlchemy` + `Alembic` recommended in ADR-0001).
-- [ ] Provision Cloud SQL for PostgreSQL for local/staging/prod-equivalent development.
-- [ ] Add migration tooling, connection settings, and developer setup docs.
+- [x] **Skeleton increment landed (2026-05-30).** Inert SQLAlchemy + Alembic + Cloud SQL engine wired behind `RouteDeps`; runtime unchanged (still Firestore). 930 backend tests green, zero regression. Ships: `backend/db/sql.py` (lazy connector/TCP engine), `backend/db/models/` (20 baseline tables, PG18 `uuidv7()` on append-heavy), `backend/db/migrations/0001_baseline` (Alembic), `backend/db/repository/` (resolution helper + inert enrollment twin), `RouteDeps.sql_engine` provider, `make test-postgres` (gated), `docs/dev/postgres-local-setup.md`.
+- [x] Choose first implementation stack: `SQLAlchemy` 2.x + `Alembic` + `pg8000` + `cloud-sql-python-connector` (ADR-0001).
+- [ ] Provision Cloud SQL for PostgreSQL 18 for local/staging/prod (infra owner). Local `make test-postgres` uses ephemeral Docker `postgres:18`.
+- [x] Add migration tooling, connection settings, and developer setup docs.
 - [x] Decide the coexistence-window write strategy. Decision (2026-05-30): `legacy_firestore_id`-resolving writes, no write-freeze, UUID PKs retained (TECH_SPEC §3.8a, POSTGRES_SCHEMA "ID resolution"). Resolution helper lives in the repository layer behind `RouteDeps`.
-- [ ] Build a Postgres repository layer behind `RouteDeps` without changing route contracts.
+- [-] Build a Postgres repository layer behind `RouteDeps` without changing route contracts. Inert seam landed (resolution helper + enrollment twin, Option A flat `deps.db`-twin contract). Per-entity adapters + the delegating router are deferred to each route-family cutover increment.
+- [ ] Close the `lti.py:703` `get_assignment_ref().update(...)` ref leak (add a real `update_assignment`) — a prerequisite before the assignments entity can cut over (not a skeleton task).
 - [ ] Add per-route-family read feature flags so a failed cut can toggle reads back to Firestore without redeploy (TECH_SPEC §3.8e).
 - [ ] Write Firestore-to-Postgres backfill scripts with dry-run, write, and parity-report modes. Run in parent-first dependency order; apply the field renames + value normalizations + type coercions from `POSTGRES_SCHEMA.md`; exclude/drain `status='active'` practice sessions; scope parity checks to stable non-mutating fields.
 - [ ] Move new low-risk school-domain writes to Postgres first: organizations, classes, enrollments, assignments.

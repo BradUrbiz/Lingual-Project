@@ -29,6 +29,7 @@ def _validate_required_env() -> None:
         'CANVAS_PAT_ENCRYPTION_KEY': 'Canvas connect returns 503 when a teacher clicks Connect',
         'PUBLIC_BASE_URL': 'Email CTAs ship with relative URLs which break in email clients',
         'SUPPORT_EMAIL': 'Plan 5 — falls back to help@l1ngual.com if unset; surfaces in org_suspended email footer',
+        'INSTANCE_CONNECTION_NAME': 'Cloud SQL disabled; Postgres-backed features (none yet) fall back to Firestore',
     }
     missing_hard = [
         f'  - {k}: {reason}'
@@ -149,8 +150,9 @@ def get_openai_client():
 from scoring import load_assessment_data, compute_results, get_actfl_description
 import database as db
 from backend.avatar_chat import register_avatar_chat_routes
-from backend.route_deps import RouteDeps
+from backend.route_deps import RouteDeps, _no_sql_engine
 from backend.services.audit import AuditLogger
+from backend.db.sql import get_engine, sql_enabled  # inert Postgres engine provider (ADR-0001)
 from backend.routes.auth import create_auth_blueprint
 from backend.routes.chat import create_chat_blueprint
 from backend.routes.assessment import create_assessment_blueprint
@@ -426,6 +428,12 @@ def register_domain_blueprints():
         allowed_minigame_types=ALLOWED_MINIGAME_TYPES,
         supported_ui_languages=SUPPORTED_UI_LANGUAGES,
         audit_logger=AuditLogger(),
+        # Inert Postgres engine provider (Cloud SQL). When no Cloud SQL target
+        # is configured, wire the None-returning sentinel so the provider's
+        # "None means unavailable -> fall back to Firestore" contract holds;
+        # get_engine() would otherwise raise. No engine is built until first
+        # call (post-fork). No route uses it yet; runtime stays Firestore.
+        sql_engine=(get_engine if sql_enabled() else _no_sql_engine),
     )
 
     app.register_blueprint(create_auth_blueprint(deps))

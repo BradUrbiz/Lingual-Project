@@ -6,6 +6,15 @@ from typing import Any, Callable, Mapping
 from backend.services.audit import AuditLogger
 
 
+def _no_sql_engine() -> Any:
+    """Default Postgres engine provider: none wired (the skeleton is inert).
+
+    Returns None so any future Postgres-backed code can detect that Cloud SQL
+    is unavailable and fall back to Firestore.
+    """
+    return None
+
+
 @dataclass(frozen=True)
 class RouteDeps:
     """Shared dependencies injected into route blueprints."""
@@ -29,3 +38,7 @@ class RouteDeps:
     # `deps.audit_logger` so tests can swap a FakeAuditLogger without mocking
     # Firestore. Default-factory keeps existing constructors compatible.
     audit_logger: AuditLogger = field(default_factory=AuditLogger)
+    # Post-beta Postgres engine provider (Cloud SQL). INERT in the current
+    # runtime — no route reads/writes use it yet. Defaulted so every existing
+    # RouteDeps(...) constructor and test double stays valid. See ADR-0001.
+    sql_engine: Callable[[], Any] = _no_sql_engine

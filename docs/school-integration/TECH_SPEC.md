@@ -16,7 +16,7 @@ Build a post-beta school architecture on top of the current Flask + Firebase + R
 - Firestore remains the source of truth for user profile, assessment state, consumer-era chats, and realtime-friendly legacy data.
 - Cloud SQL for PostgreSQL becomes the source of truth for school operations, assignment delivery, compliance records, practice-session metadata, learning events, and analytics-ready data.
 
-**Current implementation status (2026-05-30):** all school-domain state — organizations, memberships, classes, enrollments, assignments, Canvas/LTI records, compliance, practice sessions, learning events — is still in Firestore today. This spec now sets the post-beta target direction: new school-domain persistence work should move toward Postgres instead of deepening Firestore as the long-term operational database.
+**Current implementation status (2026-05-30):** all school-domain state — organizations, memberships, classes, enrollments, assignments, Canvas/LTI records, compliance, practice sessions, learning events — is still served from Firestore at runtime. An **inert** Postgres skeleton has landed (`backend/db/`: lazy Cloud SQL engine, the 20 baseline SQLAlchemy models, the Alembic `0001_baseline` migration, and the resolution helper + enrollment repository twin), wired into `RouteDeps.sql_engine` and feature-gated on `INSTANCE_CONNECTION_NAME`/`DATABASE_URL`. No route read or write uses it yet; absent the env vars the app behaves exactly as before (see LIMITATIONS #0). This spec sets the post-beta target direction: new school-domain persistence work moves onto that skeleton rather than deepening Firestore as the long-term operational database.
 
 Recommended long-term approach:
 

@@ -9,3 +9,8 @@ cryptography==44.0.3
 gunicorn==23.0.0
 PyLTI1p3>=2.0.0
 simple-websocket==1.1.0
+# Postgres (post-beta school-domain system of record — see docs/school-integration/ADR-0001).
+# Runtime is still Firestore; these ship so the inert Cloud SQL skeleton can be exercised.
+SQLAlchemy>=2.0.36,<2.1
+alembic>=1.14,<2.0
+cloud-sql-python-connector[pg8000]>=1.13,<2.0

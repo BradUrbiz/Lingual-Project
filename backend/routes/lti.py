@@ -698,13 +698,13 @@ def create_lti_blueprint(deps: RouteDeps) -> Blueprint:
             assignment = deps.db.get_assignment(assignment_id)
             if not assignment:
                 return jsonify({'success': False, 'error': 'Assignment not found.'}), 404
-            # Use a direct Firestore update
-            from google.cloud import firestore as gc_firestore
-            deps.db.get_assignment_ref(assignment_id).update({
-                'grade_metric': metric,
-                'grade_points': float(points) if points else None,
-                'updated_at': gc_firestore.SERVER_TIMESTAMP,
-            })
+            # Write through the database contract (never touch the ref directly)
+            # so the assignment entity stays swappable for the Postgres cutover.
+            deps.db.set_assignment_grade_config(
+                assignment_id,
+                grade_metric=metric,
+                grade_points=float(points) if points else None,
+            )
             return jsonify({'success': True})
         except SchoolContextPermissionError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 403

@@ -3213,6 +3213,20 @@ def unlink_assignment_from_canvas_item(assignment_id, canvas_content_id):
     batch.commit()
 
 
+def set_assignment_grade_config(assignment_id, grade_metric, grade_points):
+    """Set the LTI grade-passback config (metric + points) on an assignment.
+
+    Encapsulates the write so route code never manipulates the assignment ref
+    directly — keeps the assignment entity behind the database contract so it
+    stays swappable for the Postgres cutover (see ADR-0001).
+    """
+    get_assignment_ref(assignment_id).update({
+        'grade_metric': grade_metric,
+        'grade_points': grade_points,
+        'updated_at': firestore.SERVER_TIMESTAMP,
+    })
+
+
 def _build_school_request_payload(requester_uid, requester_email, requester_name,
                                   school_name, org_type, website_url='',
                                   canvas_instance_url='', *, enriched=None):

@@ -125,6 +125,11 @@ class FakeLtiRoutesDb(FakeDbBase):
     def get_assignment_ref(self, assignment_id: str):
         return _AssignmentRef(self, assignment_id)
 
+    def set_assignment_grade_config(self, assignment_id, grade_metric, grade_points):
+        assignment = self.assignments[assignment_id]
+        assignment["grade_metric"] = grade_metric
+        assignment["grade_points"] = grade_points
+
 
 def _platform(platform_id: str, *, org_id: str, client_id: str, deployment_id: str = "deployment-1"):
     return {
@@ -270,6 +275,21 @@ class LtiRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.get_json()["success"], False)
         self.assertIsNone(self.db.assignments["asg-b"].get("grade_metric"))
+
+    def test_grade_config_post_sets_metric_for_own_assignment(self):
+        self._seed_two_orgs()
+        self._login("teacher-a", "mem-teacher-a")
+
+        response = self.client.post(
+            "/api/teacher/assignments/asg-a/grade-config",
+            json={"metric": "completion", "points": 10},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["success"], True)
+        # Written through deps.db.set_assignment_grade_config (not a raw ref).
+        self.assertEqual(self.db.assignments["asg-a"]["grade_metric"], "completion")
+        self.assertEqual(self.db.assignments["asg-a"]["grade_points"], 10.0)
 
     def test_link_account_creates_platform_membership_for_future_lti_matching(self):
         self._seed_two_orgs()

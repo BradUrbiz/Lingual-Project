@@ -35,6 +35,12 @@ class FakeDb:
         self.classes = {}
         self.memberships = {}
 
+    def get_user(self, uid):
+        # These tests model returning users logging in, so the user already
+        # exists. Returning a non-None doc (no email_verification field) makes
+        # verify_auth treat them as existing → no signup-time verification.
+        return {'uid': uid}
+
     def get_or_create_user(self, uid, email, name):
         self.created_users.append((uid, email, name))
         return {'uid': uid, 'email': email, 'name': name}

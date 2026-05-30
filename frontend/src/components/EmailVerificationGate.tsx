@@ -49,7 +49,16 @@ export function EmailVerificationGate({ email, onVerified, onSignOut }: EmailVer
     setError(null);
     try {
       const result = await resendEmailVerification();
-      setCooldown(result.cooldownSeconds ?? 60);
+      if (result.success) {
+        setCooldown(result.cooldownSeconds ?? 60);
+      } else if ((result.cooldownSeconds ?? 0) > 0) {
+        // Still within the 60s cooldown — show the countdown, no error.
+        setCooldown(result.cooldownSeconds ?? 60);
+      } else {
+        // Resend cap reached (cooldownSeconds 0) — surface it; the button
+        // stays enabled but the user knows to sign out and start over.
+        setError('Too many resend attempts. Sign out and try again.');
+      }
     } catch {
       setError('Could not resend the code. Please try again.');
     }

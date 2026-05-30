@@ -36,11 +36,16 @@ def _resolve_email_verification(deps, decoded_token, existing_user, uid, email, 
     provider_verified = bool(decoded_token.get('email_verified'))
 
     if is_new_account and not provider_verified:
+        # The pending-state write must succeed to durably gate the account, so
+        # let its failure propagate (verify_auth returns 500, no session is
+        # created) rather than silently creating an un-gatable account that
+        # would read as grandfathered on the next login. Email *delivery* is
+        # best-effort — a send failure is recoverable via the resend endpoint.
+        code = email_verification.start_verification(deps.db, uid)
         try:
-            code = email_verification.start_verification(deps.db, uid)
             email_verification.send_verification_code_email(email, name, code)
-        except Exception as exc:  # delivery/start failure must not block signup
-            print(f'[email-verification] start failed for {uid}: {exc}')
+        except Exception as exc:
+            print(f'[email-verification] code email send failed for {uid}: {exc}')
         return True
 
     return email_verification.is_pending(existing_user)

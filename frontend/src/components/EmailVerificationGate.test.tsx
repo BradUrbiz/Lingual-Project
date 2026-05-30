@@ -57,4 +57,16 @@ describe('EmailVerificationGate', () => {
       expect(screen.getByRole('button', { name: /resend/i })).toBeDisabled();
     });
   });
+
+  it('surfaces an error (not a silent re-enable) when the resend cap is hit', async () => {
+    // Backend returns success:false with cooldownSeconds:0 when the cap is hit.
+    resendMock.mockResolvedValueOnce({ success: false, error: 'cooldown', cooldownSeconds: 0 });
+    render(<EmailVerificationGate email="a@b.test" onVerified={vi.fn()} onSignOut={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /resend/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/too many/i);
+    });
+    // Button is not stuck in a fake countdown.
+    expect(screen.getByRole('button', { name: /^resend code$/i })).not.toBeDisabled();
+  });
 });

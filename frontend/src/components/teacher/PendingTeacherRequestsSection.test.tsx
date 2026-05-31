@@ -69,7 +69,7 @@ describe('PendingTeacherRequestsSection', () => {
         fireEvent.click(await screen.findByRole('button', { name: /decline/i }));
         const reasonInput = await screen.findByLabelText(/reason/i);
         fireEvent.change(reasonInput, { target: { value: 'Wrong school' } });
-        fireEvent.click(screen.getByRole('button', { name: /^submit$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /decline request/i }));
         await waitFor(() => {
             expect(declineMock).toHaveBeenCalledWith('tjr-1', 'Wrong school');
         });

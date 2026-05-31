@@ -24,7 +24,11 @@ export function LearningLocaleProvider({ children }: { children: ReactNode }) {
   const [learningLocale, setLearningLocale] = useState<LearningLocale>(DEFAULT_LEARNING_LOCALE);
 
   useEffect(() => {
-    if (!user) return;
+    // While the email-verification gate is up, /api/user/profile is blocked
+    // (403) by design — skip the fetch so the gated window stays quiet. The
+    // effect re-runs once the user verifies (the `user` object changes and
+    // emailVerificationRequired flips false), loading the real locale then.
+    if (!user || user.emailVerificationRequired) return;
     let isActive = true;
     getUserProfile()
       .then((profile) => {

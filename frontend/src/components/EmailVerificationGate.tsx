@@ -51,6 +51,12 @@ export function EmailVerificationGate({ email, onVerified, onSignOut }: EmailVer
       const result = await resendEmailVerification();
       if (result.success) {
         setCooldown(result.cooldownSeconds ?? 60);
+      } else if (result.error === 'send_failed') {
+        // A fresh code was generated but delivery failed — keep the cooldown
+        // (a retry must respect the rate limit) but tell the user, so they
+        // don't sit waiting for an email that never arrived.
+        setCooldown(result.cooldownSeconds ?? 60);
+        setError("We couldn't send the code just now. Try again in a moment.");
       } else if ((result.cooldownSeconds ?? 0) > 0) {
         // Still within the 60s cooldown — show the countdown, no error.
         setCooldown(result.cooldownSeconds ?? 60);

@@ -58,6 +58,19 @@ describe('EmailVerificationGate', () => {
     });
   });
 
+  it('surfaces a delivery failure while keeping the cooldown active', async () => {
+    // Backend returns success:false / error:send_failed with the cooldown when a
+    // fresh code was generated but delivery threw.
+    resendMock.mockResolvedValueOnce({ success: false, error: 'send_failed', cooldownSeconds: 60 });
+    render(<EmailVerificationGate email="a@b.test" onVerified={vi.fn()} onSignOut={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /resend/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/couldn't send|try again/i);
+    });
+    // Cooldown still ticking → resend stays disabled (not the "too many" path).
+    expect(screen.getByRole('button', { name: /resend code/i })).toBeDisabled();
+  });
+
   it('surfaces an error (not a silent re-enable) when the resend cap is hit', async () => {
     // Backend returns success:false with cooldownSeconds:0 when the cap is hit.
     resendMock.mockResolvedValueOnce({ success: false, error: 'cooldown', cooldownSeconds: 0 });

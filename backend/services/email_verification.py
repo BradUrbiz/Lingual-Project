@@ -8,6 +8,7 @@ real Firestore client (`database.get_db()`), matching the route convention.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import secrets
 from dataclasses import dataclass
@@ -20,9 +21,14 @@ STATUS_PENDING = 'pending'
 STATUS_VERIFIED = 'verified'
 
 CODE_TTL = timedelta(minutes=10)
+# Wrong-guess budget *per code*. A resend issues a fresh code and intentionally
+# resets this (a legit user who mistyped an old code shouldn't be locked out on
+# their first try with the new one). Total brute-force surface is therefore
+# bounded by MAX_ATTEMPTS * (1 + MAX_RESENDS) = 30 guesses against a 900k space,
+# further rate-limited by RESEND_COOLDOWN — negligible.
 MAX_ATTEMPTS = 5
 RESEND_COOLDOWN = timedelta(seconds=60)
-MAX_RESENDS = 5  # per pending verification window
+MAX_RESENDS = 5  # fresh codes per pending verification window
 
 _FIELD = 'email_verification'
 
@@ -94,7 +100,7 @@ def confirm(db, uid: str, code: str, *, now: datetime | None = None) -> ConfirmR
     if attempts >= MAX_ATTEMPTS:
         return ConfirmResult(ok=False, error='too_many_attempts')
 
-    if hash_code(uid, str(code).strip()) != code_hash:
+    if not hmac.compare_digest(hash_code(uid, str(code).strip()), code_hash):
         attempts += 1
         db.update_user(uid, {_FIELD: {'attempts': attempts}})
         if attempts >= MAX_ATTEMPTS:

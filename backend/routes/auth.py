@@ -258,7 +258,16 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
                 user.get('email', ''), user.get('name'), result.code,
             )
         except Exception as exc:
+            # A fresh code was already written; tell the client delivery failed
+            # (instead of a silent 200) so it can prompt a retry rather than
+            # leaving the user waiting for an email that never arrives. The
+            # cooldown is still returned so the retry respects the rate limit.
             print(f"[email-verification] resend enqueue failed for {user['uid']}: {exc}")
+            return jsonify({
+                'success': False,
+                'error': 'send_failed',
+                'cooldownSeconds': result.cooldown_seconds,
+            }), 502
 
         return jsonify({'success': True, 'cooldownSeconds': result.cooldown_seconds})
 

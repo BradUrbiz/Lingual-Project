@@ -603,6 +603,39 @@ class TestEmailVerificationEndpoints(unittest.TestCase):
         self.assertEqual(resp.status_code, 429)
         self.assertGreater(resp.get_json()["cooldownSeconds"], 0)
 
+    def test_resend_surfaces_delivery_failure(self):
+        """A delivery-layer failure returns 502/send_failed (not a silent 200),
+        so the client can prompt a retry instead of waiting for nothing."""
+        from datetime import UTC, datetime, timedelta
+        from unittest.mock import patch
+
+        from backend.services import email_verification
+
+        db = FakeAuthDb()
+        self._seed_pending(db)
+        # Elapse the cooldown so the resend is actually attempted (and reaches
+        # the send path) rather than short-circuiting on the 60s rate limit.
+        db.users["test-uid"]["email_verification"]["last_sent_at"] = (
+            datetime.now(UTC) - timedelta(seconds=120)
+        ).isoformat()
+        app, db, _ = _build_app(db=db)
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess["user"] = {"uid": "test-uid", "email": "test@example.com",
+                            "name": "T", "email_verified": False}
+
+        with patch.object(
+            email_verification, "send_verification_code_email",
+            side_effect=RuntimeError("resend provider down"),
+        ):
+            resp = client.post("/api/auth/email-verification/resend", json={})
+
+        self.assertEqual(resp.status_code, 502)
+        body = resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertEqual(body["error"], "send_failed")
+        self.assertGreater(body["cooldownSeconds"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

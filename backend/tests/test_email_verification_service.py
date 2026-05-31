@@ -115,6 +115,22 @@ class ResendTest(unittest.TestCase):
         result = ev.resend(self.db, "u1", now=t)
         self.assertFalse(result.allowed)
 
+    def test_resend_allowed_again_after_code_expires_at_cap(self):
+        """At the cap, the user must not be permanently stranded: once the last
+        code expires a fresh window opens so they can recover."""
+        t = self.t0
+        for _ in range(ev.MAX_RESENDS):
+            t = t + timedelta(seconds=61)
+            self.assertTrue(ev.resend(self.db, "u1", now=t).allowed)
+        # Still within the active window → cap holds.
+        self.assertFalse(ev.resend(self.db, "u1", now=t + timedelta(seconds=61)).allowed)
+        # After the last code expires → recovery allowed, counter resets.
+        expired = t + ev.CODE_TTL + timedelta(seconds=1)
+        result = ev.resend(self.db, "u1", now=expired)
+        self.assertTrue(result.allowed)
+        self.assertRegex(result.code, r"^\d{6}$")
+        self.assertEqual(self.db.users["u1"]["email_verification"]["resend_count"], 1)
+
 
 class SendEmailTest(unittest.TestCase):
     def test_enqueues_with_template_and_code(self):

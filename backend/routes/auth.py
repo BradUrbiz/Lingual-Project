@@ -26,29 +26,37 @@ def build_auth_user_payload(uid, email, name, school_context, email_verification
 
 
 def _resolve_email_verification(deps, decoded_token, existing_user, uid, email, name):
-    """Return True if this account must verify its email before using the app.
+    """Ensure the user doc exists and return True if email must be verified.
 
-    Starts verification (and emails a code) only for brand-new accounts whose
-    provider has not already verified the email — so Google (email_verified
-    claim True) is auto-verified and existing accounts are never re-gated.
+    For a brand-new account whose provider has not verified the email, create
+    the user doc together with its pending verification state in a single
+    atomic write (create-if-absent). This closes a race where a second
+    concurrent `/api/auth/verify` could otherwise read the just-created doc
+    *before* the gate was written and mint an ungated session. Google
+    (email_verified claim True) is auto-verified and existing accounts are
+    never re-gated.
     """
-    is_new_account = existing_user is None
     provider_verified = bool(decoded_token.get('email_verified'))
 
-    if is_new_account and not provider_verified:
-        # The pending-state write must succeed to durably gate the account, so
-        # let its failure propagate (verify_auth returns 500, no session is
-        # created) rather than silently creating an un-gatable account that
-        # would read as grandfathered on the next login. Email *delivery* is
-        # best-effort — a send failure is recoverable via the resend endpoint.
-        code = email_verification.start_verification(deps.db, uid)
-        try:
-            email_verification.send_verification_code_email(email, name, code)
-        except Exception as exc:
-            print(f'[email-verification] code email send failed for {uid}: {exc}')
+    if existing_user is None and not provider_verified:
+        code = email_verification.generate_code()
+        # Atomic create-with-gate. Fails closed: if the write raises it
+        # propagates (verify_auth → 500, no session) rather than leaving an
+        # un-gatable account. Only the request that actually created the doc
+        # owns the live code, so only it emails one — a concurrent loser would
+        # otherwise send a code that no longer matches the stored hash.
+        created = deps.db.create_user_with_verification(
+            uid, email, name, email_verification.build_pending_state(uid, code),
+        )
+        if created:
+            try:
+                email_verification.send_verification_code_email(email, name, code)
+            except Exception as exc:
+                print(f'[email-verification] code email send failed for {uid}: {exc}')
         return True
 
-    return email_verification.is_pending(existing_user)
+    deps.db.get_or_create_user(uid, email, name)
+    return (not provider_verified) and email_verification.is_pending(existing_user)
 
 
 def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
@@ -82,8 +90,10 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
             email = decoded_token.get('email', '')
             name = decoded_token.get('name', email.split('@')[0] if email else 'User')
 
+            # Capture existence BEFORE _resolve_email_verification, which owns
+            # user creation (atomic create-with-gate for new gated accounts,
+            # get_or_create_user otherwise).
             existing_user = deps.db.get_user(uid)
-            deps.db.get_or_create_user(uid, email, name)
             email_verification_required = _resolve_email_verification(
                 deps, decoded_token, existing_user, uid, email, name,
             )

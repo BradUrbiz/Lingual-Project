@@ -251,6 +251,7 @@ import secrets
 from datetime import UTC, datetime
 
 from firebase_admin import firestore
+from google.api_core import exceptions as google_api_exceptions
 
 SCHOOL_ROLE_PRIORITY = {
     'school_admin': 0,
@@ -638,10 +639,9 @@ def get_learning_event_ref(event_id):
     return get_learning_events_collection().document(event_id)
 
 
-def create_user(uid, email, name):
-    """Create a new user document."""
-    user_ref = get_user_ref(uid)
-    user_data = {
+def _new_user_doc(uid, email, name):
+    """Build the initial user-document payload (no write)."""
+    return {
         'email': email,
         'name': name,
         'last_active_membership_id': None,
@@ -674,8 +674,32 @@ def create_user(uid, email, name):
         'selected_categories': [],
         'chat_history': []
     }
-    user_ref.set(user_data)
+
+
+def create_user(uid, email, name):
+    """Create a new user document."""
+    user_data = _new_user_doc(uid, email, name)
+    get_user_ref(uid).set(user_data)
     return user_data
+
+
+def create_user_with_verification(uid, email, name, email_verification):
+    """Atomically create a new user doc that already carries its pending
+    email-verification gate.
+
+    Uses Firestore's `create()` (fails if the doc already exists) so a
+    concurrent signup `/api/auth/verify` can never observe the freshly-created
+    account *without* its verification gate and mint an ungated session.
+    Returns True if this call created the doc, False if it already existed
+    (another concurrent request won the create — it owns the live code).
+    """
+    user_data = _new_user_doc(uid, email, name)
+    user_data['email_verification'] = dict(email_verification)
+    try:
+        get_user_ref(uid).create(user_data)
+        return True
+    except google_api_exceptions.AlreadyExists:
+        return False
 
 
 def get_user(uid):

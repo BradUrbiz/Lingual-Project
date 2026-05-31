@@ -39,6 +39,18 @@ class FakeAuthDb(FakeDbBase):
             self.users[uid] = make_user(uid=uid, name=name, email=email)
         return self.users[uid]
 
+    def create_user_with_verification(self, uid, email, name, email_verification):
+        """Mimic database.create_user_with_verification (Firestore create()):
+        atomic create-if-absent. Returns False without clobbering if the doc
+        already exists (a concurrent creator won the race)."""
+        if uid in self.users:
+            return False
+        self.users[uid] = make_user(
+            uid=uid, name=name, email=email,
+            email_verification=dict(email_verification),
+        )
+        return True
+
     def update_user_profile(self, uid, **kwargs):
         self.profile_updates.append((uid, kwargs))
         user = self.users.get(uid)
@@ -546,6 +558,78 @@ class TestEmailVerificationGating(unittest.TestCase):
 
         resp = _login_session(client)
         self.assertTrue(resp.get_json()["user"]["emailVerificationRequired"])
+
+
+class TestEmailVerificationSignupAtomicity(unittest.TestCase):
+    """The new-signup gate must be written atomically with account creation so
+    a concurrent /api/auth/verify can never observe the account ungated."""
+
+    def test_create_user_with_verification_is_create_if_absent(self):
+        from backend.services import email_verification as ev
+        db = FakeAuthDb()
+        state1 = ev.build_pending_state("u", "111111")
+        self.assertTrue(db.create_user_with_verification("u", "u@x.test", "U", state1))
+        # Full doc created together with the gate (not a bare doc).
+        self.assertEqual(db.users["u"]["email"], "u@x.test")
+        self.assertEqual(
+            db.users["u"]["email_verification"]["code_hash"], ev.hash_code("u", "111111")
+        )
+        # A concurrent second creator loses and must NOT clobber the live code.
+        state2 = ev.build_pending_state("u", "222222")
+        self.assertFalse(db.create_user_with_verification("u", "u@x.test", "U", state2))
+        self.assertEqual(
+            db.users["u"]["email_verification"]["code_hash"], ev.hash_code("u", "111111")
+        )
+
+    def test_new_password_signup_creates_doc_already_gated(self):
+        app, db, _ = _build_app()
+        client = app.test_client()
+        resp = client.post("/api/auth/verify", json={"idToken": "new-password-token"})
+        self.assertEqual(resp.status_code, 200)
+        doc = db.users["new-pw-uid"]
+        # The doc exists WITH its pending gate and full user fields in one shot.
+        self.assertEqual(doc["email_verification"]["status"], "pending")
+        self.assertEqual(doc["email"], "newpw@example.com")
+        self.assertTrue(resp.get_json()["user"]["emailVerificationRequired"])
+
+    def test_concurrent_create_loser_gates_without_resending_or_clobbering(self):
+        """Simulate the race: this request's pre-read saw no user, but a
+        concurrent request already created the gated doc. The loser must still
+        gate, must not email a stale code, and must not overwrite the winner's
+        code."""
+        from backend.services import email_verification as ev
+        from unittest.mock import patch
+
+        class RaceFakeAuthDb(FakeAuthDb):
+            def __init__(self):
+                super().__init__()
+                # A concurrent request won the create (code "111111").
+                super().create_user_with_verification(
+                    "new-pw-uid", "newpw@example.com", "New PW User",
+                    ev.build_pending_state("new-pw-uid", "111111"),
+                )
+                self._read_once = False
+
+            def get_user(self, uid):
+                # verify_auth's pre-read lands in the race window: no user yet.
+                if uid == "new-pw-uid" and not self._read_once:
+                    self._read_once = True
+                    return None
+                return super().get_user(uid)
+
+        app, db, _ = _build_app(db=RaceFakeAuthDb())
+        client = app.test_client()
+        with patch.object(ev, "send_verification_code_email") as send:
+            resp = client.post("/api/auth/verify", json={"idToken": "new-password-token"})
+
+        self.assertTrue(resp.get_json()["user"]["emailVerificationRequired"])  # fail closed
+        with client.session_transaction() as sess:
+            self.assertFalse(sess["user"]["email_verified"])
+        send.assert_not_called()  # loser does not email a stale code
+        self.assertEqual(  # winner's live code preserved
+            db.users["new-pw-uid"]["email_verification"]["code_hash"],
+            ev.hash_code("new-pw-uid", "111111"),
+        )
 
 
 class TestEmailVerificationEndpoints(unittest.TestCase):

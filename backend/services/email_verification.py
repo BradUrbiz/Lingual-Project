@@ -60,18 +60,30 @@ def is_pending(user_doc) -> bool:
     return ((user_doc or {}).get(_FIELD) or {}).get('status') == STATUS_PENDING
 
 
-def start_verification(db, uid: str, *, now: datetime | None = None) -> str:
-    """Generate a fresh code, write pending state, return the plaintext code."""
-    code = generate_code()
+def build_pending_state(uid: str, code: str, *, now: datetime | None = None,
+                        resend_count: int = 0) -> dict:
+    """The `email_verification` map for a freshly-issued pending code.
+
+    Shared by the signup-time atomic create, `start_verification`, and
+    `resend` so the pending-record shape stays in one place.
+    """
     ts = _now(now)
-    db.update_user(uid, {_FIELD: {
+    return {
         'status': STATUS_PENDING,
         'code_hash': hash_code(uid, code),
         'expires_at': (ts + CODE_TTL).isoformat(),
         'attempts': 0,
         'last_sent_at': ts.isoformat(),
-        'resend_count': 0,
-    }})
+        'resend_count': resend_count,
+    }
+
+
+def start_verification(db, uid: str, *, now: datetime | None = None) -> str:
+    """Generate a fresh code, write pending state to an existing user doc, and
+    return the plaintext code. (Brand-new signups create the doc and this state
+    atomically via `database.create_user_with_verification` instead.)"""
+    code = generate_code()
+    db.update_user(uid, {_FIELD: build_pending_state(uid, code, now=now)})
     return code
 
 
@@ -139,19 +151,19 @@ def resend(db, uid: str, *, now: datetime | None = None) -> ResendResult:
                 cooldown_seconds=int(RESEND_COOLDOWN.total_seconds() - elapsed),
             )
 
+    expires_at = _parse(record.get('expires_at'))
+    code_expired = expires_at is None or ts > expires_at
     resend_count = record.get('resend_count', 0)
-    if resend_count >= MAX_RESENDS:
+    # The cap bounds resends within an *active* window (anti email-bombing).
+    # Once the current code has expired a fresh window opens (counter resets),
+    # so a legitimate user who exhausted resends and let the code lapse can
+    # still recover instead of being permanently stranded.
+    if resend_count >= MAX_RESENDS and not code_expired:
         return ResendResult(allowed=False)
 
+    new_count = 1 if code_expired else resend_count + 1
     code = generate_code()
-    db.update_user(uid, {_FIELD: {
-        'status': STATUS_PENDING,
-        'code_hash': hash_code(uid, code),
-        'expires_at': (ts + CODE_TTL).isoformat(),
-        'attempts': 0,
-        'last_sent_at': ts.isoformat(),
-        'resend_count': resend_count + 1,
-    }})
+    db.update_user(uid, {_FIELD: build_pending_state(uid, code, now=ts, resend_count=new_count)})
     return ResendResult(
         allowed=True,
         code=code,

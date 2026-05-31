@@ -178,6 +178,12 @@ def send_verification_code_email(recipient_email: str, recipient_name: str | Non
     Uses the real Firestore client by default (route convention). Callers wrap
     this in try/except so a delivery-layer failure never blocks verification.
     """
+    # Dev convenience: locally there is no Resend/Cloud Function to deliver the
+    # email, so surface the code in the backend console for testing. Gated on
+    # FLASK_ENV=development — never fires in production — and emitted before the
+    # enqueue so it still prints if the outbox write fails.
+    if os.environ.get('FLASK_ENV') == 'development':
+        print(f"[email-verification:dev] code for {recipient_email}: {code}")
     enqueue_outbox_email(
         db=db if db is not None else database.get_db(),
         recipient_email=recipient_email,

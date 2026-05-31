@@ -19,7 +19,7 @@ steps:
       - |
         cd frontend &&
         npm ci &&
-        npm run test -- --run --exclude='**/AppChatPage.avatar.test.tsx' --maxWorkers=2 --minWorkers=1
+        NODE_OPTIONS=--max-old-space-size=6144 npm run test -- --run --exclude='**/AppChatPage.avatar.test.tsx' --maxWorkers=4 --minWorkers=1
 
   # Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
@@ -87,7 +87,9 @@ images:
 # Build options
 options:
   logging: CLOUD_LOGGING_ONLY
-  # 8 vCPU / 8 GB. Combined with vitest --maxWorkers=2, the frontend jsdom suite
-  # (heavy deps: pixi/three/live2d) stays well under RAM. Uncapped workers on the
-  # default machine OOM-killed a vitest worker (ERR_IPC_CHANNEL_CLOSED).
-  machineType: 'E2_HIGHCPU_8'
+  # 32 vCPU / 32 GB. The frontend jsdom suite (heavy deps: pixi/three/live2d)
+  # accumulates heap across files within a worker; the fix is a raised per-worker
+  # heap (NODE_OPTIONS=--max-old-space-size=6144) + a moderate worker count
+  # (--maxWorkers=4, so each worker handles fewer files) + ample machine RAM
+  # (4 workers x 6 GB = 24 GB < 32 GB). Default 2 GB worker heap OOM'd.
+  machineType: 'E2_HIGHCPU_32'

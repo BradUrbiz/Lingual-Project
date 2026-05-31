@@ -39,6 +39,18 @@ class FakeAuthDb(FakeDbBase):
             self.users[uid] = make_user(uid=uid, name=name, email=email)
         return self.users[uid]
 
+    def create_user_with_verification(self, uid, email, name, email_verification):
+        """Mimic database.create_user_with_verification (Firestore create()):
+        atomic create-if-absent. Returns False without clobbering if the doc
+        already exists (a concurrent creator won the race)."""
+        if uid in self.users:
+            return False
+        self.users[uid] = make_user(
+            uid=uid, name=name, email=email,
+            email_verification=dict(email_verification),
+        )
+        return True
+
     def update_user_profile(self, uid, **kwargs):
         self.profile_updates.append((uid, kwargs))
         user = self.users.get(uid)
@@ -78,6 +90,18 @@ class FakeFirebaseAuth:
                 "uid": "test-uid",
                 "email": "test@example.com",
                 "name": "Test User",
+            },
+            "new-password-token": {
+                "uid": "new-pw-uid",
+                "email": "newpw@example.com",
+                "name": "New PW User",
+                "email_verified": False,
+            },
+            "google-token": {
+                "uid": "google-uid",
+                "email": "g@example.com",
+                "name": "Google User",
+                "email_verified": True,
             },
         }
         self._raise_on_verify: type[Exception] | None = None
@@ -481,6 +505,220 @@ class TestInitialOnboarding(unittest.TestCase):
         data = resp.get_json()
         self.assertFalse(data["success"])
         self.assertIn("Invalid learning locale", data["error"])
+
+
+class TestEmailVerificationGating(unittest.TestCase):
+    """New email/password accounts get gated; Google + existing don't."""
+
+    def test_new_password_account_is_pending(self):
+        app, db, _ = _build_app()
+        client = app.test_client()
+
+        resp = client.post("/api/auth/verify", json={"idToken": "new-password-token"})
+        self.assertEqual(resp.status_code, 200)
+        user = resp.get_json()["user"]
+        self.assertTrue(user["emailVerificationRequired"])
+
+        record = db.users["new-pw-uid"]["email_verification"]
+        self.assertEqual(record["status"], "pending")
+
+        with client.session_transaction() as sess:
+            self.assertFalse(sess["user"]["email_verified"])
+
+    def test_new_google_account_is_not_pending(self):
+        app, db, _ = _build_app()
+        client = app.test_client()
+
+        resp = client.post("/api/auth/verify", json={"idToken": "google-token"})
+        self.assertEqual(resp.status_code, 200)
+        user = resp.get_json()["user"]
+        self.assertFalse(user["emailVerificationRequired"])
+        self.assertNotIn("email_verification", db.users["google-uid"])
+
+        with client.session_transaction() as sess:
+            self.assertTrue(sess["user"]["email_verified"])
+
+    def test_existing_account_not_regated(self):
+        db = FakeAuthDb()
+        db.users["test-uid"] = make_user(uid="test-uid", email="test@example.com")
+        app, db, _ = _build_app(db=db)
+        client = app.test_client()
+
+        resp = _login_session(client)  # valid-token, existing user, no email_verified claim
+        user = resp.get_json()["user"]
+        self.assertFalse(user["emailVerificationRequired"])
+        self.assertNotIn("email_verification", db.users["test-uid"])
+
+    def test_returning_pending_account_is_regated(self):
+        db = FakeAuthDb()
+        db.users["test-uid"] = make_user(uid="test-uid", email="test@example.com")
+        db.users["test-uid"]["email_verification"] = {"status": "pending"}
+        app, db, _ = _build_app(db=db)
+        client = app.test_client()
+
+        resp = _login_session(client)
+        self.assertTrue(resp.get_json()["user"]["emailVerificationRequired"])
+
+
+class TestEmailVerificationSignupAtomicity(unittest.TestCase):
+    """The new-signup gate must be written atomically with account creation so
+    a concurrent /api/auth/verify can never observe the account ungated."""
+
+    def test_create_user_with_verification_is_create_if_absent(self):
+        from backend.services import email_verification as ev
+        db = FakeAuthDb()
+        state1 = ev.build_pending_state("u", "111111")
+        self.assertTrue(db.create_user_with_verification("u", "u@x.test", "U", state1))
+        # Full doc created together with the gate (not a bare doc).
+        self.assertEqual(db.users["u"]["email"], "u@x.test")
+        self.assertEqual(
+            db.users["u"]["email_verification"]["code_hash"], ev.hash_code("u", "111111")
+        )
+        # A concurrent second creator loses and must NOT clobber the live code.
+        state2 = ev.build_pending_state("u", "222222")
+        self.assertFalse(db.create_user_with_verification("u", "u@x.test", "U", state2))
+        self.assertEqual(
+            db.users["u"]["email_verification"]["code_hash"], ev.hash_code("u", "111111")
+        )
+
+    def test_new_password_signup_creates_doc_already_gated(self):
+        app, db, _ = _build_app()
+        client = app.test_client()
+        resp = client.post("/api/auth/verify", json={"idToken": "new-password-token"})
+        self.assertEqual(resp.status_code, 200)
+        doc = db.users["new-pw-uid"]
+        # The doc exists WITH its pending gate and full user fields in one shot.
+        self.assertEqual(doc["email_verification"]["status"], "pending")
+        self.assertEqual(doc["email"], "newpw@example.com")
+        self.assertTrue(resp.get_json()["user"]["emailVerificationRequired"])
+
+    def test_concurrent_create_loser_gates_without_resending_or_clobbering(self):
+        """Simulate the race: this request's pre-read saw no user, but a
+        concurrent request already created the gated doc. The loser must still
+        gate, must not email a stale code, and must not overwrite the winner's
+        code."""
+        from backend.services import email_verification as ev
+        from unittest.mock import patch
+
+        class RaceFakeAuthDb(FakeAuthDb):
+            def __init__(self):
+                super().__init__()
+                # A concurrent request won the create (code "111111").
+                super().create_user_with_verification(
+                    "new-pw-uid", "newpw@example.com", "New PW User",
+                    ev.build_pending_state("new-pw-uid", "111111"),
+                )
+                self._read_once = False
+
+            def get_user(self, uid):
+                # verify_auth's pre-read lands in the race window: no user yet.
+                if uid == "new-pw-uid" and not self._read_once:
+                    self._read_once = True
+                    return None
+                return super().get_user(uid)
+
+        app, db, _ = _build_app(db=RaceFakeAuthDb())
+        client = app.test_client()
+        with patch.object(ev, "send_verification_code_email") as send:
+            resp = client.post("/api/auth/verify", json={"idToken": "new-password-token"})
+
+        self.assertTrue(resp.get_json()["user"]["emailVerificationRequired"])  # fail closed
+        with client.session_transaction() as sess:
+            self.assertFalse(sess["user"]["email_verified"])
+        send.assert_not_called()  # loser does not email a stale code
+        self.assertEqual(  # winner's live code preserved
+            db.users["new-pw-uid"]["email_verification"]["code_hash"],
+            ev.hash_code("new-pw-uid", "111111"),
+        )
+
+
+class TestEmailVerificationEndpoints(unittest.TestCase):
+    def _seed_pending(self, db, uid="test-uid"):
+        from backend.services import email_verification
+        db.users[uid] = make_user(uid=uid, email="test@example.com")
+        return email_verification.start_verification(db, uid)
+
+    def test_confirm_success_clears_gate(self):
+        db = FakeAuthDb()
+        code = self._seed_pending(db)
+        app, db, _ = _build_app(db=db)
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess["user"] = {"uid": "test-uid", "email": "test@example.com",
+                            "name": "T", "email_verified": False}
+
+        resp = client.post("/api/auth/email-verification/confirm", json={"code": code})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        with client.session_transaction() as sess:
+            self.assertTrue(sess["user"]["email_verified"])
+
+    def test_confirm_wrong_code(self):
+        db = FakeAuthDb()
+        self._seed_pending(db)
+        app, db, _ = _build_app(db=db)
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess["user"] = {"uid": "test-uid", "email": "test@example.com",
+                            "name": "T", "email_verified": False}
+
+        resp = client.post("/api/auth/email-verification/confirm", json={"code": "000000"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.get_json()["error"], "invalid_code")
+
+    def test_confirm_requires_session(self):
+        app, _, _ = _build_app()
+        client = app.test_client()
+        resp = client.post("/api/auth/email-verification/confirm", json={"code": "123456"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_resend_returns_429_on_cooldown(self):
+        db = FakeAuthDb()
+        self._seed_pending(db)
+        app, db, _ = _build_app(db=db)
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess["user"] = {"uid": "test-uid", "email": "test@example.com",
+                            "name": "T", "email_verified": False}
+
+        # start_verification set last_sent_at = now, so an immediate resend hits
+        # the cooldown → 429. Deterministic.
+        resp = client.post("/api/auth/email-verification/resend", json={})
+        self.assertEqual(resp.status_code, 429)
+        self.assertGreater(resp.get_json()["cooldownSeconds"], 0)
+
+    def test_resend_surfaces_delivery_failure(self):
+        """A delivery-layer failure returns 502/send_failed (not a silent 200),
+        so the client can prompt a retry instead of waiting for nothing."""
+        from datetime import UTC, datetime, timedelta
+        from unittest.mock import patch
+
+        from backend.services import email_verification
+
+        db = FakeAuthDb()
+        self._seed_pending(db)
+        # Elapse the cooldown so the resend is actually attempted (and reaches
+        # the send path) rather than short-circuiting on the 60s rate limit.
+        db.users["test-uid"]["email_verification"]["last_sent_at"] = (
+            datetime.now(UTC) - timedelta(seconds=120)
+        ).isoformat()
+        app, db, _ = _build_app(db=db)
+        client = app.test_client()
+        with client.session_transaction() as sess:
+            sess["user"] = {"uid": "test-uid", "email": "test@example.com",
+                            "name": "T", "email_verified": False}
+
+        with patch.object(
+            email_verification, "send_verification_code_email",
+            side_effect=RuntimeError("resend provider down"),
+        ):
+            resp = client.post("/api/auth/email-verification/resend", json={})
+
+        self.assertEqual(resp.status_code, 502)
+        body = resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertEqual(body["error"], "send_failed")
+        self.assertGreater(body["cooldownSeconds"], 0)
 
 
 if __name__ == "__main__":

@@ -1,12 +1,13 @@
 from flask import Blueprint, current_app, jsonify, request, session
 
 from backend.route_deps import RouteDeps
+from backend.services import email_verification
 from database import ALLOWED_INTENDED_ROLES
 
 ALLOWED_MIGRATE_ROLES = frozenset({'student', 'teacher', 'admin'})
 
 
-def build_auth_user_payload(uid, email, name, school_context):
+def build_auth_user_payload(uid, email, name, school_context, email_verification_required=False):
     """Build the auth payload returned to the frontend."""
     return {
         'uid': uid,
@@ -20,7 +21,42 @@ def build_auth_user_payload(uid, email, name, school_context):
         'onboardingState': school_context.get('onboarding_state'),
         'requiresLegacyRolePick': bool(school_context.get('requires_legacy_role_pick')),
         'lingualAdmin': bool(school_context.get('lingual_admin')),
+        'emailVerificationRequired': bool(email_verification_required),
     }
+
+
+def _resolve_email_verification(deps, decoded_token, existing_user, uid, email, name):
+    """Ensure the user doc exists and return True if email must be verified.
+
+    For a brand-new account whose provider has not verified the email, create
+    the user doc together with its pending verification state in a single
+    atomic write (create-if-absent). This closes a race where a second
+    concurrent `/api/auth/verify` could otherwise read the just-created doc
+    *before* the gate was written and mint an ungated session. Google
+    (email_verified claim True) is auto-verified and existing accounts are
+    never re-gated.
+    """
+    provider_verified = bool(decoded_token.get('email_verified'))
+
+    if existing_user is None and not provider_verified:
+        code = email_verification.generate_code()
+        # Atomic create-with-gate. Fails closed: if the write raises it
+        # propagates (verify_auth → 500, no session) rather than leaving an
+        # un-gatable account. Only the request that actually created the doc
+        # owns the live code, so only it emails one — a concurrent loser would
+        # otherwise send a code that no longer matches the stored hash.
+        created = deps.db.create_user_with_verification(
+            uid, email, name, email_verification.build_pending_state(uid, code),
+        )
+        if created:
+            try:
+                email_verification.send_verification_code_email(email, name, code)
+            except Exception as exc:
+                print(f'[email-verification] code email send failed for {uid}: {exc}')
+        return True
+
+    deps.db.get_or_create_user(uid, email, name)
+    return (not provider_verified) and email_verification.is_pending(existing_user)
 
 
 def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
@@ -54,7 +90,13 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
             email = decoded_token.get('email', '')
             name = decoded_token.get('name', email.split('@')[0] if email else 'User')
 
-            deps.db.get_or_create_user(uid, email, name)
+            # Capture existence BEFORE _resolve_email_verification, which owns
+            # user creation (atomic create-with-gate for new gated accounts,
+            # get_or_create_user otherwise).
+            existing_user = deps.db.get_user(uid)
+            email_verification_required = _resolve_email_verification(
+                deps, decoded_token, existing_user, uid, email, name,
+            )
 
             if intended_role:
                 # Persist only on first-time users — existing memberships always win.
@@ -82,11 +124,14 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
                 'email': email,
                 'name': name,
                 'active_membership_id': school_context.get('active_membership_id'),
+                'email_verified': not email_verification_required,
             }
 
             return jsonify({
                 'success': True,
-                'user': build_auth_user_payload(uid, email, name, school_context),
+                'user': build_auth_user_payload(
+                    uid, email, name, school_context, email_verification_required,
+                ),
             })
 
         except deps.firebase_auth.InvalidIdTokenError:
@@ -181,6 +226,60 @@ def create_auth_blueprint(deps: RouteDeps) -> Blueprint:
             'sklc_description': proficiency_description,
             'domain_bands': results.get('domain_bands', {}),
         })
+
+    @bp.route('/api/auth/email-verification/confirm', methods=['POST'])
+    def confirm_email_verification():
+        user = session.get('user')
+        if not user or not user.get('uid'):
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+
+        data = request.get_json(silent=True) or {}
+        code = str(data.get('code', '')).strip()
+        result = email_verification.confirm(deps.db, user['uid'], code)
+
+        if not result.ok:
+            return jsonify({'success': False, 'error': result.error}), 400
+
+        try:
+            deps.firebase_auth.update_user(user['uid'], email_verified=True)
+        except Exception as exc:  # best-effort sync; Firestore is authoritative
+            print(f"[email-verification] firebase sync failed for {user['uid']}: {exc}")
+
+        session['user']['email_verified'] = True
+        session.modified = True
+        return jsonify({'success': True})
+
+    @bp.route('/api/auth/email-verification/resend', methods=['POST'])
+    def resend_email_verification():
+        user = session.get('user')
+        if not user or not user.get('uid'):
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+
+        result = email_verification.resend(deps.db, user['uid'])
+        if not result.allowed:
+            return jsonify({
+                'success': False,
+                'error': 'cooldown',
+                'cooldownSeconds': result.cooldown_seconds,
+            }), 429
+
+        try:
+            email_verification.send_verification_code_email(
+                user.get('email', ''), user.get('name'), result.code,
+            )
+        except Exception as exc:
+            # A fresh code was already written; tell the client delivery failed
+            # (instead of a silent 200) so it can prompt a retry rather than
+            # leaving the user waiting for an email that never arrives. The
+            # cooldown is still returned so the retry respects the rate limit.
+            print(f"[email-verification] resend enqueue failed for {user['uid']}: {exc}")
+            return jsonify({
+                'success': False,
+                'error': 'send_failed',
+                'cooldownSeconds': result.cooldown_seconds,
+            }), 502
+
+        return jsonify({'success': True, 'cooldownSeconds': result.cooldown_seconds})
 
     @bp.route('/api/set-language', methods=['POST'])
     def api_set_language():

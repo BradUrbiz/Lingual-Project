@@ -62,6 +62,8 @@ class OutboxTemplate(str, Enum):
     # Plan 5: Lingual-admin org lifecycle (suspend / restore)
     ORG_SUSPENDED = 'org_suspended'
     ORG_RESTORED = 'org_restored'
+    # Email verification at signup (6-digit code)
+    EMAIL_VERIFICATION_CODE = 'email_verification_code'
 
 
 def enqueue_outbox_email(

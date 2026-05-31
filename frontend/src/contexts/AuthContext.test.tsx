@@ -18,6 +18,8 @@ vi.mock('../api/auth', () => ({
   verifyToken: (...args: unknown[]) => verifyTokenMock(...args),
   logout: vi.fn(),
   migrateRole: (...args: unknown[]) => migrateRoleMock(...args),
+  confirmEmailVerification: vi.fn(),
+  resendEmailVerification: vi.fn(),
 }));
 
 vi.mock('firebase/auth', async () => {
@@ -416,5 +418,58 @@ describe('AuthContext - LegacyRoleMigrationModal mount', () => {
     await waitFor(() => {
       expect(screen.queryByText(/welcome back/i)).not.toBeInTheDocument();
     });
+  });
+});
+
+describe('AuthContext - EmailVerificationGate mount', () => {
+  beforeEach(() => {
+    verifyTokenMock.mockReset();
+    firebaseAuthState.currentUser = null;
+    localStorage.clear();
+  });
+
+  function CallSignInForGate() {
+    const { signInWithEmail } = useAuth();
+    const signedInRef = useRef(false);
+    useEffect(() => {
+      if (signedInRef.current) return;
+      signedInRef.current = true;
+      void signInWithEmail('pending@b.test', 'password123');
+    }, [signInWithEmail]);
+    return <div>ready</div>;
+  }
+
+  it('mounts the gate when emailVerificationRequired is true', async () => {
+    verifyTokenMock.mockResolvedValue({
+      success: true,
+      user: { uid: 'u1', email: 'pending@b.test', name: 'P', emailVerificationRequired: true },
+    });
+    firebaseAuthState.currentUser = { getIdToken: vi.fn().mockResolvedValue('id-token-pending') };
+
+    render(
+      <AuthProvider>
+        <CallSignInForGate />
+      </AuthProvider>,
+    );
+
+    await screen.findByText(/verify your email/i);
+    expect(screen.getByText(/pending@b\.test/)).toBeInTheDocument();
+  });
+
+  it('does NOT mount the gate when the flag is false', async () => {
+    verifyTokenMock.mockResolvedValue({
+      success: true,
+      user: { uid: 'u1', email: 'a@b.test', name: 'A', emailVerificationRequired: false },
+    });
+    firebaseAuthState.currentUser = { getIdToken: vi.fn().mockResolvedValue('id-token-ok') };
+
+    render(
+      <AuthProvider>
+        <CallSignInForGate />
+      </AuthProvider>,
+    );
+
+    await screen.findByText('ready');
+    expect(screen.queryByText(/verify your email/i)).not.toBeInTheDocument();
   });
 });

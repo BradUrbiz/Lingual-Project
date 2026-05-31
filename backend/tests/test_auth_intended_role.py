@@ -32,6 +32,16 @@ class FakeAuthDb(FakeDbBase):
             self.users[uid] = make_user(uid=uid, name=name, email=email)
         return self.users[uid]
 
+    def create_user_with_verification(self, uid, email, name, email_verification):
+        # Mirror database.create_user_with_verification (atomic create-if-absent).
+        if uid in self.users:
+            return False
+        self.users[uid] = make_user(
+            uid=uid, name=name, email=email,
+            email_verification=dict(email_verification),
+        )
+        return True
+
     def update_user_profile(self, uid, **kwargs):
         self.profile_updates.append((uid, kwargs))
         user = self.users.get(uid)

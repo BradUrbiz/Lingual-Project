@@ -19,7 +19,7 @@ steps:
       - |
         cd frontend &&
         npm ci &&
-        npm run test -- --run --exclude='**/AppChatPage.avatar.test.tsx'
+        npm run test -- --run --exclude='**/AppChatPage.avatar.test.tsx' --maxWorkers=2 --minWorkers=1
 
   # Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
@@ -87,3 +87,7 @@ images:
 # Build options
 options:
   logging: CLOUD_LOGGING_ONLY
+  # 8 vCPU / 8 GB. Combined with vitest --maxWorkers=2, the frontend jsdom suite
+  # (heavy deps: pixi/three/live2d) stays well under RAM. Uncapped workers on the
+  # default machine OOM-killed a vitest worker (ERR_IPC_CHANNEL_CLOSED).
+  machineType: 'E2_HIGHCPU_8'

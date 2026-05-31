@@ -37,6 +37,15 @@ _log = logging.getLogger(__name__)
 # even though Firestore is authoritative. Pairs with sql.py's pool_timeout=3.
 _READ_STATEMENT_TIMEOUT_MS = 5_000
 
+# Per-process shadow-parity counters (flag -> [compared, mismatched]). A soak
+# SIGNAL, not exact metrics — benign races under Cloud Run threading are fine.
+# Logged at WARNING (the only level visible in prod — no logging handler is
+# configured, so module INFO/DEBUG never surface) on the FIRST compare per
+# process and every _SHADOW_SUMMARY_EVERY after, so a CLEAN shadow is OBSERVABLE.
+# Otherwise "no MISMATCH" is indistinguishable from "the shadow never ran".
+_shadow_stats: dict[str, list[int]] = {}
+_SHADOW_SUMMARY_EVERY = 25
+
 # Known-divergent organization keys to ignore in shadow parity (READ_CUTOVER.md
 # §4). Surfacing these would be alert noise, not drift:
 #   school_admin_uids - Firestore-denormalized; derived (not stored) in PG, and
@@ -124,16 +133,26 @@ class ReadRouter:
             return pg_call(session)
 
     def _shadow_compare(self, flag, fs_result, pg_call, engine, ignore) -> None:
-        """Read PG, compare to the Firestore result, log mismatches. Never raises,
-        never mutates the response (Firestore stays authoritative in shadow)."""
+        """Read PG, compare to the Firestore result, log mismatches + a periodic
+        rolling summary. Never raises, never mutates the response (Firestore stays
+        authoritative in shadow)."""
         try:
             pg_result = self._pg_read(pg_call, engine)
         except Exception:  # noqa: BLE001 — a broken shadow read must not affect the request
             _log.exception('shadow-read %s: PG side errored', flag)
             return
         diff = _diff(fs_result, pg_result, ignore)
+        stats = _shadow_stats.setdefault(flag, [0, 0])
+        stats[0] += 1
         if diff:
-            _log.warning('shadow-read MISMATCH %s: %s', flag, diff)
+            stats[1] += 1
+            _log.warning('shadow-read MISMATCH %s [#%d]: %s', flag, stats[0], diff)
+        elif stats[0] == 1 or stats[0] % _SHADOW_SUMMARY_EVERY == 0:
+            # Positive "shadow is running + clean" signal (first compare + every N).
+            _log.warning(
+                'shadow-read %s: %d compared, %d mismatched (rolling, this instance)',
+                flag, stats[0], stats[1],
+            )
 
     def _route_read(self, flag, fs_call, pg_call, *, ignore=frozenset()):
         """The 3-state per-entity gate. See module docstring."""

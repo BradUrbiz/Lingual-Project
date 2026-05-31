@@ -76,6 +76,8 @@ class TestRouting(unittest.TestCase):
     def setUp(self):
         _clear_flag()
         self.addCleanup(_clear_flag)
+        read_router._shadow_stats.clear()  # per-process counter is module-global
+        self.addCleanup(read_router._shadow_stats.clear)
         # provider returns a truthy fake engine so _resolve_engine yields non-None
         self.router = ReadRouter(types.SimpleNamespace(), sql_engine=lambda: object())
 
@@ -92,10 +94,23 @@ class TestRouting(unittest.TestCase):
         os.environ[_FLAG] = 'shadow'
         seen = []
         with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: pc('SESS')):
-            out = self._route(lambda: {'id': 'o1', 'v': 1},
-                             lambda s: seen.append(s) or {'id': 'o1', 'v': 2})
+            with self.assertLogs('backend.db.read_router', level='WARNING') as cm:
+                out = self._route(lambda: {'id': 'o1', 'v': 1},
+                                 lambda s: seen.append(s) or {'id': 'o1', 'v': 2})
         self.assertEqual(out, {'id': 'o1', 'v': 1})   # Firestore authoritative
         self.assertEqual(seen, ['SESS'])              # PG read ran for the compare
+        self.assertTrue(any('MISMATCH' in m and "'v': (1, 2)" in m for m in cm.output))
+        self.assertEqual(read_router._shadow_stats[_FLAG], [1, 1])  # 1 compared, 1 mismatched
+
+    def test_shadow_clean_compare_logs_positive_first_signal(self):
+        os.environ[_FLAG] = 'shadow'
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: {'id': 'o1', 'v': 1}):
+            with self.assertLogs('backend.db.read_router', level='WARNING') as cm:
+                out = self._route(lambda: {'id': 'o1', 'v': 1}, lambda s: {'id': 'o1', 'v': 1})
+        self.assertEqual(out, {'id': 'o1', 'v': 1})
+        # a CLEAN compare still emits the positive "shadow is running" summary:
+        self.assertTrue(any('1 compared, 0 mismatched' in m for m in cm.output))
+        self.assertEqual(read_router._shadow_stats[_FLAG], [1, 0])
 
     def test_shadow_pg_error_is_swallowed_returns_firestore(self):
         os.environ[_FLAG] = 'shadow'

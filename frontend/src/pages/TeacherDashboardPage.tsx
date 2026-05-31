@@ -1010,35 +1010,34 @@ function ClassSummaryCard({
   onOpenCanvas: (classId: string) => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => onOpenAnalytics(classSummary.id)}
-      aria-label={`Open ${classSummary.name} analytics`}
-      className="w-full cursor-pointer rounded-2xl border-2 border-border bg-secondary/50 p-5 text-left transition-colors hover:border-primary hover:bg-secondary focus:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"
-    >
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h3 className="text-lg font-display font-bold text-foreground">{classSummary.name}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {classSummary.subject || 'Subject TBD'}
-            {classSummary.term ? ` · ${classSummary.term}` : ''}
-            {classSummary.gradeBand ? ` · Grades ${classSummary.gradeBand}` : ''}
-          </p>
+    <div className="w-full rounded-2xl border-2 border-border bg-secondary/50 p-5 transition-colors hover:border-primary hover:bg-secondary">
+      <button
+        type="button"
+        onClick={() => onOpenAnalytics(classSummary.id)}
+        aria-label={`Open ${classSummary.name} analytics`}
+        className="block w-full cursor-pointer rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="text-lg font-display font-bold text-foreground">{classSummary.name}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {classSummary.subject || 'Subject TBD'}
+              {classSummary.term ? ` · ${classSummary.term}` : ''}
+              {classSummary.gradeBand ? ` · Grades ${classSummary.gradeBand}` : ''}
+            </p>
+          </div>
+          <div className="grid gap-3 sm:w-[420px] sm:grid-cols-3">
+            <ClassMetric label="Students" value={classSummary.studentCount} />
+            <ClassMetric label="Language" value={classSummary.learningLocale} />
+            <ClassMetric label="Assignments" value={classSummary.assignmentCount ?? 0} />
+          </div>
         </div>
-        <div className="grid gap-3 sm:w-[420px] sm:grid-cols-3">
-          <ClassMetric label="Students" value={classSummary.studentCount} />
-          <ClassMetric label="Language" value={classSummary.learningLocale} />
-          <ClassMetric label="Assignments" value={classSummary.assignmentCount ?? 0} />
-        </div>
-      </div>
+      </button>
       <div className="mt-4 flex flex-wrap gap-3">
         <Button
           variant="outline"
           size="sm"
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenJoinCode(classSummary.id);
-          }}
+          onClick={() => onOpenJoinCode(classSummary.id)}
         >
           <UserPlus size={14} className="mr-1.5" />
           Invite students
@@ -1046,10 +1045,7 @@ function ClassSummaryCard({
         <Button
           variant="outline"
           size="sm"
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenRoster(classSummary.id);
-          }}
+          onClick={() => onOpenRoster(classSummary.id)}
         >
           <Users size={14} className="mr-1.5" />
           Roster
@@ -1057,10 +1053,7 @@ function ClassSummaryCard({
         <Button
           variant="outline"
           size="sm"
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenAssignments(classSummary.id);
-          }}
+          onClick={() => onOpenAssignments(classSummary.id)}
         >
           Build assignments
         </Button>
@@ -1071,10 +1064,7 @@ function ClassSummaryCard({
           aria-label={
             classSummary.canvasLinked ? 'Canvas linked - click to manage or resync' : 'Connect Canvas'
           }
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenCanvas(classSummary.id);
-          }}
+          onClick={() => onOpenCanvas(classSummary.id)}
         >
           {classSummary.canvasLinked ? (
             <>
@@ -1099,7 +1089,7 @@ function ClassSummaryCard({
           )}
         </Button>
       </div>
-    </button>
+    </div>
   );
 }
 

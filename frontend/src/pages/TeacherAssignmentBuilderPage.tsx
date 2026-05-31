@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -190,12 +190,8 @@ function useTeacherAssignmentBuilderController() {
   const patchBuilderState = (payload: Partial<TeacherAssignmentBuilderState>) => {
     dispatch({ type: 'patch', payload });
   };
-  const setLoading = (value: boolean) => patchBuilderState({ loading: value });
   const setError = (value: string | null) => patchBuilderState({ error: value });
   const setSuccessMessage = (value: string | null) => patchBuilderState({ successMessage: value });
-  const setTeacherClasses = (value: TeacherClassSummary[]) => patchBuilderState({ teacherClasses: value });
-  const setAssignments = (value: StudentAssignmentSummary[]) => patchBuilderState({ assignments: value });
-  const setCanvasContent = (value: CanvasCourseContentItem[]) => patchBuilderState({ canvasContent: value });
   const setBuilderMode = (value: BuilderMode) => patchBuilderState({ builderMode: value });
   const setAdvancedEntryMode = (value: AdvancedEntryMode) => patchBuilderState({ advancedEntryMode: value });
   const setSourcePacketText = (value: string) => patchBuilderState({ sourcePacketText: value });
@@ -220,44 +216,53 @@ function useTeacherAssignmentBuilderController() {
   const activeClass = teacherClasses.find((item) => item.id === classId) || null;
   const usesCanvasWorkflow = builderMode === 'quick' || advancedEntryMode === 'canvas';
 
-  const loadClassData = async (nextClassId: string) => {
+  const loadClassData = useCallback(async (nextClassId: string) => {
     const [classes, classAssignments] = await Promise.all([
       getTeacherClasses(),
       getTeacherAssignments(nextClassId),
     ]);
 
-    setTeacherClasses(classes);
-    setAssignments(classAssignments);
+    dispatch({ type: 'patch', payload: { teacherClasses: classes, assignments: classAssignments } });
 
     // Load Canvas content (best-effort - not all classes have Canvas).
     try {
       const items = await getCanvasContentForClass(nextClassId);
-      setCanvasContent(items);
+      dispatch({ type: 'patch', payload: { canvasContent: items } });
     } catch {
-      setCanvasContent([]);
+      dispatch({ type: 'patch', payload: { canvasContent: [] } });
     }
-  };
+  }, []);
 
   useEffect(() => {
     let isActive = true;
 
     if (!classId) {
-      setLoading(false);
-      setError('Class id is required.');
+      dispatch({
+        type: 'patch',
+        payload: { loading: false, error: 'Class id is required.' },
+      });
       return;
     }
 
     const load = async () => {
-      setLoading(true);
+      dispatch({ type: 'patch', payload: { loading: true } });
       try {
         await loadClassData(classId);
         if (!isActive) return;
-        setError(null);
+        dispatch({ type: 'patch', payload: { error: null } });
       } catch (loadError) {
         if (!isActive) return;
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load assignment builder.');
+        dispatch({
+          type: 'patch',
+          payload: {
+            error:
+              loadError instanceof Error
+                ? loadError.message
+                : 'Failed to load assignment builder.',
+          },
+        });
       } finally {
-        if (isActive) setLoading(false);
+        if (isActive) dispatch({ type: 'patch', payload: { loading: false } });
       }
     };
 
@@ -265,7 +270,7 @@ function useTeacherAssignmentBuilderController() {
     return () => {
       isActive = false;
     };
-  }, [classId]);
+  }, [classId, loadClassData]);
 
   const resetCanvasPracticeState = () => {
     dispatch({ type: 'resetCanvasPractice' });
@@ -1340,16 +1345,6 @@ function TagListEditor({
   ariaLabel?: string;
 }) {
   const [newValue, setNewValue] = useState('');
-  const itemIdsRef = useRef<string[]>([]);
-  const nextItemIdRef = useRef(0);
-
-  while (itemIdsRef.current.length < items.length) {
-    itemIdsRef.current.push(`tag-item-${nextItemIdRef.current}`);
-    nextItemIdRef.current += 1;
-  }
-  if (itemIdsRef.current.length > items.length) {
-    itemIdsRef.current.length = items.length;
-  }
 
   const handleAdd = () => {
     const trimmed = newValue.trim();
@@ -1360,11 +1355,14 @@ function TagListEditor({
   };
 
   const handleRemove = (index: number) => {
-    itemIdsRef.current.splice(index, 1);
     onChange(items.filter((_, i) => i !== index));
   };
 
   const handleEdit = (index: number, value: string) => {
+    const trimmed = value.trim();
+    if (trimmed && items.some((item, itemIndex) => itemIndex !== index && item === trimmed)) {
+      return;
+    }
     const updated = [...items];
     updated[index] = value;
     onChange(updated);
@@ -1373,7 +1371,7 @@ function TagListEditor({
   return (
     <div className="space-y-2" aria-label={ariaLabel}>
       {items.map((item, i) => (
-        <div key={itemIdsRef.current[i]} className="flex items-center gap-2">
+        <div key={item || `${ariaLabel || placeholder}-empty`} className="flex items-center gap-2">
           <Input
             value={item}
             onChange={(event) => handleEdit(i, event.target.value)}

@@ -1,29 +1,43 @@
+import type { ReactNode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { AppGamesPage } from '@/pages/AppGamesPage';
 
 const learningLocaleState = vi.hoisted(() => ({
   value: 'ko-KR' as 'ko-KR' | 'es-ES' | 'fr-FR' | 'ru-RU' | 'he-IL',
+  setLearningLocale: vi.fn(),
+  t: (key: string) =>
+    ({
+      'app.games.listeningQuiz': 'Listening Quiz',
+      'app.games.grammarChallenge': 'Grammar Challenge',
+      'app.learn.minigames.flashcards': 'Flashcard Flip',
+      'app.learn.minigames.wordMatch': 'Word Match',
+      'app.games.conversationGames': 'Conversation Games',
+    })[key] || '',
 }));
 
 const getChatSessionsMock = vi.fn();
 
+vi.mock('motion/react', () => ({
+  AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
+vi.mock('@/components/minigames', () => ({
+  FlashcardFlip: () => <div data-testid="flashcard-flip" />,
+  GrammarChallenge: () => <div data-testid="grammar-challenge" />,
+  ListeningQuiz: () => <div data-testid="listening-quiz" />,
+  WordMatch: () => <div data-testid="word-match" />,
+}));
+
 vi.mock('@/contexts/LanguageContext', () => ({
   useLanguage: () => ({
-    t: (key: string) =>
-      ({
-        'app.games.listeningQuiz': 'Listening Quiz',
-        'app.games.grammarChallenge': 'Grammar Challenge',
-        'app.learn.minigames.flashcards': 'Flashcard Flip',
-        'app.learn.minigames.wordMatch': 'Word Match',
-        'app.games.conversationGames': 'Conversation Games',
-      })[key] || '',
+    t: learningLocaleState.t,
   }),
 }));
 
 vi.mock('@/contexts/LearningLocaleContext', () => ({
   useLearningLocale: () => ({
     learningLocale: learningLocaleState.value,
-    setLearningLocale: vi.fn(),
+    setLearningLocale: learningLocaleState.setLearningLocale,
   }),
 }));
 

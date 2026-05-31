@@ -450,6 +450,16 @@ def register_domain_blueprints():
                 'are a no-op until one is configured'
             )
 
+    if os.environ.get('DUAL_WRITE_SCHOOL_CHAIN') == '1':
+        if sql_enabled():
+            print('[startup] DUAL_WRITE_SCHOOL_CHAIN=1 — org/membership/class writes shadow to Postgres')
+        else:
+            print(
+                '[startup warning] DUAL_WRITE_SCHOOL_CHAIN=1 but no Cloud SQL target '
+                '(INSTANCE_CONNECTION_NAME/DATABASE_URL) set — parent-chain shadow writes '
+                'are a no-op until one is configured'
+            )
+
     app.register_blueprint(create_auth_blueprint(deps))
     app.register_blueprint(create_chat_blueprint(deps))
     app.register_blueprint(create_assessment_blueprint(deps))

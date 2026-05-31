@@ -21,14 +21,16 @@ export function OrgAuditTab({ orgId }: { orgId: string }) {
   return (
     <ul className="divide-y divide-neutral-200">
       {items.map(a => {
-        const metaSnippet = Object.entries(a.metadata || {})
-          .filter(([, v]) => v !== null && v !== undefined && v !== '')
-          .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
-          .join(' · ');
+        const metaSnippet = Object.entries(a.metadata || {}).reduce<string[]>((parts, [k, v]) => {
+          if (v !== null && v !== undefined && v !== '') {
+            parts.push(`${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`);
+          }
+          return parts;
+        }, []).join(' · ');
         return (
           <li key={a.id} className="py-3 text-sm">
             <div className="flex items-baseline gap-3">
-              <span className="text-neutral-500">{a.createdAt || '—'}</span>
+              <span className="text-neutral-500">{a.createdAt || '-'}</span>
               <span className="font-mono text-xs text-neutral-500">{a.actorUid}</span>
               <span className="font-medium">{a.action}</span>
             </div>
@@ -41,5 +43,3 @@ export function OrgAuditTab({ orgId }: { orgId: string }) {
     </ul>
   );
 }
-
-export default OrgAuditTab;

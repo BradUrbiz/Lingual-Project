@@ -27,7 +27,7 @@ function clampStep(s: number): WizardStep {
 }
 
 /**
- * Immutably set a value at a dotted path. **Object paths only** — does not
+ * Immutably set a value at a dotted path. **Object paths only** - does not
  * support array indices. The wizard's payload shape (`adminIdentity.fullName`,
  * `location.country`, `curriculum.gradeRanges` as a whole) only needs object
  * nesting. If a future field demands array writes, replace this with `lodash.set`

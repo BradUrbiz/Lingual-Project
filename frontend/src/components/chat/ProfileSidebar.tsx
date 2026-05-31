@@ -1,5 +1,5 @@
 import { useLanguage } from '../../contexts/LanguageContext';
-import { Button } from '../common';
+import { Button } from '@/components/ui/button';
 
 interface Minigame {
   id: string;
@@ -62,6 +62,12 @@ interface ProfileSidebarProps {
   aiState?: 'speak' | 'notalk' | 'bruh';
 }
 
+const aiImages: Record<string, string> = {
+  speak: '/imgs/c-speak.png',
+  notalk: '/imgs/c-notalk.png',
+  bruh: '/imgs/c-bruh.png',
+};
+
 export function ProfileSidebar({
   level,
   goals,
@@ -72,12 +78,6 @@ export function ProfileSidebar({
   // Normalize goals to always be an array or single string display
   const goalsArray = Array.isArray(goals) ? goals : goals ? [goals] : [];
   const { t } = useLanguage();
-
-  const aiImages: Record<string, string> = {
-    speak: '/imgs/c-speak.png',
-    notalk: '/imgs/c-notalk.png',
-    bruh: '/imgs/c-bruh.png',
-  };
 
   const handleMinigameClick = (game: Minigame) => {
     if (game.command && onMinigameSelect) {
@@ -92,7 +92,7 @@ export function ProfileSidebar({
         <img
           src={aiImages[aiState]}
           alt="Lingu"
-          className="w-24 h-24 mx-auto object-contain"
+          className="size-24 mx-auto object-contain"
         />
       </div>
 
@@ -111,9 +111,9 @@ export function ProfileSidebar({
             {t('chat.yourGoals')}
           </h3>
           <div className="flex flex-wrap gap-1">
-            {goalsArray.map((goal, index) => (
+            {goalsArray.map((goal) => (
               <span
-                key={index}
+                key={goal}
                 className="px-2 py-0.5 bg-gray-100 rounded text-xs text-text"
               >
                 {goal}
@@ -158,12 +158,12 @@ export function ProfileSidebar({
             type="button"
           >
             {/* Logo */}
-            <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden">
+            <div className="flex-shrink-0 size-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden">
               {game.logo ? (
                 <img
                   src={game.logo}
                   alt={game.name}
-                  className="w-8 h-8 object-contain"
+                  className="size-8 object-contain"
                 />
               ) : (
                 <div className="text-xl text-gray-300">?</div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef } from 'react';
 import {
   Box3,
   Clock,
@@ -44,6 +44,48 @@ type VrmAvatarPanelProps = {
 };
 
 type PanelStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+type VrmPanelState = {
+  status: PanelStatus;
+  errorMessage: string | null;
+  resolvedExpressionKeys: string[];
+  showDebug: boolean;
+};
+
+type VrmPanelAction =
+  | { type: 'loading' }
+  | { type: 'ready'; resolvedExpressionKeys: string[] }
+  | { type: 'error'; errorMessage: string }
+  | { type: 'toggleDebug' };
+
+function createInitialVrmPanelState(enabled: boolean, webglSupported: boolean): VrmPanelState {
+  return {
+    status: enabled && webglSupported ? 'loading' : 'idle',
+    errorMessage: null,
+    resolvedExpressionKeys: [],
+    showDebug: false,
+  };
+}
+
+function vrmPanelReducer(state: VrmPanelState, action: VrmPanelAction): VrmPanelState {
+  switch (action.type) {
+    case 'loading':
+      return { ...state, status: 'loading', errorMessage: null };
+    case 'ready':
+      return {
+        ...state,
+        status: 'ready',
+        errorMessage: null,
+        resolvedExpressionKeys: action.resolvedExpressionKeys,
+      };
+    case 'error':
+      return { ...state, status: 'error', errorMessage: action.errorMessage };
+    case 'toggleDebug':
+      return { ...state, showDebug: !state.showDebug };
+    default:
+      return state;
+  }
+}
 type VrmHumanoidBoneAccess = {
   getNormalizedBoneNode?: (name: VRMHumanBoneName) => Object3D | null;
   getRawBoneNode?: (name: VRMHumanBoneName) => Object3D | null;
@@ -258,9 +300,77 @@ function formatDialogueState(dialogueState: AvatarDialogueState): string {
   }
 }
 
+type VrmAvatarOverlayProps = {
+  effectiveStatus: PanelStatus;
+  overlayStatus: string | null;
+  fallbackSrc?: string;
+  title: string;
+  showDebug: boolean;
+  avatarPerformance: AvatarPerformanceFrame;
+  resolvedExpressionKeys: string[];
+  onToggleDebug: () => void;
+};
+
+function VrmAvatarOverlay({
+  effectiveStatus,
+  overlayStatus,
+  fallbackSrc,
+  title,
+  showDebug,
+  avatarPerformance,
+  resolvedExpressionKeys,
+  onToggleDebug,
+}: VrmAvatarOverlayProps) {
+  return (
+    <>
+      {effectiveStatus !== 'ready' ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
+          {fallbackSrc ? (
+            <img src={fallbackSrc} alt={title} className="size-20 opacity-80" />
+          ) : (
+            <div className="flex size-20 items-center justify-center rounded-2xl border-3 border-border bg-secondary">
+              <span className="text-3xl">🧑‍🏫</span>
+            </div>
+          )}
+          <div className="text-xs font-bold text-muted-foreground">{overlayStatus}</div>
+        </div>
+      ) : null}
+
+      {effectiveStatus === 'ready' ? (
+        <div className="pointer-events-none absolute left-3 top-3 rounded-xl border-2 border-border bg-card/80 px-2 py-1 text-[11px] font-bold text-muted-foreground backdrop-blur">
+          {overlayStatus}
+        </div>
+      ) : null}
+
+      {import.meta.env.DEV && effectiveStatus === 'ready' ? (
+        <>
+          <button
+            type="button"
+            onClick={onToggleDebug}
+            className="absolute right-3 top-3 rounded-lg border-2 border-border bg-card/90 px-2 py-1 text-[10px] font-bold text-foreground shadow-stamp-sm"
+          >
+            {showDebug ? 'Hide Debug' : 'Show Debug'}
+          </button>
+          {showDebug ? (
+            <div className="absolute bottom-3 right-3 max-w-[18rem] rounded-xl border-2 border-border bg-card/90 p-3 text-[10px] text-foreground shadow-stamp backdrop-blur">
+              <div className="font-bold uppercase tracking-[0.12em] text-muted-foreground">Avatar Debug</div>
+              <div className="mt-2 space-y-1">
+                <div>State: {formatDialogueState(avatarPerformance.dialogueState)}</div>
+                <div>Affect: {avatarPerformance.affect}</div>
+                <div>Audio: {avatarPerformance.debug.audioLevel.toFixed(2)}</div>
+                <div>Keys: {resolvedExpressionKeys.join(', ') || 'none'}</div>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </>
+  );
+}
+
 export default function VrmAvatarPanel({
   enabled,
-  performance,
+  performance: avatarPerformance,
   modelUrl = DEFAULT_MODEL_URL,
   fallbackSrc,
   statusLabel,
@@ -268,17 +378,18 @@ export default function VrmAvatarPanel({
 }: VrmAvatarPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const performanceRef = useRef(performance);
+  const performanceRef = useRef(avatarPerformance);
 
-  const [webglSupported] = useState(() => supportsWebGL());
-  const [status, setStatus] = useState<PanelStatus>(() => (enabled && webglSupported ? 'loading' : 'idle'));
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [resolvedExpressionKeys, setResolvedExpressionKeys] = useState<string[]>([]);
-  const [showDebug, setShowDebug] = useState(false);
+  const webglSupported = useMemo(() => supportsWebGL(), []);
+  const [panelState, dispatchPanel] = useReducer(
+    vrmPanelReducer,
+    createInitialVrmPanelState(enabled, webglSupported)
+  );
+  const { status, errorMessage, resolvedExpressionKeys, showDebug } = panelState;
 
   useEffect(() => {
-    performanceRef.current = performance;
-  }, [performance]);
+    performanceRef.current = avatarPerformance;
+  }, [avatarPerformance]);
 
   useEffect(() => {
     if (!enabled || !webglSupported) return;
@@ -288,8 +399,7 @@ export default function VrmAvatarPanel({
     if (!container || !canvas) return;
 
     queueMicrotask(() => {
-      setStatus('loading');
-      setErrorMessage(null);
+      dispatchPanel({ type: 'loading' });
     });
 
     let isDisposed = false;
@@ -310,8 +420,7 @@ export default function VrmAvatarPanel({
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to initialize WebGL renderer.';
       queueMicrotask(() => {
-        setStatus('error');
-        setErrorMessage(message);
+        dispatchPanel({ type: 'error', errorMessage: message });
       });
       return;
     }
@@ -433,8 +542,7 @@ export default function VrmAvatarPanel({
 
         const loadedVrm = gltf.userData.vrm as VRM | undefined;
         if (!loadedVrm) {
-          setErrorMessage('Loaded model is not a valid VRM.');
-          setStatus('error');
+          dispatchPanel({ type: 'error', errorMessage: 'Loaded model is not a valid VRM.' });
           return;
         }
 
@@ -451,7 +559,7 @@ export default function VrmAvatarPanel({
         const aliases = resolveExpressionAliases(manager?.expressionMap);
         expressionAliasesRef.current = aliases;
         expressionCapabilitiesRef.current = getExpressionCapabilities(aliases);
-        setResolvedExpressionKeys(listResolvedExpressionKeys(aliases));
+        const resolvedKeys = listResolvedExpressionKeys(aliases);
 
         vrm.scene.rotation.y = Math.PI;
         vrm.scene.traverse((obj: Object3D) => {
@@ -461,15 +569,16 @@ export default function VrmAvatarPanel({
         scene.add(vrm.scene);
         frameCameraToBust(vrm, camera);
 
-        setErrorMessage(null);
-        setStatus('ready');
+        dispatchPanel({ type: 'ready', resolvedExpressionKeys: resolvedKeys });
       },
       undefined,
       (err: unknown) => {
         if (isDisposed) return;
         console.error('VRM load error:', err);
-        setStatus('error');
-        setErrorMessage('Failed to load avatar model. Please check the VRM file path.');
+        dispatchPanel({
+          type: 'error',
+          errorMessage: 'Failed to load avatar model. Please check the VRM file path.',
+        });
       }
     );
 
@@ -520,54 +629,22 @@ export default function VrmAvatarPanel({
     if (effectiveStatus === 'loading') return 'Loading avatar…';
     if (effectiveStatus === 'error') return effectiveErrorMessage ?? 'Avatar unavailable';
     if (statusLabel) return statusLabel;
-    return formatDialogueState(performance.dialogueState);
-  }, [effectiveErrorMessage, effectiveStatus, enabled, performance.dialogueState, statusLabel]);
+    return formatDialogueState(avatarPerformance.dialogueState);
+  }, [avatarPerformance.dialogueState, effectiveErrorMessage, effectiveStatus, enabled, statusLabel]);
 
   return (
     <div ref={containerRef} className="relative h-full w-full">
       <canvas ref={canvasRef} className="h-full w-full" />
-
-      {effectiveStatus !== 'ready' ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
-          {fallbackSrc ? (
-            <img src={fallbackSrc} alt={title} className="h-20 w-20 opacity-80" />
-          ) : (
-            <div className="flex h-20 w-20 items-center justify-center rounded-2xl border-3 border-border bg-secondary">
-              <span className="text-3xl">🧑‍🏫</span>
-            </div>
-          )}
-          <div className="text-xs font-bold text-muted-foreground">{overlayStatus}</div>
-        </div>
-      ) : null}
-
-      {effectiveStatus === 'ready' ? (
-        <div className="pointer-events-none absolute left-3 top-3 rounded-xl border-2 border-border bg-card/80 px-2 py-1 text-[11px] font-bold text-muted-foreground backdrop-blur">
-          {overlayStatus}
-        </div>
-      ) : null}
-
-      {import.meta.env.DEV && effectiveStatus === 'ready' ? (
-        <>
-          <button
-            type="button"
-            onClick={() => setShowDebug((prev) => !prev)}
-            className="absolute right-3 top-3 rounded-lg border-2 border-border bg-card/90 px-2 py-1 text-[10px] font-bold text-foreground shadow-stamp-sm"
-          >
-            {showDebug ? 'Hide Debug' : 'Show Debug'}
-          </button>
-          {showDebug ? (
-            <div className="absolute bottom-3 right-3 max-w-[18rem] rounded-xl border-2 border-border bg-card/90 p-3 text-[10px] text-foreground shadow-stamp backdrop-blur">
-              <div className="font-bold uppercase tracking-[0.12em] text-muted-foreground">Avatar Debug</div>
-              <div className="mt-2 space-y-1">
-                <div>State: {formatDialogueState(performance.dialogueState)}</div>
-                <div>Affect: {performance.affect}</div>
-                <div>Audio: {performance.debug.audioLevel.toFixed(2)}</div>
-                <div>Keys: {resolvedExpressionKeys.join(', ') || 'none'}</div>
-              </div>
-            </div>
-          ) : null}
-        </>
-      ) : null}
+      <VrmAvatarOverlay
+        effectiveStatus={effectiveStatus}
+        overlayStatus={overlayStatus}
+        fallbackSrc={fallbackSrc}
+        title={title}
+        showDebug={showDebug}
+        avatarPerformance={avatarPerformance}
+        resolvedExpressionKeys={resolvedExpressionKeys}
+        onToggleDebug={() => dispatchPanel({ type: 'toggleDebug' })}
+      />
     </div>
   );
 }

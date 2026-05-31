@@ -13,7 +13,7 @@ const ROLES: { value: IntendedRole; label: string; description: string }[] = [
 
 // Spec §628: Blocking modal. Intentionally NO close button, NO escape key
 // handler, NO click-outside dismissal. Legacy users MUST pick a role to
-// proceed — this is by design, do not add dismissal controls.
+// proceed - this is by design, do not add dismissal controls.
 export function LegacyRoleMigrationModal({ onPicked }: LegacyRoleMigrationModalProps) {
   const [busy, setBusy] = useState<IntendedRole | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,10 +34,10 @@ export function LegacyRoleMigrationModal({ onPicked }: LegacyRoleMigrationModalP
   }
 
   return (
-    <div
-      role="dialog"
+    <dialog
+      open
       aria-modal="true"
-      // Backdrop has no onClick — see comment above. Spec §628.
+      // Backdrop has no onClick - see comment above. Spec §628.
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
     >
       <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-2xl">
@@ -53,7 +53,7 @@ export function LegacyRoleMigrationModal({ onPicked }: LegacyRoleMigrationModalP
           {ROLES.map(r => {
             const descId = `legacy-role-desc-${r.value}`;
             return (
-              <button
+              <button type="button"
                 key={r.value}
                 onClick={() => pick(r.value)}
                 disabled={busy !== null}
@@ -78,6 +78,6 @@ export function LegacyRoleMigrationModal({ onPicked }: LegacyRoleMigrationModalP
           Your existing progress stays with you.
         </p>
       </div>
-    </div>
+    </dialog>
   );
 }

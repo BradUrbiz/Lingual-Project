@@ -13,7 +13,7 @@ export function LingualAdminShell() {
   return (
     <div className="flex min-h-screen bg-neutral-50">
       <aside className="w-56 shrink-0 border-r border-neutral-200 bg-white">
-        <div className="px-5 py-5 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+        <div className="p-5 text-sm font-semibold uppercase tracking-wide text-neutral-500">
           Lingual Admin
         </div>
         <nav
@@ -37,7 +37,7 @@ export function LingualAdminShell() {
           ))}
         </nav>
       </aside>
-      <main className="flex-1 px-8 py-8">
+      <main className="flex-1 p-8">
         <Outlet />
       </main>
     </div>

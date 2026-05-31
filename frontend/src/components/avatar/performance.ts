@@ -46,7 +46,7 @@ type DirectivePerformanceBias = {
   cadenceBoost: number;
 };
 
-export const PRE_SPEAKING_WINDOW_MS = 180;
+const PRE_SPEAKING_WINDOW_MS = 180;
 export const POST_SPEAKING_WINDOW_MS = 220;
 const THINKING_WINDOW_MS = 2400;
 

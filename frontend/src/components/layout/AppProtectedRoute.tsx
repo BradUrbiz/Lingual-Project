@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { LoadingSpinner } from '../common';
+import { LoadingSpinner } from '../common/LoadingSpinner';
 import { AppLayout } from './AppLayout';
 
 export function AppProtectedRoute() {

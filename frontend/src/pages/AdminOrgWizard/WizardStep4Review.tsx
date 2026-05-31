@@ -27,7 +27,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-3 gap-3 py-1 text-sm">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="col-span-2">{value || <span className="text-muted-foreground">—</span>}</dd>
+      <dd className="col-span-2">{value || <span className="text-muted-foreground">-</span>}</dd>
     </div>
   );
 }
@@ -83,7 +83,7 @@ export function WizardStep4Review({
           <Row label="Name" value={state.adminIdentity?.fullName} />
           <Row label="Email" value={state.adminIdentity?.schoolEmail} />
           <Row label="Role" value={state.adminIdentity?.roleTitle} />
-          <Row label="Authorized" value={state.adminIdentity?.authorizationAttested ? 'Confirmed' : '—'} />
+          <Row label="Authorized" value={state.adminIdentity?.authorizationAttested ? 'Confirmed' : '-'} />
         </dl>
       </section>
 
@@ -106,7 +106,7 @@ export function WizardStep4Review({
         <p className="mb-2 text-xs text-muted-foreground">
           These addresses will receive an invitation email automatically once Lingual approves your school.
         </p>
-        <div className="flex flex-wrap gap-1.5 rounded-md border px-2 py-2">
+        <div className="flex flex-wrap gap-1.5 rounded-md border p-2">
           {preInvites.map((email) => (
             <span key={email} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs">
               {email}

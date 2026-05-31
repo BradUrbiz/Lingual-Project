@@ -7,7 +7,7 @@ export type WeightedBankChoice<T> = {
   candidateKey: string;
 };
 
-export function chooseWeightedIndex(weights: number[]) {
+function chooseWeightedIndex(weights: number[]) {
   const totalWeight = weights.reduce((sum, value) => sum + value, 0);
   let cursor = Math.random() * totalWeight;
   for (let index = 0; index < weights.length; index += 1) {
@@ -27,16 +27,20 @@ export function chooseExpressionFromBanks(
   lastExpressionKey: string | null,
   now: number
 ): WeightedBankChoice<string> | null {
+  const availableExpressionSet = new Set(availableExpressions);
   for (const expressionId of expressionIds) {
     const bank = manifest.namedExpressions[expressionId];
     if (!bank) continue;
 
-    const rawCandidates = bank.candidates
-      .map((candidate, index) => ({
-        candidate,
-        weight: bank.weights?.[index] ?? 1,
-      }))
-      .filter(({ candidate }) => availableExpressions.includes(candidate));
+    const rawCandidates = bank.candidates.reduce<Array<{ candidate: string; weight: number }>>((acc, candidate, index) => {
+      if (availableExpressionSet.has(candidate)) {
+        acc.push({
+          candidate,
+          weight: bank.weights?.[index] ?? 1,
+        });
+      }
+      return acc;
+    }, []);
 
     if (!rawCandidates.length) continue;
 
@@ -70,19 +74,20 @@ export function chooseMotionFromBanks(
     const bank = manifest.namedMotions[motionRef];
     if (!bank) continue;
 
-    const rawCandidates = bank.candidates
-      .map((candidate, index) => ({
-        candidate,
-        weight: bank.weights?.[index] ?? candidate.weight ?? 1,
-      }))
-      .filter(({ candidate }) => {
+    const rawCandidates = bank.candidates.reduce<Array<{ candidate: Live2DMotionRef; weight: number }>>((acc, candidate, index) => {
         const count = availableGroups[candidate.group];
         if (typeof count !== 'number' || count <= 0) {
-          return false;
+          return acc;
         }
-        const index = candidate.index ?? 0;
-        return index >= 0 && index < count;
-      });
+        const motionIndex = candidate.index ?? 0;
+        if (motionIndex >= 0 && motionIndex < count) {
+          acc.push({
+            candidate,
+            weight: bank.weights?.[index] ?? candidate.weight ?? 1,
+          });
+        }
+        return acc;
+      }, []);
 
     if (!rawCandidates.length) continue;
 

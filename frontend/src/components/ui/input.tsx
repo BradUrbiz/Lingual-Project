@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
@@ -37,42 +36,41 @@ export interface InputProps
     VariantProps<typeof inputVariants> {
   label?: string;
   error?: string;
+  ref?: React.Ref<HTMLInputElement>;
 }
 
-const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, label, error, variant, inputSize, id, ...props }, ref) => {
-    const generatedId = React.useId();
-    const inputId = id || generatedId;
-    const errorId = `${inputId}-error`;
-    const describedBy = error ? errorId : props['aria-describedby'];
+function Input({ className, type, label, error, variant, inputSize, id, ref, ...props }: InputProps) {
+  const generatedId = React.useId();
+  const inputId = id || generatedId;
+  const errorId = `${inputId}-error`;
+  const describedBy = error ? errorId : props['aria-describedby'];
 
-    return (
-      <div className="w-full space-y-2">
-        {label && (
-          <Label htmlFor={inputId} className="text-base font-semibold text-foreground">
-            {label}
-          </Label>
+  return (
+    <div className="w-full space-y-2">
+      {label && (
+        <Label htmlFor={inputId} className="text-base font-semibold text-foreground">
+          {label}
+        </Label>
+      )}
+      <input
+        type={type}
+        id={inputId}
+        aria-invalid={error ? true : props['aria-invalid']}
+        aria-describedby={describedBy}
+        className={cn(
+          inputVariants({ variant, inputSize }),
+          error && 'border-destructive focus:border-destructive focus:ring-destructive/20',
+          className
         )}
-        <input
-          type={type}
-          id={inputId}
-          aria-invalid={error ? true : props['aria-invalid']}
-          aria-describedby={describedBy}
-          className={cn(
-            inputVariants({ variant, inputSize }),
-            error && 'border-destructive focus:border-destructive focus:ring-destructive/20',
-            className
-          )}
-          ref={ref}
-          {...props}
-        />
-        {error && (
-          <p id={errorId} className="text-sm font-medium text-destructive">{error}</p>
-        )}
-      </div>
-    );
-  }
-);
+        ref={ref}
+        {...props}
+      />
+      {error && (
+        <p id={errorId} className="text-sm font-medium text-destructive">{error}</p>
+      )}
+    </div>
+  );
+}
 Input.displayName = 'Input';
 
-export { Input, inputVariants };
+export { Input };

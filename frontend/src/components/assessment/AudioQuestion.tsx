@@ -29,9 +29,9 @@ export function AudioQuestion({
         <div className="rounded-2xl border-2 border-border bg-secondary p-4">
           <p className="text-xs uppercase tracking-wide text-muted-foreground mb-3">Warm-up words</p>
           <div className="flex flex-wrap gap-2">
-            {wordList.map((word, index) => (
+            {wordList.map((word) => (
               <span
-                key={index}
+                key={word}
                 className="px-3 py-1 bg-card rounded-full text-foreground text-sm border border-border"
               >
                 {word}
@@ -45,8 +45,8 @@ export function AudioQuestion({
         <div className="rounded-2xl border-2 border-border bg-card p-4">
           <p className="text-xs uppercase tracking-wide text-muted-foreground mb-3">Read aloud</p>
           <div className="space-y-2">
-            {sentences.map((sentence, index) => (
-              <p key={index} className="text-foreground text-lg">
+            {sentences.map((sentence) => (
+              <p key={sentence} className="text-foreground text-lg">
                 {sentence}
               </p>
             ))}
@@ -73,7 +73,7 @@ export function AudioQuestion({
           }`}
         >
           <svg
-            className="w-8 h-8"
+            className="size-8"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"

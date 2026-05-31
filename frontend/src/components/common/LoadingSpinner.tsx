@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -16,12 +16,12 @@ const sizes = {
 export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerProps) {
   return (
     <div className={cn('flex justify-center items-center', className)}>
-      <motion.div
+      <m.div
         animate={{ rotate: 360 }}
         transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
       >
         <Loader2 className={cn(sizes[size], 'text-primary')} />
-      </motion.div>
+      </m.div>
     </div>
   );
 }

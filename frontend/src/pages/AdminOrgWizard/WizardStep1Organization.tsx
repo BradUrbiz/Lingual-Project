@@ -46,6 +46,7 @@ export function WizardStep1Organization({ state, dispatch }: WizardStep1Props) {
       <WizardField label="Organization name" required htmlFor="schoolName">
         <input
           id="schoolName"
+          aria-label="Organization name"
           type="text"
           className="w-full rounded-md border px-3 py-2"
           value={state.schoolName ?? ''}
@@ -56,6 +57,7 @@ export function WizardStep1Organization({ state, dispatch }: WizardStep1Props) {
       <WizardField label="Organization website" required htmlFor="websiteUrl">
         <input
           id="websiteUrl"
+          aria-label="Organization website"
           type="url"
           placeholder="https://yourschool.org"
           className="w-full rounded-md border px-3 py-2"
@@ -66,19 +68,19 @@ export function WizardStep1Organization({ state, dispatch }: WizardStep1Props) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <WizardField label="Country" required htmlFor="country">
-          <input id="country" type="text" placeholder="US"
+          <input id="country" aria-label="Country" type="text" placeholder="US"
                  className="w-full rounded-md border px-3 py-2"
                  value={loc.country}
                  onChange={(e) => setField(dispatch, 'location.country', e.target.value)} />
         </WizardField>
         <WizardField label="State / Province" required htmlFor="state">
-          <input id="state" type="text"
+          <input id="state" aria-label="State / Province" type="text"
                  className="w-full rounded-md border px-3 py-2"
                  value={loc.state}
                  onChange={(e) => setField(dispatch, 'location.state', e.target.value)} />
         </WizardField>
         <WizardField label="County / District" htmlFor="county">
-          <input id="county" type="text"
+          <input id="county" aria-label="County / District" type="text"
                  className="w-full rounded-md border px-3 py-2"
                  value={loc.county ?? ''}
                  onChange={(e) => setField(dispatch, 'location.county', e.target.value)} />
@@ -112,7 +114,7 @@ export function WizardStep1Organization({ state, dispatch }: WizardStep1Props) {
       </WizardField>
 
       <WizardField label="Grade size (students per grade level)" required
-                   helper="Approximate is fine — used for capacity planning only.">
+                   helper="Approximate is fine - used for capacity planning only.">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           {GRADE_SIZES.map((v) => (
             <label key={v} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
@@ -128,6 +130,7 @@ export function WizardStep1Organization({ state, dispatch }: WizardStep1Props) {
       <WizardField label="Official email domain(s)"
                    helper="Comma-separated. Used later to verify teacher signups.">
         <input
+          aria-label="Official email domains"
           type="text"
           placeholder="@ssfs.org, @school.edu"
           className="w-full rounded-md border px-3 py-2"
@@ -136,38 +139,14 @@ export function WizardStep1Organization({ state, dispatch }: WizardStep1Props) {
             setField(dispatch, 'officialEmailDomains',
               e.target.value
                 .split(',')
-                .map((s) => s.trim().toLowerCase())
-                .filter(Boolean),
+                .flatMap((s) => {
+                  const value = s.trim().toLowerCase();
+                  return value ? [value] : [];
+                }),
             )
           }
         />
       </WizardField>
     </div>
   );
-}
-
-export interface ValidationResult {
-  ok: boolean;
-  errors: Record<string, string>;
-}
-
-const URL_RE = /^https?:\/\/[^\s]+$/i;
-
-export function validateStep1(state: Partial<WizardSubmitPayload>): ValidationResult {
-  const errors: Record<string, string> = {};
-  if (!state.schoolName || state.schoolName.trim().length < 2) {
-    errors.schoolName = 'Organization name is required.';
-  }
-  if (!state.websiteUrl) {
-    errors.websiteUrl = 'Organization website is required.';
-  } else if (!URL_RE.test(state.websiteUrl)) {
-    errors.websiteUrl = 'Enter a valid URL (starting with https://).';
-  }
-  const loc = state.location ?? { country: '', state: '' };
-  if (!loc.country) errors['location.country'] = 'Country is required.';
-  if (!loc.state) errors['location.state'] = 'State / Province is required.';
-  if (!state.schoolType) errors.schoolType = 'School type is required.';
-  if (!state.publicPrivate) errors.publicPrivate = 'Public / Private is required.';
-  if (!state.gradeSize) errors.gradeSize = 'Grade size is required.';
-  return { ok: Object.keys(errors).length === 0, errors };
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { WizardStep2Admin, validateStep2 } from './WizardStep2Admin';
+import { WizardStep2Admin } from './WizardStep2Admin';
+import { validateStep2 } from './wizardValidation';
 
 describe('WizardStep2Admin', () => {
   it('renders prefilled admin identity', () => {

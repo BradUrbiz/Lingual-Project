@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, use, type ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import type { MembershipSummary, SchoolRole } from '@/types';
 
@@ -37,7 +37,7 @@ export function MembershipProvider({ children }: { children: ReactNode }) {
 }
 
 export function useMembership() {
-  const context = useContext(MembershipContext);
+  const context = use(MembershipContext);
   if (!context) {
     throw new Error('useMembership must be used within a MembershipProvider');
   }

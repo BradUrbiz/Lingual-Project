@@ -5,7 +5,7 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
   return (
     <section className="space-y-3">
       <div className="flex items-center gap-2">
-        <Icon className="h-5 w-5 text-blue-600" />
+        <Icon className="size-5 text-blue-600" />
         <h2 className="text-xl font-semibold">{title}</h2>
       </div>
       <div className="text-gray-700 dark:text-gray-300 space-y-2">{children}</div>
@@ -17,7 +17,7 @@ export default function CompliancePage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Lingual — Data & Compliance Overview</h1>
+        <h1 className="text-3xl font-bold">Lingual - Data & Compliance Overview</h1>
         <p className="mt-2 text-gray-600 dark:text-gray-400">
           Information for school administrators and coordinators evaluating Lingual for pilot use.
         </p>
@@ -38,7 +38,7 @@ export default function CompliancePage() {
         <Section icon={Shield} title="How consent works">
           <ul className="list-disc pl-5 space-y-1">
             <li>Voice-enabled practice requires explicit student consent before any session can start.</li>
-            <li>Students self-consent on their own profile — teachers and admins can also grant or revoke consent on their behalf.</li>
+            <li>Students self-consent on their own profile - teachers and admins can also grant or revoke consent on their behalf.</li>
             <li>If voice consent is not granted, sessions are downgraded to text-only practice (typing with the AI tutor) where the assignment allows it.</li>
             <li>Consent status is tracked per student per organization with a full audit trail.</li>
             <li>Schools can issue secure-link guardian notices as supplementary parent communication.</li>
@@ -55,7 +55,7 @@ export default function CompliancePage() {
           <ul className="list-disc pl-5 space-y-1">
             <li>
               <strong>Sent to OpenAI:</strong> student audio (voice mode), typed text, prior turns
-              in the current session, and a system prompt that carries assignment context —
+              in the current session, and a system prompt that carries assignment context -
               scenario, target expressions, focus grammar, and learning locale.
             </li>
             <li>
@@ -66,7 +66,7 @@ export default function CompliancePage() {
           <p>
             OpenAI does not use data sent through its API to train its models. Under OpenAI's
             default API terms, payloads may be retained for up to 30 days for abuse monitoring
-            and then deleted — that window is controlled by OpenAI, not Lingual. Transcripts that
+            and then deleted - that window is controlled by OpenAI, not Lingual. Transcripts that
             Lingual itself retains in Firestore are separate from OpenAI's processing and follow
             the retention defaults below.
           </p>

@@ -154,7 +154,7 @@ describe('LandingPage', () => {
       </MemoryRouter>
     );
 
-    // Membership is source of truth — clicking "I'm a Student" still routes to teacher home
+    // Membership is source of truth - clicking "I'm a Student" still routes to teacher home
     const cta = screen.getAllByRole('button', { name: "I'm a Student" })[0];
     fireEvent.click(cta);
 

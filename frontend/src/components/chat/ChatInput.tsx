@@ -1,5 +1,5 @@
 import { KeyboardEvent } from 'react';
-import { TextArea } from '../common';
+import { Textarea as TextArea } from '@/components/ui/textarea';
 
 interface ChatInputProps {
   value: string;
@@ -37,12 +37,13 @@ export function ChatInput({
         rows={1}
         className="flex-1 min-h-[48px] text-[10.4px] leading-[1.45]"
       />
-      <button
+      <button type="button"
         onClick={onSend}
+        aria-label="Send message"
         disabled={!value.trim() || disabled}
         className="p-3 bg-primary text-primary-foreground rounded-xl border-2 border-foreground shadow-stamp hover:shadow-[6px_6px_0_0_var(--foreground)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0_0_var(--foreground)] disabled:bg-secondary disabled:text-muted-foreground disabled:border-border disabled:shadow-none disabled:cursor-not-allowed transition-all"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+        <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
           <path
             strokeLinecap="round"
             strokeLinejoin="round"

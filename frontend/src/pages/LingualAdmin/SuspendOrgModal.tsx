@@ -11,12 +11,13 @@ export function SuspendOrgModal({ onCancel, onConfirm }: SuspendOrgModalProps) {
   const [until, setUntil] = useState('');
   const valid = reason.trim().length > 0 && (mode === 'indefinite' || until);
   return (
-    <div role="dialog" aria-modal="true" className="fixed inset-0 z-30 flex items-center justify-center bg-black/40">
+    <dialog open aria-modal="true" className="fixed inset-0 z-30 flex items-center justify-center bg-black/40">
       <div className="w-[480px] rounded-lg bg-white p-6 shadow-xl">
         <h3 className="text-lg font-semibold">Suspend organization</h3>
 
-        <label className="mt-4 block text-xs uppercase tracking-wide text-neutral-500">Reason</label>
+        <label htmlFor="suspend-org-reason" className="mt-4 block text-xs uppercase tracking-wide text-neutral-500">Reason</label>
         <textarea
+          id="suspend-org-reason"
           value={reason}
           onChange={e => setReason(e.target.value)}
           rows={3}
@@ -37,6 +38,7 @@ export function SuspendOrgModal({ onCancel, onConfirm }: SuspendOrgModalProps) {
           </label>
           {mode === 'temporary' && (
             <input
+              aria-label="Suspended until date"
               type="datetime-local"
               value={until}
               onChange={e => setUntil(e.target.value)}
@@ -46,8 +48,8 @@ export function SuspendOrgModal({ onCancel, onConfirm }: SuspendOrgModalProps) {
         </fieldset>
 
         <div className="mt-6 flex justify-end gap-2">
-          <button onClick={onCancel} className="rounded-md px-4 py-2 text-sm">Cancel</button>
-          <button
+          <button type="button" onClick={onCancel} className="rounded-md px-4 py-2 text-sm">Cancel</button>
+          <button type="button"
             disabled={!valid}
             onClick={async () => {
               const isoUntil = mode === 'temporary' && until
@@ -61,8 +63,6 @@ export function SuspendOrgModal({ onCancel, onConfirm }: SuspendOrgModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
-
-export default SuspendOrgModal;

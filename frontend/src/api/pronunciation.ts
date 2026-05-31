@@ -26,12 +26,6 @@ interface SaveAttemptResponse {
   error?: string;
 }
 
-interface GetAttemptsResponse {
-  success: boolean;
-  attempts?: PronunciationAttempt[];
-  error?: string;
-}
-
 export const getSpeechToken = async (): Promise<{ token: string; region: string; expiresAt: string }> => {
   try {
     const response = await api.post<SpeechTokenResponse>('/azure/speech-token');
@@ -81,14 +75,6 @@ export const savePronunciationAttempt = async (
     return { attemptId: response.data.attemptId };
   }
   throw new Error(response.data.error || 'Failed to save attempt');
-};
-
-export const getPronunciationAttempts = async (sessionId: string): Promise<PronunciationAttempt[]> => {
-  const response = await api.get<GetAttemptsResponse>(`/pronunciation/sessions/${sessionId}/attempts`);
-  if (response.data.success && response.data.attempts) {
-    return response.data.attempts;
-  }
-  throw new Error(response.data.error || 'Failed to load attempts');
 };
 
 export const uploadPronunciationAudio = async (payload: {

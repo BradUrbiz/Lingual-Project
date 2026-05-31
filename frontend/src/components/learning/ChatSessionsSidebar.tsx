@@ -26,42 +26,48 @@ function SessionItem({
   const lastMessage = session.last_message || t('app.learn.sessions.noMessages');
 
   return (
-    <div
-      onClick={() => onSelect(session.id)}
-      className={clsx(
-        'w-full text-left relative flex items-center p-4 rounded-xl border-2 transition-all mb-4 cursor-pointer group',
-        isActive
-          ? 'bg-card border-foreground shadow-stamp'
-          : 'bg-card border-border hover:border-foreground hover:shadow-stamp-sm'
-      )}
-    >
-      <div
+    <div className="relative mb-4 group">
+      <button
+        type="button"
+        aria-label={`Open ${session.title}`}
+        onClick={() => onSelect(session.id)}
         className={clsx(
-          'w-10 h-10 rounded-xl flex items-center justify-center mr-4 z-10 border-2',
-          hasMessages ? 'bg-primary text-primary-foreground border-foreground' : 'bg-secondary text-muted-foreground border-border'
+          'w-full text-left relative flex items-center p-4 rounded-xl border-2 transition-all cursor-pointer',
+          isActive
+            ? 'bg-card border-foreground shadow-stamp'
+            : 'bg-card border-border hover:border-foreground hover:shadow-stamp-sm'
         )}
       >
-        {hasMessages ? <CheckCircle2 size={20} /> : <Play size={18} fill="currentColor" />}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-3">
-          <h4 className="font-display font-bold text-sm text-foreground truncate">
-            {session.title || t('app.learn.sessions.newChatTitle')}
-          </h4>
-          <span className="text-xs text-muted-foreground">{formatShortDate(session.updated_at)}</span>
+        <div
+          className={clsx(
+            'size-10 rounded-xl flex items-center justify-center mr-4 z-10 border-2',
+            hasMessages ? 'bg-primary text-primary-foreground border-foreground' : 'bg-secondary text-muted-foreground border-border'
+          )}
+        >
+          {hasMessages ? <CheckCircle2 size={20} /> : <Play size={18} fill="currentColor" />}
         </div>
-        <p className="text-xs text-muted-foreground mt-1 truncate">{lastMessage}</p>
-      </div>
 
-      {hasMessages && (
-        <div className="ml-3 text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg border border-primary/20">
-          {session.message_count}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-3">
+            <h4 className="font-display font-bold text-sm text-foreground truncate">
+              {session.title || t('app.learn.sessions.newChatTitle')}
+            </h4>
+            <span className="text-xs text-muted-foreground">{formatShortDate(session.updated_at)}</span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1 truncate">{lastMessage}</p>
         </div>
-      )}
+
+        {hasMessages && (
+          <div className="ml-3 text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg border border-primary/20">
+            {session.message_count}
+          </div>
+        )}
+      </button>
 
       <button
+        type="button"
         onClick={(e) => onDelete(session.id, e)}
+        aria-label={`${t('app.learn.sessions.deleteAction') || 'Delete chat'}: ${session.title}`}
         className="absolute right-2 top-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10"
         title={t('app.learn.sessions.deleteAction') || 'Delete chat'}
       >
@@ -117,12 +123,12 @@ export function ChatSessionsSidebar({
 
       <div className="flex-1 overflow-y-auto p-6">
         {showResume && mostRecentSession ? (
-          <button
+          <button type="button"
             onClick={() => onSelectSession(mostRecentSession.id)}
             className="w-full mb-4 p-4 rounded-xl border-2 border-primary/30 bg-primary/5 text-left hover:bg-primary/10 hover:border-primary transition-colors"
           >
             <div className="flex items-center gap-3">
-              <span className="w-10 h-10 rounded-xl bg-card text-primary flex items-center justify-center border-2 border-primary/30">
+              <span className="size-10 rounded-xl bg-card text-primary flex items-center justify-center border-2 border-primary/30">
                 <History size={18} strokeWidth={2.5} />
               </span>
               <div className="min-w-0">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -31,45 +31,191 @@ function formatStatusVariant(status: string): 'success' | 'secondary' | 'outline
   return 'outline';
 }
 
-export function TeacherAssignmentBuilderPage() {
+interface TeacherAssignmentBuilderState {
+  loading: boolean;
+  error: string | null;
+  successMessage: string | null;
+  teacherClasses: TeacherClassSummary[];
+  assignments: StudentAssignmentSummary[];
+  canvasContent: CanvasCourseContentItem[];
+  builderMode: BuilderMode;
+  advancedEntryMode: AdvancedEntryMode;
+  sourcePacketText: string;
+  draftInstructions: string;
+  canvasPhase: CanvasPracticePhase;
+  canvasError: string | null;
+  selectedCanvasItemId: string;
+  canvasItemContext: CanvasItemContext | null;
+  canvasTitle: string;
+  canvasDescription: string;
+  canvasScenario: string;
+  canvasTargetExpressions: string[];
+  canvasTargetVocabulary: string[];
+  canvasFocusGrammar: string[];
+  canvasSuccessCriteria: string[];
+  canvasObjectives: string[];
+  canvasObjectivesFromAI: boolean;
+  canvasTeacherNotes: string;
+  customStudentInstructions: string;
+  canvasTargetLanguageIntensity: TargetLanguageIntensity;
+  canvasStatus: 'draft' | 'published';
+}
+
+type TeacherAssignmentBuilderAction =
+  | { type: 'patch'; payload: Partial<TeacherAssignmentBuilderState> }
+  | { type: 'resetCanvasPractice' }
+  | { type: 'populateCanvasSuggestions'; suggestions: CanvasPracticeSuggestions; nextInstructions?: string };
+
+const initialTeacherAssignmentBuilderState: TeacherAssignmentBuilderState = {
+  loading: true,
+  error: null,
+  successMessage: null,
+  teacherClasses: [],
+  assignments: [],
+  canvasContent: [],
+  builderMode: 'quick',
+  advancedEntryMode: 'canvas',
+  sourcePacketText: '',
+  draftInstructions: '',
+  canvasPhase: 'idle',
+  canvasError: null,
+  selectedCanvasItemId: '',
+  canvasItemContext: null,
+  canvasTitle: '',
+  canvasDescription: '',
+  canvasScenario: '',
+  canvasTargetExpressions: [],
+  canvasTargetVocabulary: [],
+  canvasFocusGrammar: [],
+  canvasSuccessCriteria: [],
+  canvasObjectives: [],
+  canvasObjectivesFromAI: false,
+  canvasTeacherNotes: '',
+  customStudentInstructions: '',
+  canvasTargetLanguageIntensity: 'balanced',
+  canvasStatus: 'draft',
+};
+
+function getResetCanvasPracticePatch(): Partial<TeacherAssignmentBuilderState> {
+  return {
+    canvasPhase: 'idle',
+    canvasError: null,
+    selectedCanvasItemId: '',
+    canvasItemContext: null,
+    sourcePacketText: '',
+    draftInstructions: '',
+    canvasTitle: '',
+    canvasDescription: '',
+    canvasScenario: '',
+    canvasTargetExpressions: [],
+    canvasTargetVocabulary: [],
+    canvasFocusGrammar: [],
+    canvasSuccessCriteria: [],
+    canvasObjectives: [],
+    canvasObjectivesFromAI: false,
+    canvasTeacherNotes: '',
+    customStudentInstructions: '',
+    canvasTargetLanguageIntensity: 'balanced',
+    canvasStatus: 'draft',
+  };
+}
+
+function teacherAssignmentBuilderReducer(
+  state: TeacherAssignmentBuilderState,
+  action: TeacherAssignmentBuilderAction,
+): TeacherAssignmentBuilderState {
+  switch (action.type) {
+    case 'patch':
+      return { ...state, ...action.payload };
+    case 'resetCanvasPractice':
+      return { ...state, ...getResetCanvasPracticePatch() };
+    case 'populateCanvasSuggestions': {
+      const providedObjectives = action.suggestions.objectives || [];
+      return {
+        ...state,
+        canvasTitle: action.suggestions.suggestedTitle || '',
+        canvasDescription: action.suggestions.suggestedDescription || '',
+        canvasScenario: action.suggestions.scenario || '',
+        ...(action.nextInstructions !== undefined ? { draftInstructions: action.nextInstructions } : {}),
+        canvasTargetExpressions: action.suggestions.targetExpressions || [],
+        canvasTargetVocabulary: action.suggestions.targetVocabulary || [],
+        canvasFocusGrammar: action.suggestions.focusGrammar || [],
+        canvasSuccessCriteria: action.suggestions.successCriteria || [],
+        canvasObjectives: providedObjectives,
+        canvasObjectivesFromAI: providedObjectives.length > 0,
+        canvasTeacherNotes: action.suggestions.teacherNotes || '',
+      };
+    }
+    default:
+      return state;
+  }
+}
+
+function useTeacherAssignmentBuilderController() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [teacherClasses, setTeacherClasses] = useState<TeacherClassSummary[]>([]);
-  const [assignments, setAssignments] = useState<StudentAssignmentSummary[]>([]);
-  const [canvasContent, setCanvasContent] = useState<CanvasCourseContentItem[]>([]);
-  const [builderMode, setBuilderMode] = useState<BuilderMode>('quick');
-  const [advancedEntryMode, setAdvancedEntryMode] = useState<AdvancedEntryMode>('canvas');
-  const [sourcePacketText, setSourcePacketText] = useState('');
-  const [draftInstructions, setDraftInstructions] = useState('');
-
-  // ── Canvas-powered assignment state ──────────────────────────────────
-  const [canvasPhase, setCanvasPhase] = useState<CanvasPracticePhase>('idle');
-  const [canvasError, setCanvasError] = useState<string | null>(null);
-  const [selectedCanvasItemId, setSelectedCanvasItemId] = useState<string>('');
-  const [canvasItemContext, setCanvasItemContext] = useState<CanvasItemContext | null>(null);
-  const [canvasTitle, setCanvasTitle] = useState('');
-  const [canvasDescription, setCanvasDescription] = useState('');
-  const [canvasScenario, setCanvasScenario] = useState('');
-  const [canvasTargetExpressions, setCanvasTargetExpressions] = useState<string[]>([]);
-  const [canvasTargetVocabulary, setCanvasTargetVocabulary] = useState<string[]>([]);
-  const [canvasFocusGrammar, setCanvasFocusGrammar] = useState<string[]>([]);
-  const [canvasSuccessCriteria, setCanvasSuccessCriteria] = useState<string[]>([]);
-  const [canvasObjectives, setCanvasObjectives] = useState<string[]>([]);
-  // Track whether objectives were pre-populated by the AI suggestions response.
-  // The backend only sometimes returns objectives, so the "AI-generated" badge
-  // on the Objectives field can otherwise falsely claim ownership of teacher-
-  // authored items.
-  const [canvasObjectivesFromAI, setCanvasObjectivesFromAI] = useState(false);
-  const [canvasTeacherNotes, setCanvasTeacherNotes] = useState('');
-  const [customStudentInstructions, setCustomStudentInstructions] = useState('');
-  const [canvasTargetLanguageIntensity, setCanvasTargetLanguageIntensity] =
-    useState<TargetLanguageIntensity>('balanced');
-  // Default to 'draft' so a misclick on Publish doesn't ship an un-reviewed
-  // assignment live to students. Teachers must explicitly choose Published.
-  const [canvasStatus, setCanvasStatus] = useState<'draft' | 'published'>('draft');
+  const [state, dispatch] = useReducer(
+    teacherAssignmentBuilderReducer,
+    initialTeacherAssignmentBuilderState,
+  );
+  const {
+    loading,
+    error,
+    successMessage,
+    teacherClasses,
+    assignments,
+    canvasContent,
+    builderMode,
+    advancedEntryMode,
+    sourcePacketText,
+    draftInstructions,
+    canvasPhase,
+    canvasError,
+    selectedCanvasItemId,
+    canvasItemContext,
+    canvasTitle,
+    canvasDescription,
+    canvasScenario,
+    canvasTargetExpressions,
+    canvasTargetVocabulary,
+    canvasFocusGrammar,
+    canvasSuccessCriteria,
+    canvasObjectives,
+    canvasObjectivesFromAI,
+    canvasTeacherNotes,
+    customStudentInstructions,
+    canvasTargetLanguageIntensity,
+    canvasStatus,
+  } = state;
+  const patchBuilderState = (payload: Partial<TeacherAssignmentBuilderState>) => {
+    dispatch({ type: 'patch', payload });
+  };
+  const setLoading = (value: boolean) => patchBuilderState({ loading: value });
+  const setError = (value: string | null) => patchBuilderState({ error: value });
+  const setSuccessMessage = (value: string | null) => patchBuilderState({ successMessage: value });
+  const setTeacherClasses = (value: TeacherClassSummary[]) => patchBuilderState({ teacherClasses: value });
+  const setAssignments = (value: StudentAssignmentSummary[]) => patchBuilderState({ assignments: value });
+  const setCanvasContent = (value: CanvasCourseContentItem[]) => patchBuilderState({ canvasContent: value });
+  const setBuilderMode = (value: BuilderMode) => patchBuilderState({ builderMode: value });
+  const setAdvancedEntryMode = (value: AdvancedEntryMode) => patchBuilderState({ advancedEntryMode: value });
+  const setSourcePacketText = (value: string) => patchBuilderState({ sourcePacketText: value });
+  const setDraftInstructions = (value: string) => patchBuilderState({ draftInstructions: value });
+  const setCanvasPhase = (value: CanvasPracticePhase) => patchBuilderState({ canvasPhase: value });
+  const setCanvasError = (value: string | null) => patchBuilderState({ canvasError: value });
+  const setSelectedCanvasItemId = (value: string) => patchBuilderState({ selectedCanvasItemId: value });
+  const setCanvasItemContext = (value: CanvasItemContext | null) => patchBuilderState({ canvasItemContext: value });
+  const setCanvasTitle = (value: string) => patchBuilderState({ canvasTitle: value });
+  const setCanvasDescription = (value: string) => patchBuilderState({ canvasDescription: value });
+  const setCanvasScenario = (value: string) => patchBuilderState({ canvasScenario: value });
+  const setCanvasTargetExpressions = (value: string[]) => patchBuilderState({ canvasTargetExpressions: value });
+  const setCanvasTargetVocabulary = (value: string[]) => patchBuilderState({ canvasTargetVocabulary: value });
+  const setCanvasFocusGrammar = (value: string[]) => patchBuilderState({ canvasFocusGrammar: value });
+  const setCanvasSuccessCriteria = (value: string[]) => patchBuilderState({ canvasSuccessCriteria: value });
+  const setCanvasObjectives = (value: string[]) => patchBuilderState({ canvasObjectives: value, canvasObjectivesFromAI: false });
+  const setCanvasTeacherNotes = (value: string) => patchBuilderState({ canvasTeacherNotes: value });
+  const setCustomStudentInstructions = (value: string) => patchBuilderState({ customStudentInstructions: value });
+  const setCanvasTargetLanguageIntensity = (value: TargetLanguageIntensity) => patchBuilderState({ canvasTargetLanguageIntensity: value });
+  const setCanvasStatus = (value: 'draft' | 'published') => patchBuilderState({ canvasStatus: value });
 
   const activeClass = teacherClasses.find((item) => item.id === classId) || null;
   const usesCanvasWorkflow = builderMode === 'quick' || advancedEntryMode === 'canvas';
@@ -83,7 +229,7 @@ export function TeacherAssignmentBuilderPage() {
     setTeacherClasses(classes);
     setAssignments(classAssignments);
 
-    // Load Canvas content (best-effort — not all classes have Canvas).
+    // Load Canvas content (best-effort - not all classes have Canvas).
     try {
       const items = await getCanvasContentForClass(nextClassId);
       setCanvasContent(items);
@@ -122,47 +268,14 @@ export function TeacherAssignmentBuilderPage() {
   }, [classId]);
 
   const resetCanvasPracticeState = () => {
-    setCanvasPhase('idle');
-    setCanvasError(null);
-    setSelectedCanvasItemId('');
-    setCanvasItemContext(null);
-    setSourcePacketText('');
-    setDraftInstructions('');
-    setCanvasTitle('');
-    setCanvasDescription('');
-    setCanvasScenario('');
-    setCanvasTargetExpressions([]);
-    setCanvasTargetVocabulary([]);
-    setCanvasFocusGrammar([]);
-    setCanvasSuccessCriteria([]);
-    setCanvasObjectives([]);
-    setCanvasObjectivesFromAI(false);
-    setCanvasTeacherNotes('');
-    setCustomStudentInstructions('');
-    setCanvasTargetLanguageIntensity('balanced');
-    setCanvasStatus('draft');
+    dispatch({ type: 'resetCanvasPractice' });
   };
 
   const populateCanvasFormFromSuggestions = (
     suggestions: CanvasPracticeSuggestions,
     nextInstructions?: string,
   ) => {
-    setCanvasTitle(suggestions.suggestedTitle || '');
-    setCanvasDescription(suggestions.suggestedDescription || '');
-    setCanvasScenario(suggestions.scenario || '');
-    if (nextInstructions !== undefined) {
-      setDraftInstructions(nextInstructions);
-    }
-    setCanvasTargetExpressions(suggestions.targetExpressions || []);
-    setCanvasTargetVocabulary(suggestions.targetVocabulary || []);
-    setCanvasFocusGrammar(suggestions.focusGrammar || []);
-    setCanvasSuccessCriteria(suggestions.successCriteria || []);
-    // Pre-fill objectives when the backend provides them. If it doesn't,
-    // teachers can still add them manually via the TagListEditor below.
-    const providedObjectives = suggestions.objectives || [];
-    setCanvasObjectives(providedObjectives);
-    setCanvasObjectivesFromAI(providedObjectives.length > 0);
-    setCanvasTeacherNotes(suggestions.teacherNotes || '');
+    dispatch({ type: 'populateCanvasSuggestions', suggestions, nextInstructions });
   };
 
   const handleCanvasGenerate = async (targetContentId?: string) => {
@@ -378,10 +491,127 @@ export function TeacherAssignmentBuilderPage() {
     resetCanvasPracticeState();
   };
 
+  return {
+    classId,
+    navigate,
+    loading,
+    error,
+    successMessage,
+    teacherClasses,
+    assignments,
+    canvasContent,
+    builderMode,
+    advancedEntryMode,
+    sourcePacketText,
+    draftInstructions,
+    canvasPhase,
+    canvasError,
+    selectedCanvasItemId,
+    canvasItemContext,
+    canvasTitle,
+    canvasDescription,
+    canvasScenario,
+    canvasTargetExpressions,
+    canvasTargetVocabulary,
+    canvasFocusGrammar,
+    canvasSuccessCriteria,
+    canvasObjectives,
+    canvasObjectivesFromAI,
+    canvasTeacherNotes,
+    customStudentInstructions,
+    canvasTargetLanguageIntensity,
+    canvasStatus,
+    activeClass,
+    usesCanvasWorkflow,
+    setSourcePacketText,
+    setDraftInstructions,
+    setCanvasError,
+    setSelectedCanvasItemId,
+    setCanvasTitle,
+    setCanvasDescription,
+    setCanvasScenario,
+    setCanvasTargetExpressions,
+    setCanvasTargetVocabulary,
+    setCanvasFocusGrammar,
+    setCanvasSuccessCriteria,
+    setCanvasObjectives,
+    setCanvasTeacherNotes,
+    setCustomStudentInstructions,
+    setCanvasTargetLanguageIntensity,
+    setCanvasStatus,
+    handleCanvasGenerate,
+    handleSourceDraftGenerate,
+    handleSelectAdvancedEntryMode,
+    handleSelectBuilderMode,
+    handlePublishAssignment,
+    handleCanvasRegenerate,
+    handleCanvasPickDifferent,
+  };
+}
+
+type TeacherAssignmentBuilderController = ReturnType<typeof useTeacherAssignmentBuilderController>;
+
+function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilderController) {
+  const {
+    classId,
+    navigate,
+    loading,
+    error,
+    successMessage,
+    assignments,
+    canvasContent,
+    builderMode,
+    advancedEntryMode,
+    sourcePacketText,
+    draftInstructions,
+    canvasPhase,
+    canvasError,
+    selectedCanvasItemId,
+    canvasItemContext,
+    canvasTitle,
+    canvasDescription,
+    canvasScenario,
+    canvasTargetExpressions,
+    canvasTargetVocabulary,
+    canvasFocusGrammar,
+    canvasSuccessCriteria,
+    canvasObjectives,
+    canvasObjectivesFromAI,
+    canvasTeacherNotes,
+    customStudentInstructions,
+    canvasTargetLanguageIntensity,
+    canvasStatus,
+    activeClass,
+    usesCanvasWorkflow,
+    setSourcePacketText,
+    setDraftInstructions,
+    setCanvasError,
+    setSelectedCanvasItemId,
+    setCanvasTitle,
+    setCanvasDescription,
+    setCanvasScenario,
+    setCanvasTargetExpressions,
+    setCanvasTargetVocabulary,
+    setCanvasFocusGrammar,
+    setCanvasSuccessCriteria,
+    setCanvasObjectives,
+    setCanvasTeacherNotes,
+    setCustomStudentInstructions,
+    setCanvasTargetLanguageIntensity,
+    setCanvasStatus,
+    handleCanvasGenerate,
+    handleSourceDraftGenerate,
+    handleSelectAdvancedEntryMode,
+    handleSelectBuilderMode,
+    handlePublishAssignment,
+    handleCanvasRegenerate,
+    handleCanvasPickDifferent,
+  } = controller;
+
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -438,14 +668,14 @@ export function TeacherAssignmentBuilderPage() {
 
       {successMessage && (
         <Alert>
-          <CheckCircle2 className="h-4 w-4" />
+          <CheckCircle2 className="size-4" />
           <AlertDescription>{successMessage}</AlertDescription>
         </Alert>
       )}
 
       <Card className="border-3 border-foreground p-6 shadow-stamp">
         <div className="flex items-center gap-3 mb-6">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
+          <div className="flex size-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
             <Sparkles size={22} strokeWidth={2.5} />
           </div>
           <div>
@@ -560,7 +790,7 @@ export function TeacherAssignmentBuilderPage() {
                   }}
                   className="h-11 w-full rounded-xl border-2 border-border bg-card px-4 text-sm text-foreground focus:border-primary focus:outline-none"
                 >
-                  <option value="">Select a Canvas page or assignment...</option>
+                  <option value="">Select a Canvas page or assignment…</option>
                   {groupCanvasItemsByModule(canvasContent).map((group) => (
                     <optgroup key={group.moduleName} label={group.moduleName}>
                       {group.items.map((item) => (
@@ -877,7 +1107,7 @@ export function TeacherAssignmentBuilderPage() {
                           {
                             value: 'english_first',
                             label: 'English-first',
-                            hint: 'Novice-friendly — English leads, target language introduced alongside English meanings.',
+                            hint: 'Novice-friendly - English leads, target language introduced alongside English meanings.',
                           },
                           {
                             value: 'english_led',
@@ -897,7 +1127,7 @@ export function TeacherAssignmentBuilderPage() {
                           {
                             value: 'target_only',
                             label: 'Target-language-only',
-                            hint: 'Best for advanced classes — AI replies stay in the target language.',
+                            hint: 'Best for advanced classes - AI replies stay in the target language.',
                           },
                         ] as Array<{ value: TargetLanguageIntensity; label: string; hint: string }>
                       ).map((option) => {
@@ -1004,7 +1234,7 @@ export function TeacherAssignmentBuilderPage() {
       {/* Assignments list */}
       <Card className="border-3 border-foreground p-6 shadow-stamp">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
+            <div className="flex size-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
               <GraduationCap size={22} strokeWidth={2.5} />
             </div>
             <div>
@@ -1060,6 +1290,10 @@ export function TeacherAssignmentBuilderPage() {
   );
 }
 
+export function TeacherAssignmentBuilderPage() {
+  return renderTeacherAssignmentBuilderPage(useTeacherAssignmentBuilderController());
+}
+
 // ── Local helpers for Canvas Quick Assign ──────────────────────────────
 
 interface CanvasItemGroup {
@@ -1080,7 +1314,7 @@ function groupCanvasItemsByModule(items: CanvasCourseContentItem[]): CanvasItemG
   }
   return Array.from(byModule.entries()).map(([moduleName, groupItems]) => ({
     moduleName,
-    items: [...groupItems].sort((a, b) => a.itemPosition - b.itemPosition),
+    items: Array.from(groupItems).sort((a, b) => a.itemPosition - b.itemPosition),
   }));
 }
 
@@ -1106,6 +1340,16 @@ function TagListEditor({
   ariaLabel?: string;
 }) {
   const [newValue, setNewValue] = useState('');
+  const itemIdsRef = useRef<string[]>([]);
+  const nextItemIdRef = useRef(0);
+
+  while (itemIdsRef.current.length < items.length) {
+    itemIdsRef.current.push(`tag-item-${nextItemIdRef.current}`);
+    nextItemIdRef.current += 1;
+  }
+  if (itemIdsRef.current.length > items.length) {
+    itemIdsRef.current.length = items.length;
+  }
 
   const handleAdd = () => {
     const trimmed = newValue.trim();
@@ -1116,6 +1360,7 @@ function TagListEditor({
   };
 
   const handleRemove = (index: number) => {
+    itemIdsRef.current.splice(index, 1);
     onChange(items.filter((_, i) => i !== index));
   };
 
@@ -1128,7 +1373,7 @@ function TagListEditor({
   return (
     <div className="space-y-2" aria-label={ariaLabel}>
       {items.map((item, i) => (
-        <div key={i} className="flex items-center gap-2">
+        <div key={itemIdsRef.current[i]} className="flex items-center gap-2">
           <Input
             value={item}
             onChange={(event) => handleEdit(i, event.target.value)}

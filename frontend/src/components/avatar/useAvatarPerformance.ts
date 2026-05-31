@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { startTransition, useEffect, useReducer, useRef } from 'react';
 import { useAudioRms } from './useAudioRms';
 import { buildAvatarPerformanceFrame, resolveAvatarAffect, resolveDialogueState } from './performance';
 import { buildSpeechMouthTarget, smoothSpeechMouthDrive } from './speechMouth';
@@ -8,36 +8,46 @@ type UseAvatarPerformanceInput = Omit<AvatarPerformanceSource, 'now'> & {
   now?: number;
 };
 
+type AvatarRuntimeState = {
+  tickNow: number;
+  feedAudioLevel: number;
+  mouthDrive: number;
+  rawRms: number;
+};
+
 function resolveNow(now?: number): number {
   if (typeof now === 'number') return now;
   if (typeof performance !== 'undefined') return performance.now();
   return Date.now();
 }
 
+function avatarRuntimeReducer(_state: AvatarRuntimeState, nextState: AvatarRuntimeState) {
+  return nextState;
+}
+
 export function useAvatarPerformance(source: UseAvatarPerformanceInput): AvatarPerformanceFrame {
-  const [tickNow, setTickNow] = useState<number>(() => resolveNow(source.now));
-  const [feedAudioLevel, setFeedAudioLevel] = useState(0);
-  const [mouthDrive, setMouthDrive] = useState(0);
-  const [rawRms, setRawRms] = useState(0);
-  const [lastUserSpeechStoppedAt, setLastUserSpeechStoppedAt] = useState<number | null>(null);
+  const [runtimeState, setRuntimeState] = useReducer(avatarRuntimeReducer, source.now, (now) => ({
+    tickNow: resolveNow(now),
+    feedAudioLevel: 0,
+    mouthDrive: 0,
+    rawRms: 0,
+  }));
   const previousListeningRef = useRef(source.isListening);
+  const lastUserSpeechStoppedAtRef = useRef<number | null>(null);
   const mouthDriveRef = useRef(0);
+  const previousListening = previousListeningRef.current;
+  if (previousListening !== source.isListening) {
+    if (previousListening && !source.isListening) {
+      lastUserSpeechStoppedAtRef.current = resolveNow(source.now);
+    }
+    previousListeningRef.current = source.isListening;
+  }
+
   const analysisEnabled =
     source.mode === 'realtime' &&
     Boolean(source.remoteAudioStream) &&
     (source.isConnected || source.isSpeaking || source.assistantSpeechStartedAt !== null);
   const { rawRmsRef, rmsLevelRef } = useAudioRms(source.remoteAudioStream, analysisEnabled);
-
-  useEffect(() => {
-    const previousListening = previousListeningRef.current;
-    if (previousListening && !source.isListening) {
-      const stoppedAt = resolveNow(source.now);
-      queueMicrotask(() => {
-        setLastUserSpeechStoppedAt(stoppedAt);
-      });
-    }
-    previousListeningRef.current = source.isListening;
-  }, [source.isListening, source.now]);
 
   useEffect(() => {
     if (typeof source.now === 'number') {
@@ -71,7 +81,7 @@ export function useAvatarPerformance(source: UseAvatarPerformanceInput): AvatarP
         now: nextNow,
       };
       const dialogueState = resolveDialogueState(plannerSource, {
-        lastUserSpeechStoppedAt,
+        lastUserSpeechStoppedAt: lastUserSpeechStoppedAtRef.current,
       });
       const affect = resolveAvatarAffect(plannerSource);
       const transcript =
@@ -95,10 +105,12 @@ export function useAvatarPerformance(source: UseAvatarPerformanceInput): AvatarP
       mouthDriveRef.current = nextMouthDrive;
 
       startTransition(() => {
-        setTickNow(nextNow);
-        setFeedAudioLevel(nextFeedAudioLevel);
-        setMouthDrive(nextMouthDrive);
-        setRawRms(nextRawRms);
+        setRuntimeState({
+          tickNow: nextNow,
+          feedAudioLevel: nextFeedAudioLevel,
+          mouthDrive: nextMouthDrive,
+          rawRms: nextRawRms,
+        });
       });
     };
 
@@ -132,28 +144,27 @@ export function useAvatarPerformance(source: UseAvatarPerformanceInput): AvatarP
     source.now,
     source.avatarDirective,
     source.remoteAudioStream,
-    lastUserSpeechStoppedAt,
     rmsLevelRef,
     rawRmsRef,
   ]);
 
-  const now = typeof source.now === 'number' ? source.now : tickNow;
+  const now = typeof source.now === 'number' ? source.now : runtimeState.tickNow;
   const plannerSource: AvatarPerformanceSource = {
     ...source,
     now,
   };
   const affect = resolveAvatarAffect(plannerSource);
   const dialogueState = resolveDialogueState(plannerSource, {
-    lastUserSpeechStoppedAt,
+    lastUserSpeechStoppedAt: lastUserSpeechStoppedAtRef.current,
   });
 
   const frame = buildAvatarPerformanceFrame({
     source: plannerSource,
     dialogueState,
     affect,
-    audioLevel: mouthDrive,
-    feedAudioLevel,
-    rawRmsLevel: rawRms,
+    audioLevel: runtimeState.mouthDrive,
+    feedAudioLevel: runtimeState.feedAudioLevel,
+    rawRmsLevel: runtimeState.rawRms,
   });
   return frame;
 }

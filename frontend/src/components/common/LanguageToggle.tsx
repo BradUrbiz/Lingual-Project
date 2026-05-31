@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 import type { Language } from '../../types';
@@ -7,18 +7,18 @@ interface LanguageToggleProps {
   className?: string;
 }
 
+const languages: { value: Language; label: string }[] = [
+  { value: 'en', label: 'EN' },
+  { value: 'ko', label: 'KO' },
+];
+
 export function LanguageToggle({ className = '' }: LanguageToggleProps) {
   const { lang, setLang } = useLanguage();
-
-  const languages: { value: Language; label: string }[] = [
-    { value: 'en', label: 'EN' },
-    { value: 'ko', label: 'KO' },
-  ];
 
   return (
     <div className={cn('flex gap-1 bg-muted p-1 rounded-lg relative', className)}>
       {languages.map(({ value, label }) => (
-        <button
+        <button type="button"
           key={value}
           onClick={() => setLang(value)}
           className={cn(
@@ -27,7 +27,7 @@ export function LanguageToggle({ className = '' }: LanguageToggleProps) {
           )}
         >
           {lang === value && (
-            <motion.div
+            <m.div
               layoutId="language-indicator"
               className="absolute inset-0 bg-card rounded-md shadow-sm"
               style={{ zIndex: -1 }}

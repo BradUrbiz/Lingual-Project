@@ -1,5 +1,5 @@
 export const DEFAULT_REALTIME_SPEAKING_SPEED = 1;
-export const REALTIME_SPEAKING_SPEED_STORAGE_KEY = 'lingual:realtime:speakingSpeed';
+const REALTIME_SPEAKING_SPEED_STORAGE_KEY = 'lingual:realtime:speakingSpeed';
 
 export type RealtimeSpeakingSpeedOption = {
   speed: number;

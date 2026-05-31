@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, Loader2, Users } from 'lucide-react';
-import { motion } from 'motion/react';
+import { m } from 'framer-motion';
 import { AnimatedPage } from '@/components/layout';
 import { Alert, AlertDescription, Button, Card, Input } from '@/components/ui';
 import { joinClassByCode } from '@/api/schools';
@@ -43,14 +43,14 @@ export function StudentJoinClassPage() {
     return (
       <AnimatedPage>
         <div className="min-h-screen flex items-center justify-center p-4">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="w-full max-w-md"
           >
             <Card className="p-8 text-center space-y-6">
               <div className="flex justify-center">
-                <CheckCircle2 className="h-16 w-16 text-green-500" />
+                <CheckCircle2 className="size-16 text-green-500" />
               </div>
 
               <div className="space-y-2">
@@ -73,10 +73,10 @@ export function StudentJoinClassPage() {
 
               <Button onClick={() => navigate('/app/learn', { replace: true })} className="w-full">
                 Go to Learning
-                <ArrowRight className="ml-2 h-4 w-4" />
+                <ArrowRight className="ml-2 size-4" />
               </Button>
             </Card>
-          </motion.div>
+          </m.div>
         </div>
       </AnimatedPage>
     );
@@ -85,7 +85,7 @@ export function StudentJoinClassPage() {
   return (
     <AnimatedPage>
       <div className="min-h-screen flex items-center justify-center p-4">
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md"
@@ -93,7 +93,7 @@ export function StudentJoinClassPage() {
           <Card className="p-8 space-y-6">
             <div className="text-center space-y-2">
               <div className="flex justify-center">
-                <Users className="h-12 w-12 text-primary" />
+                <Users className="size-12 text-primary" />
               </div>
               <h1 className="text-2xl font-bold">Join a Class</h1>
               <p className="text-muted-foreground">
@@ -123,19 +123,19 @@ export function StudentJoinClassPage() {
               <Button onClick={handleSubmit} disabled={loading || code.length !== 6} className="w-full">
                 {loading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Joining...
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Joining…
                   </>
                 ) : (
                   <>
                     Join Class
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    <ArrowRight className="ml-2 size-4" />
                   </>
                 )}
               </Button>
             </div>
           </Card>
-        </motion.div>
+        </m.div>
       </div>
     </AnimatedPage>
   );

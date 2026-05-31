@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   RefreshCcw,
@@ -13,10 +13,11 @@ import {
   CircleUserRound,
   Hand,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { m, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { useRealtimeChat } from '@/hooks/useRealtimeChat';
 import { useRealtimeSpeakingSpeed } from '@/hooks/useRealtimeSpeakingSpeed';
+import { useLazyRef } from '@/hooks/useLazyRef';
 import {
   createChatSession,
   getChatSession,
@@ -67,6 +68,7 @@ const DEFAULT_LANGUAGE_MIX_LEVEL: LanguageMixLevel = 'balanced';
 const Live2DAvatarPanel = lazy(() => import('@/components/avatar/Live2DAvatarPanel'));
 
 type AvatarActivity = 'idle' | 'listening' | 'thinking' | 'speaking';
+type Mode = 'text' | 'realtime';
 
 const domainBadgeStyles: Record<string, string> = {
   grammar: 'bg-primary/10 text-primary border border-primary/20',
@@ -98,61 +100,221 @@ function getClientNow(): number {
   }
 }
 
-export function AppChatPage() {
+function getInitialChatAvatarEnabled(): boolean {
+  if (!CHAT_AVATAR_AVAILABLE) return false;
+  try {
+    const stored = window.localStorage.getItem(CHAT_AVATAR_ENABLED_KEY);
+    if (stored === null) return false;
+    return stored === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function getInitialDesktopMatch(): boolean {
+  try {
+    return window.matchMedia?.('(min-width: 1024px)')?.matches ?? false;
+  } catch {
+    return false;
+  }
+}
+
+interface TextAvatarState {
+  activity: AvatarActivity;
+  transcriptDelta: string;
+  transcriptFinal: string;
+  speechStartedAt: number | null;
+  speechEndedAt: number | null;
+}
+
+interface AppChatState {
+  sessions: ChatSession[];
+  currentChatId: string | null;
+  historyMessages: ChatMessage[];
+  loadingSessions: boolean;
+  loadingChat: boolean;
+  error: string | null;
+  isConnecting: boolean;
+  assessmentResults: AssessmentResults | null;
+  profileSummary?: UserProfile;
+  languageMixLevel: LanguageMixLevel;
+  languageMixNotice: string | null;
+  mode: Mode;
+  inputValue: string;
+  isSendingText: boolean;
+  isSidebarExpanded: boolean;
+  isSidebarDialogOpen: boolean;
+  textAvatar: TextAvatarState;
+  isAvatarEnabled: boolean;
+  isDesktop: boolean;
+}
+
+type AppChatAction =
+  | { type: 'patch'; payload: Partial<AppChatState> }
+  | { type: 'patchTextAvatar'; payload: Partial<TextAvatarState> }
+  | { type: 'resetTextAvatar' }
+  | { type: 'setSessions'; sessions: ChatSession[] }
+  | { type: 'updateSessions'; updater: (sessions: ChatSession[]) => ChatSession[] }
+  | { type: 'chatLoaded'; chatId: string; messages: ChatMessage[]; languageMixLevel: LanguageMixLevel }
+  | { type: 'chatCreated'; session: ChatSession; languageMixLevel: LanguageMixLevel }
+  | { type: 'appendHistoryMessage'; message: ChatMessage }
+  | { type: 'setTextAvatarSpeaking'; content: string; startedAt: number }
+  | { type: 'setTextAvatarSpeechEnded'; endedAt: number }
+  | { type: 'languageMixUpdated'; chatId: string; languageMixLevel: LanguageMixLevel }
+  | { type: 'deleteSession'; chatId: string };
+
+const initialTextAvatarState: TextAvatarState = {
+  activity: 'idle',
+  transcriptDelta: '',
+  transcriptFinal: '',
+  speechStartedAt: null,
+  speechEndedAt: null,
+};
+
+function createInitialAppChatState(): AppChatState {
+  return {
+    sessions: [],
+    currentChatId: null,
+    historyMessages: [],
+    loadingSessions: true,
+    loadingChat: false,
+    error: null,
+    isConnecting: false,
+    assessmentResults: null,
+    profileSummary: undefined,
+    languageMixLevel: DEFAULT_LANGUAGE_MIX_LEVEL,
+    languageMixNotice: null,
+    mode: 'realtime',
+    inputValue: '',
+    isSendingText: false,
+    isSidebarExpanded: false,
+    isSidebarDialogOpen: false,
+    textAvatar: initialTextAvatarState,
+    isAvatarEnabled: getInitialChatAvatarEnabled(),
+    isDesktop: getInitialDesktopMatch(),
+  };
+}
+
+function appChatReducer(state: AppChatState, action: AppChatAction): AppChatState {
+  switch (action.type) {
+    case 'patch':
+      return { ...state, ...action.payload };
+    case 'patchTextAvatar':
+      return { ...state, textAvatar: { ...state.textAvatar, ...action.payload } };
+    case 'resetTextAvatar':
+      return { ...state, textAvatar: initialTextAvatarState };
+    case 'setSessions':
+      return { ...state, sessions: action.sessions };
+    case 'updateSessions':
+      return { ...state, sessions: action.updater(state.sessions) };
+    case 'chatLoaded':
+      return {
+        ...state,
+        historyMessages: action.messages,
+        currentChatId: action.chatId,
+        languageMixLevel: action.languageMixLevel,
+        languageMixNotice: null,
+      };
+    case 'chatCreated':
+      return {
+        ...state,
+        sessions: [action.session, ...state.sessions],
+        historyMessages: [],
+        currentChatId: action.session.id,
+        languageMixLevel: action.languageMixLevel,
+        languageMixNotice: null,
+      };
+    case 'appendHistoryMessage':
+      return { ...state, historyMessages: [...state.historyMessages, action.message] };
+    case 'setTextAvatarSpeaking':
+      return {
+        ...state,
+        textAvatar: {
+          activity: 'speaking',
+          transcriptDelta: action.content,
+          transcriptFinal: action.content,
+          speechStartedAt: action.startedAt,
+          speechEndedAt: null,
+        },
+      };
+    case 'setTextAvatarSpeechEnded':
+      return {
+        ...state,
+        textAvatar: {
+          ...state.textAvatar,
+          activity: 'idle',
+          speechEndedAt: action.endedAt,
+        },
+      };
+    case 'languageMixUpdated':
+      return {
+        ...state,
+        languageMixLevel: action.languageMixLevel,
+        sessions: state.sessions.map((session) => (
+          session.id === action.chatId
+            ? { ...session, languageMixLevel: action.languageMixLevel }
+            : session
+        )),
+      };
+    case 'deleteSession':
+      return {
+        ...state,
+        sessions: state.sessions.filter((session) => session.id !== action.chatId),
+      };
+    default:
+      return state;
+  }
+}
+
+function useAppChatPageController() {
   const { lang, t } = useLanguage();
   const { avatarUrl } = useAuth();
   const userAvatar = avatarUrl || null;
   const [searchParams] = useSearchParams();
   const requestedChatId = searchParams.get('chatId');
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  const [historyMessages, setHistoryMessages] = useState<ChatMessage[]>([]);
-  const [loadingSessions, setLoadingSessions] = useState(true);
-  const [loadingChat, setLoadingChat] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [assessmentResults, setAssessmentResults] = useState<AssessmentResults | null>(null);
-  const [profileSummary, setProfileSummary] = useState<UserProfile | null>(null);
-  const [languageMixLevel, setLanguageMixLevel] = useState<LanguageMixLevel>(DEFAULT_LANGUAGE_MIX_LEVEL);
-  const [languageMixNotice, setLanguageMixNotice] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(appChatReducer, undefined, createInitialAppChatState);
+  const {
+    sessions,
+    currentChatId,
+    historyMessages,
+    loadingSessions,
+    loadingChat,
+    error,
+    isConnecting,
+    assessmentResults,
+    profileSummary,
+    languageMixLevel,
+    languageMixNotice,
+    mode,
+    inputValue,
+    isSendingText,
+    isSidebarExpanded,
+    isSidebarDialogOpen,
+    textAvatar,
+    isAvatarEnabled,
+    isDesktop,
+  } = state;
   const [speakingSpeed, setSpeakingSpeed] = useRealtimeSpeakingSpeed();
+  const isDeletingChatRef = useRef(false);
 
-  // Chat mode state
-  type Mode = 'text' | 'realtime';
-  const [mode, setMode] = useState<Mode>('realtime');
-  const [inputValue, setInputValue] = useState('');
-  const [isSendingText, setIsSendingText] = useState(false);
-  const [isDeletingChat, setIsDeletingChat] = useState(false);
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
-  const [isSidebarDialogOpen, setIsSidebarDialogOpen] = useState(false);
-  const [textAvatarActivity, setTextAvatarActivity] = useState<AvatarActivity>('idle');
-  const [textAssistantTranscriptDelta, setTextAssistantTranscriptDelta] = useState('');
-  const [textAssistantTranscriptFinal, setTextAssistantTranscriptFinal] = useState('');
-  const [textAssistantSpeechStartedAt, setTextAssistantSpeechStartedAt] = useState<number | null>(null);
-  const [textAssistantSpeechEndedAt, setTextAssistantSpeechEndedAt] = useState<number | null>(null);
-  const [isAvatarEnabled, setIsAvatarEnabled] = useState(() => {
-    if (!CHAT_AVATAR_AVAILABLE) return false;
-    try {
-      const stored = window.localStorage.getItem(CHAT_AVATAR_ENABLED_KEY);
-      if (stored === null) return false;
-      return stored === 'true';
-    } catch {
-      return true;
+  const updateAvatarEnabled = useCallback((enabled: boolean) => {
+    if (!CHAT_AVATAR_AVAILABLE) {
+      dispatch({ type: 'patch', payload: { isAvatarEnabled: false } });
+      return;
     }
-  });
-  const [isDesktop, setIsDesktop] = useState(() => {
+    dispatch({ type: 'patch', payload: { isAvatarEnabled: enabled } });
     try {
-      return window.matchMedia?.('(min-width: 1024px)')?.matches ?? false;
+      window.localStorage.setItem(CHAT_AVATAR_ENABLED_KEY, String(enabled));
     } catch {
-      return false;
+      // ignore storage failures
     }
-  });
+  }, []);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentChatIdRef = useRef<string | null>(null);
   const previousMessageCountRef = useRef(0);
   const textAvatarTimeoutRef = useRef<number | null>(null);
-  const realtimeSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const realtimeSaveQueueRef = useLazyRef(() => Promise.resolve());
   const nextRealtimeMessageOrderRef = useRef(0);
   currentChatIdRef.current = currentChatId;
 
@@ -162,34 +324,22 @@ export function AppChatPage() {
     textAvatarTimeoutRef.current = null;
   }, []);
 
-  const resetTextAvatarPerformance = useCallback(() => {
-    setTextAssistantTranscriptDelta('');
-    setTextAssistantTranscriptFinal('');
-    setTextAssistantSpeechStartedAt(null);
-    setTextAssistantSpeechEndedAt(null);
-  }, []);
-
   const resetRealtimePersistence = useCallback((messageCount = 0) => {
     realtimeSaveQueueRef.current = Promise.resolve();
     nextRealtimeMessageOrderRef.current = messageCount;
-  }, []);
+  }, [realtimeSaveQueueRef]);
 
   const playTextAvatarSpeech = useCallback((content: string) => {
     clearTextAvatarTimeout();
 
     if (!content.trim()) {
-      setTextAvatarActivity('idle');
+      dispatch({ type: 'patchTextAvatar', payload: { activity: 'idle' } });
       return;
     }
 
-    setTextAssistantTranscriptDelta(content);
-    setTextAssistantTranscriptFinal(content);
-    setTextAssistantSpeechStartedAt(getClientNow());
-    setTextAssistantSpeechEndedAt(null);
-    setTextAvatarActivity('speaking');
+    dispatch({ type: 'setTextAvatarSpeaking', content, startedAt: getClientNow() });
     textAvatarTimeoutRef.current = window.setTimeout(() => {
-      setTextAvatarActivity('idle');
-      setTextAssistantSpeechEndedAt(getClientNow());
+      dispatch({ type: 'setTextAvatarSpeechEnded', endedAt: getClientNow() });
       textAvatarTimeoutRef.current = null;
     }, getTextAvatarSpeechDuration(content));
   }, [clearTextAvatarTimeout]);
@@ -202,9 +352,9 @@ export function AppChatPage() {
     const sortOrder = nextRealtimeMessageOrderRef.current;
     nextRealtimeMessageOrderRef.current += 1;
 
-    setSessions((prev) => {
-      const target = prev.find((session) => session.id === chatId);
-      if (!target) return prev;
+    dispatch({ type: 'updateSessions', updater: (currentSessions) => {
+      const target = currentSessions.find((session) => session.id === chatId);
+      if (!target) return currentSessions;
       const updatedTitle =
         target.message_count === 0 && role === 'user'
           ? content.length > 30
@@ -218,25 +368,29 @@ export function AppChatPage() {
         message_count: target.message_count + 1,
         last_message: content,
       };
-      return [updated, ...prev.filter((session) => session.id !== chatId)];
-    });
+      return [updated, ...currentSessions.filter((session) => session.id !== chatId)];
+    } });
 
-    realtimeSaveQueueRef.current = realtimeSaveQueueRef.current
+    const currentSaveQueue = realtimeSaveQueueRef.current;
+    realtimeSaveQueueRef.current = currentSaveQueue
       .catch(() => undefined)
       .then(async () => {
         const response = await saveMessageToChat(chatId, role, content, { timestamp, sortOrder });
         const resolvedTitle = response.title?.trim();
         if (!resolvedTitle) return;
-        setSessions((prev) => prev.map((session) => (
-          session.id === chatId
-            ? { ...session, title: resolvedTitle }
-            : session
-        )));
+        dispatch({
+          type: 'updateSessions',
+          updater: (currentSessions) => currentSessions.map((session) => (
+            session.id === chatId
+              ? { ...session, title: resolvedTitle }
+              : session
+          )),
+        });
       })
       .catch((err) => {
         console.error('Failed to save realtime message:', err);
       });
-  }, []);
+  }, [realtimeSaveQueueRef]);
 
   const realtimeSessionParams = useMemo(
     () => ({
@@ -299,15 +453,15 @@ export function AppChatPage() {
       mode,
       isConnected: true,
       isListening: false,
-      isSpeaking: textAvatarActivity === 'speaking',
+      isSpeaking: textAvatar.activity === 'speaking',
       remoteAudioStream: null,
       assistantTranscriptDelta:
-        textAvatarActivity === 'thinking' && !textAssistantTranscriptDelta
+        textAvatar.activity === 'thinking' && !textAvatar.transcriptDelta
           ? '…'
-          : textAssistantTranscriptDelta,
-      assistantTranscriptFinal: textAssistantTranscriptFinal,
-      assistantSpeechStartedAt: textAssistantSpeechStartedAt,
-      assistantSpeechEndedAt: textAssistantSpeechEndedAt,
+          : textAvatar.transcriptDelta,
+      assistantTranscriptFinal: textAvatar.transcriptFinal,
+      assistantSpeechStartedAt: textAvatar.speechStartedAt,
+      assistantSpeechEndedAt: textAvatar.speechEndedAt,
       avatarDirective: null,
     };
   }, [
@@ -321,11 +475,11 @@ export function AppChatPage() {
     legacyRealtimeSession.isSpeaking,
     mode,
     remoteAudioStream,
-    textAssistantSpeechEndedAt,
-    textAssistantSpeechStartedAt,
-    textAssistantTranscriptDelta,
-    textAssistantTranscriptFinal,
-      textAvatarActivity,
+    textAvatar.activity,
+    textAvatar.speechEndedAt,
+    textAvatar.speechStartedAt,
+    textAvatar.transcriptDelta,
+    textAvatar.transcriptFinal,
   ]);
 
   const live2dPerformance = useAvatarPerformance(avatarSource);
@@ -370,16 +524,16 @@ export function AppChatPage() {
       return statusLabel;
     }
 
-    if (textAvatarActivity === 'thinking') {
+    if (textAvatar.activity === 'thinking') {
       return t('app.learn.status.aiResponding');
     }
 
-    if (textAvatarActivity === 'speaking') {
+    if (textAvatar.activity === 'speaking') {
       return t('app.learn.status.aiSpeaking');
     }
 
     return t('app.learn.status.ready');
-  }, [mode, statusLabel, t, textAvatarActivity]);
+  }, [mode, statusLabel, t, textAvatar.activity]);
 
   const micButtonLabel = useMemo(() => {
     if (isConnecting) return t('app.learn.status.connecting');
@@ -404,11 +558,9 @@ export function AppChatPage() {
   }, [clearTextAvatarTimeout]);
 
   const loadChat = useCallback(async (chatId: string) => {
-    setLoadingChat(true);
-    setError(null);
+    dispatch({ type: 'patch', payload: { loadingChat: true, error: null } });
     clearTextAvatarTimeout();
-    setTextAvatarActivity('idle');
-    resetTextAvatarPerformance();
+    dispatch({ type: 'resetTextAvatar' });
     clearMessages();
     disconnect();
 
@@ -421,23 +573,23 @@ export function AppChatPage() {
         timestamp: msg.timestamp,
       }));
       resetRealtimePersistence(formattedMessages.length);
-      setHistoryMessages(formattedMessages);
-      setCurrentChatId(chatId);
-      setLanguageMixLevel(chat.languageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL);
-      setLanguageMixNotice(null);
+      dispatch({
+        type: 'chatLoaded',
+        chatId,
+        messages: formattedMessages,
+        languageMixLevel: chat.languageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL,
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load chat');
+      dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : 'Failed to load chat' } });
     } finally {
-      setLoadingChat(false);
+      dispatch({ type: 'patch', payload: { loadingChat: false } });
     }
-  }, [clearMessages, clearTextAvatarTimeout, disconnect, resetRealtimePersistence, resetTextAvatarPerformance]);
+  }, [clearMessages, clearTextAvatarTimeout, disconnect, resetRealtimePersistence]);
 
   const createNewChat = useCallback(async () => {
-    setLoadingChat(true);
-    setError(null);
+    dispatch({ type: 'patch', payload: { loadingChat: true, error: null } });
     clearTextAvatarTimeout();
-    setTextAvatarActivity('idle');
-    resetTextAvatarPerformance();
+    dispatch({ type: 'resetTextAvatar' });
     clearMessages();
     disconnect();
 
@@ -453,28 +605,28 @@ export function AppChatPage() {
         languageMixLevel: createdLanguageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL,
       };
       resetRealtimePersistence(0);
-      setSessions((prev) => [newSession, ...prev]);
-      setHistoryMessages([]);
-      setCurrentChatId(chatId);
-      setLanguageMixLevel(createdLanguageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL);
-      setLanguageMixNotice(null);
+      dispatch({
+        type: 'chatCreated',
+        session: newSession,
+        languageMixLevel: createdLanguageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL,
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create chat');
+      dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : 'Failed to create chat' } });
     } finally {
-      setLoadingChat(false);
+      dispatch({ type: 'patch', payload: { loadingChat: false } });
     }
-  }, [clearMessages, clearTextAvatarTimeout, disconnect, resetRealtimePersistence, resetTextAvatarPerformance]);
+  }, [clearMessages, clearTextAvatarTimeout, disconnect, resetRealtimePersistence]);
 
+  // react-doctor-disable-next-line react-doctor/no-initialize-state -- profileSummary already starts undefined and is populated by an async profile fetch.
   useEffect(() => {
     let isActive = true;
 
     const init = async () => {
-      setLoadingSessions(true);
-      setError(null);
+      dispatch({ type: 'patch', payload: { loadingSessions: true, error: null } });
       try {
         const chatSessions = await getChatSessions();
         if (!isActive) return;
-        setSessions(chatSessions);
+        dispatch({ type: 'setSessions', sessions: chatSessions });
 
         const requestedSession = requestedChatId
           ? chatSessions.find((session) => session.id === requestedChatId)
@@ -489,9 +641,9 @@ export function AppChatPage() {
         }
       } catch (err) {
         if (!isActive) return;
-        setError(err instanceof Error ? err.message : 'Failed to load sessions');
+        dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : 'Failed to load sessions' } });
       } finally {
-        if (isActive) setLoadingSessions(false);
+        if (isActive) dispatch({ type: 'patch', payload: { loadingSessions: false } });
       }
     };
 
@@ -509,13 +661,13 @@ export function AppChatPage() {
       try {
         const profile = await getUserProfile();
         if (!isActive) return;
-        setProfileSummary(profile);
+        dispatch({ type: 'patch', payload: { profileSummary: profile } });
 
         if (profile.assessed) {
           try {
             const results = await getAssessmentResults();
             if (!isActive) return;
-            setAssessmentResults(results);
+            dispatch({ type: 'patch', payload: { assessmentResults: results } });
           } catch (err) {
             console.error('Failed to load assessment results:', err);
           }
@@ -525,6 +677,7 @@ export function AppChatPage() {
       }
     };
 
+    // react-doctor-disable-next-line react-doctor/no-initialize-state -- profileSummary already starts undefined and is populated by an async profile fetch.
     loadSummary();
     return () => {
       isActive = false;
@@ -532,47 +685,45 @@ export function AppChatPage() {
   }, []);
 
   const handleSelectSession = (chatId: string) => {
-    setIsSidebarDialogOpen(false);
+    dispatch({ type: 'patch', payload: { isSidebarDialogOpen: false } });
     if (chatId === currentChatId) return;
     loadChat(chatId);
   };
 
   const handleCreateChatFromSidebar = () => {
-    setIsSidebarDialogOpen(false);
+    dispatch({ type: 'patch', payload: { isSidebarDialogOpen: false } });
     createNewChat();
   };
 
   const handleRecordToggle = async () => {
-    setError(null);
+    dispatch({ type: 'patch', payload: { error: null } });
     if (!currentChatId) return;
 
     try {
       clearTextAvatarTimeout();
-      setTextAvatarActivity('idle');
-      resetTextAvatarPerformance();
+      dispatch({ type: 'resetTextAvatar' });
 
       if (isConnected) {
         disconnect();
         return;
       }
 
-      setIsConnecting(true);
+      dispatch({ type: 'patch', payload: { isConnecting: true } });
       await connect({ chatId: currentChatId, speakingSpeed });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start realtime session');
+      dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : 'Failed to start realtime session' } });
     } finally {
-      setIsConnecting(false);
+      dispatch({ type: 'patch', payload: { isConnecting: false } });
     }
   };
 
   const handleModeChange = (newMode: Mode) => {
     clearTextAvatarTimeout();
-    setTextAvatarActivity('idle');
-    resetTextAvatarPerformance();
+    dispatch({ type: 'resetTextAvatar' });
     if (mode === 'realtime' && isConnected && newMode !== 'realtime') {
       disconnect();
     }
-    setMode(newMode);
+    dispatch({ type: 'patch', payload: { mode: newMode } });
   };
 
   const handleLanguageMixChange = async (nextValue: string) => {
@@ -580,25 +731,32 @@ export function AppChatPage() {
 
     const nextLanguageMixLevel = nextValue as LanguageMixLevel;
     const previousLanguageMixLevel = languageMixLevel;
-    setLanguageMixLevel(nextLanguageMixLevel);
-    setLanguageMixNotice(
-      isConnected ? 'Reconnect voice to apply this language mix.' : null
-    );
+    dispatch({
+      type: 'patch',
+      payload: {
+        languageMixLevel: nextLanguageMixLevel,
+        languageMixNotice: isConnected ? 'Reconnect voice to apply this language mix.' : null,
+      },
+    });
 
     try {
       const updatedChat = await updateChatSettings(currentChatId, {
         languageMixLevel: nextLanguageMixLevel,
       });
-      setLanguageMixLevel(updatedChat.languageMixLevel || nextLanguageMixLevel);
-      setSessions((prev) => prev.map((session) => (
-        session.id === currentChatId
-          ? { ...session, languageMixLevel: updatedChat.languageMixLevel || nextLanguageMixLevel }
-          : session
-      )));
+      dispatch({
+        type: 'languageMixUpdated',
+        chatId: currentChatId,
+        languageMixLevel: updatedChat.languageMixLevel || nextLanguageMixLevel,
+      });
     } catch (err) {
-      setLanguageMixLevel(previousLanguageMixLevel);
-      setLanguageMixNotice(null);
-      setError(err instanceof Error ? err.message : 'Failed to update language mix');
+      dispatch({
+        type: 'patch',
+        payload: {
+          languageMixLevel: previousLanguageMixLevel,
+          languageMixNotice: null,
+          error: err instanceof Error ? err.message : 'Failed to update language mix',
+        },
+      });
     }
   };
 
@@ -606,15 +764,25 @@ export function AppChatPage() {
     if (!inputValue.trim() || isSendingText || !currentChatId) return;
 
     const message = inputValue.trim();
-    setInputValue('');
-    setIsSendingText(true);
-    setError(null);
+    dispatch({
+      type: 'patch',
+      payload: {
+        inputValue: '',
+        isSendingText: true,
+        error: null,
+      },
+    });
     clearTextAvatarTimeout();
-    setTextAvatarActivity('thinking');
-    setTextAssistantTranscriptDelta('…');
-    setTextAssistantTranscriptFinal('');
-    setTextAssistantSpeechStartedAt(null);
-    setTextAssistantSpeechEndedAt(null);
+    dispatch({
+      type: 'patchTextAvatar',
+      payload: {
+        activity: 'thinking',
+        transcriptDelta: '…',
+        transcriptFinal: '',
+        speechStartedAt: null,
+        speechEndedAt: null,
+      },
+    });
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -622,11 +790,11 @@ export function AppChatPage() {
       content: message,
       timestamp: new Date().toISOString(),
     };
-    setHistoryMessages((prev) => [...prev, userMessage]);
+    dispatch({ type: 'appendHistoryMessage', message: userMessage });
 
-    setSessions((prev) => {
-      const target = prev.find((s) => s.id === currentChatId);
-      if (!target) return prev;
+    dispatch({ type: 'updateSessions', updater: (currentSessions) => {
+      const target = currentSessions.find((s) => s.id === currentChatId);
+      if (!target) return currentSessions;
       const updated = {
         ...target,
         title: target.message_count === 0 ? (message.length > 30 ? `${message.slice(0, 30)}...` : message) : target.title,
@@ -634,24 +802,29 @@ export function AppChatPage() {
         message_count: target.message_count + 1,
         last_message: message,
       };
-      return [updated, ...prev.filter((s) => s.id !== currentChatId)];
-    });
+      return [updated, ...currentSessions.filter((s) => s.id !== currentChatId)];
+    } });
 
     try {
       const response = await sendChatMessage(currentChatId, message);
-      setTextAssistantTranscriptDelta(response.response);
-      setTextAssistantTranscriptFinal(response.response);
+      dispatch({
+        type: 'patchTextAvatar',
+        payload: {
+          transcriptDelta: response.response,
+          transcriptFinal: response.response,
+        },
+      });
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: response.response,
         timestamp: new Date().toISOString(),
       };
-      setHistoryMessages((prev) => [...prev, assistantMessage]);
+      dispatch({ type: 'appendHistoryMessage', message: assistantMessage });
 
-      setSessions((prev) => {
-        const target = prev.find((s) => s.id === currentChatId);
-        if (!target) return prev;
+      dispatch({ type: 'updateSessions', updater: (currentSessions) => {
+        const target = currentSessions.find((s) => s.id === currentChatId);
+        if (!target) return currentSessions;
         const updated = {
           ...target,
           title: response.title || target.title,
@@ -659,35 +832,35 @@ export function AppChatPage() {
           message_count: target.message_count + 1,
           last_message: response.response,
         };
-        return [updated, ...prev.filter((s) => s.id !== currentChatId)];
-      });
+        return [updated, ...currentSessions.filter((s) => s.id !== currentChatId)];
+      } });
 
       playTextAvatarSpeech(response.response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send message');
-      setTextAvatarActivity('idle');
-      resetTextAvatarPerformance();
+      dispatch({
+        type: 'patch',
+        payload: { error: err instanceof Error ? err.message : 'Failed to send message' },
+      });
+      dispatch({ type: 'resetTextAvatar' });
     } finally {
-      setIsSendingText(false);
+      dispatch({ type: 'patch', payload: { isSendingText: false } });
     }
   };
 
   const handleDeleteChat = async (chatId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isDeletingChat) return;
-    setIsDeletingChat(true);
+    if (isDeletingChatRef.current) return;
+    isDeletingChatRef.current = true;
 
     try {
       await deleteChatSession(chatId);
       const remaining = sessions.filter((s) => s.id !== chatId);
-      setSessions(remaining);
+      dispatch({ type: 'setSessions', sessions: remaining });
 
       if (currentChatId === chatId) {
-        setCurrentChatId(null);
-        setHistoryMessages([]);
+        dispatch({ type: 'patch', payload: { currentChatId: null, historyMessages: [] } });
         clearTextAvatarTimeout();
-        setTextAvatarActivity('idle');
-        resetTextAvatarPerformance();
+        dispatch({ type: 'resetTextAvatar' });
         clearMessages();
         disconnect();
         if (remaining.length > 0) {
@@ -698,9 +871,9 @@ export function AppChatPage() {
       }
     } catch (err) {
       console.error('Failed to delete chat:', err);
-      setError('Failed to delete chat');
+      dispatch({ type: 'patch', payload: { error: 'Failed to delete chat' } });
     } finally {
-      setIsDeletingChat(false);
+      isDeletingChatRef.current = false;
     }
   };
 
@@ -751,22 +924,6 @@ export function AppChatPage() {
   ];
 
   useEffect(() => {
-    if (!CHAT_AVATAR_AVAILABLE) {
-      setIsAvatarEnabled(false);
-      return;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!CHAT_AVATAR_AVAILABLE) return;
-    try {
-      window.localStorage.setItem(CHAT_AVATAR_ENABLED_KEY, String(isAvatarEnabled));
-    } catch {
-      // ignore storage failures
-    }
-  }, [isAvatarEnabled]);
-
-  useEffect(() => {
     let mediaQueryList: MediaQueryList | null = null;
 
     try {
@@ -777,10 +934,8 @@ export function AppChatPage() {
 
     if (!mediaQueryList) return;
 
-    setIsDesktop(mediaQueryList.matches);
-
     const handleChange = (event: MediaQueryListEvent) => {
-      setIsDesktop(event.matches);
+      dispatch({ type: 'patch', payload: { isDesktop: event.matches } });
     };
 
     if (mediaQueryList.addEventListener) {
@@ -792,45 +947,160 @@ export function AppChatPage() {
     return () => mediaQueryList?.removeListener(handleChange);
   }, []);
 
+  const handleToggleSidebarExpanded = useCallback(() => {
+    dispatch({ type: 'patch', payload: { isSidebarExpanded: !isSidebarExpanded } });
+  }, [isSidebarExpanded]);
+
+  const handleExpandSidebar = useCallback(() => {
+    dispatch({ type: 'patch', payload: { isSidebarExpanded: true } });
+  }, []);
+
+  const handleCloseSidebar = useCallback(() => {
+    dispatch({ type: 'patch', payload: { isSidebarExpanded: false } });
+  }, []);
+
+  const handleOpenSidebarDialog = useCallback(() => {
+    dispatch({ type: 'patch', payload: { isSidebarDialogOpen: true } });
+  }, []);
+
+  const handleSidebarDialogOpenChange = useCallback((nextOpen: boolean) => {
+    dispatch({ type: 'patch', payload: { isSidebarDialogOpen: nextOpen } });
+  }, []);
+
+  const handleInputChange = useCallback((nextValue: string) => {
+    dispatch({ type: 'patch', payload: { inputValue: nextValue } });
+  }, []);
+
+  return {
+    t,
+    userAvatar,
+    sessions,
+    currentChatId,
+    currentSession,
+    mostRecentSession,
+    showResume,
+    loadingSessions,
+    loadingChat,
+    error,
+    realtimeError,
+    displayMessages,
+    messagesEndRef,
+    isSidebarExpanded,
+    isSidebarDialogOpen,
+    isAvatarEnabled,
+    isDesktop,
+    levelDescription,
+    levelLabel,
+    focusBadge,
+    focusBadgeClass,
+    topDomain,
+    getDomainLabel,
+    languageMixLevel,
+    languageMixNotice,
+    languageMixOptions,
+    mode,
+    live2dAvatarState,
+    live2dPerformance,
+    live2dDiagnostics,
+    avatarStatusLabel,
+    queueAvatarHit,
+    updateAvatarEnabled,
+    createNewChat,
+    handleModeChange,
+    handleLanguageMixChange,
+    handleSelectSession,
+    handleCreateChatFromSidebar,
+    handleDeleteChat,
+    inputValue,
+    handleInputChange,
+    isSendingText,
+    handleSendText,
+    statusLabel,
+    isConnecting,
+    isConnected,
+    isListening,
+    isSpeaking,
+    isTutorHoldActive,
+    hasHeldTutorResponse,
+    setTutorHoldActive,
+    handleRecordToggle,
+    micButtonLabel,
+    speakingSpeed,
+    handleSpeakingSpeedChange,
+    handleToggleSidebarExpanded,
+    handleExpandSidebar,
+    handleCloseSidebar,
+    handleOpenSidebarDialog,
+    handleSidebarDialogOpenChange,
+  };
+}
+
+type AppChatPageController = ReturnType<typeof useAppChatPageController>;
+
+function AppChatPageView({ controller }: { controller: AppChatPageController }) {
   return (
     <div className="relative flex h-[calc(100vh-7rem)] min-h-0 gap-3 -mx-2 sm:-mx-3 lg:-mx-3">
-      {/* Sidebar: icon bar is in-flow, expanded panel overlays */}
-      <div className="hidden h-full shrink-0 lg:block w-14">
-        <div className="flex h-full w-14 flex-col items-center gap-3 rounded-2xl border-3 border-foreground bg-card py-3 shadow-stamp">
-          <button
-            type="button"
-            onClick={() => setIsSidebarExpanded((prev) => !prev)}
-            aria-label={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-            title={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-foreground transition-colors hover:bg-secondary"
-          >
-            {isSidebarExpanded ? <ChevronLeft size={18} strokeWidth={2.5} /> : <ChevronRight size={18} strokeWidth={2.5} />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsSidebarExpanded(true)}
-            aria-label={t('app.learn.path.title')}
-            title={t('app.learn.path.title')}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border-2 border-border bg-card text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          >
-            <BookOpen size={18} strokeWidth={2.5} />
-          </button>
-        </div>
-      </div>
+      <DesktopSessionsPanel controller={controller} />
+      <ChatMainArea controller={controller} />
+      <MobileSessionsDialog controller={controller} />
+    </div>
+  );
+}
 
-      {/* Sidebar expanded overlay panel */}
+function DesktopSessionsPanel({ controller }: { controller: AppChatPageController }) {
+  const {
+    t,
+    sessions,
+    currentChatId,
+    mostRecentSession,
+    showResume,
+    loadingSessions,
+    isSidebarExpanded,
+    handleSelectSession,
+    handleCreateChatFromSidebar,
+    handleDeleteChat,
+    handleToggleSidebarExpanded,
+    handleExpandSidebar,
+    handleCloseSidebar,
+  } = controller;
+
+  return (
+    <>
+      <div className="hidden h-full w-14 shrink-0 lg:block">
+      <div className="flex h-full w-14 flex-col items-center gap-3 rounded-2xl border-3 border-foreground bg-card py-3 shadow-stamp">
+        <button
+          type="button"
+          onClick={handleToggleSidebarExpanded}
+          aria-label={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          title={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          className="inline-flex size-10 items-center justify-center rounded-xl border-2 border-border bg-card text-foreground transition-colors hover:bg-secondary"
+        >
+          {isSidebarExpanded ? <ChevronLeft size={18} strokeWidth={2.5} /> : <ChevronRight size={18} strokeWidth={2.5} />}
+        </button>
+        <button
+          type="button"
+          onClick={handleExpandSidebar}
+          aria-label={t('app.learn.path.title')}
+          title={t('app.learn.path.title')}
+          className="inline-flex size-10 items-center justify-center rounded-xl border-2 border-border bg-card text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        >
+          <BookOpen size={18} strokeWidth={2.5} />
+        </button>
+      </div>
+    </div>
+
       <AnimatePresence initial={false}>
         {isSidebarExpanded ? (
           <>
-            <motion.div
+            <m.div
               key="sidebar-backdrop"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-20 hidden lg:block"
-              onClick={() => setIsSidebarExpanded(false)}
+              onClick={handleCloseSidebar}
             />
-            <motion.div
+            <m.div
               key="desktop-sidebar-content"
               initial={{ opacity: 0, x: -12 }}
               animate={{ opacity: 1, x: 0 }}
@@ -848,342 +1118,362 @@ export function AppChatPage() {
                 onDelete={handleDeleteChat}
                 t={t}
               />
-            </motion.div>
+            </m.div>
           </>
         ) : null}
       </AnimatePresence>
+    </>
+  );
+}
 
-      {/* Main Content: Avatar (5) + Chat (3) */}
-      <div className="flex h-full min-h-0 min-w-0 flex-1 gap-3">
-        {/* Virtual Avatar Panel — only available when Live2D SDK is present */}
-        {CHAT_AVATAR_AVAILABLE && isAvatarEnabled && isDesktop && (
-          <div className="hidden h-full min-h-0 flex-[5] overflow-hidden rounded-2xl border-3 border-foreground bg-card shadow-stamp lg:flex lg:flex-col">
-            <Suspense
-              fallback={
-                <div className="flex flex-1 items-center justify-center">
-                  <div className="text-center text-muted-foreground">
-                    <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-2xl border-3 border-border bg-secondary">
-                      <span className="text-3xl">🧑‍🏫</span>
-                    </div>
-                    <p className="text-sm font-bold">{t('app.learn.chat.title')}</p>
-                    <p className="mt-1 text-xs">Loading avatar…</p>
-                  </div>
-                </div>
-              }
-            >
-              <Live2DAvatarPanel
-                enabled={isAvatarEnabled}
-                avatarState={live2dAvatarState}
-                avatarReaction={null}
-                performanceFrame={live2dPerformance}
-                audioLevel={live2dPerformance.debug.audioLevel}
-                avatarDiagnostics={live2dDiagnostics}
-                fallbackSrc={AI_AVATAR}
-                statusLabel={avatarStatusLabel}
-                title={t('app.learn.chat.title')}
-                onAvatarHit={mode === 'realtime' ? queueAvatarHit : undefined}
-              />
-            </Suspense>
-          </div>
-        )}
-
-        {/* Chat Panel */}
-        <div className={clsx(
-          'relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border-3 border-foreground bg-card shadow-stamp',
-          CHAT_AVATAR_AVAILABLE && isAvatarEnabled ? 'flex-[3]' : 'flex-1'
-        )}>
-          <div className="z-10 flex items-center justify-between border-b-3 border-foreground bg-card p-4">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center space-x-2 text-sm text-primary font-bold mb-0.5">
-                <MessageSquare size={16} strokeWidth={2.5} />
-                <span>{t('app.learn.chat.label')}</span>
-              </div>
-              <h2 className="text-base font-display font-bold text-foreground truncate">
-                {currentSession?.title || t('app.learn.chat.title')}
-              </h2>
-              {levelDescription && (
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{levelDescription}</p>
-              )}
-              {(levelLabel || focusBadge || topDomain) && (
-                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                  {levelLabel && (
-                    <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-lg border border-primary/20">
-                      {levelLabel}
-                    </span>
-                  )}
-                  {focusBadge && (
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${focusBadgeClass}`}>
-                      {focusBadge}
-                    </span>
-                  )}
-                  {topDomain && (
-                    <span
-                      className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
-                        domainBadgeStyles[topDomain[0]] || 'bg-secondary text-muted-foreground border border-border'
-                      }`}
-                    >
-                      {getDomainLabel(topDomain[0])} {topDomain[1]}/10
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center space-x-2 shrink-0 ml-3">
-              <div className="flex flex-col items-end gap-1 mr-1">
-                <select
-                  aria-label={t('chat.languageMix.label')}
-                  value={languageMixLevel}
-                  onChange={(event) => void handleLanguageMixChange(event.target.value)}
-                  disabled={!currentChatId}
-                  className="h-8 rounded-xl border-2 border-border bg-card px-2 text-xs font-bold text-foreground focus:border-primary focus:outline-none"
-                >
-                  {languageMixOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                {languageMixNotice ? (
-                  <p className="max-w-48 text-right text-[10px] font-medium text-muted-foreground">
-                    {languageMixNotice}
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex bg-secondary rounded-xl p-1 border-2 border-border">
-                <button
-                  type="button"
-                  onClick={() => handleModeChange('text')}
-                  className={clsx(
-                    'h-8 px-2.5 rounded-lg text-xs font-bold transition-colors',
-                    mode === 'text'
-                      ? 'bg-card text-primary border-2 border-foreground shadow-stamp-sm'
-                      : 'text-muted-foreground hover:text-foreground border-2 border-transparent'
-                  )}
-                >
-                  {t('chat.textMode')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleModeChange('realtime')}
-                  className={clsx(
-                    'h-8 px-2.5 rounded-lg text-xs font-bold transition-colors',
-                    mode === 'realtime'
-                      ? 'bg-card text-primary border-2 border-foreground shadow-stamp-sm'
-                      : 'text-muted-foreground hover:text-foreground border-2 border-transparent'
-                  )}
-                >
-                  {t('chat.voiceMode')}
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsSidebarDialogOpen(true)}
-                aria-label={t('app.learn.sessions.title')}
-                title={t('app.learn.sessions.title')}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-xl border-2 border-border bg-card text-foreground transition-colors hover:bg-secondary lg:hidden"
-              >
-                <Menu size={14} strokeWidth={2.5} />
-              </button>
-              {CHAT_AVATAR_AVAILABLE && (
-                <button
-                  type="button"
-                  onClick={() => setIsAvatarEnabled((prev) => !prev)}
-                  aria-label={isAvatarEnabled ? 'Hide avatar' : 'Show avatar'}
-                  title={isAvatarEnabled ? 'Hide avatar' : 'Show avatar'}
-                  className={clsx(
-                    'hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-xl border-2 transition-colors',
-                    isAvatarEnabled
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary hover:border-border'
-                  )}
-                >
-                  <MonitorPlay size={16} strokeWidth={2.5} />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={createNewChat}
-                aria-label={t('app.learn.sessions.newChatTitle')}
-                title={t('app.learn.sessions.newChatTitle')}
-                className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-xl border-2 border-transparent hover:border-border transition-colors"
-              >
-                <RefreshCcw size={16} strokeWidth={2.5} />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 bg-secondary/50 relative">
-            {error || realtimeError ? (
-              <div className="mb-4 p-3 rounded-xl border-2 border-destructive bg-destructive/10 text-sm text-destructive font-medium">
-                {error || realtimeError}
-              </div>
-            ) : null}
-
-            {loadingChat ? (
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {t('app.learn.chat.loading')}
-              </div>
-            ) : displayMessages.length === 0 ? (
-              <div className="text-sm text-muted-foreground">{t('app.learn.chat.empty')}</div>
-            ) : (
-              <div className="space-y-3 pb-20">
-                {displayMessages.map((msg) => {
-                  const isUser = msg.role === 'user';
-                  return (
-                    <motion.div
-                      key={msg.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={clsx('flex gap-3', isUser ? 'flex-row-reverse' : 'flex-row')}
-                    >
-                      {isUser && !userAvatar ? (
-                        <div
-                          aria-label="You"
-                          className="w-10 h-10 shrink-0 rounded-xl bg-secondary border-2 border-foreground flex items-center justify-center text-muted-foreground"
-                        >
-                          <CircleUserRound className="h-6 w-6" strokeWidth={1.75} />
-                        </div>
-                      ) : (
-                        <img
-                          src={isUser ? (userAvatar as string) : AI_AVATAR}
-                          alt={isUser ? 'You' : 'Lingual AI'}
-                          className="w-10 h-10 shrink-0 rounded-xl bg-card border-2 border-foreground object-cover object-center"
-                        />
-                      )}
-                      <div
-                        className={clsx(
-                          'max-w-[85%] px-3 py-2.5 rounded-xl text-[11.7px] leading-[1.45] border-2',
-                          isUser
-                            ? 'bg-primary text-primary-foreground border-foreground rounded-tr-none shadow-stamp-sm'
-                            : 'bg-card text-foreground border-border rounded-tl-none'
-                        )}
-                      >
-                        {msg.content}
-                      </div>
-                    </motion.div>
-                  );
-                })}
-                <div ref={messagesEndRef} />
-              </div>
-            )}
-          </div>
-
-          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-card via-card to-transparent">
-          <AnimatePresence mode="wait">
-            {mode === 'text' ? (
-              <motion.div
-                key="text-input"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-              >
-                <ChatInput
-                  value={inputValue}
-                  onChange={setInputValue}
-                  onSend={handleSendText}
-                  disabled={isSendingText || !currentChatId}
-                  placeholder={t('chat.placeholder')}
-                />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="voice-input"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <SpeakingSpeedControl
-                    value={speakingSpeed}
-                    onChange={handleSpeakingSpeedChange}
-                    disabled={isConnecting}
-                  />
-                  <div className="bg-card border-2 border-border rounded-xl px-4 py-3 text-muted-foreground font-medium">
-                    {statusLabel}
-                  </div>
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setTutorHoldActive(!isTutorHoldActive)}
-                    disabled={!isConnected || isConnecting}
-                    aria-pressed={isTutorHoldActive}
-                    aria-label={isTutorHoldActive ? t('app.learn.chat.hold.release') : t('app.learn.chat.hold.inactive')}
-                    title={isTutorHoldActive ? t('app.learn.chat.hold.release') : t('app.learn.chat.hold.inactive')}
-                    className={clsx(
-                      'flex h-14 shrink-0 items-center gap-2 rounded-xl border-2 border-foreground px-3 text-sm font-bold transition-all',
-                      isTutorHoldActive
-                        ? 'bg-warning text-warning-foreground shadow-stamp'
-                        : 'bg-background text-foreground hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--foreground)]',
-                      (!isConnected || isConnecting) && 'cursor-not-allowed opacity-50 shadow-none'
-                    )}
-                  >
-                    <Hand size={18} strokeWidth={2.5} />
-                    <span className="hidden sm:inline">
-                      {isTutorHoldActive
-                        ? hasHeldTutorResponse
-                          ? t('app.learn.chat.hold.release')
-                          : t('app.learn.chat.hold.active')
-                        : t('app.learn.chat.hold.inactive')}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleRecordToggle}
-                    disabled={!currentChatId || isConnecting}
-                    aria-label={micButtonLabel}
-                    title={micButtonLabel}
-                    className={clsx(
-                      'w-14 h-14 rounded-xl flex items-center justify-center border-2 border-foreground transition-all',
-                      isConnected
-                        ? isSpeaking
-                          ? 'bg-primary text-primary-foreground shadow-stamp'
-                          : isListening
-                          ? 'bg-destructive text-white animate-pulse shadow-stamp'
-                          : 'bg-success text-white shadow-stamp'
-                        : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-stamp hover:shadow-[6px_6px_0_0_var(--foreground)]',
-                      (isConnecting || !currentChatId) && 'opacity-60 cursor-not-allowed'
-                    )}
-                  >
-                    <Mic size={20} strokeWidth={2.5} />
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-      </div>
-
-      <Dialog open={isSidebarDialogOpen} onOpenChange={setIsSidebarDialogOpen}>
-        <DialogContent className="grid h-[calc(100vh-2rem)] w-[calc(100vw-1.5rem)] max-w-[34rem] grid-rows-[auto_minmax(0,1fr)] gap-4 rounded-2xl border-3 border-foreground bg-background p-4 shadow-stamp lg:hidden">
-          <DialogHeader className="pr-8 text-left">
-            <DialogTitle className="font-display text-lg text-foreground">
-              {t('app.learn.sessions.title')}
-            </DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
-              {t('app.learn.sessions.subtitle')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex min-h-0 flex-col gap-4 overflow-hidden">
-            <div className="min-h-0 flex-1">
-              <ChatSessionsSidebar
-                sessions={sessions}
-                currentChatId={currentChatId}
-                mostRecentSession={mostRecentSession}
-                showResume={showResume}
-                loading={loadingSessions}
-                onSelectSession={handleSelectSession}
-                onCreateNew={handleCreateChatFromSidebar}
-                onDelete={handleDeleteChat}
-                t={t}
-              />
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+function ChatMainArea({ controller }: { controller: AppChatPageController }) {
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-1 gap-3">
+      <ChatAvatarPane controller={controller} />
+      <ChatPanel controller={controller} />
     </div>
   );
+}
+
+function ChatAvatarPane({ controller }: { controller: AppChatPageController }) {
+  const {
+    t,
+    isAvatarEnabled,
+    isDesktop,
+    live2dAvatarState,
+    live2dPerformance,
+    live2dDiagnostics,
+    avatarStatusLabel,
+    mode,
+    queueAvatarHit,
+  } = controller;
+
+  if (!CHAT_AVATAR_AVAILABLE || !isAvatarEnabled || !isDesktop) {
+    return null;
+  }
+
+  return (
+    <div className="hidden h-full min-h-0 flex-[5] overflow-hidden rounded-2xl border-3 border-foreground bg-card shadow-stamp lg:flex lg:flex-col">
+      <Suspense
+        fallback={
+          <div className="flex flex-1 items-center justify-center">
+            <div className="text-center text-muted-foreground">
+              <div className="mx-auto mb-3 flex size-20 items-center justify-center rounded-2xl border-3 border-border bg-secondary">
+                <span className="text-3xl">🧑‍🏫</span>
+              </div>
+              <p className="text-sm font-bold">{t('app.learn.chat.title')}</p>
+              <p className="mt-1 text-xs">Loading avatar…</p>
+            </div>
+          </div>
+        }
+      >
+        <Live2DAvatarPanel
+          enabled={isAvatarEnabled}
+          avatarState={live2dAvatarState}
+          avatarReaction={null}
+          performanceFrame={live2dPerformance}
+          audioLevel={live2dPerformance.debug.audioLevel}
+          avatarDiagnostics={live2dDiagnostics}
+          fallbackSrc={AI_AVATAR}
+          statusLabel={avatarStatusLabel}
+          title={t('app.learn.chat.title')}
+          onAvatarHit={mode === 'realtime' ? queueAvatarHit : undefined}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+function ChatPanel({ controller }: { controller: AppChatPageController }) {
+  const { isAvatarEnabled } = controller;
+
+  return (
+    <div className={clsx(
+      'relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border-3 border-foreground bg-card shadow-stamp',
+      CHAT_AVATAR_AVAILABLE && isAvatarEnabled ? 'flex-[3]' : 'flex-1'
+    )}>
+      <ChatHeader controller={controller} />
+      <ChatMessagesPane controller={controller} />
+      <ChatComposer controller={controller} />
+    </div>
+  );
+}
+
+function ChatHeader({ controller }: { controller: AppChatPageController }) {
+  const {
+    t,
+    currentChatId,
+    currentSession,
+    levelDescription,
+    levelLabel,
+    focusBadge,
+    focusBadgeClass,
+    topDomain,
+    getDomainLabel,
+    languageMixLevel,
+    languageMixNotice,
+    languageMixOptions,
+    mode,
+    isAvatarEnabled,
+    updateAvatarEnabled,
+    createNewChat,
+    handleModeChange,
+    handleLanguageMixChange,
+    handleOpenSidebarDialog,
+  } = controller;
+
+  return (
+    <div className="z-10 flex items-center justify-between border-b-3 border-foreground bg-card p-4">
+      <div className="min-w-0 flex-1">
+        <div className="mb-0.5 flex items-center gap-x-2 text-sm font-bold text-primary">
+          <MessageSquare size={16} strokeWidth={2.5} />
+          <span>{t('app.learn.chat.label')}</span>
+        </div>
+        <h2 className="truncate font-display text-base font-bold text-foreground">
+          {currentSession?.title || t('app.learn.chat.title')}
+        </h2>
+        {levelDescription ? (
+          <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{levelDescription}</p>
+        ) : null}
+        {(levelLabel || focusBadge || topDomain) ? (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {levelLabel ? (
+              <span className="rounded-lg border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                {levelLabel}
+              </span>
+            ) : null}
+            {focusBadge ? (
+              <span className={`rounded-lg px-2 py-0.5 text-xs font-bold ${focusBadgeClass}`}>
+                {focusBadge}
+              </span>
+            ) : null}
+            {topDomain ? (
+              <span
+                className={`rounded-lg px-2 py-0.5 text-xs font-bold ${
+                  domainBadgeStyles[topDomain[0]] || 'border border-border bg-secondary text-muted-foreground'
+                }`}
+              >
+                {getDomainLabel(topDomain[0])} {topDomain[1]}/10
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="ml-3 flex shrink-0 items-center gap-x-2">
+        <div className="mr-1 flex flex-col items-end gap-1">
+          <select
+            aria-label={t('chat.languageMix.label')}
+            value={languageMixLevel}
+            onChange={(event) => void handleLanguageMixChange(event.target.value)}
+            disabled={!currentChatId}
+            className="h-8 rounded-xl border-2 border-border bg-card px-2 text-xs font-bold text-foreground focus:border-primary focus:outline-none"
+          >
+            {languageMixOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {languageMixNotice ? (
+            <p className="max-w-48 text-right text-[10px] font-medium text-muted-foreground">
+              {languageMixNotice}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex rounded-xl border-2 border-border bg-secondary p-1">
+          <button type="button" onClick={() => handleModeChange('text')} className={clsx('h-8 rounded-lg border-2 px-2.5 text-xs font-bold transition-colors', mode === 'text' ? 'border-foreground bg-card text-primary shadow-stamp-sm' : 'border-transparent text-muted-foreground hover:text-foreground')}>
+            {t('chat.textMode')}
+          </button>
+          <button type="button" onClick={() => handleModeChange('realtime')} className={clsx('h-8 rounded-lg border-2 px-2.5 text-xs font-bold transition-colors', mode === 'realtime' ? 'border-foreground bg-card text-primary shadow-stamp-sm' : 'border-transparent text-muted-foreground hover:text-foreground')}>
+            {t('chat.voiceMode')}
+          </button>
+        </div>
+        <button type="button" onClick={handleOpenSidebarDialog} aria-label={t('app.learn.sessions.title')} title={t('app.learn.sessions.title')} className="inline-flex size-8 items-center justify-center rounded-xl border-2 border-border bg-card text-foreground transition-colors hover:bg-secondary lg:hidden">
+          <Menu size={14} strokeWidth={2.5} />
+        </button>
+        {CHAT_AVATAR_AVAILABLE ? (
+          <button type="button" onClick={() => updateAvatarEnabled(!isAvatarEnabled)} aria-label={isAvatarEnabled ? 'Hide avatar' : 'Show avatar'} title={isAvatarEnabled ? 'Hide avatar' : 'Show avatar'} className={clsx('hidden size-8 items-center justify-center rounded-xl border-2 transition-colors lg:inline-flex', isAvatarEnabled ? 'border-primary bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:border-border hover:bg-secondary hover:text-foreground')}>
+            <MonitorPlay size={16} strokeWidth={2.5} />
+          </button>
+        ) : null}
+        <button type="button" onClick={createNewChat} aria-label={t('app.learn.sessions.newChatTitle')} title={t('app.learn.sessions.newChatTitle')} className="size-8 rounded-xl border-2 border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-secondary hover:text-foreground">
+          <RefreshCcw size={16} strokeWidth={2.5} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ChatMessagesPane({ controller }: { controller: AppChatPageController }) {
+  const { t, userAvatar, loadingChat, error, realtimeError, displayMessages, messagesEndRef } = controller;
+
+  return (
+    <div className="relative flex-1 overflow-y-auto bg-secondary/50 p-4">
+      {error || realtimeError ? (
+        <div className="mb-4 rounded-xl border-2 border-destructive bg-destructive/10 p-3 text-sm font-medium text-destructive">
+          {error || realtimeError}
+        </div>
+      ) : null}
+
+      {loadingChat ? (
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          {t('app.learn.chat.loading')}
+        </div>
+      ) : displayMessages.length === 0 ? (
+        <div className="text-sm text-muted-foreground">{t('app.learn.chat.empty')}</div>
+      ) : (
+        <div className="space-y-3 pb-20">
+          {displayMessages.map((msg) => (
+            <ChatMessageBubble key={msg.id} message={msg} userAvatar={userAvatar} />
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChatMessageBubble({ message, userAvatar }: { message: ChatMessage; userAvatar: string | null }) {
+  const isUser = message.role === 'user';
+
+  return (
+    <m.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={clsx('flex gap-3', isUser ? 'flex-row-reverse' : 'flex-row')}
+    >
+      {isUser && !userAvatar ? (
+        <div aria-label="You" className="flex size-10 shrink-0 items-center justify-center rounded-xl border-2 border-foreground bg-secondary text-muted-foreground">
+          <CircleUserRound className="size-6" strokeWidth={1.75} />
+        </div>
+      ) : (
+        <img
+          src={isUser ? (userAvatar as string) : AI_AVATAR}
+          alt={isUser ? 'You' : 'Lingual AI'}
+          className="size-10 shrink-0 rounded-xl border-2 border-foreground bg-card object-cover object-center"
+        />
+      )}
+      <div className={clsx('max-w-[85%] rounded-xl border-2 px-3 py-2.5 text-[11.7px] leading-[1.45]', isUser ? 'rounded-tr-none border-foreground bg-primary text-primary-foreground shadow-stamp-sm' : 'rounded-tl-none border-border bg-card text-foreground')}>
+        {message.content}
+      </div>
+    </m.div>
+  );
+}
+
+function ChatComposer({ controller }: { controller: AppChatPageController }) {
+  const {
+    t,
+    currentChatId,
+    mode,
+    inputValue,
+    handleInputChange,
+    isSendingText,
+    handleSendText,
+    statusLabel,
+    isConnecting,
+    isConnected,
+    isListening,
+    isSpeaking,
+    isTutorHoldActive,
+    hasHeldTutorResponse,
+    setTutorHoldActive,
+    handleRecordToggle,
+    micButtonLabel,
+    speakingSpeed,
+    handleSpeakingSpeedChange,
+  } = controller;
+
+  return (
+    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-card via-card to-transparent p-4">
+      <AnimatePresence mode="wait">
+        {mode === 'text' ? (
+          <m.div key="text-input" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <ChatInput
+              value={inputValue}
+              onChange={handleInputChange}
+              onSend={handleSendText}
+              disabled={isSendingText || !currentChatId}
+              placeholder={t('chat.placeholder')}
+            />
+          </m.div>
+        ) : (
+          <m.div key="voice-input" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <SpeakingSpeedControl value={speakingSpeed} onChange={handleSpeakingSpeedChange} disabled={isConnecting} />
+              <div className="rounded-xl border-2 border-border bg-card px-4 py-3 font-medium text-muted-foreground">
+                {statusLabel}
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button type="button" onClick={() => setTutorHoldActive(!isTutorHoldActive)} disabled={!isConnected || isConnecting} aria-pressed={isTutorHoldActive} aria-label={isTutorHoldActive ? t('app.learn.chat.hold.release') : t('app.learn.chat.hold.inactive')} title={isTutorHoldActive ? t('app.learn.chat.hold.release') : t('app.learn.chat.hold.inactive')} className={clsx('flex h-14 shrink-0 items-center gap-2 rounded-xl border-2 border-foreground px-3 text-sm font-bold transition-all', isTutorHoldActive ? 'bg-warning text-warning-foreground shadow-stamp' : 'bg-background text-foreground hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--foreground)]', (!isConnected || isConnecting) && 'cursor-not-allowed opacity-50 shadow-none')}>
+                <Hand size={18} strokeWidth={2.5} />
+                <span className="hidden sm:inline">
+                  {isTutorHoldActive
+                    ? hasHeldTutorResponse
+                      ? t('app.learn.chat.hold.release')
+                      : t('app.learn.chat.hold.active')
+                    : t('app.learn.chat.hold.inactive')}
+                </span>
+              </button>
+              <button type="button" onClick={handleRecordToggle} disabled={!currentChatId || isConnecting} aria-label={micButtonLabel} title={micButtonLabel} className={clsx('flex h-14 w-14 items-center justify-center rounded-xl border-2 border-foreground transition-all', isConnected ? isSpeaking ? 'bg-primary text-primary-foreground shadow-stamp' : isListening ? 'bg-destructive text-white shadow-stamp animate-pulse' : 'bg-success text-white shadow-stamp' : 'bg-primary text-primary-foreground shadow-stamp hover:bg-primary/90 hover:shadow-[6px_6px_0_0_var(--foreground)]', (isConnecting || !currentChatId) && 'cursor-not-allowed opacity-60')}>
+                <Mic size={20} strokeWidth={2.5} />
+              </button>
+            </div>
+          </m.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function MobileSessionsDialog({ controller }: { controller: AppChatPageController }) {
+  const {
+    t,
+    sessions,
+    currentChatId,
+    mostRecentSession,
+    showResume,
+    loadingSessions,
+    isSidebarDialogOpen,
+    handleSidebarDialogOpenChange,
+    handleSelectSession,
+    handleCreateChatFromSidebar,
+    handleDeleteChat,
+  } = controller;
+
+  return (
+    <Dialog open={isSidebarDialogOpen} onOpenChange={handleSidebarDialogOpenChange}>
+      <DialogContent className="grid h-[calc(100vh-2rem)] w-[calc(100vw-1.5rem)] max-w-[34rem] grid-rows-[auto_minmax(0,1fr)] gap-4 rounded-2xl border-3 border-foreground bg-background p-4 shadow-stamp lg:hidden">
+        <DialogHeader className="pr-8 text-left">
+          <DialogTitle className="font-display text-lg text-foreground">
+            {t('app.learn.sessions.title')}
+          </DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            {t('app.learn.sessions.subtitle')}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex min-h-0 flex-col gap-4 overflow-hidden">
+          <div className="min-h-0 flex-1">
+            <ChatSessionsSidebar
+              sessions={sessions}
+              currentChatId={currentChatId}
+              mostRecentSession={mostRecentSession}
+              showResume={showResume}
+              loading={loadingSessions}
+              onSelectSession={handleSelectSession}
+              onCreateNew={handleCreateChatFromSidebar}
+              onDelete={handleDeleteChat}
+              t={t}
+            />
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function AppChatPage() {
+  const controller = useAppChatPageController();
+  return <AppChatPageView controller={controller} />;
 }

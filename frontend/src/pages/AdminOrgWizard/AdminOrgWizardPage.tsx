@@ -14,18 +14,16 @@ import {
 } from './wizardReducer';
 import { WizardProgress } from './WizardProgress';
 import { WizardSidebar } from './WizardSidebar';
-import {
-  WizardStep1Organization,
-  validateStep1,
-} from './WizardStep1Organization';
-import { WizardStep2Admin, validateStep2 } from './WizardStep2Admin';
-import { WizardStep3Integration, validateStep3 } from './WizardStep3Integration';
+import { WizardStep1Organization } from './WizardStep1Organization';
+import { WizardStep2Admin } from './WizardStep2Admin';
+import { WizardStep3Integration } from './WizardStep3Integration';
 import { WizardStep4Review } from './WizardStep4Review';
+import { validateStep1, validateStep2, validateStep3 } from './wizardValidation';
 
 const STEPS = [
   { id: 1, title: 'Organization', subtitle: 'Name, website, location' },
   { id: 2, title: 'Admin', subtitle: 'Your identity & authorization' },
-  { id: 3, title: 'Integration', subtitle: 'Optional — Canvas & curriculum' },
+  { id: 3, title: 'Integration', subtitle: 'Optional - Canvas & curriculum' },
   { id: 4, title: 'Review', subtitle: 'Confirm & submit' },
 ];
 
@@ -47,13 +45,13 @@ export function AdminOrgWizardPage() {
   const [loaded, setLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const hasLoadedInitialDraftRef = useRef(false);
 
   // 1. Load the draft on mount (or prefill from auth user)
-  //    Effect runs once on mount; we deliberately do not depend on `user`
-  //    because re-running this on every user-context change would clobber
-  //    in-progress edits with the seed payload again. Refreshes to the user
-  //    happen in AdminPendingPage, not here.
+  //    Guarded so dependency changes cannot clobber in-progress edits.
   useEffect(() => {
+    if (hasLoadedInitialDraftRef.current) return;
+    hasLoadedInitialDraftRef.current = true;
     let cancelled = false;
     (async () => {
       try {
@@ -93,14 +91,13 @@ export function AdminOrgWizardPage() {
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [params, setParams, user]);
 
   // 2. URL step → reducer. One-way binding: URL is canonical for navigation
   //    (so browser back/forward works), the reducer is canonical for data.
-  //    Only fires when the URL has an explicit ?step param — this avoids
+  //    Only fires when the URL has an explicit ?step param - this avoids
   //    clobbering the draft's loaded step when the URL starts with no ?step.
-  //    We don't depend on state.currentStep here — that would create a loop
+  //    We don't depend on state.currentStep here - that would create a loop
   //    when gotoStep below pushes URL and the reducer in the same turn.
   useEffect(() => {
     const stepParam = params.get('step');
@@ -109,8 +106,7 @@ export function AdminOrgWizardPage() {
     if (urlStep !== state.currentStep) {
       dispatch({ type: 'GOTO_STEP', step: urlStep });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params, loaded]);
+  }, [params, loaded, state.currentStep]);
 
   // 3. Autosave (debounced)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

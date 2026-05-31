@@ -12,6 +12,7 @@ import {
   parseAvatarDirectiveArguments,
   shouldTriggerAvatarContextResponse,
 } from './realtimeAvatar';
+import { useLazyRef } from './useLazyRef';
 import { normalizeRealtimeSpeakingSpeed } from '@/lib/realtimeSpeakingSpeed';
 
 interface RealtimeMessage {
@@ -176,11 +177,11 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const micSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const micAnalyserRef = useRef<AnalyserNode | null>(null);
   const micMeterFrameRef = useRef<number | null>(null);
-  const finalizedItemsRef = useRef<Set<string>>(new Set());
-  const messageContentRef = useRef<Map<string, string>>(new Map());
-  const messageTimestampRef = useRef<Map<string, string>>(new Map());
-  const userTranscriptBufferRef = useRef<Map<string, string>>(new Map());
-  const messageOrderRef = useRef<Map<string, number>>(new Map());
+  const finalizedItemsRef = useLazyRef(() => new Set<string>());
+  const messageContentRef = useLazyRef(() => new Map<string, string>());
+  const messageTimestampRef = useLazyRef(() => new Map<string, string>());
+  const userTranscriptBufferRef = useLazyRef(() => new Map<string, string>());
+  const messageOrderRef = useLazyRef(() => new Map<string, number>());
   const nextMessageOrderRef = useRef(0);
   const pendingUserOrderRef = useRef<number | null>(null);
   const pendingAssistantOrderRef = useRef<number | null>(null);
@@ -201,11 +202,11 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   // Reset to 0 by speech_started, so any consumer checking `> 0` knows whether
   // a turn is in progress.
   const currentTurnStartedAtRef = useRef<number>(0);
-  const currentInputTurnRef = useRef(createEmptyRealtimeInputTurnMetrics());
+  const currentInputTurnRef = useLazyRef(createEmptyRealtimeInputTurnMetrics);
   const directiveResetTimeoutRef = useRef<number | null>(null);
-  const directiveArgumentBufferRef = useRef<Map<string, string>>(new Map());
-  const directiveCallRef = useRef<Map<string, { callId: string | null; name: string | null }>>(new Map());
-  const completedDirectiveCallsRef = useRef<Set<string>>(new Set());
+  const directiveArgumentBufferRef = useLazyRef(() => new Map<string, string>());
+  const directiveCallRef = useLazyRef(() => new Map<string, { callId: string | null; name: string | null }>());
+  const completedDirectiveCallsRef = useLazyRef(() => new Set<string>());
   const pendingDirectiveContinuationRef = useRef(false);
   const queuedAvatarContextsRef = useRef<AvatarContextResponse[]>([]);
   const pendingSpeechTurnHasDirectiveRef = useRef(false);
@@ -247,15 +248,21 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   }, [updateAvatarDebugStats]);
 
   const resetMessageTracking = useCallback(() => {
-    finalizedItemsRef.current.clear();
-    messageContentRef.current.clear();
-    messageTimestampRef.current.clear();
-    userTranscriptBufferRef.current.clear();
-    messageOrderRef.current.clear();
+    const finalizedItems = finalizedItemsRef.current;
+    const messageContent = messageContentRef.current;
+    const messageTimestamp = messageTimestampRef.current;
+    const userTranscriptBuffer = userTranscriptBufferRef.current;
+    const messageOrder = messageOrderRef.current;
+
+    finalizedItems.clear();
+    messageContent.clear();
+    messageTimestamp.clear();
+    userTranscriptBuffer.clear();
+    messageOrder.clear();
     nextMessageOrderRef.current = 0;
     pendingUserOrderRef.current = null;
     pendingAssistantOrderRef.current = null;
-  }, []);
+  }, [finalizedItemsRef, messageContentRef, messageOrderRef, messageTimestampRef, userTranscriptBufferRef]);
 
   const resetAssistantPerformanceState = useCallback(() => {
     assistantTranscriptDeltaRef.current = '';
@@ -268,16 +275,17 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   }, []);
 
   const ensureMessageOrder = useCallback((itemId: string) => {
-    const existingOrder = messageOrderRef.current.get(itemId);
+    const messageOrder = messageOrderRef.current;
+    const existingOrder = messageOrder.get(itemId);
     if (existingOrder !== undefined) {
       return existingOrder;
     }
 
     const nextOrder = nextMessageOrderRef.current;
     nextMessageOrderRef.current += 1;
-    messageOrderRef.current.set(itemId, nextOrder);
+    messageOrder.set(itemId, nextOrder);
     return nextOrder;
-  }, []);
+  }, [messageOrderRef]);
 
   const reservePendingMessageOrder = useCallback((role: 'user' | 'assistant') => {
     const pendingOrderRef = role === 'user' ? pendingUserOrderRef : pendingAssistantOrderRef;
@@ -294,7 +302,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const adoptPendingMessageOrder = useCallback((role: 'user' | 'assistant', itemId?: string) => {
     if (!itemId) return;
 
-    const existingOrder = messageOrderRef.current.get(itemId);
+    const messageOrder = messageOrderRef.current;
+    const existingOrder = messageOrder.get(itemId);
     if (existingOrder !== undefined) {
       return existingOrder;
     }
@@ -306,12 +315,12 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     }
 
     pendingOrderRef.current = null;
-    messageOrderRef.current.set(itemId, pendingOrder);
+    messageOrder.set(itemId, pendingOrder);
     if (nextMessageOrderRef.current <= pendingOrder) {
       nextMessageOrderRef.current = pendingOrder + 1;
     }
     return pendingOrder;
-  }, []);
+  }, [messageOrderRef]);
 
   const reserveMessageOrder = useCallback((item?: RealtimeItem, itemId?: string) => {
     const resolvedItemId = itemId ?? item?.id;
@@ -330,13 +339,15 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       mode: 'append' | 'replace',
       isFinal = false
     ) => {
-      const previousContent = messageContentRef.current.get(itemId) ?? '';
+      const messageContent = messageContentRef.current;
+      const messageTimestamp = messageTimestampRef.current;
+      const previousContent = messageContent.get(itemId) ?? '';
       const nextContent = mode === 'append' ? `${previousContent}${content}` : content;
-      const timestamp = messageTimestampRef.current.get(itemId) ?? new Date().toISOString();
+      const timestamp = messageTimestamp.get(itemId) ?? new Date().toISOString();
       const sortOrder = ensureMessageOrder(itemId);
 
-      messageContentRef.current.set(itemId, nextContent);
-      messageTimestampRef.current.set(itemId, timestamp);
+      messageContent.set(itemId, nextContent);
+      messageTimestamp.set(itemId, timestamp);
 
       setMessages((prev) => {
         const existingIndex = prev.findIndex((message) => message.id === itemId);
@@ -368,7 +379,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
 
       return nextContent;
     },
-    [ensureMessageOrder]
+    [ensureMessageOrder, messageContentRef, messageTimestampRef]
   );
 
   const appendTranscript = useCallback(
@@ -387,7 +398,9 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const finalizeTranscript = useCallback(
     (role: 'user' | 'assistant', content?: string, itemId?: string) => {
       const resolvedItemId = itemId || `${role}-${Date.now()}`;
-      const resolvedContent = content ?? messageContentRef.current.get(resolvedItemId) ?? '';
+      const messageContent = messageContentRef.current;
+      const finalizedItems = finalizedItemsRef.current;
+      const resolvedContent = content ?? messageContent.get(resolvedItemId) ?? '';
       if (!resolvedContent.trim()) return;
 
       adoptPendingMessageOrder(role, resolvedItemId);
@@ -398,25 +411,31 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
         setAssistantTranscriptDelta(nextContent);
         setAssistantTranscriptFinal(nextContent);
       }
-      if (!finalizedItemsRef.current.has(resolvedItemId)) {
-        finalizedItemsRef.current.add(resolvedItemId);
+      if (!finalizedItems.has(resolvedItemId)) {
+        finalizedItems.add(resolvedItemId);
         onMessageCallback?.(role, nextContent.trim());
       }
     },
-    [adoptPendingMessageOrder, onMessageCallback, upsertMessage]
+    [adoptPendingMessageOrder, finalizedItemsRef, messageContentRef, onMessageCallback, upsertMessage]
   );
 
   const removeMessage = useCallback((itemId?: string) => {
     if (!itemId) return;
 
-    finalizedItemsRef.current.delete(itemId);
-    userTranscriptBufferRef.current.delete(itemId);
-    messageContentRef.current.delete(itemId);
-    messageTimestampRef.current.delete(itemId);
-    messageOrderRef.current.delete(itemId);
+    const finalizedItems = finalizedItemsRef.current;
+    const userTranscriptBuffer = userTranscriptBufferRef.current;
+    const messageContent = messageContentRef.current;
+    const messageTimestamp = messageTimestampRef.current;
+    const messageOrder = messageOrderRef.current;
+
+    finalizedItems.delete(itemId);
+    userTranscriptBuffer.delete(itemId);
+    messageContent.delete(itemId);
+    messageTimestamp.delete(itemId);
+    messageOrder.delete(itemId);
 
     setMessages((prev) => prev.filter((message) => message.id !== itemId));
-  }, []);
+  }, [finalizedItemsRef, messageContentRef, messageOrderRef, messageTimestampRef, userTranscriptBufferRef]);
 
   const ensureMicAnalyser = useCallback(async () => {
     if (!mediaStreamRef.current) {
@@ -460,7 +479,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const startMicMeter = useCallback(async () => {
     const analyser = await ensureMicAnalyser();
     if (!analyser) {
-      currentInputTurnRef.current.hadMicSignal = false;
+      const currentInputTurn = currentInputTurnRef.current;
+      currentInputTurn.hadMicSignal = false;
       return;
     }
 
@@ -478,15 +498,16 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       const rms = computeRmsFromByteTimeDomain(waveform);
 
       if (inputSpeechStartedAtRef.current !== null) {
-        currentInputTurnRef.current.hadMicSignal = true;
-        currentInputTurnRef.current.peakRms = Math.max(currentInputTurnRef.current.peakRms, rms);
+        const currentInputTurn = currentInputTurnRef.current;
+        currentInputTurn.hadMicSignal = true;
+        currentInputTurn.peakRms = Math.max(currentInputTurn.peakRms, rms);
       }
 
       micMeterFrameRef.current = window.requestAnimationFrame(tick);
     };
 
     micMeterFrameRef.current = window.requestAnimationFrame(tick);
-  }, [ensureMicAnalyser, stopMicMeter]);
+  }, [currentInputTurnRef, ensureMicAnalyser, stopMicMeter]);
 
   const cleanupConnection = useCallback(() => {
     stopMicMeter();
@@ -541,10 +562,14 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     currentResponseIdRef.current = null;
     inputSpeechStartedAtRef.current = null;
     currentInputTurnRef.current = createEmptyRealtimeInputTurnMetrics();
-    userTranscriptBufferRef.current.clear();
-    directiveArgumentBufferRef.current.clear();
-    directiveCallRef.current.clear();
-    completedDirectiveCallsRef.current.clear();
+    const userTranscriptBuffer = userTranscriptBufferRef.current;
+    const directiveArgumentBuffer = directiveArgumentBufferRef.current;
+    const directiveCall = directiveCallRef.current;
+    const completedDirectiveCalls = completedDirectiveCallsRef.current;
+    userTranscriptBuffer.clear();
+    directiveArgumentBuffer.clear();
+    directiveCall.clear();
+    completedDirectiveCalls.clear();
     pendingDirectiveContinuationRef.current = false;
     queuedAvatarContextsRef.current = [];
     pendingSpeechTurnHasDirectiveRef.current = false;
@@ -552,7 +577,16 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     setAvatarDebugStats(createEmptyAvatarDebugStats());
     resetAssistantPerformanceState();
     clearAvatarDirective();
-  }, [clearAvatarDirective, resetAssistantPerformanceState, stopMicMeter]);
+  }, [
+    clearAvatarDirective,
+    completedDirectiveCallsRef,
+    currentInputTurnRef,
+    directiveArgumentBufferRef,
+    directiveCallRef,
+    resetAssistantPerformanceState,
+    stopMicMeter,
+    userTranscriptBufferRef,
+  ]);
 
   const sendClientEvent = useCallback((payload: Record<string, unknown>) => {
     if (dataChannelRef.current?.readyState === 'open') {
@@ -690,22 +724,25 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   }, [createConversationItem, createRealtimeResponseUnlessHeld]);
 
   const completeDirectiveToolCall = useCallback((itemId: string, argsString?: string, eventCallId?: string | null, eventName?: string | null) => {
-    const meta = directiveCallRef.current.get(itemId);
+    const directiveCall = directiveCallRef.current;
+    const directiveArgumentBuffer = directiveArgumentBufferRef.current;
+    const completedDirectiveCalls = completedDirectiveCallsRef.current;
+    const meta = directiveCall.get(itemId);
     const resolvedName = eventName ?? meta?.name ?? null;
     if (resolvedName !== DIRECTIVE_TOOL_NAME) {
-      directiveArgumentBufferRef.current.delete(itemId);
-      directiveCallRef.current.delete(itemId);
+      directiveArgumentBuffer.delete(itemId);
+      directiveCall.delete(itemId);
       return;
     }
 
     const resolvedCallId = eventCallId ?? meta?.callId ?? null;
-    if (resolvedCallId && completedDirectiveCallsRef.current.has(resolvedCallId)) {
-      directiveArgumentBufferRef.current.delete(itemId);
-      directiveCallRef.current.delete(itemId);
+    if (resolvedCallId && completedDirectiveCalls.has(resolvedCallId)) {
+      directiveArgumentBuffer.delete(itemId);
+      directiveCall.delete(itemId);
       return;
     }
 
-    const serializedArguments = argsString ?? directiveArgumentBufferRef.current.get(itemId) ?? '';
+    const serializedArguments = argsString ?? directiveArgumentBuffer.get(itemId) ?? '';
     const directive = parseAvatarDirectiveArguments(serializedArguments);
 
     if (directive) {
@@ -713,18 +750,29 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     }
     acknowledgeFunctionCall(resolvedCallId, Boolean(directive));
     if (resolvedCallId) {
-      completedDirectiveCallsRef.current.add(resolvedCallId);
+      completedDirectiveCalls.add(resolvedCallId);
     }
     pendingDirectiveContinuationRef.current = true;
     maybeContinueAfterDirectiveTool();
 
-    directiveArgumentBufferRef.current.delete(itemId);
-    directiveCallRef.current.delete(itemId);
-  }, [acknowledgeFunctionCall, applyAvatarDirective, maybeContinueAfterDirectiveTool]);
+    directiveArgumentBuffer.delete(itemId);
+    directiveCall.delete(itemId);
+  }, [
+    acknowledgeFunctionCall,
+    applyAvatarDirective,
+    completedDirectiveCallsRef,
+    directiveArgumentBufferRef,
+    directiveCallRef,
+    maybeContinueAfterDirectiveTool,
+  ]);
 
   const handleServerEvent = useCallback(
     (event: RealtimeServerEvent) => {
       const itemId = event.item_id || event.item?.id;
+      const directiveArgumentBuffer = directiveArgumentBufferRef.current;
+      const directiveCall = directiveCallRef.current;
+      const completedDirectiveCalls = completedDirectiveCallsRef.current;
+      const userTranscriptBuffer = userTranscriptBufferRef.current;
 
       if (ASSISTANT_TRANSCRIPT_DELTA_EVENTS.has(event.type)) {
         appendTranscript('assistant', event.delta ?? event.transcript ?? '', itemId);
@@ -770,9 +818,9 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
         case 'session.created':
           resetMessageTracking();
           resetAssistantPerformanceState();
-          directiveArgumentBufferRef.current.clear();
-          directiveCallRef.current.clear();
-          completedDirectiveCallsRef.current.clear();
+          directiveArgumentBuffer.clear();
+          directiveCall.clear();
+          completedDirectiveCalls.clear();
           pendingDirectiveContinuationRef.current = false;
           clearAvatarDirective();
           break;
@@ -782,12 +830,12 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
         case 'response.output_item.added':
           reserveMessageOrder(event.item, itemId);
           if (itemId && event.item?.type === 'function_call') {
-            directiveCallRef.current.set(itemId, {
+            directiveCall.set(itemId, {
               callId: event.item.call_id ?? event.call_id ?? null,
               name: event.item.name ?? event.name ?? null,
             });
             if (typeof event.item.arguments === 'string') {
-              directiveArgumentBufferRef.current.set(itemId, event.item.arguments);
+              directiveArgumentBuffer.set(itemId, event.item.arguments);
             }
           }
           break;
@@ -806,8 +854,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
 
         case 'response.function_call_arguments.delta':
           if (itemId) {
-            const previous = directiveArgumentBufferRef.current.get(itemId) ?? '';
-            directiveArgumentBufferRef.current.set(itemId, `${previous}${event.delta ?? ''}`);
+            const previous = directiveArgumentBuffer.get(itemId) ?? '';
+            directiveArgumentBuffer.set(itemId, `${previous}${event.delta ?? ''}`);
           }
           break;
 
@@ -844,26 +892,27 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
 
         case 'conversation.item.input_audio_transcription.delta':
           if (itemId) {
-            const previous = userTranscriptBufferRef.current.get(itemId) ?? '';
-            userTranscriptBufferRef.current.set(itemId, `${previous}${event.delta ?? event.transcript ?? ''}`);
+            const previous = userTranscriptBuffer.get(itemId) ?? '';
+            userTranscriptBuffer.set(itemId, `${previous}${event.delta ?? event.transcript ?? ''}`);
           }
           break;
 
         case 'conversation.item.input_audio_transcription.completed':
         case 'conversation.item.input_audio_transcription.done':
           {
-            const resolvedTranscript = event.transcript ?? userTranscriptBufferRef.current.get(itemId ?? '') ?? '';
+            const resolvedTranscript = event.transcript ?? userTranscriptBuffer.get(itemId ?? '') ?? '';
             if (itemId) {
-              userTranscriptBufferRef.current.delete(itemId);
+              userTranscriptBuffer.delete(itemId);
             }
 
-            currentInputTurnRef.current.durationMs =
+            const currentInputTurn = currentInputTurnRef.current;
+            currentInputTurn.durationMs =
               inputSpeechStartedAtRef.current === null
-                ? currentInputTurnRef.current.durationMs
+                ? currentInputTurn.durationMs
                 : Math.max(0, Math.round(performance.now() - inputSpeechStartedAtRef.current));
             inputSpeechStartedAtRef.current = null;
 
-            if (shouldRespondToRealtimeTurn(resolvedTranscript, currentInputTurnRef.current)) {
+            if (shouldRespondToRealtimeTurn(resolvedTranscript, currentInputTurn)) {
               finalizeTranscript('user', resolvedTranscript, itemId);
               createRealtimeResponseUnlessHeld();
             } else {
@@ -918,11 +967,12 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
             const computedDuration = currentTurnStartedAtRef.current > 0
               ? Math.max(0, Math.round(performance.now() - currentTurnStartedAtRef.current))
               : 0;
+            const currentInputTurn = currentInputTurnRef.current;
             // Prefer the larger of the computed duration and whatever
             // transcription.completed may have already recorded, so out-of-order
             // events never drop the duration back to 0.
-            currentInputTurnRef.current.durationMs = Math.max(
-              currentInputTurnRef.current.durationMs,
+            currentInputTurn.durationMs = Math.max(
+              currentInputTurn.durationMs,
               computedDuration,
             );
           }
@@ -967,12 +1017,17 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       deleteConversationItem,
       finalizeTranscript,
       flushQueuedAvatarContexts,
+      completedDirectiveCallsRef,
+      currentInputTurnRef,
+      directiveArgumentBufferRef,
+      directiveCallRef,
       maybeContinueAfterDirectiveTool,
       removeMessage,
       reserveMessageOrder,
       reservePendingMessageOrder,
       resetAssistantPerformanceState,
       resetMessageTracking,
+      userTranscriptBufferRef,
       updateAvatarDebugStats,
     ]
   );
@@ -1082,12 +1137,23 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     resetAssistantPerformanceState();
     inputSpeechStartedAtRef.current = null;
     currentInputTurnRef.current = createEmptyRealtimeInputTurnMetrics();
-    directiveArgumentBufferRef.current.clear();
-    directiveCallRef.current.clear();
-    completedDirectiveCallsRef.current.clear();
+    const directiveArgumentBuffer = directiveArgumentBufferRef.current;
+    const directiveCall = directiveCallRef.current;
+    const completedDirectiveCalls = completedDirectiveCallsRef.current;
+    directiveArgumentBuffer.clear();
+    directiveCall.clear();
+    completedDirectiveCalls.clear();
     pendingDirectiveContinuationRef.current = false;
     clearAvatarDirective();
-  }, [clearAvatarDirective, resetAssistantPerformanceState, resetMessageTracking]);
+  }, [
+    clearAvatarDirective,
+    completedDirectiveCallsRef,
+    currentInputTurnRef,
+    directiveArgumentBufferRef,
+    directiveCallRef,
+    resetAssistantPerformanceState,
+    resetMessageTracking,
+  ]);
 
   const queueAvatarHit = useCallback(async (area: string) => {
     if (!area.trim()) return;

@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { Mic, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -14,7 +14,7 @@ export function VoiceRecorder({
   disabled = false,
 }: VoiceRecorderProps) {
   return (
-    <motion.button
+    <m.button
       onClick={onToggleRecording}
       disabled={disabled}
       className={cn(
@@ -33,10 +33,10 @@ export function VoiceRecorder({
       whileTap={{ scale: 0.95 }}
     >
       {isRecording ? (
-        <Square className="w-8 h-8 text-white fill-white" />
+        <Square className="size-8 text-white fill-white" />
       ) : (
-        <Mic className="w-8 h-8 text-white" />
+        <Mic className="size-8 text-white" />
       )}
-    </motion.button>
+    </m.button>
   );
 }

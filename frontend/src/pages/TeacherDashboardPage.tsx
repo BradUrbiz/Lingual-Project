@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TEACHER_JOIN_ORG_ROUTE } from '@/lib/homeRoutes';
 import {
@@ -71,292 +71,464 @@ const DEFAULT_CLASS_FORM: CreateTeacherClassPayload = {
   learningLocale: 'ko-KR',
 };
 
-export function TeacherDashboardPage() {
+type LtiPlatformForm = {
+  issuer: string;
+  clientId: string;
+  deploymentId: string;
+  authLoginUrl: string;
+  authTokenUrl: string;
+  keySetUrl: string;
+};
+
+const DEFAULT_LTI_FORM: LtiPlatformForm = {
+  issuer: '',
+  clientId: '',
+  deploymentId: '',
+  authLoginUrl: '',
+  authTokenUrl: '',
+  keySetUrl: '',
+};
+
+const EMPTY_DASHBOARD_SUMMARY = {
+  classCount: 0,
+  studentCount: 0,
+  speakingMinutes: 0,
+  assignmentCount: 0,
+};
+
+type DashboardClassSummary = TeacherDashboardData['classes'][number];
+type DashboardSetupChecklistItem = TeacherDashboardData['setupChecklist'][number];
+type DashboardAlert = TeacherDashboardData['alerts'][number];
+type DashboardStat = {
+  label: string;
+  value: number;
+  icon: typeof BookOpen;
+  accent: string;
+};
+
+type TeacherDashboardState = {
+  loading: boolean;
+  savingClass: boolean;
+  error: string | null;
+  dashboard?: TeacherDashboardData;
+  isCreateDialogOpen: boolean;
+  classForm: CreateTeacherClassPayload;
+  classFilter: string;
+  joinCodeClassId: string | null;
+  joinCodeData: ClassJoinCodeData | null;
+  joinCodeLoading: boolean;
+  joinCodeCopied: boolean;
+  rosterClassId: string | null;
+  roster: ClassRosterStudent[];
+  rosterLoading: boolean;
+  removingUid: string | null;
+  canvasRosterGap: CanvasRosterGapEntry[];
+  canvasRosterSummary: CanvasRosterGapSummary | null;
+  teacherInviteCode: TeacherInviteCodeData | null;
+  teacherInviteCodeLoading: boolean;
+  teacherInviteCodeCopied: boolean;
+  ltiPlatform: LtiPlatformConfig | null;
+  ltiLoading: boolean;
+  ltiSaving: boolean;
+  ltiForm: LtiPlatformForm;
+};
+
+type UpdateClassFieldAction<
+  K extends keyof CreateTeacherClassPayload = keyof CreateTeacherClassPayload,
+> = {
+  type: 'updateClassField';
+  field: K;
+  value: CreateTeacherClassPayload[K];
+};
+
+type TeacherDashboardAction =
+  | { type: 'patch'; patch: Partial<TeacherDashboardState> }
+  | UpdateClassFieldAction
+  | { type: 'updateLtiField'; field: keyof LtiPlatformForm; value: string }
+  | { type: 'removeRosterStudent'; studentUid: string };
+
+const initialTeacherDashboardState: TeacherDashboardState = {
+  loading: true,
+  savingClass: false,
+  error: null,
+  dashboard: undefined,
+  isCreateDialogOpen: false,
+  classForm: DEFAULT_CLASS_FORM,
+  classFilter: '',
+  joinCodeClassId: null,
+  joinCodeData: null,
+  joinCodeLoading: false,
+  joinCodeCopied: false,
+  rosterClassId: null,
+  roster: [],
+  rosterLoading: false,
+  removingUid: null,
+  canvasRosterGap: [],
+  canvasRosterSummary: null,
+  teacherInviteCode: null,
+  teacherInviteCodeLoading: false,
+  teacherInviteCodeCopied: false,
+  ltiPlatform: null,
+  ltiLoading: false,
+  ltiSaving: false,
+  ltiForm: DEFAULT_LTI_FORM,
+};
+
+function teacherDashboardReducer(
+  state: TeacherDashboardState,
+  action: TeacherDashboardAction
+): TeacherDashboardState {
+  switch (action.type) {
+    case 'patch':
+      return { ...state, ...action.patch };
+    case 'updateClassField':
+      return {
+        ...state,
+        classForm: {
+          ...state.classForm,
+          [action.field]: action.value,
+        },
+      };
+    case 'updateLtiField':
+      return {
+        ...state,
+        ltiForm: {
+          ...state.ltiForm,
+          [action.field]: action.value,
+        },
+      };
+    case 'removeRosterStudent':
+      return {
+        ...state,
+        roster: state.roster.filter((student) => student.uid !== action.studentUid),
+      };
+    default:
+      return state;
+  }
+}
+
+function useTeacherDashboardController() {
   const navigate = useNavigate();
   const { hasRole } = useMembership();
   const isSchoolAdmin = hasRole('school_admin');
-
-  const [loading, setLoading] = useState(true);
-  const [savingClass, setSavingClass] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [dashboard, setDashboard] = useState<TeacherDashboardData | null>(null);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [classForm, setClassForm] = useState<CreateTeacherClassPayload>(DEFAULT_CLASS_FORM);
-  const [classFilter, setClassFilter] = useState('');
-
-  // Join code state
-  const [joinCodeClassId, setJoinCodeClassId] = useState<string | null>(null);
-  const [joinCodeData, setJoinCodeData] = useState<ClassJoinCodeData | null>(null);
-  const [joinCodeLoading, setJoinCodeLoading] = useState(false);
-  const [joinCodeCopied, setJoinCodeCopied] = useState(false);
-
-  // Roster state
-  const [rosterClassId, setRosterClassId] = useState<string | null>(null);
-  const [roster, setRoster] = useState<ClassRosterStudent[]>([]);
-  const [rosterLoading, setRosterLoading] = useState(false);
-  const [removingUid, setRemovingUid] = useState<string | null>(null);
-
-  // Canvas roster gap state
-  const [canvasRosterGap, setCanvasRosterGap] = useState<CanvasRosterGapEntry[]>([]);
-  const [canvasRosterSummary, setCanvasRosterSummary] =
-    useState<CanvasRosterGapSummary | null>(null);
-
-  // Tracks the class whose roster is currently being fetched, so an
-  // in-flight fetch for class A doesn't overwrite state after the teacher
-  // has already switched to class B.
+  const [state, dispatch] = useReducer(teacherDashboardReducer, initialTeacherDashboardState);
   const activeRosterClassIdRef = useRef<string | null>(null);
+  const {
+    loading,
+    savingClass,
+    error,
+    dashboard,
+    isCreateDialogOpen,
+    classForm,
+    classFilter,
+    joinCodeClassId,
+    joinCodeData,
+    joinCodeLoading,
+    joinCodeCopied,
+    rosterClassId,
+    roster,
+    rosterLoading,
+    removingUid,
+    canvasRosterGap,
+    canvasRosterSummary,
+    teacherInviteCode,
+    teacherInviteCodeLoading,
+    teacherInviteCodeCopied,
+    ltiPlatform,
+    ltiLoading,
+    ltiSaving,
+    ltiForm,
+  } = state;
 
-  // Team section state (school_admin only)
-  const [teacherInviteCode, setTeacherInviteCode] = useState<TeacherInviteCodeData | null>(null);
-  const [teacherInviteCodeLoading, setTeacherInviteCodeLoading] = useState(false);
-  const [teacherInviteCodeCopied, setTeacherInviteCodeCopied] = useState(false);
-
-  // LTI configuration state (school_admin only)
-  const [ltiPlatform, setLtiPlatform] = useState<LtiPlatformConfig | null>(null);
-  const [ltiLoading, setLtiLoading] = useState(false);
-  const [ltiSaving, setLtiSaving] = useState(false);
-  const [ltiForm, setLtiForm] = useState({
-    issuer: '',
-    clientId: '',
-    deploymentId: '',
-    authLoginUrl: '',
-    authTokenUrl: '',
-    keySetUrl: '',
-  });
-
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     try {
       const nextDashboard = await getTeacherDashboard();
-      setDashboard(nextDashboard);
-      setError(null);
+      dispatch({ type: 'patch', patch: { dashboard: nextDashboard, error: null } });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load teacher dashboard.');
+      dispatch({
+        type: 'patch',
+        patch: { error: err instanceof Error ? err.message : 'Failed to load teacher dashboard.' },
+      });
     } finally {
-      setLoading(false);
+      dispatch({ type: 'patch', patch: { loading: false } });
     }
-  };
+  }, []);
 
   useEffect(() => {
+    // react-doctor-disable-next-line react-doctor/no-initialize-state -- dashboard starts empty and is populated by an async dashboard fetch.
     loadDashboard();
-  }, []);
+  }, [loadDashboard]);
 
   const updateClassField = <K extends keyof CreateTeacherClassPayload>(
     field: K,
     value: CreateTeacherClassPayload[K]
   ) => {
-    setClassForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
+    dispatch({ type: 'updateClassField', field, value });
   };
 
   const handleCreateClass = async () => {
-    setSavingClass(true);
-    setError(null);
+    dispatch({ type: 'patch', patch: { savingClass: true, error: null } });
 
     try {
       await createTeacherClass(classForm);
-      setIsCreateDialogOpen(false);
-      setClassForm(DEFAULT_CLASS_FORM);
+      dispatch({
+        type: 'patch',
+        patch: { isCreateDialogOpen: false, classForm: DEFAULT_CLASS_FORM },
+      });
       await loadDashboard();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create class.');
+      dispatch({
+        type: 'patch',
+        patch: { error: err instanceof Error ? err.message : 'Failed to create class.' },
+      });
     } finally {
-      setSavingClass(false);
+      dispatch({ type: 'patch', patch: { savingClass: false } });
     }
   };
 
-  // ── Join code handlers ──────────────────────────────────────────────
-
   const openJoinCodeDialog = async (classId: string) => {
-    setJoinCodeClassId(classId);
-    setJoinCodeData(null);
-    setJoinCodeLoading(true);
-    setJoinCodeCopied(false);
+    dispatch({
+      type: 'patch',
+      patch: {
+        joinCodeClassId: classId,
+        joinCodeData: null,
+        joinCodeLoading: true,
+        joinCodeCopied: false,
+      },
+    });
+
     try {
       const data = await getClassJoinCode(classId);
-      setJoinCodeData(data);
+      dispatch({ type: 'patch', patch: { joinCodeData: data } });
     } catch {
-      // No active code — that's fine, user can generate one
-      setJoinCodeData(null);
+      dispatch({ type: 'patch', patch: { joinCodeData: null } });
     } finally {
-      setJoinCodeLoading(false);
+      dispatch({ type: 'patch', patch: { joinCodeLoading: false } });
     }
   };
 
   const handleGenerateCode = async () => {
     if (!joinCodeClassId) return;
-    setJoinCodeLoading(true);
+    dispatch({ type: 'patch', patch: { joinCodeLoading: true } });
+
     try {
       const data = await generateClassJoinCode(joinCodeClassId);
-      setJoinCodeData(data);
+      dispatch({ type: 'patch', patch: { joinCodeData: data } });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate join code.');
+      dispatch({
+        type: 'patch',
+        patch: { error: err instanceof Error ? err.message : 'Failed to generate join code.' },
+      });
     } finally {
-      setJoinCodeLoading(false);
+      dispatch({ type: 'patch', patch: { joinCodeLoading: false } });
     }
   };
 
   const handleDeactivateCode = async () => {
     if (!joinCodeClassId) return;
-    setJoinCodeLoading(true);
+    dispatch({ type: 'patch', patch: { joinCodeLoading: true } });
+
     try {
       await deactivateClassJoinCode(joinCodeClassId);
-      setJoinCodeData(null);
+      dispatch({ type: 'patch', patch: { joinCodeData: null } });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to deactivate join code.');
+      dispatch({
+        type: 'patch',
+        patch: { error: err instanceof Error ? err.message : 'Failed to deactivate join code.' },
+      });
     } finally {
-      setJoinCodeLoading(false);
+      dispatch({ type: 'patch', patch: { joinCodeLoading: false } });
     }
   };
 
   const handleCopyCode = async (code: string) => {
     await navigator.clipboard.writeText(code);
-    setJoinCodeCopied(true);
-    setTimeout(() => setJoinCodeCopied(false), 2000);
+    dispatch({ type: 'patch', patch: { joinCodeCopied: true } });
+    setTimeout(() => dispatch({ type: 'patch', patch: { joinCodeCopied: false } }), 2000);
   };
-
-  // ── Roster handlers ───────────────────────────────────────────────
 
   const openRosterDialog = async (classId: string) => {
     activeRosterClassIdRef.current = classId;
-    setRosterClassId(classId);
-    setRoster([]);
-    setCanvasRosterGap([]);
-    setCanvasRosterSummary(null);
-    setRosterLoading(true);
+    dispatch({
+      type: 'patch',
+      patch: {
+        rosterClassId: classId,
+        roster: [],
+        canvasRosterGap: [],
+        canvasRosterSummary: null,
+        rosterLoading: true,
+      },
+    });
+
     try {
+      if (activeRosterClassIdRef.current !== classId) return;
       const [students, gapResponse] = await Promise.all([
         getClassRoster(classId),
         getClassCanvasRosterGap(classId),
       ]);
-      // Bail if the teacher clicked a different class's roster button
-      // before this fetch resolved — applying stale data would show
-      // class A's roster under class B's dialog title.
-      if (activeRosterClassIdRef.current !== classId) return;
-      setRoster(students);
-      setCanvasRosterGap(gapResponse.gap);
-      setCanvasRosterSummary(gapResponse.summary);
+
+      if (activeRosterClassIdRef.current === classId) {
+        dispatch({
+          type: 'patch',
+          patch: {
+            roster: students,
+            canvasRosterGap: gapResponse.gap,
+            canvasRosterSummary: gapResponse.summary,
+          },
+        });
+      }
     } catch (err) {
-      if (activeRosterClassIdRef.current !== classId) return;
-      setError(err instanceof Error ? err.message : 'Failed to load roster.');
+      if (activeRosterClassIdRef.current === classId) {
+        dispatch({
+          type: 'patch',
+          patch: { error: err instanceof Error ? err.message : 'Failed to load roster.' },
+        });
+      }
     } finally {
       if (activeRosterClassIdRef.current === classId) {
-        setRosterLoading(false);
+        dispatch({ type: 'patch', patch: { rosterLoading: false } });
       }
     }
   };
 
   const handleRemoveStudent = async (studentUid: string) => {
     if (!rosterClassId) return;
-    setRemovingUid(studentUid);
+    dispatch({ type: 'patch', patch: { removingUid: studentUid } });
+
     try {
       await removeStudentFromClass(rosterClassId, studentUid);
-      setRoster((prev) => prev.filter((s) => s.uid !== studentUid));
+      dispatch({ type: 'removeRosterStudent', studentUid });
       await loadDashboard();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove student.');
+      dispatch({
+        type: 'patch',
+        patch: { error: err instanceof Error ? err.message : 'Failed to remove student.' },
+      });
     } finally {
-      setRemovingUid(null);
+      dispatch({ type: 'patch', patch: { removingUid: null } });
     }
   };
 
-  // ── Team section handlers (school_admin only) ──────────────────────
-
   const loadTeamData = useCallback(async () => {
     if (!isSchoolAdmin) return;
-    setTeacherInviteCodeLoading(true);
+    dispatch({ type: 'patch', patch: { teacherInviteCodeLoading: true } });
+
     try {
       const code = await getTeacherInviteCode();
-      setTeacherInviteCode(code);
+      dispatch({ type: 'patch', patch: { teacherInviteCode: code } });
     } catch {
-      setTeacherInviteCode(null);
+      dispatch({ type: 'patch', patch: { teacherInviteCode: null } });
     } finally {
-      setTeacherInviteCodeLoading(false);
+      dispatch({ type: 'patch', patch: { teacherInviteCodeLoading: false } });
     }
-    // Load LTI platform config
-    setLtiLoading(true);
+
+    dispatch({ type: 'patch', patch: { ltiLoading: true } });
     try {
       const platform = await getLtiPlatform();
-      setLtiPlatform(platform);
+      dispatch({ type: 'patch', patch: { ltiPlatform: platform } });
     } catch {
-      setLtiPlatform(null);
+      dispatch({ type: 'patch', patch: { ltiPlatform: null } });
     } finally {
-      setLtiLoading(false);
+      dispatch({ type: 'patch', patch: { ltiLoading: false } });
     }
   }, [isSchoolAdmin]);
 
   useEffect(() => {
+    // react-doctor-disable-next-line react-doctor/no-derived-state -- teacherInviteCodeLoading is an async request flag reused by load, generate, and refresh actions.
     loadTeamData();
   }, [loadTeamData]);
 
   const handleGenerateTeacherInviteCode = async () => {
-    setTeacherInviteCodeLoading(true);
+    dispatch({ type: 'patch', patch: { teacherInviteCodeLoading: true } });
+
     try {
       const data = await generateTeacherInviteCode();
-      setTeacherInviteCode(data);
+      dispatch({ type: 'patch', patch: { teacherInviteCode: data } });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate teacher invite code.');
+      dispatch({
+        type: 'patch',
+        patch: {
+          error: err instanceof Error ? err.message : 'Failed to generate teacher invite code.',
+        },
+      });
     } finally {
-      setTeacherInviteCodeLoading(false);
+      dispatch({ type: 'patch', patch: { teacherInviteCodeLoading: false } });
     }
   };
 
   const handleDeactivateTeacherInviteCode = async () => {
-    setTeacherInviteCodeLoading(true);
+    dispatch({ type: 'patch', patch: { teacherInviteCodeLoading: true } });
+
     try {
       await deactivateTeacherInviteCode();
-      setTeacherInviteCode(null);
+      dispatch({ type: 'patch', patch: { teacherInviteCode: null } });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to deactivate teacher invite code.');
+      dispatch({
+        type: 'patch',
+        patch: {
+          error: err instanceof Error ? err.message : 'Failed to deactivate teacher invite code.',
+        },
+      });
     } finally {
-      setTeacherInviteCodeLoading(false);
+      dispatch({ type: 'patch', patch: { teacherInviteCodeLoading: false } });
     }
   };
 
   const handleCopyTeacherInviteCode = async (code: string) => {
     await navigator.clipboard.writeText(code);
-    setTeacherInviteCodeCopied(true);
-    setTimeout(() => setTeacherInviteCodeCopied(false), 2000);
+    dispatch({ type: 'patch', patch: { teacherInviteCodeCopied: true } });
+    setTimeout(
+      () => dispatch({ type: 'patch', patch: { teacherInviteCodeCopied: false } }),
+      2000
+    );
   };
 
   const handleRegisterLtiPlatform = async () => {
-    setLtiSaving(true);
-    setError(null);
+    dispatch({ type: 'patch', patch: { ltiSaving: true, error: null } });
+
     try {
       await registerLtiPlatform(ltiForm);
       const platform = await getLtiPlatform();
-      setLtiPlatform(platform);
-      setLtiForm({ issuer: '', clientId: '', deploymentId: '', authLoginUrl: '', authTokenUrl: '', keySetUrl: '' });
+      dispatch({ type: 'patch', patch: { ltiPlatform: platform, ltiForm: DEFAULT_LTI_FORM } });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to register LTI platform.');
+      dispatch({
+        type: 'patch',
+        patch: { error: err instanceof Error ? err.message : 'Failed to register LTI platform.' },
+      });
     } finally {
-      setLtiSaving(false);
+      dispatch({ type: 'patch', patch: { ltiSaving: false } });
     }
   };
 
   const handleRemoveLtiPlatform = async () => {
-    setLtiSaving(true);
-    setError(null);
+    dispatch({ type: 'patch', patch: { ltiSaving: true, error: null } });
+
     try {
       await deleteLtiPlatform();
-      setLtiPlatform(null);
+      dispatch({ type: 'patch', patch: { ltiPlatform: null } });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove LTI platform.');
+      dispatch({
+        type: 'patch',
+        patch: { error: err instanceof Error ? err.message : 'Failed to remove LTI platform.' },
+      });
     } finally {
-      setLtiSaving(false);
+      dispatch({ type: 'patch', patch: { ltiSaving: false } });
     }
   };
 
   const filteredClasses = useMemo(() => {
     if (!dashboard || !classFilter) return dashboard?.classes ?? [];
-    return dashboard.classes.filter((c) => c.id === classFilter);
+    return dashboard.classes.filter((classSummary) => classSummary.id === classFilter);
   }, [dashboard, classFilter]);
 
   const filteredSummary = useMemo(() => {
-    if (!dashboard || !classFilter) return dashboard?.summary ?? { classCount: 0, studentCount: 0, speakingMinutes: 0, assignmentCount: 0 };
-    const studentCount = filteredClasses.reduce((sum, c) => sum + c.studentCount, 0);
-    const assignmentCount = filteredClasses.reduce((sum, c) => sum + (c.assignmentCount ?? 0), 0);
+    if (!dashboard || !classFilter) return dashboard?.summary ?? EMPTY_DASHBOARD_SUMMARY;
+    const studentCount = filteredClasses.reduce((sum, classSummary) => {
+      return sum + classSummary.studentCount;
+    }, 0);
+    const assignmentCount = filteredClasses.reduce((sum, classSummary) => {
+      return sum + (classSummary.assignmentCount ?? 0);
+    }, 0);
     return {
       classCount: filteredClasses.length,
       studentCount,
@@ -365,130 +537,320 @@ export function TeacherDashboardPage() {
     };
   }, [dashboard, classFilter, filteredClasses]);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+  const stats = useMemo<DashboardStat[]>(
+    () => [
+      {
+        label: 'Classes',
+        value: filteredSummary.classCount,
+        icon: BookOpen,
+        accent: 'bg-primary/10 text-primary',
+      },
+      {
+        label: 'Students',
+        value: filteredSummary.studentCount,
+        icon: Users,
+        accent: 'bg-success/15 text-success',
+      },
+      {
+        label: 'Speaking minutes',
+        value: filteredSummary.speakingMinutes,
+        icon: CalendarClock,
+        accent: 'bg-accent/20 text-accent-foreground',
+      },
+      {
+        label: 'Assignments',
+        value: filteredSummary.assignmentCount,
+        icon: GraduationCap,
+        accent: 'bg-secondary text-foreground',
+      },
+    ],
+    [filteredSummary]
+  );
+
+  const openCreateDialog = () => {
+    dispatch({ type: 'patch', patch: { isCreateDialogOpen: true } });
+  };
+
+  const closeCreateDialog = () => {
+    dispatch({ type: 'patch', patch: { isCreateDialogOpen: false } });
+  };
+
+  const handleCreateDialogOpenChange = (open: boolean) => {
+    dispatch({ type: 'patch', patch: { isCreateDialogOpen: open } });
+  };
+
+  const setClassFilter = (nextClassFilter: string) => {
+    dispatch({ type: 'patch', patch: { classFilter: nextClassFilter } });
+  };
+
+  const closeJoinCodeDialog = () => {
+    dispatch({ type: 'patch', patch: { joinCodeClassId: null } });
+  };
+
+  const closeRosterDialog = () => {
+    activeRosterClassIdRef.current = null;
+    dispatch({ type: 'patch', patch: { rosterClassId: null } });
+  };
+
+  const openInviteFromRoster = () => {
+    const classId = rosterClassId;
+    closeRosterDialog();
+    if (classId) void openJoinCodeDialog(classId);
+  };
+
+  const updateLtiField = (field: keyof LtiPlatformForm, value: string) => {
+    dispatch({ type: 'updateLtiField', field, value });
+  };
+
+  return {
+    loading,
+    savingClass,
+    error,
+    dashboard,
+    isSchoolAdmin,
+    isCreateDialogOpen,
+    classForm,
+    classFilter,
+    filteredClasses,
+    stats,
+    joinCodeClassId,
+    joinCodeData,
+    joinCodeLoading,
+    joinCodeCopied,
+    rosterClassId,
+    roster,
+    rosterLoading,
+    removingUid,
+    canvasRosterGap,
+    canvasRosterSummary,
+    teacherInviteCode,
+    teacherInviteCodeLoading,
+    teacherInviteCodeCopied,
+    ltiPlatform,
+    ltiLoading,
+    ltiSaving,
+    ltiForm,
+    goToTeacherJoin: () => navigate(TEACHER_JOIN_ORG_ROUTE),
+    openCreateDialog,
+    closeCreateDialog,
+    handleCreateDialogOpenChange,
+    setClassFilter,
+    clearClassFilter: () => setClassFilter(''),
+    updateClassField,
+    handleCreateClass,
+    openJoinCodeDialog,
+    closeJoinCodeDialog,
+    handleGenerateCode,
+    handleDeactivateCode,
+    handleCopyCode,
+    openRosterDialog,
+    closeRosterDialog,
+    openInviteFromRoster,
+    handleRemoveStudent,
+    openClassAnalytics: (classId: string) => navigate(`/app/teacher/classes/${classId}/analytics`),
+    openClassAssignments: (classId: string) =>
+      navigate(`/app/teacher/classes/${classId}/assignments`),
+    openClassCanvasConnect: (classId: string) =>
+      navigate(`/app/teacher/classes/${classId}/canvas/connect`),
+    handleGenerateTeacherInviteCode,
+    handleDeactivateTeacherInviteCode,
+    handleCopyTeacherInviteCode,
+    handleRegisterLtiPlatform,
+    handleRemoveLtiPlatform,
+    updateLtiField,
+  };
+}
+
+type TeacherDashboardController = ReturnType<typeof useTeacherDashboardController>;
+
+export function TeacherDashboardPage() {
+  const controller = useTeacherDashboardController();
+  return <TeacherDashboardView controller={controller} />;
+}
+
+function TeacherDashboardView({ controller }: { controller: TeacherDashboardController }) {
+  const { dashboard } = controller;
+
+  if (controller.loading) {
+    return <TeacherDashboardLoading />;
   }
 
   if (!dashboard) {
     return (
-      <div className="space-y-4">
-        <Alert variant="destructive">
-          <AlertDescription>{error || 'Teacher dashboard is unavailable.'}</AlertDescription>
-        </Alert>
-        <Button variant="outline" onClick={() => navigate(TEACHER_JOIN_ORG_ROUTE)}>
-          Go to teacher join
-        </Button>
-      </div>
+      <TeacherDashboardUnavailable
+        error={controller.error}
+        onGoToTeacherJoin={controller.goToTeacherJoin}
+      />
     );
   }
 
-  const stats = [
-    {
-      label: 'Classes',
-      value: filteredSummary.classCount,
-      icon: BookOpen,
-      accent: 'bg-primary/10 text-primary',
-    },
-    {
-      label: 'Students',
-      value: filteredSummary.studentCount,
-      icon: Users,
-      accent: 'bg-success/15 text-success',
-    },
-    {
-      label: 'Speaking minutes',
-      value: filteredSummary.speakingMinutes,
-      icon: CalendarClock,
-      accent: 'bg-accent/20 text-accent-foreground',
-    },
-    {
-      label: 'Assignments',
-      value: filteredSummary.assignmentCount,
-      icon: GraduationCap,
-      accent: 'bg-secondary text-foreground',
-    },
-  ];
-
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border-2 border-border bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            <School size={14} />
-            School integration
-          </div>
-          <h1 className="text-3xl font-display font-bold text-foreground">
-            {dashboard.organizationName || 'Teacher workspace'}
-          </h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Manage your classes, create speaking assignments, and track student progress.
-          </p>
+      <TeacherDashboardHeader
+        organizationName={dashboard.organizationName}
+        onCreateClass={controller.openCreateDialog}
+      />
+      <DashboardErrorAlert error={controller.error} />
+      <DashboardAlerts alerts={dashboard.alerts} />
+      <ClassFilterBar
+        classes={dashboard.classes}
+        value={controller.classFilter}
+        onChange={controller.setClassFilter}
+        onClear={controller.clearClassFilter}
+      />
+      <StatsGrid stats={controller.stats} />
+      <TeacherDashboardHints dashboard={dashboard} />
+      {controller.isSchoolAdmin && <PendingTeacherRequestsSection />}
+      <SetupAndClassesSection controller={controller} />
+      {controller.isSchoolAdmin && <TeacherInviteCodeSection controller={controller} />}
+      {controller.isSchoolAdmin && <LtiConfigurationCard controller={controller} />}
+      <CreateClassDialog controller={controller} />
+      <JoinCodeDialog controller={controller} />
+      <RosterDialog controller={controller} />
+    </div>
+  );
+}
+
+function TeacherDashboardLoading() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <Loader2 className="size-8 animate-spin text-primary" />
+    </div>
+  );
+}
+
+function TeacherDashboardUnavailable({
+  error,
+  onGoToTeacherJoin,
+}: {
+  error: string | null;
+  onGoToTeacherJoin: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <Alert variant="destructive">
+        <AlertDescription>{error || 'Teacher dashboard is unavailable.'}</AlertDescription>
+      </Alert>
+      <Button variant="outline" onClick={onGoToTeacherJoin}>
+        Go to teacher join
+      </Button>
+    </div>
+  );
+}
+
+function TeacherDashboardHeader({
+  organizationName,
+  onCreateClass,
+}: {
+  organizationName?: string;
+  onCreateClass: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div>
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full border-2 border-border bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          <School size={14} />
+          School integration
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
-            <Plus size={16} className="mr-2" />
-            Create class
-          </Button>
-        </div>
+        <h1 className="text-3xl font-display font-bold text-foreground">
+          {organizationName || 'Teacher workspace'}
+        </h1>
+        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+          Manage your classes, create speaking assignments, and track student progress.
+        </p>
       </div>
+      <div className="flex flex-wrap gap-3">
+        <Button onClick={onCreateClass}>
+          <Plus size={16} className="mr-2" />
+          Create class
+        </Button>
+      </div>
+    </div>
+  );
+}
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+function DashboardErrorAlert({ error }: { error: string | null }) {
+  if (!error) return null;
+
+  return (
+    <Alert variant="destructive">
+      <AlertDescription>{error}</AlertDescription>
+    </Alert>
+  );
+}
+
+function DashboardAlerts({ alerts }: { alerts: DashboardAlert[] }) {
+  if (alerts.length === 0) return null;
+
+  return (
+    <div className="grid gap-3">
+      {alerts.map((message) => (
+        <Alert key={message}>
+          <AlertTriangle className="size-4" />
+          <AlertDescription>{message}</AlertDescription>
         </Alert>
-      )}
+      ))}
+    </div>
+  );
+}
 
-      {dashboard.alerts.length > 0 && (
-        <div className="grid gap-3">
-          {dashboard.alerts.map((message) => (
-            <Alert key={message}>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          ))}
-        </div>
-      )}
+function ClassFilterBar({
+  classes,
+  value,
+  onChange,
+  onClear,
+}: {
+  classes: DashboardClassSummary[];
+  value: string;
+  onChange: (classId: string) => void;
+  onClear: () => void;
+}) {
+  if (classes.length <= 1) return null;
 
-      {dashboard.classes.length > 1 && (
-        <div className="flex items-center gap-3">
-          <Filter size={16} className="text-muted-foreground" />
-          <label htmlFor="dashboard-class-filter" className="text-sm font-medium text-muted-foreground">
-            Class
-          </label>
-          <select
-            id="dashboard-class-filter"
-            value={classFilter}
-            onChange={(e) => setClassFilter(e.target.value)}
-            className="h-9 rounded-xl border-2 border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none"
-          >
-            <option value="">All classes</option>
-            {dashboard.classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          {classFilter && (
-            <button
-              onClick={() => setClassFilter('')}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              Clear
-            </button>
-          )}
-        </div>
+  return (
+    <div className="flex items-center gap-3">
+      <Filter size={16} className="text-muted-foreground" />
+      <label htmlFor="dashboard-class-filter" className="text-sm font-medium text-muted-foreground">
+        Class
+      </label>
+      <select
+        id="dashboard-class-filter"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 rounded-xl border-2 border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none"
+      >
+        <option value="">All classes</option>
+        {classes.map((classSummary) => (
+          <option key={classSummary.id} value={classSummary.id}>
+            {classSummary.name}
+          </option>
+        ))}
+      </select>
+      {value && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          Clear
+        </button>
       )}
+    </div>
+  );
+}
 
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => (
+function StatsGrid({ stats }: { stats: DashboardStat[] }) {
+  return (
+    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+      {stats.map((stat) => {
+        const Icon = stat.icon;
+        return (
           <Card key={stat.label} className="border-3 border-foreground p-5 shadow-stamp">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-foreground ${stat.accent}`}>
-                <stat.icon size={22} strokeWidth={2.5} />
+              <div
+                className={`flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-foreground ${stat.accent}`}
+              >
+                <Icon size={22} strokeWidth={2.5} />
               </div>
               <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Beta
@@ -497,723 +859,801 @@ export function TeacherDashboardPage() {
             <p className="text-3xl font-display font-bold text-foreground">{stat.value}</p>
             <p className="mt-1 text-sm font-medium text-muted-foreground">{stat.label}</p>
           </Card>
-        ))}
-      </div>
+        );
+      })}
+    </div>
+  );
+}
 
-      {dashboard && (
-        <>
-          <OnboardingHint
-            show={dashboard.classes.length === 0}
-            message="Create your first class to get started."
-            ctaLabel="Create Class"
-            ctaTo="/app/teacher"
-          />
-          <OnboardingHint
-            show={dashboard.classes.length > 0 && dashboard.summary.studentCount === 0}
-            message="Invite students to your class using a join code."
-            ctaLabel="Go to Class"
-            ctaTo={`/app/teacher/classes/${dashboard.classes[0]?.id}/analytics`}
-          />
-          <OnboardingHint
-            show={dashboard.classes.length > 0 && dashboard.summary.studentCount > 0 && dashboard.summary.assignmentCount === 0}
-            message="Create your first assignment from a class page."
-            ctaLabel="Go to Class"
-            ctaTo={`/app/teacher/classes/${dashboard.classes[0]?.id}/assignments`}
-          />
-        </>
-      )}
+function TeacherDashboardHints({ dashboard }: { dashboard: TeacherDashboardData }) {
+  return (
+    <>
+      <OnboardingHint
+        show={dashboard.classes.length === 0}
+        message="Create your first class to get started."
+        ctaLabel="Create Class"
+        ctaTo="/app/teacher"
+      />
+      <OnboardingHint
+        show={dashboard.classes.length > 0 && dashboard.summary.studentCount === 0}
+        message="Invite students to your class using a join code."
+        ctaLabel="Go to Class"
+        ctaTo={`/app/teacher/classes/${dashboard.classes[0]?.id}/analytics`}
+      />
+      <OnboardingHint
+        show={
+          dashboard.classes.length > 0 &&
+          dashboard.summary.studentCount > 0 &&
+          dashboard.summary.assignmentCount === 0
+        }
+        message="Create your first assignment from a class page."
+        ctaLabel="Go to Class"
+        ctaTo={`/app/teacher/classes/${dashboard.classes[0]?.id}/assignments`}
+      />
+    </>
+  );
+}
 
-      {isSchoolAdmin && <PendingTeacherRequestsSection />}
+function SetupAndClassesSection({ controller }: { controller: TeacherDashboardController }) {
+  const { dashboard } = controller;
+  if (!dashboard) return null;
 
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <Card className="border-3 border-foreground p-6 shadow-stamp">
-          <h2 className="text-xl font-display font-bold text-foreground">Setup checklist</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Phase 1 is complete when the school workspace, first class, and first student path all exist on the
-            real data model.
-          </p>
-          <div className="mt-6 space-y-4">
-            {dashboard.setupChecklist.map((item) => (
-              <div key={item.id} className="rounded-2xl border-2 border-border bg-secondary/60 p-4">
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-full border-2 ${
-                      item.completed
-                        ? 'border-success bg-success/15 text-success'
-                        : 'border-border bg-card text-muted-foreground'
-                    }`}
-                  >
-                    <CheckCircle2 size={18} strokeWidth={2.5} />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-foreground">{item.title}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+  return (
+    <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+      <SetupChecklistCard items={dashboard.setupChecklist} />
+      <ClassesCard controller={controller} />
+    </div>
+  );
+}
 
-        <Card className="border-3 border-foreground p-6 shadow-stamp">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-xl font-display font-bold text-foreground">Classes</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Your active classes and their student rosters.
-              </p>
-            </div>
-            <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-              <Plus size={16} className="mr-2" />
-              New class
-            </Button>
-          </div>
-
-          {filteredClasses.length === 0 ? (
-            <div className="mt-6 rounded-3xl border-3 border-dashed border-border bg-secondary/40 p-8 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-foreground bg-card">
-                <BookOpen size={24} strokeWidth={2.5} />
-              </div>
-              <h3 className="mt-4 text-xl font-display font-bold text-foreground">No classes yet</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Create the first class so assignments, roster imports, and assignment-aware practice can anchor to a
-                real school object.
-              </p>
-              <Button className="mt-5" onClick={() => setIsCreateDialogOpen(true)}>
-                Create first class
-              </Button>
-            </div>
-          ) : (
-            <div className="mt-6 grid gap-4">
-              {filteredClasses.map((classSummary) => {
-                const goToClass = () =>
-                  navigate(`/app/teacher/classes/${classSummary.id}/analytics`);
-                return (
-                  <div
-                    key={classSummary.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={goToClass}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        goToClass();
-                      }
-                    }}
-                    aria-label={`Open ${classSummary.name} analytics`}
-                    className="cursor-pointer rounded-2xl border-2 border-border bg-secondary/50 p-5 transition-colors hover:border-primary hover:bg-secondary focus:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <h3 className="text-lg font-display font-bold text-foreground">{classSummary.name}</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {classSummary.subject || 'Subject TBD'}
-                          {classSummary.term ? ` · ${classSummary.term}` : ''}
-                          {classSummary.gradeBand ? ` · Grades ${classSummary.gradeBand}` : ''}
-                        </p>
-                      </div>
-                      <div className="grid gap-3 sm:w-[420px] sm:grid-cols-3">
-                        <div className="rounded-xl border border-border bg-card px-3 py-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                            Students
-                          </p>
-                          <p className="mt-1 text-lg font-bold text-foreground">{classSummary.studentCount}</p>
-                        </div>
-                        <div className="rounded-xl border border-border bg-card px-3 py-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                            Language
-                          </p>
-                          <p className="mt-1 text-lg font-bold text-foreground">{classSummary.learningLocale}</p>
-                        </div>
-                        <div className="rounded-xl border border-border bg-card px-3 py-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                            Assignments
-                          </p>
-                          <p className="mt-1 text-lg font-bold text-foreground">{classSummary.assignmentCount ?? 0}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openJoinCodeDialog(classSummary.id);
-                        }}
-                      >
-                        <UserPlus size={14} className="mr-1.5" />
-                        Invite students
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openRosterDialog(classSummary.id);
-                        }}
-                      >
-                        <Users size={14} className="mr-1.5" />
-                        Roster
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          navigate(`/app/teacher/classes/${classSummary.id}/assignments`);
-                        }}
-                      >
-                        Build assignments
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={classSummary.canvasLinked ? 'group' : undefined}
-                        aria-label={
-                          classSummary.canvasLinked
-                            ? 'Canvas linked — click to manage or resync'
-                            : 'Connect Canvas'
-                        }
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          navigate(`/app/teacher/classes/${classSummary.id}/canvas/connect`);
-                        }}
-                      >
-                        {classSummary.canvasLinked ? (
-                          <>
-                            <CheckCircle2
-                              size={14}
-                              className="mr-1.5 group-hover:hidden group-focus-visible:hidden"
-                            />
-                            <RefreshCw
-                              size={14}
-                              className="mr-1.5 hidden group-hover:inline group-focus-visible:inline"
-                            />
-                            <span className="group-hover:hidden group-focus-visible:hidden">
-                              Canvas Linked
-                            </span>
-                            <span className="hidden group-hover:inline group-focus-visible:inline">
-                              Resync Canvas
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <LinkIcon size={14} className="mr-1.5" />
-                            Canvas
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {/* ── Team section (school_admin only) ─────────────────────────── */}
-      {isSchoolAdmin && (
-        <div className="grid gap-6 xl:grid-cols-2">
-          {/* Teacher Invite Code card */}
-          <Card className="border-3 border-foreground p-6 shadow-stamp">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-foreground bg-primary/10 text-primary">
-                <ShieldCheck size={20} strokeWidth={2.5} />
+function SetupChecklistCard({ items }: { items: DashboardSetupChecklistItem[] }) {
+  return (
+    <Card className="border-3 border-foreground p-6 shadow-stamp">
+      <h2 className="text-xl font-display font-bold text-foreground">Setup checklist</h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Phase 1 is complete when the school workspace, first class, and first student path all exist on
+        the real data model.
+      </p>
+      <div className="mt-6 space-y-4">
+        {items.map((item) => (
+          <div key={item.id} className="rounded-2xl border-2 border-border bg-secondary/60 p-4">
+            <div className="flex items-start gap-3">
+              <div
+                className={`mt-0.5 flex size-8 items-center justify-center rounded-full border-2 ${
+                  item.completed
+                    ? 'border-success bg-success/15 text-success'
+                    : 'border-border bg-card text-muted-foreground'
+                }`}
+              >
+                <CheckCircle2 size={18} strokeWidth={2.5} />
               </div>
               <div>
-                <h2 className="text-xl font-display font-bold text-foreground">Teacher Invite Code</h2>
-                <p className="text-sm text-muted-foreground">Share with teachers to join your school.</p>
+                <p className="font-semibold text-foreground">{item.title}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
               </div>
             </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
-            {teacherInviteCodeLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            ) : teacherInviteCode?.active && teacherInviteCode.inviteCode ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-center gap-3 rounded-2xl border-2 border-border bg-secondary/60 p-6">
-                  <span className="font-mono text-4xl font-bold tracking-[0.4em] text-foreground">
-                    {teacherInviteCode.inviteCode}
-                  </span>
-                  <button
-                    onClick={() => handleCopyTeacherInviteCode(teacherInviteCode.inviteCode)}
-                    className="rounded-lg border border-border bg-card p-2 text-muted-foreground hover:text-foreground transition-colors"
-                    title="Copy code"
-                  >
-                    <ClipboardCopy size={18} />
-                  </button>
-                </div>
-                {teacherInviteCodeCopied && (
-                  <p className="text-center text-sm text-success font-medium">Copied to clipboard!</p>
-                )}
-                <p className="text-center text-sm text-muted-foreground">
-                  Teachers go to <strong>l1ngual.com/app/join-school</strong> and enter this code.
-                </p>
-                <div className="flex justify-center gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDeactivateTeacherInviteCode}
-                    disabled={teacherInviteCodeLoading}
-                  >
-                    Deactivate
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center space-y-4 py-4">
-                <p className="text-muted-foreground">
-                  {teacherInviteCode && !teacherInviteCode.active
-                    ? 'The invite code has been deactivated.'
-                    : 'No active teacher invite code.'}
-                </p>
-                <Button onClick={handleGenerateTeacherInviteCode} disabled={teacherInviteCodeLoading}>
-                  {teacherInviteCode && !teacherInviteCode.active ? 'Regenerate' : 'Generate Invite Code'}
-                </Button>
-              </div>
-            )}
-          </Card>
+function ClassesCard({ controller }: { controller: TeacherDashboardController }) {
+  return (
+    <Card className="border-3 border-foreground p-6 shadow-stamp">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-display font-bold text-foreground">Classes</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Your active classes and their student rosters.
+          </p>
+        </div>
+        <Button size="sm" onClick={controller.openCreateDialog}>
+          <Plus size={16} className="mr-2" />
+          New class
+        </Button>
+      </div>
 
+      {controller.filteredClasses.length === 0 ? (
+        <EmptyClassesState onCreateClass={controller.openCreateDialog} />
+      ) : (
+        <div className="mt-6 grid gap-4">
+          {controller.filteredClasses.map((classSummary) => (
+            <ClassSummaryCard
+              key={classSummary.id}
+              classSummary={classSummary}
+              onOpenAnalytics={controller.openClassAnalytics}
+              onOpenJoinCode={controller.openJoinCodeDialog}
+              onOpenRoster={controller.openRosterDialog}
+              onOpenAssignments={controller.openClassAssignments}
+              onOpenCanvas={controller.openClassCanvasConnect}
+            />
+          ))}
         </div>
       )}
+    </Card>
+  );
+}
 
-      {/* ── LTI Configuration (school_admin only) ──────────────────── */}
-      {isSchoolAdmin && (
-        <Card className="border-3 border-foreground p-6 shadow-stamp">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-foreground bg-primary/10 text-primary">
-              <LinkIcon size={20} strokeWidth={2.5} />
-            </div>
-            <div>
-              <h2 className="text-xl font-display font-bold text-foreground">LTI 1.3 Configuration</h2>
-              <p className="text-sm text-muted-foreground">
-                Connect Canvas via LTI 1.3 for single sign-on and deep linking.
-              </p>
-            </div>
-          </div>
+function EmptyClassesState({ onCreateClass }: { onCreateClass: () => void }) {
+  return (
+    <div className="mt-6 rounded-3xl border-3 border-dashed border-border bg-secondary/40 p-8 text-center">
+      <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border-2 border-foreground bg-card">
+        <BookOpen size={24} strokeWidth={2.5} />
+      </div>
+      <h3 className="mt-4 text-xl font-display font-bold text-foreground">No classes yet</h3>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Create the first class so assignments, roster imports, and assignment-aware practice can anchor
+        to a real school object.
+      </p>
+      <Button className="mt-5" onClick={onCreateClass}>
+        Create first class
+      </Button>
+    </div>
+  );
+}
 
-          {ltiLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            </div>
-          ) : ltiPlatform ? (
-            <div className="space-y-5">
-              <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4 space-y-3">
-                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Registered Platform
-                </h3>
-                <div className="grid gap-2 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-muted-foreground">Issuer</span>
-                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">{ltiPlatform.issuer}</span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-muted-foreground">Client ID</span>
-                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">{ltiPlatform.clientId}</span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-muted-foreground">Deployment ID</span>
-                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">{ltiPlatform.deploymentId}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4 space-y-3">
-                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Your Lingual LTI URLs
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Enter these in your Canvas Developer Key / LTI tool configuration.
-                </p>
-                <div className="grid gap-2 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-muted-foreground">Login URL</span>
-                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
-                      {window.location.origin}/lti/login
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-muted-foreground">Launch URL</span>
-                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
-                      {window.location.origin}/lti/callback
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-muted-foreground">JWKS URL</span>
-                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
-                      {window.location.origin}/lti/jwks
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-muted-foreground">Redirect URI</span>
-                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
-                      {window.location.origin}/lti/callback
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRemoveLtiPlatform}
-                  loading={ltiSaving}
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 size={14} className="mr-1.5" />
-                  Remove LTI Platform
-                </Button>
-              </div>
-            </div>
+function ClassSummaryCard({
+  classSummary,
+  onOpenAnalytics,
+  onOpenJoinCode,
+  onOpenRoster,
+  onOpenAssignments,
+  onOpenCanvas,
+}: {
+  classSummary: DashboardClassSummary;
+  onOpenAnalytics: (classId: string) => void;
+  onOpenJoinCode: (classId: string) => void;
+  onOpenRoster: (classId: string) => void;
+  onOpenAssignments: (classId: string) => void;
+  onOpenCanvas: (classId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenAnalytics(classSummary.id)}
+      aria-label={`Open ${classSummary.name} analytics`}
+      className="w-full cursor-pointer rounded-2xl border-2 border-border bg-secondary/50 p-5 text-left transition-colors hover:border-primary hover:bg-secondary focus:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"
+    >
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h3 className="text-lg font-display font-bold text-foreground">{classSummary.name}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {classSummary.subject || 'Subject TBD'}
+            {classSummary.term ? ` · ${classSummary.term}` : ''}
+            {classSummary.gradeBand ? ` · Grades ${classSummary.gradeBand}` : ''}
+          </p>
+        </div>
+        <div className="grid gap-3 sm:w-[420px] sm:grid-cols-3">
+          <ClassMetric label="Students" value={classSummary.studentCount} />
+          <ClassMetric label="Language" value={classSummary.learningLocale} />
+          <ClassMetric label="Assignments" value={classSummary.assignmentCount ?? 0} />
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenJoinCode(classSummary.id);
+          }}
+        >
+          <UserPlus size={14} className="mr-1.5" />
+          Invite students
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenRoster(classSummary.id);
+          }}
+        >
+          <Users size={14} className="mr-1.5" />
+          Roster
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenAssignments(classSummary.id);
+          }}
+        >
+          Build assignments
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className={classSummary.canvasLinked ? 'group' : undefined}
+          aria-label={
+            classSummary.canvasLinked ? 'Canvas linked - click to manage or resync' : 'Connect Canvas'
+          }
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenCanvas(classSummary.id);
+          }}
+        >
+          {classSummary.canvasLinked ? (
+            <>
+              <CheckCircle2
+                size={14}
+                className="mr-1.5 group-hover:hidden group-focus-visible:hidden"
+              />
+              <RefreshCw
+                size={14}
+                className="mr-1.5 hidden group-hover:inline group-focus-visible:inline"
+              />
+              <span className="group-hover:hidden group-focus-visible:hidden">Canvas Linked</span>
+              <span className="hidden group-hover:inline group-focus-visible:inline">
+                Resync Canvas
+              </span>
+            </>
           ) : (
-            <div className="space-y-4">
-              <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4 space-y-3 mb-4">
-                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Your Lingual LTI URLs
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Enter these in your Canvas Developer Key / LTI tool configuration.
-                </p>
-                <div className="grid gap-2 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-muted-foreground">Login URL</span>
-                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
-                      {window.location.origin}/lti/login
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-muted-foreground">Launch URL</span>
-                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
-                      {window.location.origin}/lti/callback
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-muted-foreground">JWKS URL</span>
-                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
-                      {window.location.origin}/lti/jwks
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium text-muted-foreground">Redirect URI</span>
-                    <span className="text-foreground font-mono text-xs truncate max-w-[300px]">
-                      {window.location.origin}/lti/callback
-                    </span>
-                  </div>
-                </div>
-              </div>
+            <>
+              <LinkIcon size={14} className="mr-1.5" />
+              Canvas
+            </>
+          )}
+        </Button>
+      </div>
+    </button>
+  );
+}
 
-              <h3 className="text-base font-display font-bold text-foreground">Register Canvas Platform</h3>
-              <p className="text-sm text-muted-foreground">
-                Enter the LTI 1.3 configuration values from your Canvas Developer Key.
-              </p>
-              <div className="grid gap-3">
-                <Input
-                  label="Issuer"
-                  value={ltiForm.issuer}
-                  onChange={(e) => setLtiForm((f) => ({ ...f, issuer: e.target.value }))}
-                  placeholder="https://canvas.instructure.com"
-                />
-                <Input
-                  label="Client ID"
-                  value={ltiForm.clientId}
-                  onChange={(e) => setLtiForm((f) => ({ ...f, clientId: e.target.value }))}
-                  placeholder="10000000000001"
-                />
-                <Input
-                  label="Deployment ID"
-                  value={ltiForm.deploymentId}
-                  onChange={(e) => setLtiForm((f) => ({ ...f, deploymentId: e.target.value }))}
-                  placeholder="1"
-                />
-                <Input
-                  label="Auth Login URL"
-                  value={ltiForm.authLoginUrl}
-                  onChange={(e) => setLtiForm((f) => ({ ...f, authLoginUrl: e.target.value }))}
-                  placeholder="https://canvas.instructure.com/api/lti/authorize_redirect"
-                />
-                <Input
-                  label="Auth Token URL"
-                  value={ltiForm.authTokenUrl}
-                  onChange={(e) => setLtiForm((f) => ({ ...f, authTokenUrl: e.target.value }))}
-                  placeholder="https://canvas.instructure.com/login/oauth2/token"
-                />
-                <Input
-                  label="Key Set URL"
-                  value={ltiForm.keySetUrl}
-                  onChange={(e) => setLtiForm((f) => ({ ...f, keySetUrl: e.target.value }))}
-                  placeholder="https://canvas.instructure.com/api/lti/security/jwks"
-                />
-              </div>
-              <Button
-                onClick={handleRegisterLtiPlatform}
-                loading={ltiSaving}
-                disabled={!ltiForm.issuer || !ltiForm.clientId || !ltiForm.deploymentId || !ltiForm.authLoginUrl || !ltiForm.authTokenUrl || !ltiForm.keySetUrl}
-              >
-                Register Platform
-              </Button>
+function ClassMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-xl border border-border bg-card px-3 py-2">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 text-lg font-bold text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function TeacherInviteCodeSection({ controller }: { controller: TeacherDashboardController }) {
+  return (
+    <div className="grid gap-6 xl:grid-cols-2">
+      <TeacherInviteCodeCard controller={controller} />
+    </div>
+  );
+}
+
+function TeacherInviteCodeCard({ controller }: { controller: TeacherDashboardController }) {
+  const code = controller.teacherInviteCode;
+
+  return (
+    <Card className="border-3 border-foreground p-6 shadow-stamp">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="flex size-10 items-center justify-center rounded-2xl border-2 border-foreground bg-primary/10 text-primary">
+          <ShieldCheck size={20} strokeWidth={2.5} />
+        </div>
+        <div>
+          <h2 className="text-xl font-display font-bold text-foreground">Teacher Invite Code</h2>
+          <p className="text-sm text-muted-foreground">Share with teachers to join your school.</p>
+        </div>
+      </div>
+
+      {controller.teacherInviteCodeLoading ? (
+        <InlineLoader />
+      ) : code?.active && code.inviteCode ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-center gap-3 rounded-2xl border-2 border-border bg-secondary/60 p-6">
+            <span className="font-mono text-4xl font-bold tracking-[0.4em] text-foreground">
+              {code.inviteCode}
+            </span>
+            <button
+              type="button"
+              onClick={() => controller.handleCopyTeacherInviteCode(code.inviteCode)}
+              className="rounded-lg border border-border bg-card p-2 text-muted-foreground transition-colors hover:text-foreground"
+              title="Copy code"
+            >
+              <ClipboardCopy size={18} />
+            </button>
+          </div>
+          {controller.teacherInviteCodeCopied && (
+            <p className="text-center text-sm font-medium text-success">Copied to clipboard!</p>
+          )}
+          <p className="text-center text-sm text-muted-foreground">
+            Teachers go to <strong>l1ngual.com/app/join-school</strong> and enter this code.
+          </p>
+          <div className="flex justify-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={controller.handleDeactivateTeacherInviteCode}
+              disabled={controller.teacherInviteCodeLoading}
+            >
+              Deactivate
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4 py-4 text-center">
+          <p className="text-muted-foreground">
+            {code && !code.active ? 'The invite code has been deactivated.' : 'No active teacher invite code.'}
+          </p>
+          <Button
+            onClick={controller.handleGenerateTeacherInviteCode}
+            disabled={controller.teacherInviteCodeLoading}
+          >
+            {code && !code.active ? 'Regenerate' : 'Generate Invite Code'}
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function LtiConfigurationCard({ controller }: { controller: TeacherDashboardController }) {
+  return (
+    <Card className="border-3 border-foreground p-6 shadow-stamp">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="flex size-10 items-center justify-center rounded-2xl border-2 border-foreground bg-primary/10 text-primary">
+          <LinkIcon size={20} strokeWidth={2.5} />
+        </div>
+        <div>
+          <h2 className="text-xl font-display font-bold text-foreground">LTI 1.3 Configuration</h2>
+          <p className="text-sm text-muted-foreground">
+            Connect Canvas via LTI 1.3 for single sign-on and deep linking.
+          </p>
+        </div>
+      </div>
+
+      {controller.ltiLoading ? (
+        <InlineLoader />
+      ) : controller.ltiPlatform ? (
+        <div className="space-y-5">
+          <LtiRegisteredPlatform platform={controller.ltiPlatform} />
+          <LtiUrlsPanel />
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={controller.handleRemoveLtiPlatform}
+              loading={controller.ltiSaving}
+              className="text-destructive hover:text-destructive"
+            >
+              <Trash2 size={14} className="mr-1.5" />
+              Remove LTI Platform
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <LtiRegistrationForm controller={controller} />
+      )}
+    </Card>
+  );
+}
+
+function LtiRegisteredPlatform({ platform }: { platform: LtiPlatformConfig }) {
+  return (
+    <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+      <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        Registered Platform
+      </h3>
+      <div className="grid gap-2 text-sm">
+        <LtiPlatformDetailRow label="Issuer" value={platform.issuer} />
+        <LtiPlatformDetailRow label="Client ID" value={platform.clientId} />
+        <LtiPlatformDetailRow label="Deployment ID" value={platform.deploymentId} />
+      </div>
+    </div>
+  );
+}
+
+function LtiUrlsPanel() {
+  const origin = window.location.origin;
+
+  return (
+    <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+      <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        Your Lingual LTI URLs
+      </h3>
+      <p className="text-xs text-muted-foreground">
+        Enter these in your Canvas Developer Key / LTI tool configuration.
+      </p>
+      <div className="grid gap-2 text-sm">
+        <LtiPlatformDetailRow label="Login URL" value={`${origin}/lti/login`} />
+        <LtiPlatformDetailRow label="Launch URL" value={`${origin}/lti/callback`} />
+        <LtiPlatformDetailRow label="JWKS URL" value={`${origin}/lti/jwks`} />
+        <LtiPlatformDetailRow label="Redirect URI" value={`${origin}/lti/callback`} />
+      </div>
+    </div>
+  );
+}
+
+function LtiPlatformDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <span className="font-medium text-muted-foreground">{label}</span>
+      <span className="max-w-[300px] truncate font-mono text-xs text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function LtiRegistrationForm({ controller }: { controller: TeacherDashboardController }) {
+  const form = controller.ltiForm;
+  const isDisabled =
+    !form.issuer ||
+    !form.clientId ||
+    !form.deploymentId ||
+    !form.authLoginUrl ||
+    !form.authTokenUrl ||
+    !form.keySetUrl;
+
+  return (
+    <div className="space-y-4">
+      <div className="mb-4">
+        <LtiUrlsPanel />
+      </div>
+      <h3 className="text-base font-display font-bold text-foreground">Register Canvas Platform</h3>
+      <p className="text-sm text-muted-foreground">
+        Enter the LTI 1.3 configuration values from your Canvas Developer Key.
+      </p>
+      <div className="grid gap-3">
+        <Input
+          label="Issuer"
+          value={form.issuer}
+          onChange={(event) => controller.updateLtiField('issuer', event.target.value)}
+          placeholder="https://canvas.instructure.com"
+        />
+        <Input
+          label="Client ID"
+          value={form.clientId}
+          onChange={(event) => controller.updateLtiField('clientId', event.target.value)}
+          placeholder="10000000000001"
+        />
+        <Input
+          label="Deployment ID"
+          value={form.deploymentId}
+          onChange={(event) => controller.updateLtiField('deploymentId', event.target.value)}
+          placeholder="1"
+        />
+        <Input
+          label="Auth Login URL"
+          value={form.authLoginUrl}
+          onChange={(event) => controller.updateLtiField('authLoginUrl', event.target.value)}
+          placeholder="https://canvas.instructure.com/api/lti/authorize_redirect"
+        />
+        <Input
+          label="Auth Token URL"
+          value={form.authTokenUrl}
+          onChange={(event) => controller.updateLtiField('authTokenUrl', event.target.value)}
+          placeholder="https://canvas.instructure.com/login/oauth2/token"
+        />
+        <Input
+          label="Key Set URL"
+          value={form.keySetUrl}
+          onChange={(event) => controller.updateLtiField('keySetUrl', event.target.value)}
+          placeholder="https://canvas.instructure.com/api/lti/security/jwks"
+        />
+      </div>
+      <Button
+        onClick={controller.handleRegisterLtiPlatform}
+        loading={controller.ltiSaving}
+        disabled={isDisabled}
+      >
+        Register Platform
+      </Button>
+    </div>
+  );
+}
+
+function CreateClassDialog({ controller }: { controller: TeacherDashboardController }) {
+  return (
+    <Dialog
+      open={controller.isCreateDialogOpen}
+      onOpenChange={controller.handleCreateDialogOpenChange}
+    >
+      <DialogContent className="border-3 border-foreground shadow-stamp">
+        <DialogHeader>
+          <DialogTitle className="font-display text-2xl">Create class</DialogTitle>
+          <DialogDescription>
+            Set up a new class for your students. You can invite students after creating it.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4 py-2">
+          <Input
+            label="Class name"
+            value={controller.classForm.name}
+            onChange={(event) => controller.updateClassField('name', event.target.value)}
+            placeholder="French 1 - Period 2"
+          />
+          <Input
+            label="Term"
+            value={controller.classForm.term}
+            onChange={(event) => controller.updateClassField('term', event.target.value)}
+            placeholder="Fall 2026"
+          />
+          <Input
+            label="Subject"
+            value={controller.classForm.subject}
+            onChange={(event) => controller.updateClassField('subject', event.target.value)}
+            placeholder="French"
+          />
+          <Input
+            label="Grade band"
+            value={controller.classForm.gradeBand}
+            onChange={(event) => controller.updateClassField('gradeBand', event.target.value)}
+            placeholder="9-10"
+          />
+          <div className="space-y-2">
+            <label htmlFor="teacher-class-locale" className="text-base font-semibold text-foreground">
+              Practice language
+            </label>
+            <select
+              id="teacher-class-locale"
+              value={controller.classForm.learningLocale}
+              onChange={(event) => controller.updateClassField('learningLocale', event.target.value)}
+              className="h-12 w-full rounded-xl border-3 border-border bg-card px-4 text-base text-foreground focus:border-primary focus:outline-none"
+            >
+              {LEARNING_LOCALES.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={controller.closeCreateDialog}>
+            Cancel
+          </Button>
+          <Button onClick={controller.handleCreateClass} loading={controller.savingClass}>
+            Create class
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function JoinCodeDialog({ controller }: { controller: TeacherDashboardController }) {
+  return (
+    <Dialog
+      open={controller.joinCodeClassId !== null}
+      onOpenChange={(open) => {
+        if (!open) controller.closeJoinCodeDialog();
+      }}
+    >
+      <DialogContent className="border-3 border-foreground shadow-stamp">
+        <DialogHeader>
+          <DialogTitle className="font-display text-2xl">Invite students</DialogTitle>
+          <DialogDescription>
+            Share this code with students. They enter it at the join page to enroll in your class.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="py-4">
+          {controller.joinCodeLoading ? (
+            <InlineLoader />
+          ) : controller.joinCodeData?.active ? (
+            <ActiveJoinCode controller={controller} />
+          ) : (
+            <div className="space-y-4 py-4 text-center">
+              <p className="text-muted-foreground">No active join code for this class.</p>
+              <Button onClick={controller.handleGenerateCode}>Generate join code</Button>
             </div>
           )}
-        </Card>
+        </div>
+
+        <DialogFooter>
+          {controller.joinCodeData?.active && (
+            <Button
+              variant="outline"
+              onClick={controller.handleDeactivateCode}
+              disabled={controller.joinCodeLoading}
+            >
+              Deactivate code
+            </Button>
+          )}
+          {controller.joinCodeData?.active && (
+            <Button onClick={controller.handleGenerateCode} disabled={controller.joinCodeLoading}>
+              Regenerate
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ActiveJoinCode({ controller }: { controller: TeacherDashboardController }) {
+  const code = controller.joinCodeData;
+  if (!code?.active) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-center gap-3 rounded-2xl border-2 border-border bg-secondary/60 p-6">
+        <span className="font-mono text-4xl font-bold tracking-[0.4em] text-foreground">
+          {code.joinCode}
+        </span>
+        <button
+          type="button"
+          onClick={() => controller.handleCopyCode(code.joinCode)}
+          className="rounded-lg border border-border bg-card p-2 text-muted-foreground transition-colors hover:text-foreground"
+          title="Copy code"
+        >
+          <ClipboardCopy size={18} />
+        </button>
+      </div>
+      {controller.joinCodeCopied && (
+        <p className="text-center text-sm font-medium text-success">Copied to clipboard!</p>
       )}
+      <p className="text-center text-sm text-muted-foreground">
+        Students go to <strong>l1ngual.com/app/join</strong> and enter this code.
+      </p>
+    </div>
+  );
+}
 
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="border-3 border-foreground shadow-stamp">
-          <DialogHeader>
-            <DialogTitle className="font-display text-2xl">Create class</DialogTitle>
-            <DialogDescription>
-              Set up a new class for your students. You can invite students after creating it.
-            </DialogDescription>
-          </DialogHeader>
+function RosterDialog({ controller }: { controller: TeacherDashboardController }) {
+  return (
+    <Dialog
+      open={controller.rosterClassId !== null}
+      onOpenChange={(open) => {
+        if (!open) controller.closeRosterDialog();
+      }}
+    >
+      <DialogContent className="border-3 border-foreground shadow-stamp sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="font-display text-2xl">Class roster</DialogTitle>
+          <DialogDescription>
+            {controller.roster.length} student{controller.roster.length !== 1 ? 's' : ''} enrolled
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="grid gap-4 py-2">
-            <Input
-              label="Class name"
-              value={classForm.name}
-              onChange={(event) => updateClassField('name', event.target.value)}
-              placeholder="French 1 - Period 2"
-            />
-            <Input
-              label="Term"
-              value={classForm.term}
-              onChange={(event) => updateClassField('term', event.target.value)}
-              placeholder="Fall 2026"
-            />
-            <Input
-              label="Subject"
-              value={classForm.subject}
-              onChange={(event) => updateClassField('subject', event.target.value)}
-              placeholder="French"
-            />
-            <Input
-              label="Grade band"
-              value={classForm.gradeBand}
-              onChange={(event) => updateClassField('gradeBand', event.target.value)}
-              placeholder="9-10"
-            />
+        <div className="max-h-[400px] overflow-y-auto py-2">
+          {controller.rosterLoading ? (
+            <InlineLoader />
+          ) : controller.roster.length === 0 ? (
+            <EmptyRosterState onInviteStudents={controller.openInviteFromRoster} />
+          ) : (
             <div className="space-y-2">
-              <label htmlFor="teacher-class-locale" className="text-base font-semibold text-foreground">
-                Practice language
-              </label>
-              <select
-                id="teacher-class-locale"
-                value={classForm.learningLocale}
-                onChange={(event) => updateClassField('learningLocale', event.target.value)}
-                className="h-12 w-full rounded-xl border-3 border-border bg-card px-4 text-base text-foreground focus:border-primary focus:outline-none"
-              >
-                {LEARNING_LOCALES.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              {controller.roster.map((student, index) => (
+                <RosterStudentRow
+                  key={student.uid || `row-${index}`}
+                  student={student}
+                  removingUid={controller.removingUid}
+                  onRemove={controller.handleRemoveStudent}
+                />
+              ))}
             </div>
-          </div>
+          )}
+          {controller.canvasRosterSummary && (
+            <CanvasRosterGapSection
+              gap={controller.canvasRosterGap}
+              summary={controller.canvasRosterSummary}
+            />
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateClass} loading={savingClass}>
-              Create class
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+function EmptyRosterState({ onInviteStudents }: { onInviteStudents: () => void }) {
+  return (
+    <div className="py-8 text-center">
+      <Users className="mx-auto size-10 text-muted-foreground" />
+      <p className="mt-3 text-muted-foreground">No students enrolled yet.</p>
+      <Button variant="outline" size="sm" className="mt-4" onClick={onInviteStudents}>
+        <UserPlus size={14} className="mr-1.5" />
+        Invite students
+      </Button>
+    </div>
+  );
+}
 
-      {/* Join code dialog */}
-      <Dialog open={joinCodeClassId !== null} onOpenChange={(open) => { if (!open) setJoinCodeClassId(null); }}>
-        <DialogContent className="border-3 border-foreground shadow-stamp">
-          <DialogHeader>
-            <DialogTitle className="font-display text-2xl">Invite students</DialogTitle>
-            <DialogDescription>
-              Share this code with students. They enter it at the join page to enroll in your class.
-            </DialogDescription>
-          </DialogHeader>
+function RosterStudentRow({
+  student,
+  removingUid,
+  onRemove,
+}: {
+  student: ClassRosterStudent;
+  removingUid: string | null;
+  onRemove: (studentUid: string) => void;
+}) {
+  const joinedLabel =
+    student.joinSource === 'join_code'
+      ? 'Joined via code'
+      : student.joinSource === 'lti'
+        ? 'Joined via Canvas LTI'
+        : student.joinSource === 'canvas_legacy'
+          ? 'Legacy Canvas enrollment'
+          : student.joinSource || 'Enrolled';
+  const enrolledSuffix = student.enrolledAt
+    ? ` · ${new Date(student.enrolledAt).toLocaleDateString()}`
+    : '';
+  const subtitle = `${joinedLabel}${enrolledSuffix}`;
 
-          <div className="py-4">
-            {joinCodeLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            ) : joinCodeData?.active ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-center gap-3 rounded-2xl border-2 border-border bg-secondary/60 p-6">
-                  <span className="font-mono text-4xl font-bold tracking-[0.4em] text-foreground">
-                    {joinCodeData.joinCode}
-                  </span>
-                  <button
-                    onClick={() => handleCopyCode(joinCodeData.joinCode)}
-                    className="rounded-lg border border-border bg-card p-2 text-muted-foreground hover:text-foreground transition-colors"
-                    title="Copy code"
-                  >
-                    <ClipboardCopy size={18} />
-                  </button>
-                </div>
-                {joinCodeCopied && (
-                  <p className="text-center text-sm text-success font-medium">Copied to clipboard!</p>
-                )}
-                <p className="text-center text-sm text-muted-foreground">
-                  Students go to <strong>l1ngual.com/app/join</strong> and enter this code.
-                </p>
-              </div>
-            ) : (
-              <div className="text-center space-y-4 py-4">
-                <p className="text-muted-foreground">No active join code for this class.</p>
-                <Button onClick={handleGenerateCode}>Generate join code</Button>
-              </div>
-            )}
-          </div>
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/40 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate font-medium text-foreground">{student.displayName}</p>
+          {student.isOnCanvasRoster === true && (
+            <span className="rounded-full border border-emerald-500/40 bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+              On Canvas roster
+            </span>
+          )}
+          {student.isOnCanvasRoster === false && (
+            <span className="rounded-full border border-muted bg-muted/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Not on Canvas roster
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+      {student.uid && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onRemove(student.uid)}
+          disabled={removingUid === student.uid}
+          className="text-destructive hover:text-destructive"
+        >
+          {removingUid === student.uid ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Trash2 size={14} />
+          )}
+        </Button>
+      )}
+    </div>
+  );
+}
 
-          <DialogFooter>
-            {joinCodeData?.active && (
-              <Button variant="outline" onClick={handleDeactivateCode} disabled={joinCodeLoading}>
-                Deactivate code
-              </Button>
-            )}
-            {joinCodeData?.active && (
-              <Button onClick={handleGenerateCode} disabled={joinCodeLoading}>
-                Regenerate
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+function CanvasRosterGapSection({
+  gap,
+  summary,
+}: {
+  gap: CanvasRosterGapEntry[];
+  summary: CanvasRosterGapSummary;
+}) {
+  return (
+    <div className="mt-6 space-y-2 border-t border-border pt-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-foreground">Canvas roster - not yet joined</h3>
+        <span className="text-xs text-muted-foreground">
+          {summary.joined} of {summary.canvas_total} Canvas students joined
+        </span>
+      </div>
+      {gap.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          All Canvas-rostered students have joined via class code.
+        </p>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground">
+            Share the class code with these students to enroll them.
+          </p>
+          <ul className="space-y-1">
+            {gap.map((entry) => (
+              <li
+                key={entry.canvas_email}
+                className="flex items-center justify-between rounded-lg border border-dashed border-border px-3 py-2 text-sm"
+              >
+                <span className="truncate">{entry.canvas_name || entry.canvas_email}</span>
+                <span className="truncate text-xs text-muted-foreground">{entry.canvas_email}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
 
-      {/* Roster dialog */}
-      <Dialog open={rosterClassId !== null} onOpenChange={(open) => { if (!open) setRosterClassId(null); }}>
-        <DialogContent className="border-3 border-foreground shadow-stamp sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="font-display text-2xl">Class roster</DialogTitle>
-            <DialogDescription>
-              {roster.length} student{roster.length !== 1 ? 's' : ''} enrolled
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-2 max-h-[400px] overflow-y-auto">
-            {rosterLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            ) : roster.length === 0 ? (
-              <div className="text-center py-8">
-                <Users className="mx-auto h-10 w-10 text-muted-foreground" />
-                <p className="mt-3 text-muted-foreground">No students enrolled yet.</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
-                  onClick={() => {
-                    setRosterClassId(null);
-                    if (rosterClassId) openJoinCodeDialog(rosterClassId);
-                  }}
-                >
-                  <UserPlus size={14} className="mr-1.5" />
-                  Invite students
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {roster.map((student, idx) => {
-                  const key = student.uid || `row-${idx}`;
-                  const joinedLabel =
-                    student.joinSource === 'join_code'
-                      ? 'Joined via code'
-                      : student.joinSource === 'lti'
-                      ? 'Joined via Canvas LTI'
-                      : student.joinSource === 'canvas_legacy'
-                      ? 'Legacy Canvas enrollment'
-                      : student.joinSource || 'Enrolled';
-                  const enrolledSuffix = student.enrolledAt
-                    ? ` · ${new Date(student.enrolledAt).toLocaleDateString()}`
-                    : '';
-                  const subtitle = `${joinedLabel}${enrolledSuffix}`;
-                  return (
-                    <div
-                      key={key}
-                      className="flex items-center justify-between rounded-xl border border-border bg-secondary/40 px-4 py-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-medium text-foreground truncate">
-                            {student.displayName}
-                          </p>
-                          {student.isOnCanvasRoster === true && (
-                            <span className="rounded-full border border-emerald-500/40 bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
-                              On Canvas roster
-                            </span>
-                          )}
-                          {student.isOnCanvasRoster === false && (
-                            <span className="rounded-full border border-muted bg-muted/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              Not on Canvas roster
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">{subtitle}</p>
-                      </div>
-                      {student.uid && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveStudent(student.uid)}
-                          disabled={removingUid === student.uid}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          {removingUid === student.uid ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 size={14} />
-                          )}
-                        </Button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {canvasRosterSummary && (
-              <div className="mt-6 space-y-2 border-t border-border pt-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Canvas roster — not yet joined
-                  </h3>
-                  <span className="text-xs text-muted-foreground">
-                    {canvasRosterSummary.joined} of {canvasRosterSummary.canvas_total}{' '}
-                    Canvas students joined
-                  </span>
-                </div>
-                {canvasRosterGap.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    All Canvas-rostered students have joined via class code.
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-xs text-muted-foreground">
-                      Share the class code with these students to enroll them.
-                    </p>
-                    <ul className="space-y-1">
-                      {canvasRosterGap.map((entry) => (
-                        <li
-                          key={entry.canvas_email}
-                          className="flex items-center justify-between rounded-lg border border-dashed border-border px-3 py-2 text-sm"
-                        >
-                          <span className="truncate">{entry.canvas_name || entry.canvas_email}</span>
-                          <span className="text-xs text-muted-foreground truncate">
-                            {entry.canvas_email}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+function InlineLoader() {
+  return (
+    <div className="flex justify-center py-8">
+      <Loader2 className="size-6 animate-spin text-primary" />
     </div>
   );
 }

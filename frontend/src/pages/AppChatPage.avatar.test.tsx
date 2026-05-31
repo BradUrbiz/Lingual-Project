@@ -187,7 +187,7 @@ vi.mock('@/components/ui', () => ({
     ...props
   }: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) => {
     void loading;
-    return <button {...props}>{children}</button>;
+    return <button type="button" {...props}>{children}</button>;
   },
   Dialog: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -395,7 +395,7 @@ describe('AppChatPage live2d avatar wiring', () => {
     // AppChatPage reads its avatar-enabled preference from localStorage and
     // defaults to `false` when nothing is stored. The avatar panel is only
     // rendered when the preference is truthy, so explicitly opt in for this
-    // test suite — this matches the real-user flow where someone toggles the
+    // test suite - this matches the real-user flow where someone toggles the
     // avatar on and the preference persists across sessions.
     window.localStorage.clear();
     window.localStorage.setItem('lingual:chat:avatarEnabled', 'true');

@@ -1,6 +1,6 @@
 import { Suspense, lazy, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, LazyMotion, MotionConfig, domAnimation } from 'framer-motion';
 import { AuthProvider } from './contexts/AuthContext';
 import { MembershipProvider } from './contexts/MembershipContext';
 import { LanguageProvider } from './contexts/LanguageContext';
@@ -10,7 +10,7 @@ import { AppProtectedRoute } from './components/layout/AppProtectedRoute';
 import { TeacherRoute } from './components/layout/TeacherRoute';
 import { SchoolAdminRoute } from './components/layout/SchoolAdminRoute';
 import { LingualAdminRoute } from './components/layout/LingualAdminRoute';
-import { LoadingSpinner } from './components/common';
+import { LoadingSpinner } from './components/common/LoadingSpinner';
 import { useAuth } from './hooks/useAuth';
 import { getOnboardingDestination } from './lib/homeRoutes';
 
@@ -246,7 +246,7 @@ function AnimatedRoutes() {
         </Route>
 
         {/*
-          Lingual admin panel — mounted at the top level (outside /app) so its
+          Lingual admin panel - mounted at the top level (outside /app) so its
           own LingualAdminShell chrome does not double-nest inside AppLayout.
           `LingualAdminRoute` enforces both auth (redirect to /login when
           signed-out) and the lingual_admin role.
@@ -278,17 +278,21 @@ function App() {
   const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || '';
 
   return (
-    <BrowserRouter basename={basename}>
-      <AuthProvider>
-        <MembershipProvider>
-          <LanguageProvider>
-            <LearningLocaleProvider>
-              <AnimatedRoutes />
-            </LearningLocaleProvider>
-          </LanguageProvider>
-        </MembershipProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <MotionConfig reducedMotion="user">
+      <LazyMotion features={domAnimation}>
+        <BrowserRouter basename={basename}>
+          <AuthProvider>
+            <MembershipProvider>
+              <LanguageProvider>
+                <LearningLocaleProvider>
+                  <AnimatedRoutes />
+                </LearningLocaleProvider>
+              </LanguageProvider>
+            </MembershipProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </LazyMotion>
+    </MotionConfig>
   );
 }
 

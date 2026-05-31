@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 
@@ -9,13 +9,13 @@ interface ModeToggleProps {
   onModeChange: (mode: Mode) => void;
 }
 
+const modes: { value: Mode; labelKey: string }[] = [
+  { value: 'text', labelKey: 'chat.textMode' },
+  { value: 'voice', labelKey: 'chat.voiceMode' },
+];
+
 export function ModeToggle({ mode, onModeChange }: ModeToggleProps) {
   const { t } = useLanguage();
-
-  const modes: { value: Mode; labelKey: string }[] = [
-    { value: 'text', labelKey: 'chat.textMode' },
-    { value: 'voice', labelKey: 'chat.voiceMode' },
-  ];
 
   return (
     <div className="flex gap-1 bg-muted p-1 rounded-lg relative">
@@ -30,7 +30,7 @@ export function ModeToggle({ mode, onModeChange }: ModeToggleProps) {
           )}
         >
           {mode === value && (
-            <motion.div
+            <m.div
               layoutId="mode-indicator"
               className="absolute inset-0 bg-card rounded-md shadow-sm"
               style={{ zIndex: -1 }}

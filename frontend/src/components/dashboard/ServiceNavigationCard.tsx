@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { m } from 'framer-motion';
 import { clsx } from 'clsx';
 
 const colorStyles: Record<string, { border: string; bg: string; hover: string; iconBg: string }> = {
@@ -42,7 +42,7 @@ export function ServiceNavigationCard({ title, description, icon, href, color }:
   const styles = colorStyles[color];
 
   return (
-    <motion.button
+    <m.button
       type="button"
       onClick={() => navigate(href)}
       whileHover={{ y: -2 }}
@@ -70,6 +70,6 @@ export function ServiceNavigationCard({ title, description, icon, href, color }:
       </div>
       <h3 className="text-xl font-display font-bold text-foreground">{title}</h3>
       <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-    </motion.button>
+    </m.button>
   );
 }

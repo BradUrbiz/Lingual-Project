@@ -1,7 +1,7 @@
 // FLASHCARDFLIP - Warm Brutalism Edition
 
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useReducer, useEffect, useRef } from 'react';
+import { m, AnimatePresence } from 'framer-motion';
 import { X, Trophy, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui';
 
@@ -15,12 +15,63 @@ interface FlashcardFlipProps {
   onClose: () => void;
 }
 
+type FlashcardState = {
+  currentIndex: number;
+  answer: string;
+  score: number;
+  showResult: 'correct' | 'wrong' | null;
+  gameOver: boolean;
+};
+
+type FlashcardAction =
+  | { type: 'answerChanged'; answer: string }
+  | { type: 'submit'; isCorrect: boolean }
+  | { type: 'advance' }
+  | { type: 'finish' };
+
+const INITIAL_FLASHCARD_STATE: FlashcardState = {
+  currentIndex: 0,
+  answer: '',
+  score: 0,
+  showResult: null,
+  gameOver: false,
+};
+
+function flashcardReducer(state: FlashcardState, action: FlashcardAction): FlashcardState {
+  switch (action.type) {
+    case 'answerChanged':
+      return { ...state, answer: action.answer };
+    case 'submit':
+      return {
+        ...state,
+        score: action.isCorrect ? state.score + 1 : state.score,
+        showResult: action.isCorrect ? 'correct' : 'wrong',
+      };
+    case 'advance':
+      return {
+        ...state,
+        currentIndex: state.currentIndex + 1,
+        answer: '',
+        showResult: null,
+      };
+    case 'finish':
+      return {
+        ...state,
+        answer: '',
+        showResult: null,
+        gameOver: true,
+      };
+    default:
+      return state;
+  }
+}
+
 export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [answer, setAnswer] = useState('');
-  const [score, setScore] = useState(0);
-  const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
-  const [gameOver, setGameOver] = useState(false);
+  const [flashcardState, dispatchFlashcard] = useReducer(
+    flashcardReducer,
+    INITIAL_FLASHCARD_STATE
+  );
+  const { currentIndex, answer, score, showResult, gameOver } = flashcardState;
   const inputRef = useRef<HTMLInputElement>(null);
 
   const currentCard = flashcards[currentIndex];
@@ -33,22 +84,13 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
     e.preventDefault();
 
     const isCorrect = answer.toLowerCase().trim() === currentCard.english.toLowerCase().trim();
-
-    if (isCorrect) {
-      setScore(score + 1);
-      setShowResult('correct');
-    } else {
-      setShowResult('wrong');
-    }
+    dispatchFlashcard({ type: 'submit', isCorrect });
 
     setTimeout(() => {
-      setShowResult(null);
-      setAnswer('');
-
       if (currentIndex + 1 >= flashcards.length) {
-        setGameOver(true);
+        dispatchFlashcard({ type: 'finish' });
       } else {
-        setCurrentIndex(currentIndex + 1);
+        dispatchFlashcard({ type: 'advance' });
       }
     }, 1000);
   };
@@ -56,20 +98,20 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
   if (gameOver) {
     const percentage = Math.round((score / flashcards.length) * 100);
     return (
-      <motion.div
+      <m.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 bg-foreground/60 flex items-center justify-center z-50 p-4"
         onClick={onClose}
       >
-        <motion.div
+        <m.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 max-w-md w-full text-center"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="w-16 h-16 rounded-2xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center mx-auto mb-6 shadow-stamp-sm">
+          <div className="size-16 rounded-2xl bg-accent text-accent-foreground border-2 border-foreground flex items-center justify-center mx-auto mb-6 shadow-stamp-sm">
             <Trophy size={32} strokeWidth={2.5} />
           </div>
           <h2 className="text-3xl font-display font-bold text-foreground mb-2">Game Over!</h2>
@@ -87,19 +129,19 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
           <Button onClick={onClose} className="w-full">
             Close
           </Button>
-        </motion.div>
-      </motion.div>
+        </m.div>
+      </m.div>
     );
   }
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-foreground/60 flex items-center justify-center z-50 p-4"
     >
-      <motion.div
+      <m.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className="bg-card rounded-2xl border-3 border-foreground shadow-stamp p-8 max-w-md w-full"
@@ -108,7 +150,7 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary border-2 border-primary/30 flex items-center justify-center">
+            <div className="size-10 rounded-xl bg-primary/10 text-primary border-2 border-primary/30 flex items-center justify-center">
               <Sparkles size={20} strokeWidth={2.5} />
             </div>
             <div>
@@ -122,7 +164,7 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
             <div className="bg-success/10 text-success px-3 py-1.5 rounded-lg border border-success/20">
               <span className="text-sm font-bold">Score: {score}</span>
             </div>
-            <button
+            <button type="button"
               onClick={onClose}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-xl border-2 border-transparent hover:border-border transition-colors"
             >
@@ -133,7 +175,7 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
 
         {/* Progress Bar */}
         <div className="h-2 w-full rounded-lg bg-secondary border border-border overflow-hidden mb-6">
-          <motion.div
+          <m.div
             className="h-full bg-primary rounded-lg"
             initial={{ width: 0 }}
             animate={{ width: `${((currentIndex + 1) / flashcards.length) * 100}%` }}
@@ -143,7 +185,7 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
 
         {/* Flashcard */}
         <AnimatePresence mode="wait">
-          <motion.div
+          <m.div
             key={currentIndex}
             initial={{ x: 50, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
@@ -168,16 +210,17 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
                 Correct!
               </p>
             )}
-          </motion.div>
+          </m.div>
         </AnimatePresence>
 
         {/* Input */}
         <form onSubmit={handleSubmit}>
           <input
             ref={inputRef}
+            aria-label="Flashcard answer"
             type="text"
             value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
+            onChange={(e) => dispatchFlashcard({ type: 'answerChanged', answer: e.target.value })}
             placeholder="Type the English translation..."
             disabled={showResult !== null}
             className="w-full px-4 py-3 text-lg bg-card border-2 border-border rounded-xl focus:border-primary focus:outline-none disabled:bg-secondary disabled:text-muted-foreground font-medium placeholder:text-muted-foreground transition-colors"
@@ -190,8 +233,8 @@ export function FlashcardFlip({ flashcards, onClose }: FlashcardFlipProps) {
             Submit Answer
           </Button>
         </form>
-      </motion.div>
-    </motion.div>
+      </m.div>
+    </m.div>
   );
 }
 

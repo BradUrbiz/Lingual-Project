@@ -48,12 +48,12 @@ export function LingualOrgDetailPage() {
         </div>
         <div>
           {org.status === 'active' && (
-            <button onClick={() => setShowSuspend(true)} className="rounded-md bg-rose-600 px-3 py-1.5 text-sm font-medium text-white">
+            <button type="button" onClick={() => setShowSuspend(true)} className="rounded-md bg-rose-600 px-3 py-1.5 text-sm font-medium text-white">
               Suspend
             </button>
           )}
           {org.status === 'suspended' && (
-            <button
+            <button type="button"
               onClick={async () => {
                 if (!orgId) return;
                 if (!confirm('Restore this organization?')) return;
@@ -70,7 +70,7 @@ export function LingualOrgDetailPage() {
 
       <nav className="mt-6 flex gap-4 border-b border-neutral-200 text-sm">
         {TABS.map(t => (
-          <button
+          <button type="button"
             key={t.hash}
             onClick={() => navigate({ hash: t.hash }, { replace: true })}
             aria-current={activeHash === t.hash ? 'page' : undefined}

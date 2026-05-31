@@ -53,19 +53,19 @@ vi.mock('../config/firebase', () => ({
   facebookProvider: {},
 }));
 
-function CallSignUp({ role }: { role?: IntendedRole }) {
+function CallSignUp({ intendedRole }: { intendedRole?: IntendedRole }) {
   const { signUpWithEmail } = useAuth();
   useEffect(() => {
-    signUpWithEmail('a@b.test', 'password123', role ? { intendedRole: role } : undefined);
-  }, [signUpWithEmail, role]);
+    signUpWithEmail('a@b.test', 'password123', intendedRole ? { intendedRole } : undefined);
+  }, [signUpWithEmail, intendedRole]);
   return <div>ready</div>;
 }
 
-function CallGoogle({ role }: { role?: IntendedRole }) {
+function CallGoogle({ intendedRole }: { intendedRole?: IntendedRole }) {
   const { signInWithGoogle } = useAuth();
   useEffect(() => {
-    signInWithGoogle(role ? { intendedRole: role } : undefined);
-  }, [signInWithGoogle, role]);
+    signInWithGoogle(intendedRole ? { intendedRole } : undefined);
+  }, [signInWithGoogle, intendedRole]);
   return <div>ready</div>;
 }
 
@@ -87,7 +87,7 @@ describe('AuthContext intendedRole forwarding', () => {
   it('forwards intendedRole on email signup', async () => {
     render(
       <AuthProvider>
-        <CallSignUp role="teacher" />
+        <CallSignUp intendedRole="teacher" />
       </AuthProvider>,
     );
     await screen.findByText('ready');
@@ -99,7 +99,7 @@ describe('AuthContext intendedRole forwarding', () => {
   it('forwards intendedRole on Google sign-in', async () => {
     render(
       <AuthProvider>
-        <CallGoogle role="admin" />
+        <CallGoogle intendedRole="admin" />
       </AuthProvider>,
     );
     await screen.findByText('ready');
@@ -130,7 +130,7 @@ describe('AuthContext intendedRole forwarding', () => {
     await waitFor(() => {
       expect(verifyTokenMock).toHaveBeenCalledWith('id-token-signin');
     });
-    // The second argument must be omitted entirely — login is for returning
+    // The second argument must be omitted entirely - login is for returning
     // users whose role comes from their memberships, not from a UI selection.
     const calls = verifyTokenMock.mock.calls;
     const signInCall = calls.find((c) => c[0] === 'id-token-signin');
@@ -279,7 +279,7 @@ describe('AuthContext 5-minute polling (LIMITATIONS #28)', () => {
       return (
         <div>
           <span>{user ? 'in' : 'out'}</span>
-          <button onClick={() => void logout()}>logout</button>
+          <button type="button" onClick={() => void logout()}>logout</button>
         </div>
       );
     }
@@ -291,7 +291,7 @@ describe('AuthContext 5-minute polling (LIMITATIONS #28)', () => {
     );
     await waitFor(() => expect(screen.getByText('in')).toBeInTheDocument());
 
-    // First poll fires after 5 min — confirm timer is wired up.
+    // First poll fires after 5 min - confirm timer is wired up.
     const beforeFirstPoll = verifyTokenMock.mock.calls.length;
     await act(async () => { await vi.advanceTimersByTimeAsync(5 * 60 * 1000); });
     await waitFor(() => {
@@ -310,7 +310,7 @@ describe('AuthContext 5-minute polling (LIMITATIONS #28)', () => {
   });
 });
 
-describe('AuthContext — LegacyRoleMigrationModal mount', () => {
+describe('AuthContext - LegacyRoleMigrationModal mount', () => {
   beforeEach(() => {
     verifyTokenMock.mockReset();
     migrateRoleMock.mockReset();

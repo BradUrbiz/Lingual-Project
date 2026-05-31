@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'framer-motion';
 import { AlertTriangle } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Button, AnimatedCard, Alert, AlertDescription } from '@/components/ui';
@@ -53,46 +53,46 @@ export function CategoriesPage() {
   return (
     <AnimatedPage className="min-h-screen bg-background flex items-center justify-center p-6">
       <AnimatedCard className="p-8 max-w-lg w-full bg-card border-3 border-foreground shadow-stamp">
-        <motion.h1
+        <m.h1
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-2xl font-display font-bold text-center text-foreground mb-3"
         >
           {t('categories.title')}
-        </motion.h1>
-        <motion.p
+        </m.h1>
+        <m.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="text-center text-sm text-muted-foreground mb-8"
         >
           Pick one or more focus areas so we can personalize your sessions.
-        </motion.p>
+        </m.p>
 
         <AnimatePresence mode="wait">
           {error && (
-            <motion.div
+            <m.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               className="mb-4"
             >
               <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
+                <AlertTriangle className="size-4" />
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
 
         <div className="border-t border-border pt-6">
-          <motion.div
+          <m.div
             variants={staggerContainer}
             initial="initial"
             animate="animate"
             className="flex flex-wrap gap-3 mb-8"
           >
             {CATEGORY_OPTIONS.map(({ id, labelKey }) => (
-              <motion.div key={id} variants={staggerItem} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
+              <m.div key={id} variants={staggerItem} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
                 <Button
                   variant="option"
                   selected={selectedCategories.includes(id)}
@@ -101,11 +101,11 @@ export function CategoriesPage() {
                 >
                   {t(labelKey)}
                 </Button>
-              </motion.div>
+              </m.div>
             ))}
-          </motion.div>
+          </m.div>
 
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
@@ -118,7 +118,7 @@ export function CategoriesPage() {
             >
               {t('categories.continue')}
             </Button>
-          </motion.div>
+          </m.div>
         </div>
       </AnimatedCard>
     </AnimatedPage>

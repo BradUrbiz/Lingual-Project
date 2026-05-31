@@ -67,7 +67,7 @@ function clampDirectiveNumber(value: unknown, minimum: number, maximum: number) 
   return Math.max(minimum, Math.min(maximum, value));
 }
 
-export function sanitizeAvatarDirective(input: unknown): AvatarDirective | null {
+function sanitizeAvatarDirective(input: unknown): AvatarDirective | null {
   if (!input || typeof input !== 'object') return null;
 
   const record = input as Record<string, unknown>;

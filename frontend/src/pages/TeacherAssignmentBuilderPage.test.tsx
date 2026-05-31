@@ -258,7 +258,7 @@ describe('TeacherAssignmentBuilderPage', () => {
         suggestedTitle: 'Dinner at the bistro',
         suggestedDescription: 'Order a two-course dinner.',
         teacherNotes: '',
-        // objectives field in suggestions — may or may not be returned
+        // objectives field in suggestions - may or may not be returned
         // by backend; test independently that teacher can add them.
       },
     });

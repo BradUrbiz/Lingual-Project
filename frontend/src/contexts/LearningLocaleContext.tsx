@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, use, useEffect, useMemo, useState, ReactNode } from 'react';
 import { getUserProfile } from '@/api/user';
 import { useAuth } from '@/hooks/useAuth';
 import { DEFAULT_LEARNING_LOCALE } from '@/lib/learningLocales';
@@ -42,6 +42,14 @@ export function LearningLocaleProvider({ children }: { children: ReactNode }) {
 
   const effectiveLocale = user ? learningLocale : DEFAULT_LEARNING_LOCALE;
   const isRTL = RTL_LEARNING_LOCALES.has(effectiveLocale);
+  const value = useMemo(
+    () => ({
+      learningLocale: effectiveLocale,
+      setLearningLocale,
+      isRTL,
+    }),
+    [effectiveLocale, isRTL]
+  );
 
   // Keep global browser chrome and public routes LTR. Learning-locale direction
   // is scoped to authenticated app layouts so it cannot leak onto the landing
@@ -54,20 +62,14 @@ export function LearningLocaleProvider({ children }: { children: ReactNode }) {
   }, [effectiveLocale]);
 
   return (
-    <LearningLocaleContext.Provider
-      value={{
-        learningLocale: effectiveLocale,
-        setLearningLocale,
-        isRTL,
-      }}
-    >
+    <LearningLocaleContext.Provider value={value}>
       {children}
     </LearningLocaleContext.Provider>
   );
 }
 
 export function useLearningLocale() {
-  const context = useContext(LearningLocaleContext);
+  const context = use(LearningLocaleContext);
   if (!context) {
     throw new Error('useLearningLocale must be used within a LearningLocaleProvider');
   }

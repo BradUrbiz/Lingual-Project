@@ -24,7 +24,7 @@ export function SpeakingSpeedControl({
       aria-label={t('app.learn.chat.speed.label')}
     >
       <div className="flex h-8 items-center gap-1.5 rounded-xl border-2 border-border bg-background px-2 text-xs font-bold text-muted-foreground">
-        <Gauge className="h-3.5 w-3.5" strokeWidth={2.5} />
+        <Gauge className="size-3.5" strokeWidth={2.5} />
         <span>{t('app.learn.chat.speed.label')}</span>
       </div>
       <div className="flex rounded-xl border-2 border-border bg-secondary p-1">

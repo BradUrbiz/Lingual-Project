@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   getMySchoolRequest,
@@ -18,7 +18,7 @@ export function AdminPendingPage() {
   const [cancelling, setCancelling] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  async function refresh(initial = false) {
+  const refresh = useCallback(async (initial = false) => {
     try {
       const next = await getMySchoolRequest();
       if (next === null) {
@@ -43,16 +43,16 @@ export function AdminPendingPage() {
     } finally {
       if (initial) setLoading(false);
     }
-  }
+  }, [navigate, refreshUser]);
 
   useEffect(() => {
     void refresh(true);
     timer.current = setInterval(() => void refresh(), POLL_MS);
     return () => {
-      if (timer.current) clearInterval(timer.current);
+      const currentTimer = timer.current;
+      if (currentTimer) clearInterval(currentTimer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refresh]);
 
   async function handleCancel() {
     if (!req || req.status !== 'pending') return;

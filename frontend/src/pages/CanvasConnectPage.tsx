@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useReducer, type FormEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Link as LinkIcon, ArrowLeft, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { validateCanvasConnection, connectCanvas } from '@/api/canvas';
@@ -8,47 +8,93 @@ import type { CanvasCourse } from '@/types/canvas';
 
 type Step = 'credentials' | 'course-select';
 
+type CanvasConnectState = {
+  step: Step;
+  instanceUrl: string;
+  pat: string;
+  courses: CanvasCourse[];
+  selectedCourseId: string;
+  loading: boolean;
+  error: string | null;
+  ltiConfigured: boolean | null;
+};
+
+type CanvasConnectAction =
+  | { type: 'set-field'; field: 'instanceUrl' | 'pat' | 'selectedCourseId'; value: string }
+  | { type: 'set-step'; step: Step }
+  | { type: 'set-lti-configured'; value: boolean }
+  | { type: 'request-start' }
+  | { type: 'request-error'; error: string }
+  | { type: 'request-finished' }
+  | { type: 'validated'; courses: CanvasCourse[] };
+
+const initialCanvasConnectState: CanvasConnectState = {
+  step: 'credentials',
+  instanceUrl: '',
+  pat: '',
+  courses: [],
+  selectedCourseId: '',
+  loading: false,
+  error: null,
+  ltiConfigured: null,
+};
+
+function canvasConnectReducer(state: CanvasConnectState, action: CanvasConnectAction): CanvasConnectState {
+  switch (action.type) {
+    case 'set-field':
+      return { ...state, [action.field]: action.value };
+    case 'set-step':
+      return { ...state, step: action.step };
+    case 'set-lti-configured':
+      return { ...state, ltiConfigured: action.value };
+    case 'request-start':
+      return { ...state, error: null, loading: true };
+    case 'request-error':
+      return { ...state, error: action.error, loading: false };
+    case 'request-finished':
+      return { ...state, loading: false };
+    case 'validated':
+      return {
+        ...state,
+        courses: action.courses,
+        selectedCourseId: action.courses.length > 0 ? String(action.courses[0].id) : '',
+        step: 'course-select',
+      };
+    default:
+      return state;
+  }
+}
+
 export function CanvasConnectPage() {
   const { classId } = useParams<{ classId: string }>();
   const [searchParams] = useSearchParams();
   const existingClassId = classId || searchParams.get('classId') || '';
   const navigate = useNavigate();
 
-  const [step, setStep] = useState<Step>('credentials');
-  const [instanceUrl, setInstanceUrl] = useState('');
-  const [pat, setPat] = useState('');
-  const [courses, setCourses] = useState<CanvasCourse[]>([]);
-  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [ltiConfigured, setLtiConfigured] = useState<boolean | null>(null);
+  const [state, dispatch] = useReducer(canvasConnectReducer, initialCanvasConnectState);
+  const { step, instanceUrl, pat, courses, selectedCourseId, loading, error, ltiConfigured } = state;
 
   useEffect(() => {
     getLtiPlatform()
-      .then((platform) => setLtiConfigured(platform !== null))
-      .catch(() => setLtiConfigured(false));
+      .then((platform) => dispatch({ type: 'set-lti-configured', value: platform !== null }))
+      .catch(() => dispatch({ type: 'set-lti-configured', value: false }));
   }, []);
 
-  const handleValidate = async (e: React.FormEvent) => {
+  const handleValidate = async (e: FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
+    dispatch({ type: 'request-start' });
     try {
       const result = await validateCanvasConnection(instanceUrl.trim(), pat.trim());
       if (!result.success) {
-        setError(result.error || 'Validation failed');
+        dispatch({ type: 'request-error', error: result.error || 'Validation failed' });
         return;
       }
-      setCourses(result.courses);
-      if (result.courses.length > 0) {
-        setSelectedCourseId(String(result.courses[0].id));
-      }
-      setStep('course-select');
+      dispatch({ type: 'validated', courses: result.courses });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Connection failed';
-      setError(msg);
+      dispatch({ type: 'request-error', error: msg });
     } finally {
-      setLoading(false);
+      dispatch({ type: 'request-finished' });
     }
   };
 
@@ -56,8 +102,7 @@ export function CanvasConnectPage() {
     const course = courses.find((c) => String(c.id) === selectedCourseId);
     if (!course) return;
 
-    setError(null);
-    setLoading(true);
+    dispatch({ type: 'request-start' });
     try {
       const result = await connectCanvas({
         canvasInstanceUrl: instanceUrl.trim(),
@@ -67,22 +112,22 @@ export function CanvasConnectPage() {
         existingClassId: existingClassId || undefined,
       });
       if (!result.success) {
-        setError(result.error || 'Connection failed');
+        dispatch({ type: 'request-error', error: result.error || 'Connection failed' });
         return;
       }
       navigate(`/app/teacher/classes/${result.classId}/analytics`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Connection failed';
-      setError(msg);
+      dispatch({ type: 'request-error', error: msg });
     } finally {
-      setLoading(false);
+      dispatch({ type: 'request-finished' });
     }
   };
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <header className="flex items-start gap-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl border-3 border-foreground bg-primary text-primary-foreground shadow-stamp-sm">
+        <div className="flex size-12 items-center justify-center rounded-xl border-3 border-foreground bg-primary text-primary-foreground shadow-stamp-sm">
           <LinkIcon size={24} strokeWidth={2.5} />
         </div>
         <div className="space-y-1">
@@ -116,7 +161,7 @@ export function CanvasConnectPage() {
                 Your school has configured LTI integration. Simply open Lingual from inside Canvas to connect automatically.
               </p>
               <p className="mt-2 text-sm font-medium text-primary">
-                No action needed here — launch Lingual from your Canvas course navigation.
+                No action needed here - launch Lingual from your Canvas course navigation.
               </p>
             </div>
           </div>
@@ -143,7 +188,7 @@ export function CanvasConnectPage() {
                 required
                 placeholder="https://school.instructure.com"
                 value={instanceUrl}
-                onChange={(e) => setInstanceUrl(e.target.value)}
+                onChange={(e) => dispatch({ type: 'set-field', field: 'instanceUrl', value: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
                 This is your school's Canvas address. It usually looks like yourschool.instructure.com
@@ -158,7 +203,7 @@ export function CanvasConnectPage() {
                 required
                 placeholder="Your Canvas PAT"
                 value={pat}
-                onChange={(e) => setPat(e.target.value)}
+                onChange={(e) => dispatch({ type: 'set-field', field: 'pat', value: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
                 In Canvas, go to Account &gt; Settings &gt; New Access Token. Your token is encrypted and stored securely.
@@ -200,7 +245,7 @@ export function CanvasConnectPage() {
                   name="course"
                   value={String(course.id)}
                   checked={String(course.id) === selectedCourseId}
-                  onChange={(e) => setSelectedCourseId(e.target.value)}
+                  onChange={(e) => dispatch({ type: 'set-field', field: 'selectedCourseId', value: e.target.value })}
                   className="accent-primary"
                 />
                 <div>
@@ -216,7 +261,7 @@ export function CanvasConnectPage() {
           </div>
 
           <div className="mt-5 flex gap-3">
-            <Button variant="outline" onClick={() => setStep('credentials')}>
+            <Button variant="outline" onClick={() => dispatch({ type: 'set-step', step: 'credentials' })}>
               <ArrowLeft size={16} className="mr-2" />
               Back
             </Button>

@@ -117,10 +117,12 @@ export class OfficialCubismModel extends CubismUserModel {
     const modelBuffer = await fetchArrayBuffer(`${this.modelHomeDir}${modelFileName}`);
     this.loadModel(modelBuffer);
 
-    await this.loadExpressions();
-    await this.loadPhysicsAsset();
-    await this.loadPoseAsset();
-    await this.loadUserDataAsset();
+    await Promise.all([
+      this.loadExpressions(),
+      this.loadPhysicsAsset(),
+      this.loadPoseAsset(),
+      this.loadUserDataAsset(),
+    ]);
     this.collectEffectIds();
     this.collectMetadata();
     await this.preloadMotions();
@@ -183,7 +185,7 @@ export class OfficialCubismModel extends CubismUserModel {
    * Dynamically frames the model within the safe area of the canvas.
    *
    * Auto-centering: the model's visual center (manifest.anchor) is placed at
-   * the center of the safe area — no per-breakpoint position values needed.
+   * the center of the safe area - no per-breakpoint position values needed.
    *
    * Auto-zoom: logicalViewHeight scales proportionally to the safe-area
    * fraction of the viewport, with portrait tightening for narrow screens.
@@ -371,20 +373,23 @@ export class OfficialCubismModel extends CubismUserModel {
   }
 
   private async loadExpressions() {
-    if (!this.modelSetting) return;
+    const modelSetting = this.modelSetting;
+    if (!modelSetting) return;
 
-    const count = this.modelSetting.getExpressionCount();
-    for (let index = 0; index < count; index += 1) {
-      const name = this.modelSetting.getExpressionName(index);
-      const fileName = this.modelSetting.getExpressionFileName(index);
-      if (!name || !fileName) continue;
+    const count = modelSetting.getExpressionCount();
+    const expressions = await Promise.all(Array.from({ length: count }, async (_unused, index) => {
+      const name = modelSetting.getExpressionName(index);
+      const fileName = modelSetting.getExpressionFileName(index);
+      if (!name || !fileName) return null;
 
       const buffer = await fetchArrayBuffer(`${this.modelHomeDir}${fileName}`);
       const expression = this.loadExpression(buffer, buffer.byteLength, name);
-      if (expression) {
-        this.expressions.set(name, expression);
-      }
-    }
+      return expression ? { name, expression } : null;
+    }));
+
+    expressions.forEach((entry) => {
+      if (entry) this.expressions.set(entry.name, entry.expression);
+    });
   }
 
   private async loadPhysicsAsset() {
@@ -455,16 +460,17 @@ export class OfficialCubismModel extends CubismUserModel {
   }
 
   private async preloadMotions() {
-    if (!this.modelSetting) return;
+    const modelSetting = this.modelSetting;
+    if (!modelSetting) return;
 
-    const motionGroupCount = this.modelSetting.getMotionGroupCount();
-    for (let groupIndex = 0; groupIndex < motionGroupCount; groupIndex += 1) {
-      const groupName = this.modelSetting.getMotionGroupName(groupIndex);
-      const motionCount = this.modelSetting.getMotionCount(groupName);
+    const motionGroupCount = modelSetting.getMotionGroupCount();
+    const motionEntries = await Promise.all(Array.from({ length: motionGroupCount }, async (_unused, groupIndex) => {
+      const groupName = modelSetting.getMotionGroupName(groupIndex);
+      const motionCount = modelSetting.getMotionCount(groupName);
 
-      for (let motionIndex = 0; motionIndex < motionCount; motionIndex += 1) {
-        const fileName = this.modelSetting.getMotionFileName(groupName, motionIndex);
-        if (!fileName) continue;
+      return Promise.all(Array.from({ length: motionCount }, async (_unusedMotion, motionIndex) => {
+        const fileName = modelSetting.getMotionFileName(groupName, motionIndex);
+        if (!fileName) return null;
 
         const buffer = await fetchArrayBuffer(`${this.modelHomeDir}${fileName}`);
         const motion = this.loadMotion(
@@ -473,35 +479,46 @@ export class OfficialCubismModel extends CubismUserModel {
           `${groupName}:${motionIndex}`,
           undefined,
           undefined,
-          this.modelSetting,
+          modelSetting,
           groupName,
           motionIndex
         );
 
-        if (motion) {
-          motion.setEffectIds(this.eyeBlinkIds, this.lipSyncIds);
-          this.motions.set(`${groupName}:${motionIndex}`, motion);
-        }
-      }
-    }
+        if (!motion) return null;
+        const key = `${groupName}:${motionIndex}`;
+        return { key, motion };
+      }));
+    }));
+
+    motionEntries.flat().forEach((entry) => {
+      if (!entry) return;
+      entry.motion.setEffectIds(this.eyeBlinkIds, this.lipSyncIds);
+      this.motions.set(entry.key, entry.motion);
+    });
   }
 
   private async loadTextures() {
-    if (!this.modelSetting) return;
+    const modelSetting = this.modelSetting;
+    if (!modelSetting) return;
 
-    const textureCount = this.modelSetting.getTextureCount();
-    for (let index = 0; index < textureCount; index += 1) {
-      const fileName = this.modelSetting.getTextureFileName(index);
-      if (!fileName) continue;
+    const textureCount = modelSetting.getTextureCount();
+    const textures = await Promise.all(Array.from({ length: textureCount }, async (_unused, index) => {
+      const fileName = modelSetting.getTextureFileName(index);
+      if (!fileName) return null;
 
       const texture = await loadTexture(this.gl, `${this.modelHomeDir}${fileName}`, true);
-      this.textures.push(texture.id);
-      this.maxTextureHeight = Math.max(this.maxTextureHeight, texture.height);
-      this.getRenderer().bindTexture(index, texture.id);
-    }
+      return { index, texture };
+    }));
+
+    textures.forEach((entry) => {
+      if (!entry) return;
+      this.textures.push(entry.texture.id);
+      this.maxTextureHeight = Math.max(this.maxTextureHeight, entry.texture.height);
+      this.getRenderer().bindTexture(entry.index, entry.texture.id);
+    });
 
     const layout = new csmMap<string, number>();
-    this.modelSetting.getLayoutMap(layout);
+    modelSetting.getLayoutMap(layout);
     if (layout.getSize() > 0) {
       this.getModelMatrix().setupFromLayout(layout);
     }

@@ -152,6 +152,22 @@ class TestEnrollmentsReadPG(unittest.TestCase):
         self.assertNotIn('src', out)                 # not the Firestore stub
         self.assertEqual(cnt, 1)                      # PG count, not the -1 stub
 
+    def test_backfill_preserves_firestore_created_at(self):
+        # P2a: a backfilled row must keep its TRUE enrollment date (roster enrolledAt),
+        # not the backfill-run now(). The doc-carried created_at is preserved.
+        import datetime
+        ts = datetime.datetime(2025, 9, 1, 12, 0, tzinfo=datetime.timezone.utc)
+        with Session(_engine) as s:
+            _seed(s)  # enrollment first created with server_default now() (no ts in doc)
+            backfill.upsert_enrollment(s, {  # idempotent re-upsert WITH a Firestore created_at
+                'id': 'cls-1_u-student', 'class_id': 'cls-1', 'student_uid': 'u-student',
+                'student_membership_id': 'mem-s', 'status': 'active',
+                'join_source': 'join_code', 'created_at': ts})
+            s.commit()
+        with Session(_engine) as s:
+            out = enrollments.get_student_class_enrollment(s, _class_uuid(s), 'u-student')
+        self.assertEqual(out['created_at'], ts)      # true Firestore date, not now()
+
 
 if __name__ == '__main__':
     unittest.main()

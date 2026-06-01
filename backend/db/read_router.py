@@ -91,6 +91,25 @@ _CLASS_SHADOW_IGNORE = frozenset(
 # matters. (The list readers diff by id-set, so they never reach this allowlist.)
 _ENROLLMENT_SHADOW_IGNORE = frozenset({'created_at', 'updated_at'})
 
+# Sentinel a pg_call returns to say "I can't authoritatively answer this — fall open
+# to Firestore." Distinct from a real None / [] result, which IS authoritative in
+# mode '1'. The case that needs it: a child read whose PARENT id doesn't resolve to a
+# migrated row (e.g. an enrollment whose class missed the PG backfill). Returning
+# None/[] there would DENY access (empty roster / no enrollment) instead of degrading
+# to Firestore — a silent data loss the fail-open contract is meant to prevent.
+_FALLBACK = object()
+
+# Flag-state ranking for a reader gated on MORE THAN ONE entity flag. The effective
+# mode is the WEAKER of the flags: a cross-family reader is only as cut-over as its
+# least-cut-over family, so it never serves PG for one family while the other has
+# been rolled back to Firestore (the rollback-ordering footgun for list_student_classes).
+_MODE_RANK = {'': 0, '0': 0, 'shadow': 1, '1': 2}
+
+
+def _weaker_mode(*flags: str) -> str:
+    """The lowest-ranked of several flags' current modes (off < shadow < '1')."""
+    return min((os.environ.get(f, '') for f in flags), key=lambda m: _MODE_RANK.get(m, 0))
+
 
 def _norm(value: Any) -> Any:
     """Normalize a value for cross-store comparison: datetimes -> ISO string, and
@@ -184,6 +203,8 @@ class ReadRouter:
         except Exception:  # noqa: BLE001 — a broken shadow read must not affect the request
             _log.exception('shadow-read %s: PG side errored', flag)
             return
+        if pg_result is _FALLBACK:   # pg_call declined (unresolved parent) — nothing to compare
+            return
         fs_cmp = extract(fs_result) if extract else fs_result
         pg_cmp = extract(pg_result) if extract else pg_result
         diff = _diff(fs_cmp, pg_cmp, ignore)
@@ -199,10 +220,13 @@ class ReadRouter:
                 flag, stats[0], stats[1],
             )
 
-    def _route_read(self, flag, fs_call, pg_call, *, ignore=frozenset(), extract=None):
-        """The 3-state per-entity gate. See module docstring. `extract` (shadow
-        only) maps each result to its comparable part for paginated/wrapped reads."""
-        mode = os.environ.get(flag, '')
+    def _route_read(self, flag, fs_call, pg_call, *, ignore=frozenset(), extract=None, also=None):
+        """The 3-state per-entity gate. See module docstring. `extract` (shadow only)
+        maps each result to its comparable part for paginated/wrapped reads. `also`
+        (optional) is a SECOND entity flag this reader depends on — the effective mode
+        becomes the weaker of the two (cross-family readers, e.g. list_student_classes
+        which reads PG class rows via an enrollment JOIN)."""
+        mode = _weaker_mode(flag, also) if also else os.environ.get(flag, '')
         if mode not in ('shadow', '1'):
             return fs_call()
         engine = _resolve_engine(self._sql_engine)
@@ -213,10 +237,13 @@ class ReadRouter:
             self._shadow_compare(flag, fs_result, pg_call, engine, ignore, extract)
             return fs_result
         try:                                     # mode == '1': PG authoritative
-            return self._pg_read(pg_call, engine)
+            pg_result = self._pg_read(pg_call, engine)
         except Exception:  # noqa: BLE001 — fail-open: any PG failure -> Firestore
             _log.exception('%s: PG read failed; fail-open to Firestore', flag)
             return fs_call()
+        if pg_result is _FALLBACK:               # pg_call couldn't answer -> Firestore
+            return fs_call()
+        return pg_result
 
     # --- overridden readers ----------------------------------------------
 
@@ -379,7 +406,7 @@ class ReadRouter:
             from backend.db.repository import enrollments, resolution
             class_uuid = resolution.resolve_legacy_id(session, Class, class_id)
             if class_uuid is None:
-                return None
+                return _FALLBACK   # class not migrated -> can't answer; fall open (not "no enrollment")
             return enrollments.get_student_class_enrollment(session, class_uuid, student_uid)
 
         return self._route_read(
@@ -397,7 +424,7 @@ class ReadRouter:
             from backend.db.repository import enrollments, resolution
             class_uuid = resolution.resolve_legacy_id(session, Class, class_id)
             if class_uuid is None:
-                return []
+                return _FALLBACK   # class not migrated -> fall open (not an empty roster)
             return enrollments.list_class_enrollments(session, class_uuid, status)
 
         return self._route_read(
@@ -433,10 +460,12 @@ class ReadRouter:
         )
 
     def list_student_classes(self, student_uid):
-        """The active classes a student is enrolled in, routed by READ_PG_ENROLLMENTS.
-        The read-cut of the Firestore N+1 -> a single enrollments⋈classes JOIN. Gated
-        on the ENROLLMENTS flag alone (it reads PG class rows via the JOIN directly,
-        and classes are migrated before enrollments — see classes_read)."""
+        """The active classes a student is enrolled in, routed by READ_PG_ENROLLMENTS
+        AND READ_PG_CLASSES (the weaker mode wins). It reads PG class rows via an
+        enrollments⋈classes JOIN, so it touches BOTH families — gating on the weaker
+        flag means it never serves PG class data after classes has been rolled back to
+        Firestore (the rollback-ordering footgun), while still cutting over once both
+        families are PG-authoritative."""
         def pg_call(session):
             from backend.db.repository import classes_read
             return classes_read.list_student_classes(session, student_uid)
@@ -445,6 +474,7 @@ class ReadRouter:
             'READ_PG_ENROLLMENTS',
             lambda: self._fs.list_student_classes(student_uid),
             pg_call,
+            also='READ_PG_CLASSES',
         )
 
     def list_org_classes_summary(self, *, org_id):

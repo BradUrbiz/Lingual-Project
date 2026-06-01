@@ -506,6 +506,18 @@ def upsert_enrollment(
         'canvas_name': doc.get('canvas_name') or None,
     }
 
+    # Preserve the Firestore enrollment timestamps when the doc carries them. The
+    # backfill reads real Firestore docs (resolved timestamps), so a backfilled row
+    # keeps its TRUE enrollment date — routes surface created_at as the roster
+    # 'enrolledAt' (teacher.py), and without this a backfilled row would show the
+    # backfill-run date once enrollment reads cut over to Postgres. The live shadow
+    # (shadow_create_enrollment) omits these keys, so live writes fall through to the
+    # column server_default now() (≈ the SERVER_TIMESTAMP just written) — unaffected.
+    for ts_key in ('created_at', 'updated_at'):
+        ts_val = doc.get(ts_key)
+        if ts_val is not None:
+            fields[ts_key] = ts_val
+
     row = _existing(session, Enrollment, legacy_id)
     if row is None:
         row = Enrollment(legacy_firestore_id=legacy_id, **fields)

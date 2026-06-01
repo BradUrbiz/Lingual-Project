@@ -189,10 +189,10 @@ def list_student_classes(session: Any, student_uid: str) -> list[dict[str, Any]]
     per row): one JOIN of the student's ACTIVE enrollments to ACTIVE classes,
     returning the same full doc shape (+junctions) as the other class readers. The
     `(class_id, student_firebase_uid)` uniqueness already gives one enrollment per
-    class, so no dedup is needed. Routed by READ_PG_ENROLLMENTS ALONE: served from
-    PG it reads PG class rows via this JOIN directly (never the flag-gated
-    `get_class`), and the cutover sequencing keeps classes migrated before
-    enrollments — so a cross-flag gate would be redundant (READ_CUTOVER.md §3.2)."""
+    class, so no dedup is needed. It reads PG class rows via this JOIN directly (never
+    the flag-gated `get_class`), so it touches BOTH the enrollment and class families
+    — the router gates it on the WEAKER of READ_PG_ENROLLMENTS/READ_PG_CLASSES so it
+    never serves PG class data after a class rollback (READ_CUTOVER.md §3.2)."""
     rows = session.execute(
         select(Class, Organization.legacy_firestore_id)
         .join(Enrollment, Enrollment.class_id == Class.id)
@@ -202,7 +202,10 @@ def list_student_classes(session: Any, student_uid: str) -> list[dict[str, Any]]
             Enrollment.status == 'active',
             Class.status == 'active',
         )
-        .order_by(Class.updated_at.desc())
+        # Match the Firestore reader's order: most-recent ENROLLMENT first (it lists
+        # the student's enrollments by updated_at DESC, then maps each to its class),
+        # NOT class.updated_at. Class.id is a stable tie-breaker for determinism.
+        .order_by(Enrollment.updated_at.desc(), Class.id)
     ).all()
     return _hydrate(session, rows)
 

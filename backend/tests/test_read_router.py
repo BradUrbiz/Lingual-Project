@@ -823,13 +823,60 @@ class TestEnrollmentRouting(unittest.TestCase):
         self.assertEqual(out, 9)                          # Firestore authoritative
         self.assertIn('<value>', ' '.join(cm.output))     # scalar mismatch surfaced
 
-    def test_list_student_classes_is_gated_on_enrollments_flag_alone(self):
-        # served from PG when READ_PG_ENROLLMENTS=1 even though READ_PG_CLASSES is OFF
+    def test_list_student_classes_weaker_flag_gates_to_firestore(self):
+        # ENROLLMENTS=1 but CLASSES OFF -> weaker mode is OFF -> Firestore, PG untouched
+        # (defends against a class rollback while enrollments is still forward).
+        os.environ['READ_PG_ENROLLMENTS'] = '1'   # READ_PG_CLASSES left unset (off)
+        fs = types.SimpleNamespace(list_student_classes=lambda uid: [{'id': 'c-fs'}])
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        pg_called = []
+        with mock.patch.object(ReadRouter, '_pg_read',
+                               lambda self, pc, eng: pg_called.append(1) or [{'id': 'c-pg'}]):
+            out = router.list_student_classes('u1')
+        self.assertEqual(out, [{'id': 'c-fs'}])
+        self.assertEqual(pg_called, [])           # weaker flag off -> PG never touched
+
+    def test_list_student_classes_serves_pg_only_when_both_flags_one(self):
         os.environ['READ_PG_ENROLLMENTS'] = '1'
+        os.environ['READ_PG_CLASSES'] = '1'
         fs = types.SimpleNamespace(list_student_classes=lambda uid: [{'id': 'c-fs'}])
         router = ReadRouter(fs, sql_engine=lambda: object())
         with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: [{'id': 'c-pg'}]):
             self.assertEqual(router.list_student_classes('u1'), [{'id': 'c-pg'}])
+
+    def test_list_student_classes_shadow_when_one_flag_shadow_one_cutover(self):
+        # weaker of (shadow, '1') is shadow -> Firestore authoritative + compare
+        os.environ['READ_PG_ENROLLMENTS'] = 'shadow'
+        os.environ['READ_PG_CLASSES'] = '1'
+        fs = types.SimpleNamespace(list_student_classes=lambda uid: [{'id': 'c1'}])
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: [{'id': 'c1'}]):
+            with self.assertLogs('backend.db.read_router', level='WARNING'):
+                out = router.list_student_classes('u1')
+        self.assertEqual(out, [{'id': 'c1'}])     # shadow -> Firestore returned
+
+    def test_unresolved_parent_fails_open_in_mode_1(self):
+        # pg_call returns the _FALLBACK sentinel (class not migrated) -> Firestore,
+        # NOT an authoritative None that would deny the practice-launch / roster read
+        os.environ['READ_PG_ENROLLMENTS'] = '1'
+        fs = types.SimpleNamespace(
+            get_student_class_enrollment=lambda cid, uid: {'id': 'e-fs', 'src': 'fs'})
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(ReadRouter, '_pg_read',
+                               lambda self, pc, eng: read_router._FALLBACK):
+            out = router.get_student_class_enrollment('ghost-class', 'u1')
+        self.assertEqual(out, {'id': 'e-fs', 'src': 'fs'})
+
+    def test_fallback_sentinel_skips_the_shadow_compare(self):
+        os.environ['READ_PG_ENROLLMENTS'] = 'shadow'
+        fs = types.SimpleNamespace(
+            list_class_enrollments=lambda cid, st='active': [{'id': 'e1'}])
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(ReadRouter, '_pg_read',
+                               lambda self, pc, eng: read_router._FALLBACK):
+            out = router.list_class_enrollments('ghost')
+        self.assertEqual(out, [{'id': 'e1'}])                       # Firestore authoritative
+        self.assertNotIn('READ_PG_ENROLLMENTS', read_router._shadow_stats)  # never counted
 
     def test_list_org_classes_summary_is_gated_on_classes_flag(self):
         os.environ['READ_PG_CLASSES'] = '1'

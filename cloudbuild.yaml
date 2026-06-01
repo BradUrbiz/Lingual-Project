@@ -86,14 +86,15 @@ substitutions:
   # 2026-06-01 (rev 00045) after a clean shadow soak (25+ compares, 0 mismatched)
   # + dual-write drop-rate 0 + parity at the documented-junk baseline. memberships
   # 'shadow' (get_membership + get_user_memberships only; admin lists +
-  # resolve_user_school_context stay on Firestore — D4/§5). classes 'shadow' as of
-  # 2026-06-01 (get_class + list_org/teacher_classes + get_class_by_join_code;
-  # highest blast radius at '1' — authz/AI-tutor/student-join — so soak before flip).
-  # Rollback = flip back to 'shadow'/'0' (instant, no rebuild: gcloud run services
-  # update --update-env-vars).
+  # resolve_user_school_context stay on Firestore — D4/§5). classes FLIPPED to '1'
+  # on 2026-06-02 (rev 00047) — get_class + list_org/teacher_classes +
+  # get_class_by_join_code now PG-authoritative (authz/AI-tutor/student-join) after
+  # a clean soak (100 compares, 0 mismatched across point-get + list readers) + 24/24
+  # PG-served post-flip with 0 fail-open. Rollback = flip back to 'shadow'/'0'
+  # (instant, no rebuild: gcloud run services update --update-env-vars).
   _READ_PG_ORGANIZATIONS: '1'
   _READ_PG_MEMBERSHIPS: 'shadow'
-  _READ_PG_CLASSES: 'shadow'
+  _READ_PG_CLASSES: '1'
 
 # Store images in Artifact Registry
 images:

@@ -16,8 +16,8 @@ from unittest import mock
 
 from backend.db import read_router
 from backend.db.read_router import ReadRouter, _diff, _diff_dict, _diff_list, _norm
-from backend.db.models.org import Membership, Organization
-from backend.db.repository import memberships_read, organizations_read
+from backend.db.models.org import Class, Membership, Organization
+from backend.db.repository import classes_read, memberships_read, organizations_read
 
 
 _FLAG = 'READ_PG_ORGANIZATIONS'
@@ -414,11 +414,14 @@ def _make_membership(**o):
 
 
 class _SeqResult:
-    """One execute() result exposing both .one_or_none() and .all()."""
+    """One execute() result exposing .one_or_none(), .scalar_one_or_none(), .all()."""
     def __init__(self, rows):
         self._rows = rows
 
     def one_or_none(self):
+        return self._rows[0] if self._rows else None
+
+    def scalar_one_or_none(self):
         return self._rows[0] if self._rows else None
 
     def all(self):
@@ -538,6 +541,136 @@ class TestMembershipRouting(unittest.TestCase):
         joined = ' '.join(cm.output)
         self.assertNotIn('MISMATCH', joined)            # allowlisted -> clean
         self.assertIn('1 compared, 0 mismatched', joined)
+
+
+def _make_class(**o):
+    c = Class()
+    c.id = o.get('id', uuid.uuid4())
+    c.legacy_firestore_id = o.get('legacy_firestore_id', 'cls-1')
+    c.org_id = o.get('org_id', uuid.uuid4())
+    c.name = o.get('name', 'Spanish I')
+    c.term = o.get('term', 'Fall')
+    c.subject = o.get('subject', 'Spanish')
+    c.learning_locale = o.get('learning_locale', 'es-ES')
+    c.grade_band = o.get('grade_band', '9-12')
+    c.status = o.get('status', 'active')
+    c.canvas_course_id = o.get('canvas_course_id', None)
+    c.created_at = o.get('created_at', datetime.datetime(2026, 5, 30))
+    c.updated_at = o.get('updated_at', datetime.datetime(2026, 5, 30))
+    return c
+
+
+class TestClassesReadAdapter(unittest.TestCase):
+    def test_serialize_d2_org_legacy_and_no_code(self):
+        out = classes_read._serialize_class(
+            _make_class(legacy_firestore_id='cls-7'), 'org-fs-1', ['mem-a'], None)
+        self.assertEqual(out['id'], 'cls-7')
+        self.assertEqual(out['org_id'], 'org-fs-1')      # D2: legacy id, not the UUID
+        self.assertEqual(out['teacher_membership_ids'], ['mem-a'])
+        self.assertNotIn('join_code', out)               # no code -> Firestore omits
+
+    def test_serialize_active_and_deactivated_code(self):
+        active = classes_read._serialize_class(_make_class(), 'o', [], ('ABC123', True, None))
+        self.assertEqual(active['join_code'], 'ABC123')
+        self.assertIs(active['join_code_active'], True)
+        # Firestore keeps join_code after deactivation -> still surfaced, flag False:
+        dead = classes_read._serialize_class(_make_class(), 'o', [], ('XYZ789', False, None))
+        self.assertEqual(dead['join_code'], 'XYZ789')
+        self.assertIs(dead['join_code_active'], False)
+
+    def test_get_class_hydrates_sorted_teachers_and_latest_code(self):
+        c = _make_class(legacy_firestore_id='cls-1')
+        sess = _SeqSession(
+            _SeqResult([(c, 'org-fs-1')]),                  # main row + org legacy
+            _SeqResult([(c.id, 'mem-2'), (c.id, 'mem-1')]),  # teachers (unsorted)
+            _SeqResult([(c.id, 'ABC123', True, None)]),      # latest join code
+        )
+        out = classes_read.get_class(sess, 'cls-1')
+        self.assertEqual(out['org_id'], 'org-fs-1')
+        self.assertEqual(out['teacher_membership_ids'], ['mem-1', 'mem-2'])  # sorted
+        self.assertEqual(out['join_code'], 'ABC123')
+
+    def test_get_class_missing_returns_none(self):
+        self.assertIsNone(classes_read.get_class(_SeqSession(_SeqResult([])), 'ghost'))
+
+    def test_list_org_classes_hydrates_batch(self):
+        c1 = _make_class(legacy_firestore_id='c1')
+        c2 = _make_class(legacy_firestore_id='c2')
+        sess = _SeqSession(
+            _SeqResult([(c1, 'org-fs-1'), (c2, 'org-fs-1')]),  # main list
+            _SeqResult([(c1.id, 'mem-1')]),                     # teachers (only c1)
+            _SeqResult([(c2.id, 'XYZ', True, None)]),           # codes (only c2)
+        )
+        out = classes_read.list_org_classes(sess, 'org-fs-1')
+        self.assertEqual([x['id'] for x in out], ['c1', 'c2'])
+        self.assertEqual(out[0]['teacher_membership_ids'], ['mem-1'])
+        self.assertEqual(out[1]['join_code'], 'XYZ')
+        self.assertNotIn('join_code', out[0])
+
+    def test_list_teacher_classes_resolves_then_hydrates(self):
+        c = _make_class(legacy_firestore_id='c1')
+        sess = _SeqSession(
+            _SeqResult([uuid.uuid4()]),         # resolve_legacy_id(membership) -> UUID
+            _SeqResult([(c, 'org-fs-1')]),      # main
+            _SeqResult([(c.id, 'mem-1')]),      # teachers
+            _SeqResult([]),                     # codes
+        )
+        out = classes_read.list_teacher_classes(sess, 'mem-1')
+        self.assertEqual(out[0]['id'], 'c1')
+
+    def test_list_teacher_classes_unresolved_membership_empty(self):
+        self.assertEqual(classes_read.list_teacher_classes(_SeqSession(_SeqResult([])), 'ghost'), [])
+
+
+class TestClassRouting(unittest.TestCase):
+    def setUp(self):
+        os.environ.pop('READ_PG_CLASSES', None)
+        self.addCleanup(lambda: os.environ.pop('READ_PG_CLASSES', None))
+        read_router._shadow_stats.clear()
+        self.addCleanup(read_router._shadow_stats.clear)
+
+    def test_overrides_passthrough_when_off(self):
+        fs = types.SimpleNamespace(
+            get_class=lambda cid: {'id': cid, 'src': 'fs'},
+            list_org_classes=lambda oid, st='active': [{'id': 'c1', 'org': oid, 'st': st}],
+            list_teacher_classes=lambda mid, st='active': [{'id': 'c1', 'm': mid}],
+            get_class_by_join_code=lambda code: {'id': 'c1', 'code': code},
+        )
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        self.assertEqual(router.get_class('c1'), {'id': 'c1', 'src': 'fs'})
+        self.assertEqual(router.list_org_classes('o1', 'archived')[0]['st'], 'archived')
+        self.assertEqual(router.list_teacher_classes('m1')[0]['m'], 'm1')
+        self.assertEqual(router.get_class_by_join_code('ABC')['code'], 'ABC')
+
+    def test_get_class_shadow_allowlists_clock_skew(self):
+        os.environ['READ_PG_CLASSES'] = 'shadow'
+        fs = types.SimpleNamespace(
+            get_class=lambda cid: {'id': cid, 'org_id': 'o1', 'status': 'active',
+                                   'updated_at': 'T1', 'join_code_generated_at': 'T1'})
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(
+            ReadRouter, '_pg_read',
+            lambda self, pc, eng: {'id': 'c1', 'org_id': 'o1', 'status': 'active',
+                                   'updated_at': 'T2', 'join_code_generated_at': 'T2'},
+        ):
+            with self.assertLogs('backend.db.read_router', level='WARNING') as cm:
+                router.get_class('c1')
+        joined = ' '.join(cm.output)
+        self.assertNotIn('MISMATCH', joined)             # timestamps allowlisted
+        self.assertIn('1 compared, 0 mismatched', joined)
+
+    def test_list_org_classes_shadow_diffs_by_id_set(self):
+        os.environ['READ_PG_CLASSES'] = 'shadow'
+        fs = types.SimpleNamespace(
+            list_org_classes=lambda oid, st='active': [{'id': 'c1'}, {'id': 'c2'}])
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: [{'id': 'c1'}]):
+            with self.assertLogs('backend.db.read_router', level='WARNING') as cm:
+                out = router.list_org_classes('o1')
+        self.assertEqual(out, [{'id': 'c1'}, {'id': 'c2'}])  # Firestore authoritative
+        joined = ' '.join(cm.output)
+        self.assertIn('missing_in_pg', joined)
+        self.assertIn("'c2'", joined)
 
 
 if __name__ == '__main__':

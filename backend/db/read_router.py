@@ -71,6 +71,18 @@ _MEMBERSHIP_SHADOW_IGNORE = frozenset(
     {'primary_class_ids', 'created_at', 'updated_at', 'removed_at'}
 )
 
+# Known-divergent class keys to allowlist in point-get shadow parity:
+#   created_at/updated_at - clock skew (same rule as org/membership).
+#   join_code_generated_at - clock skew on LIVE-generated codes (the shadow stamps
+#                       _utcnow() while Firestore stamps SERVER_TIMESTAMP); the code
+#                       VALUE + active flag are still compared.
+# teacher_membership_ids is intentionally NOT allowlisted (it's the authz-bearing
+# field — D2 sibling); the serializer sorts it so single-teacher classes (the norm)
+# compare cleanly, and a rare multi-teacher ORDER divergence would surface as signal.
+_CLASS_SHADOW_IGNORE = frozenset(
+    {'created_at', 'updated_at', 'join_code_generated_at'}
+)
+
 
 def _norm(value: Any) -> Any:
     """Normalize a value for cross-store comparison: datetimes -> ISO string, and
@@ -294,4 +306,55 @@ class ReadRouter:
             'READ_PG_MEMBERSHIPS',
             lambda: self._fs.get_user_memberships(uid),
             pg_call,
+        )
+
+    def get_class(self, class_id):
+        """classes point-get (raw doc + junction reconstruction), routed by READ_PG_CLASSES.
+        The keystone class reader (14 callers incl. the AI-tutor authz gate, D2)."""
+        def pg_call(session):
+            from backend.db.repository import classes_read
+            return classes_read.get_class(session, class_id)
+
+        return self._route_read(
+            'READ_PG_CLASSES',
+            lambda: self._fs.get_class(class_id),
+            pg_call,
+            ignore=_CLASS_SHADOW_IGNORE,
+        )
+
+    def list_org_classes(self, org_id, status='active'):
+        """Classes for an org (updated_at DESC), routed by READ_PG_CLASSES."""
+        def pg_call(session):
+            from backend.db.repository import classes_read
+            return classes_read.list_org_classes(session, org_id, status)
+
+        return self._route_read(
+            'READ_PG_CLASSES',
+            lambda: self._fs.list_org_classes(org_id, status),
+            pg_call,
+        )
+
+    def list_teacher_classes(self, membership_id, status='active'):
+        """Classes a teacher membership teaches (via class_teachers), routed by READ_PG_CLASSES."""
+        def pg_call(session):
+            from backend.db.repository import classes_read
+            return classes_read.list_teacher_classes(session, membership_id, status)
+
+        return self._route_read(
+            'READ_PG_CLASSES',
+            lambda: self._fs.list_teacher_classes(membership_id, status),
+            pg_call,
+        )
+
+    def get_class_by_join_code(self, code):
+        """Active-code class lookup (student join), routed by READ_PG_CLASSES."""
+        def pg_call(session):
+            from backend.db.repository import classes_read
+            return classes_read.get_class_by_join_code(session, code)
+
+        return self._route_read(
+            'READ_PG_CLASSES',
+            lambda: self._fs.get_class_by_join_code(code),
+            pg_call,
+            ignore=_CLASS_SHADOW_IGNORE,
         )

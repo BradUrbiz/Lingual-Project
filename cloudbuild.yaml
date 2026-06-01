@@ -95,12 +95,14 @@ substitutions:
   _READ_PG_ORGANIZATIONS: '1'
   _READ_PG_MEMBERSHIPS: 'shadow'
   _READ_PG_CLASSES: '1'
-  # enrollments-read slice (8): SHADOW as of 2026-06-02 (roster / studentCount /
-  # practice-launch gate; the LAST read family). list_student_classes rides this
-  # flag too but gates on min(READ_PG_ENROLLMENTS, READ_PG_CLASSES). Flip to '1'
-  # after a clean soak + a fresh timestamp-preserving re-backfill; rollback =
-  # instant --update-env-vars READ_PG_ENROLLMENTS=shadow (or '0').
-  _READ_PG_ENROLLMENTS: 'shadow'
+  # enrollments-read slice (8): FLIPPED to '1' (PG-authoritative) 2026-06-02 (rev
+  # 00049) — roster / studentCount / practice-launch gate; the LAST relational read
+  # family. Promoted after a clean shadow soak (100 compared / 0 mismatched, 0
+  # fail-open) + timestamp-preserving re-backfill + parity at baseline + codex review.
+  # list_student_classes rides min(READ_PG_ENROLLMENTS, READ_PG_CLASSES). Rollback =
+  # instant --update-env-vars READ_PG_ENROLLMENTS=shadow (or '0'). org/class/enrollment
+  # reads now all PG-authoritative; memberships stays 'shadow' by design (D4).
+  _READ_PG_ENROLLMENTS: '1'
 
 # Store images in Artifact Registry
 images:

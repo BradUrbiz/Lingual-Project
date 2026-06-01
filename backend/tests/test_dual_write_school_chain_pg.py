@@ -27,7 +27,14 @@ import uuid
 import backend.db.models  # noqa: F401  (populate metadata)
 from backend.db import dual_write_school_chain as sc
 from backend.db.base import Base
-from backend.db.models.org import Class, Enrollment, Membership, Organization
+from backend.db.models.org import (
+    Class,
+    ClassJoinCode,
+    ClassTeacher,
+    Enrollment,
+    Membership,
+    Organization,
+)
 from backend.db.repository import backfill
 
 _engine = None
@@ -401,6 +408,108 @@ class TestDeleteOrgScopeEndToEnd(unittest.TestCase):
         with Session(_engine) as s:
             self.assertEqual(self._count(s, Class), 1)
             self.assertEqual(self._count(s, Membership), 1)
+
+
+class TestClassJunctionShadow(unittest.TestCase):
+    """Slice 5: class_teachers + class_join_codes junctions, via shadow_create_class
+    (which delegates to upsert_class -> reconcile_class_teachers) and the live
+    shadow_generate/deactivate_class_join_code path."""
+
+    def setUp(self):
+        self._orig = os.environ.get(FLAG)
+        os.environ[FLAG] = '1'
+        with Session(_engine) as s:
+            for model in (ClassJoinCode, ClassTeacher, Enrollment, Class, Membership, Organization):
+                s.query(model).delete()
+            s.commit()
+        # org + two teacher memberships so teacher_membership_ids resolve.
+        with Session(_engine) as s:
+            backfill.upsert_organization(s, {'id': 'org1', 'name': 'Springfield High',
+                                             'name_lower': 'springfield high', 'status': 'active'})
+            backfill.upsert_membership(s, {'id': 'm-t1', 'org_id': 'org1', 'uid': 'u1',
+                                           'roles': ['teacher'], 'status': 'active'})
+            backfill.upsert_membership(s, {'id': 'm-t2', 'org_id': 'org1', 'uid': 'u2',
+                                           'roles': ['teacher'], 'status': 'active'})
+            s.commit()
+
+    def tearDown(self):
+        if self._orig is None:
+            os.environ.pop(FLAG, None)
+        else:
+            os.environ[FLAG] = self._orig
+
+    def _provider(self):
+        return lambda: _engine
+
+    def _class_uuid(self, s, legacy='c1'):
+        return s.execute(select(Class.id).where(Class.legacy_firestore_id == legacy)).scalar_one()
+
+    def _teacher_legacy_ids(self, s, class_uuid):
+        rows = s.execute(
+            select(Membership.legacy_firestore_id)
+            .join(ClassTeacher, ClassTeacher.membership_id == Membership.id)
+            .where(ClassTeacher.class_id == class_uuid)
+        ).scalars().all()
+        return sorted(rows)
+
+    def _class_data(self, teacher_ids):
+        return {'org_id': 'org1', 'name': 'Spanish I', 'teacher_membership_ids': teacher_ids}
+
+    def test_create_populates_class_teachers(self):
+        sc.shadow_create_class(self._provider(), class_id='c1',
+                               class_data=self._class_data(['m-t1', 'm-t2']))
+        with Session(_engine) as s:
+            self.assertEqual(self._teacher_legacy_ids(s, self._class_uuid(s)), ['m-t1', 'm-t2'])
+
+    def test_create_reconciles_dropped_teacher(self):
+        sc.shadow_create_class(self._provider(), class_id='c1',
+                               class_data=self._class_data(['m-t1', 'm-t2']))
+        # re-create with t2 dropped -> the stale link is removed (convergent)
+        sc.shadow_create_class(self._provider(), class_id='c1',
+                               class_data=self._class_data(['m-t1']))
+        with Session(_engine) as s:
+            self.assertEqual(self._teacher_legacy_ids(s, self._class_uuid(s)), ['m-t1'])
+
+    def test_unresolved_teacher_is_skipped_class_still_created(self):
+        sc.shadow_create_class(self._provider(), class_id='c1',
+                               class_data=self._class_data(['m-t1', 'm-ghost']))
+        with Session(_engine) as s:
+            self.assertEqual(self._teacher_legacy_ids(s, self._class_uuid(s)), ['m-t1'])
+
+    def test_generate_then_regenerate_keeps_one_active(self):
+        sc.shadow_create_class(self._provider(), class_id='c1', class_data=self._class_data([]))
+        sc.shadow_generate_class_join_code(self._provider(), class_id='c1', code='ABC123')
+        sc.shadow_generate_class_join_code(self._provider(), class_id='c1', code='XYZ789')
+        with Session(_engine) as s:
+            cu = self._class_uuid(s)
+            active = s.execute(
+                select(ClassJoinCode.code).where(ClassJoinCode.class_id == cu,
+                                                 ClassJoinCode.active.is_(True))
+            ).scalars().all()
+            self.assertEqual(active, ['XYZ789'])  # exactly one active, the latest
+            total = s.execute(
+                select(func.count()).select_from(ClassJoinCode).where(ClassJoinCode.class_id == cu)
+            ).scalar_one()
+            self.assertEqual(total, 2)  # old code kept (inactive history)
+
+    def test_deactivate_flips_active_keeps_row(self):
+        sc.shadow_create_class(self._provider(), class_id='c1', class_data=self._class_data([]))
+        sc.shadow_generate_class_join_code(self._provider(), class_id='c1', code='ABC123')
+        sc.shadow_deactivate_class_join_code(self._provider(), class_id='c1')
+        with Session(_engine) as s:
+            cu = self._class_uuid(s)
+            row = s.execute(
+                select(ClassJoinCode).where(ClassJoinCode.class_id == cu)
+            ).scalar_one()
+            self.assertEqual(row.code, 'ABC123')
+            self.assertFalse(row.active)
+            self.assertIsNotNone(row.deactivated_at)
+
+    def test_join_code_on_absent_class_is_noop(self):
+        sc.shadow_generate_class_join_code(self._provider(), class_id='ghost', code='ABC123')
+        with Session(_engine) as s:
+            self.assertEqual(
+                s.execute(select(func.count()).select_from(ClassJoinCode)).scalar_one(), 0)
 
 
 if __name__ == '__main__':

@@ -191,9 +191,10 @@ def shadow_create_class(sql_engine: Any, *, class_id: str, class_data: dict[str,
     """Mirror a class CREATE into Postgres (idempotent upsert).
 
     upsert_class resolves org_id -> UUID (UnresolvedParentError = quiet no-op if
-    the org is not in Postgres yet). teacher_membership_ids -> the class_teachers
-    junction is intentionally DEFERRED (upsert_class omits it; class_teachers stays
-    empty until a reconciliation slice — teacher-class reads are not yet on PG).
+    the org is not in Postgres yet) AND reconciles the class_teachers junction
+    from teacher_membership_ids[] (each resolved to a membership UUID; unresolved
+    links skipped). Join codes are generated AFTER create, so class_data carries
+    none here — they are mirrored by shadow_generate/deactivate_class_join_code.
     """
     if not _enabled_school_chain():
         return
@@ -201,6 +202,49 @@ def shadow_create_class(sql_engine: Any, *, class_id: str, class_data: dict[str,
 
     doc = {**_strip_sentinels(class_data), 'id': class_id}
     _run(sql_engine, 'create_class', lambda s: backfill.upsert_class(s, doc))
+
+
+def shadow_generate_class_join_code(sql_engine: Any, *, class_id: str, code: str) -> None:
+    """Mirror generate_class_join_code: make `code` the class's SINGLE active join
+    code (deactivating any prior active code for the class). No-op if the class is
+    not in Postgres yet. Reuses the backfill reconcile so live + backfill writes
+    are byte-identical."""
+    if not _enabled_school_chain():
+        return
+    from backend.db.models.org import Class
+    from backend.db.repository import backfill
+    from backend.db.repository.resolution import resolve_legacy_id
+
+    def op(session: Any) -> None:
+        class_uuid = resolve_legacy_id(session, Class, class_id)
+        if class_uuid is None:
+            return
+        backfill.reconcile_class_join_code(
+            session, class_uuid, code=code, active=True, generated_at=_utcnow()
+        )
+
+    _run(sql_engine, 'generate_class_join_code', op)
+
+
+def shadow_deactivate_class_join_code(sql_engine: Any, *, class_id: str) -> None:
+    """Mirror deactivate_class_join_code: deactivate the class's active join code
+    (the row is kept, flipped active=False, matching Firestore which keeps
+    join_code but sets join_code_active=False). No-op if the class is absent."""
+    if not _enabled_school_chain():
+        return
+    from backend.db.models.org import Class
+    from backend.db.repository import backfill
+    from backend.db.repository.resolution import resolve_legacy_id
+
+    def op(session: Any) -> None:
+        class_uuid = resolve_legacy_id(session, Class, class_id)
+        if class_uuid is None:
+            return
+        backfill.reconcile_class_join_code(
+            session, class_uuid, code=None, active=False, generated_at=None
+        )
+
+    _run(sql_engine, 'deactivate_class_join_code', op)
 
 
 def shadow_add_primary_class(sql_engine: Any, *, membership_id: str, class_id: str) -> None:

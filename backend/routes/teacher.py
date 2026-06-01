@@ -725,7 +725,7 @@ def create_teacher_blueprint(deps: RouteDeps) -> Blueprint:
     def api_generate_join_code(class_id):
         try:
             _context, _class_record = _require_teacher_class_context(deps, class_id)
-            code = deps.db.generate_class_join_code(class_id)
+            code = deps.db.generate_class_join_code(class_id, sql_engine=deps.sql_engine)
             return jsonify({"success": True, "joinCode": code, "active": True})
         except SchoolContextPermissionError as exc:
             return jsonify({"success": False, "error": str(exc)}), 403
@@ -756,7 +756,7 @@ def create_teacher_blueprint(deps: RouteDeps) -> Blueprint:
     def api_deactivate_join_code(class_id):
         try:
             _context, _class_record = _require_teacher_class_context(deps, class_id)
-            deps.db.deactivate_class_join_code(class_id)
+            deps.db.deactivate_class_join_code(class_id, sql_engine=deps.sql_engine)
             return jsonify({"success": True})
         except SchoolContextPermissionError as exc:
             return jsonify({"success": False, "error": str(exc)}), 403

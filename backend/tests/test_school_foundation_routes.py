@@ -231,7 +231,7 @@ class FakeSchoolDb:
                 return dict(packet)
         return None
 
-    def generate_class_join_code(self, class_id):
+    def generate_class_join_code(self, class_id, sql_engine=None):
         alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
         code = ''.join(secrets.choice(alphabet) for _ in range(6))
         if class_id in self.classes:
@@ -240,7 +240,7 @@ class FakeSchoolDb:
             self.classes[class_id]['join_code_generated_at'] = datetime.now(UTC).isoformat()
         return code
 
-    def deactivate_class_join_code(self, class_id):
+    def deactivate_class_join_code(self, class_id, sql_engine=None):
         if class_id in self.classes:
             self.classes[class_id]['join_code_active'] = False
 

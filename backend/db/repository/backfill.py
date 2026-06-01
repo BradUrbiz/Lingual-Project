@@ -28,12 +28,20 @@ Value remaps and field coercions are delegated to the pure transforms in
 
 from __future__ import annotations
 
+import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from backend.db.models.migration import MigrationImportRun
-from backend.db.models.org import Class, Enrollment, Membership, Organization
+from backend.db.models.org import (
+    Class,
+    ClassJoinCode,
+    ClassTeacher,
+    Enrollment,
+    Membership,
+    Organization,
+)
 from backend.db.repository.normalization import (
     coerce_str_list,
     normalize_enrollment_status,
@@ -272,14 +280,116 @@ def upsert_membership(
     return row
 
 
+def _utcnow() -> datetime.datetime:
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def reconcile_class_teachers(
+    session: Any,
+    class_uuid: Any,
+    teacher_membership_ids: Any,
+    *,
+    class_legacy_id: Any = None,
+    warnings: list[Any] | None = None,
+) -> None:
+    """Converge class_teachers for a class to the resolved set of Firestore
+    teacher_membership_ids[]. Each membership doc-id resolves to a UUID
+    (legacy_firestore_id); unresolved ids are skipped + warned (the membership
+    must be backfilled first). Idempotent + convergent: inserts links that are
+    missing, removes links no longer present (a teacher dropped from the class).
+    """
+    desired: set = set()
+    for legacy in coerce_str_list(teacher_membership_ids):
+        muuid = resolve_legacy_id(session, Membership, legacy)
+        if muuid is None:
+            if warnings is not None:
+                warnings.append({
+                    'id': class_legacy_id,
+                    'warning': f'class_teacher: membership {legacy!r} unresolved; link skipped',
+                })
+            continue
+        desired.add(muuid)
+
+    existing = set(session.execute(
+        select(ClassTeacher.membership_id).where(ClassTeacher.class_id == class_uuid)
+    ).scalars())
+
+    for muuid in desired - existing:
+        session.add(ClassTeacher(class_id=class_uuid, membership_id=muuid))
+    stale = existing - desired
+    if stale:
+        session.execute(
+            delete(ClassTeacher)
+            .where(ClassTeacher.class_id == class_uuid)
+            .where(ClassTeacher.membership_id.in_(stale))
+        )
+    session.flush()
+
+
+def reconcile_class_join_code(
+    session: Any,
+    class_uuid: Any,
+    *,
+    code: str | None,
+    active: bool,
+    generated_at: datetime.datetime | None,
+) -> None:
+    """Converge class_join_codes to the Firestore class doc's denormalized
+    current code. Firestore keeps only the CURRENT code + active flag (no
+    history), so PG holds at most one ACTIVE row per class (the partial-unique
+    one_active_per_class index). Shared by the backfill and the live
+    generate/deactivate shadows so both write byte-identical rows.
+
+      code + active   -> ensure exactly one active row (this code).
+      code + inactive -> keep the (now inactive) code row, no active row.
+      no code         -> no active row.
+
+    Deactivate-then-flush BEFORE activating the target: the unique-active index
+    is checked per-statement, and the UoW emits INSERTs before UPDATEs, so the
+    old active row must be cleared first or the new one collides.
+    """
+    rows = session.execute(
+        select(ClassJoinCode).where(ClassJoinCode.class_id == class_uuid)
+    ).scalars().all()
+
+    keep_active_code = code if (code and active) else None
+    for r in rows:
+        if r.active and r.code != keep_active_code:
+            r.active = False
+            r.deactivated_at = r.deactivated_at or _utcnow()
+    session.flush()  # free the one-active-per-class slot before (re)activating
+
+    if not code:
+        return
+    target = next((r for r in rows if r.code == code), None)
+    if target is None:
+        session.add(ClassJoinCode(
+            class_id=class_uuid,
+            code=code,
+            active=bool(active),
+            generated_at=generated_at or _utcnow(),
+            deactivated_at=None if active else _utcnow(),
+        ))
+    else:
+        target.active = bool(active)
+        if generated_at is not None:
+            target.generated_at = generated_at
+        target.deactivated_at = None if active else (target.deactivated_at or _utcnow())
+    session.flush()
+
+
 def upsert_class(
     session: Any, doc: dict[str, Any], *, warnings: list[Any] | None = None
 ) -> Class:
-    """Upsert one class. Idempotent by legacy_firestore_id (class doc id).
+    """Upsert one class + its junctions. Idempotent by legacy_firestore_id.
 
-    Resolves org_id via legacy_firestore_id (RAISE if unresolved). Join codes
-    (class_join_codes) and teacher links (class_teachers) are OUT OF SCOPE for
-    this slice — they are synthesized/resolved in a later slice, not here.
+    Resolves org_id via legacy_firestore_id (RAISE if unresolved). Then
+    reconciles the two junctions from the denormalized Firestore fields:
+    class_teachers (from teacher_membership_ids[]) and class_join_codes (from
+    join_code / join_code_active / join_code_generated_at). Because
+    shadow_create_class delegates here, the live class-create path mirrors
+    teachers for free; the live generate/deactivate-join-code shadows reuse the
+    reconcile helpers directly.
     """
     legacy_id = doc.get('id')
     org_firestore_id = doc.get('org_id')
@@ -309,6 +419,17 @@ def upsert_class(
         for key, value in fields.items():
             setattr(row, key, value)
     session.flush()
+
+    reconcile_class_teachers(
+        session, row.id, doc.get('teacher_membership_ids'),
+        class_legacy_id=legacy_id, warnings=warnings,
+    )
+    reconcile_class_join_code(
+        session, row.id,
+        code=doc.get('join_code') or None,
+        active=bool(doc.get('join_code_active')),
+        generated_at=parse_firestore_timestamp(doc.get('join_code_generated_at')),
+    )
     return row
 
 

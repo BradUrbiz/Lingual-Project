@@ -1877,8 +1877,11 @@ JOIN_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 JOIN_CODE_LENGTH = 6
 
 
-def generate_class_join_code(class_id):
-    """Generate or regenerate a 6-char join code for a class."""
+def generate_class_join_code(class_id, sql_engine=None):
+    """Generate or regenerate a 6-char join code for a class.
+
+    `sql_engine` (deps.sql_engine) opts into the fail-open Postgres
+    class_join_codes mirror (slice 5), gated on DUAL_WRITE_SCHOOL_CHAIN."""
     code = ''.join(secrets.choice(JOIN_CODE_ALPHABET) for _ in range(JOIN_CODE_LENGTH))
     # Check for collision (extremely unlikely but safe)
     existing = get_class_by_join_code(code)
@@ -1890,15 +1893,24 @@ def generate_class_join_code(class_id):
         'join_code_generated_at': firestore.SERVER_TIMESTAMP,
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
+    if sql_engine is not None:
+        from backend.db import dual_write_school_chain as _sc
+        _sc.shadow_generate_class_join_code(sql_engine, class_id=class_id, code=code)
     return code
 
 
-def deactivate_class_join_code(class_id):
-    """Deactivate the join code for a class."""
+def deactivate_class_join_code(class_id, sql_engine=None):
+    """Deactivate the join code for a class.
+
+    `sql_engine` (deps.sql_engine) opts into the fail-open Postgres
+    class_join_codes mirror (slice 5), gated on DUAL_WRITE_SCHOOL_CHAIN."""
     get_class_ref(class_id).update({
         'join_code_active': False,
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
+    if sql_engine is not None:
+        from backend.db import dual_write_school_chain as _sc
+        _sc.shadow_deactivate_class_join_code(sql_engine, class_id=class_id)
 
 
 def get_class_by_join_code(code):

@@ -40,6 +40,18 @@ class _Result:
     def scalar_one_or_none(self):
         return self._value
 
+    # The junction reconciles (class_teachers / class_join_codes) read existing
+    # rows via .scalars(); the Tier-1 class fixtures carry no teachers/join-code,
+    # so an empty result is the correct answer (reconcile then no-ops).
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self._value if isinstance(self._value, list) else []
+
+    def __iter__(self):
+        return iter(self._value or [])
+
 
 class _NullSavepoint:
     """Stand-in for session.begin_nested(): a no-op context manager.
@@ -96,6 +108,8 @@ class _FakeSession:
 
     def execute(self, stmt):
         parsed = _parse_stmt(stmt)
+        if parsed[0] == 'junction':
+            return _Result([])  # no existing class_teachers / class_join_codes rows
         if parsed[0] == 'active':
             _, org_id, firebase_uid = parsed
             return _Result(self.active_idx.get((org_id, firebase_uid)))
@@ -125,6 +139,12 @@ def _parse_stmt(stmt):
 
     crit = crits[0]
     model = crit.left.table  # Table object
+
+    # Junction existence reads (reconcile_class_teachers / _join_code) filter on
+    # class_id, not legacy_firestore_id — the fake answers them as empty.
+    if model.name in ('class_teachers', 'class_join_codes'):
+        return ('junction',)
+
     legacy_value = crit.right.value
 
     # Map the Table back to its ORM model.

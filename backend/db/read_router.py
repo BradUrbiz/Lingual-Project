@@ -83,6 +83,14 @@ _CLASS_SHADOW_IGNORE = frozenset(
     {'created_at', 'updated_at', 'join_code_generated_at'}
 )
 
+# Known-divergent enrollment keys to allowlist in point-get shadow parity:
+#   created_at/updated_at - clock skew (Firestore SERVER_TIMESTAMP vs PG now() /
+#                       app-clock on status flips), same rule as the others.
+# The identity-bearing fields (status, join_source, student_uid, the FK legacy
+# ids) are NOT allowlisted — they're the roster/practice-launch parity that
+# matters. (The list readers diff by id-set, so they never reach this allowlist.)
+_ENROLLMENT_SHADOW_IGNORE = frozenset({'created_at', 'updated_at'})
+
 
 def _norm(value: Any) -> Any:
     """Normalize a value for cross-store comparison: datetimes -> ISO string, and
@@ -357,4 +365,98 @@ class ReadRouter:
             lambda: self._fs.get_class_by_join_code(code),
             pg_call,
             ignore=_CLASS_SHADOW_IGNORE,
+        )
+
+    def get_student_class_enrollment(self, class_id, student_uid):
+        """(class, student) enrollment point-get, routed by READ_PG_ENROLLMENTS.
+        PG keys on the (class_id, student_firebase_uid) UNIQUE columns, so it
+        subsumes the Firestore deterministic-key + legacy-fallback scan (which
+        exists only because Firestore addresses by the `{class}_{student}` doc id).
+        An unresolved class -> None (authoritative; classes are migrated before
+        enrollments). The student ref is a Firebase UID — stable, never resolved."""
+        def pg_call(session):
+            from backend.db.models.org import Class
+            from backend.db.repository import enrollments, resolution
+            class_uuid = resolution.resolve_legacy_id(session, Class, class_id)
+            if class_uuid is None:
+                return None
+            return enrollments.get_student_class_enrollment(session, class_uuid, student_uid)
+
+        return self._route_read(
+            'READ_PG_ENROLLMENTS',
+            lambda: self._fs.get_student_class_enrollment(class_id, student_uid),
+            pg_call,
+            ignore=_ENROLLMENT_SHADOW_IGNORE,
+        )
+
+    def list_class_enrollments(self, class_id, status='active'):
+        """A class's roster (newest first), routed by READ_PG_ENROLLMENTS.
+        Unresolved class -> [] (id-set shadow diff catches any real coverage gap)."""
+        def pg_call(session):
+            from backend.db.models.org import Class
+            from backend.db.repository import enrollments, resolution
+            class_uuid = resolution.resolve_legacy_id(session, Class, class_id)
+            if class_uuid is None:
+                return []
+            return enrollments.list_class_enrollments(session, class_uuid, status)
+
+        return self._route_read(
+            'READ_PG_ENROLLMENTS',
+            lambda: self._fs.list_class_enrollments(class_id, status),
+            pg_call,
+        )
+
+    def list_student_enrollments(self, student_uid, status='active'):
+        """A student's enrollments (newest first), routed by READ_PG_ENROLLMENTS.
+        No id resolution — student_uid is a Firebase UID, native to both stores."""
+        def pg_call(session):
+            from backend.db.repository import enrollments
+            return enrollments.list_student_enrollments(session, student_uid, status)
+
+        return self._route_read(
+            'READ_PG_ENROLLMENTS',
+            lambda: self._fs.list_student_enrollments(student_uid, status),
+            pg_call,
+        )
+
+    def count_org_students(self, *, org_id):
+        """Org active-student COUNT (one indexed JOIN), routed by READ_PG_ENROLLMENTS.
+        Keyword-only to match the Firestore signature."""
+        def pg_call(session):
+            from backend.db.repository import enrollments
+            return enrollments.count_org_students(session, org_id)
+
+        return self._route_read(
+            'READ_PG_ENROLLMENTS',
+            lambda: self._fs.count_org_students(org_id=org_id),
+            pg_call,
+        )
+
+    def list_student_classes(self, student_uid):
+        """The active classes a student is enrolled in, routed by READ_PG_ENROLLMENTS.
+        The read-cut of the Firestore N+1 -> a single enrollments⋈classes JOIN. Gated
+        on the ENROLLMENTS flag alone (it reads PG class rows via the JOIN directly,
+        and classes are migrated before enrollments — see classes_read)."""
+        def pg_call(session):
+            from backend.db.repository import classes_read
+            return classes_read.list_student_classes(session, student_uid)
+
+        return self._route_read(
+            'READ_PG_ENROLLMENTS',
+            lambda: self._fs.list_student_classes(student_uid),
+            pg_call,
+        )
+
+    def list_org_classes_summary(self, *, org_id):
+        """Curated class-summary rows (lingual-admin org-detail), routed by
+        READ_PG_CLASSES (class-only — no enrollments). Keyword-only to match
+        the Firestore signature."""
+        def pg_call(session):
+            from backend.db.repository import classes_read
+            return classes_read.list_org_classes_summary(session, org_id)
+
+        return self._route_read(
+            'READ_PG_CLASSES',
+            lambda: self._fs.list_org_classes_summary(org_id=org_id),
+            pg_call,
         )

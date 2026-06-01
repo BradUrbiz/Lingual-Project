@@ -16,8 +16,13 @@ from unittest import mock
 
 from backend.db import read_router
 from backend.db.read_router import ReadRouter, _diff, _diff_dict, _diff_list, _norm
-from backend.db.models.org import Class, Membership, Organization
-from backend.db.repository import classes_read, memberships_read, organizations_read
+from backend.db.models.org import Class, Enrollment, Membership, Organization
+from backend.db.repository import (
+    classes_read,
+    enrollments,
+    memberships_read,
+    organizations_read,
+)
 
 
 _FLAG = 'READ_PG_ORGANIZATIONS'
@@ -414,7 +419,8 @@ def _make_membership(**o):
 
 
 class _SeqResult:
-    """One execute() result exposing .one_or_none(), .scalar_one_or_none(), .all()."""
+    """One execute() result exposing .one_or_none(), .scalar_one_or_none(),
+    .scalar_one(), .scalars() and .all() — the surface the read adapters use."""
     def __init__(self, rows):
         self._rows = rows
 
@@ -423,6 +429,12 @@ class _SeqResult:
 
     def scalar_one_or_none(self):
         return self._rows[0] if self._rows else None
+
+    def scalar_one(self):
+        return self._rows[0] if self._rows else None
+
+    def scalars(self):
+        return self
 
     def all(self):
         return self._rows
@@ -671,6 +683,188 @@ class TestClassRouting(unittest.TestCase):
         joined = ' '.join(cm.output)
         self.assertIn('missing_in_pg', joined)
         self.assertIn("'c2'", joined)
+
+
+def _make_enrollment(**o):
+    e = Enrollment()
+    e.id = o.get('id', uuid.uuid4())
+    e.legacy_firestore_id = o.get('legacy_firestore_id', 'cls-1_stu-1')
+    e.class_id = o.get('class_id', uuid.uuid4())
+    e.student_firebase_uid = o.get('student_firebase_uid', 'stu-1')
+    e.student_membership_id = o.get('student_membership_id', None)
+    e.status = o.get('status', 'active')
+    e.join_source = o.get('join_source', 'join_code')
+    e.student_number = o.get('student_number', None)
+    e.guardian_contact_required = o.get('guardian_contact_required', False)
+    e.canvas_user_id = o.get('canvas_user_id', None)
+    e.canvas_email = o.get('canvas_email', None)
+    e.canvas_name = o.get('canvas_name', None)
+    e.created_at = o.get('created_at', datetime.datetime(2026, 5, 30))
+    e.updated_at = o.get('updated_at', datetime.datetime(2026, 5, 30))
+    return e
+
+
+class TestEnrollmentsReadAdapter(unittest.TestCase):
+    def test_serialize_emits_parent_legacy_ids_not_uuids(self):
+        # DEFECT D1: FKs serialize as the parents' Firestore doc ids (JOIN-supplied),
+        # never the PG UUID — or get_class(enrollment['class_id']) silently misses.
+        out = enrollments._serialize(
+            _make_enrollment(legacy_firestore_id='cls-1_stu-1', student_firebase_uid='stu-1'),
+            'cls-fs-1', 'mem-fs-1')
+        self.assertEqual(out['id'], 'cls-1_stu-1')
+        self.assertEqual(out['class_id'], 'cls-fs-1')             # legacy id, not str(uuid)
+        self.assertEqual(out['student_membership_id'], 'mem-fs-1')
+        self.assertEqual(out['student_uid'], 'stu-1')             # native Firebase uid
+        self.assertEqual(out['status'], 'active')
+
+    def test_serialize_null_membership_fk_stays_none(self):
+        out = enrollments._serialize(_make_enrollment(), 'cls-fs-1', None)
+        self.assertIsNone(out['student_membership_id'])           # matches Firestore
+
+    def test_get_student_class_enrollment_found_and_missing(self):
+        e = _make_enrollment(legacy_firestore_id='cls-1_stu-1')
+        found = enrollments.get_student_class_enrollment(
+            _SeqSession(_SeqResult([(e, 'cls-fs-1', None)])), uuid.uuid4(), 'stu-1')
+        self.assertEqual(found['class_id'], 'cls-fs-1')
+        self.assertIsNone(enrollments.get_student_class_enrollment(
+            _SeqSession(_SeqResult([])), uuid.uuid4(), 'ghost'))
+
+    def test_list_readers_serialize_each_row(self):
+        rows = [(_make_enrollment(legacy_firestore_id='e1'), 'cls-a', None),
+                (_make_enrollment(legacy_firestore_id='e2'), 'cls-b', 'mem-1')]
+        out = enrollments.list_class_enrollments(_SeqSession(_SeqResult(rows)), uuid.uuid4())
+        self.assertEqual([r['id'] for r in out], ['e1', 'e2'])
+        self.assertEqual(out[1]['student_membership_id'], 'mem-1')
+        out2 = enrollments.list_student_enrollments(_SeqSession(_SeqResult(rows)), 'stu-1')
+        self.assertEqual([r['id'] for r in out2], ['e1', 'e2'])
+
+    def test_count_org_students_resolves_then_counts(self):
+        # 1st execute -> org uuid (resolve_legacy_id); 2nd -> the COUNT scalar
+        sess = _SeqSession(_SeqResult([uuid.uuid4()]), _SeqResult([5]))
+        self.assertEqual(enrollments.count_org_students(sess, 'org-fs-1'), 5)
+
+    def test_count_org_students_unresolved_org_is_zero(self):
+        self.assertEqual(
+            enrollments.count_org_students(_SeqSession(_SeqResult([])), 'ghost'), 0)
+
+
+class TestClassListAndSummaryReaders(unittest.TestCase):
+    def test_list_student_classes_joins_enrollments_then_hydrates(self):
+        c = _make_class(legacy_firestore_id='c1')
+        sess = _SeqSession(
+            _SeqResult([(c, 'org-fs-1')]),     # enrollments⋈classes main rows
+            _SeqResult([(c.id, 'mem-1')]),     # teachers (batched)
+            _SeqResult([]),                    # codes
+        )
+        out = classes_read.list_student_classes(sess, 'stu-1')
+        self.assertEqual([x['id'] for x in out], ['c1'])
+        self.assertEqual(out[0]['teacher_membership_ids'], ['mem-1'])
+        self.assertEqual(out[0]['status'], 'active')      # full get_class shape
+
+    def test_list_org_classes_summary_is_narrow_shape(self):
+        c1 = _make_class(legacy_firestore_id='c1', name='Spanish')
+        sess = _SeqSession(
+            _SeqResult([c1]),                  # .scalars().all() -> class rows
+            _SeqResult([(c1.id, 'mem-1')]),    # teachers
+        )
+        out = classes_read.list_org_classes_summary(sess, 'org-fs-1')
+        self.assertEqual(out[0]['id'], 'c1')
+        self.assertEqual(out[0]['name'], 'Spanish')
+        self.assertEqual(out[0]['teacher_membership_ids'], ['mem-1'])
+        self.assertIsNone(out[0]['last_activity_at'])     # not tracked on PG row
+        # curated shape: omits the full-record fields
+        self.assertNotIn('status', out[0])
+        self.assertNotIn('learning_locale', out[0])
+        self.assertNotIn('join_code', out[0])
+
+
+class TestEnrollmentRouting(unittest.TestCase):
+    _FLAGS = ('READ_PG_ENROLLMENTS', 'READ_PG_CLASSES')
+
+    def setUp(self):
+        for f in self._FLAGS:
+            os.environ.pop(f, None)
+        self.addCleanup(lambda: [os.environ.pop(f, None) for f in self._FLAGS])
+        read_router._shadow_stats.clear()
+        self.addCleanup(read_router._shadow_stats.clear)
+
+    def test_overrides_passthrough_when_off(self):
+        # signatures must match the Firestore readers so flag-OFF is transparent
+        fs = types.SimpleNamespace(
+            get_student_class_enrollment=lambda cid, uid: {'id': f'{cid}_{uid}', 'src': 'fs'},
+            list_class_enrollments=lambda cid, st='active': [{'id': 'e1', 'st': st}],
+            list_student_enrollments=lambda uid, st='active': [{'id': 'e1', 'u': uid}],
+            count_org_students=lambda *, org_id: 9,
+            list_student_classes=lambda uid: [{'id': 'c1', 'u': uid}],
+            list_org_classes_summary=lambda *, org_id: [{'id': 'c1', 'o': org_id}],
+        )
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        self.assertEqual(router.get_student_class_enrollment('c1', 'u1')['src'], 'fs')
+        self.assertEqual(router.list_class_enrollments('c1', 'inactive')[0]['st'], 'inactive')
+        self.assertEqual(router.list_student_enrollments('u1')[0]['u'], 'u1')
+        self.assertEqual(router.count_org_students(org_id='o1'), 9)
+        self.assertEqual(router.list_student_classes('u1')[0]['u'], 'u1')
+        self.assertEqual(router.list_org_classes_summary(org_id='o1')[0]['o'], 'o1')
+
+    def test_count_org_students_cutover_returns_pg_scalar(self):
+        os.environ['READ_PG_ENROLLMENTS'] = '1'
+        fs = types.SimpleNamespace(count_org_students=lambda *, org_id: 9)
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: 4):
+            self.assertEqual(router.count_org_students(org_id='o1'), 4)
+
+    def test_count_org_students_shadow_diffs_the_scalar(self):
+        os.environ['READ_PG_ENROLLMENTS'] = 'shadow'
+        fs = types.SimpleNamespace(count_org_students=lambda *, org_id: 9)
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: 8):
+            with self.assertLogs('backend.db.read_router', level='WARNING') as cm:
+                out = router.count_org_students(org_id='o1')
+        self.assertEqual(out, 9)                          # Firestore authoritative
+        self.assertIn('<value>', ' '.join(cm.output))     # scalar mismatch surfaced
+
+    def test_list_student_classes_is_gated_on_enrollments_flag_alone(self):
+        # served from PG when READ_PG_ENROLLMENTS=1 even though READ_PG_CLASSES is OFF
+        os.environ['READ_PG_ENROLLMENTS'] = '1'
+        fs = types.SimpleNamespace(list_student_classes=lambda uid: [{'id': 'c-fs'}])
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: [{'id': 'c-pg'}]):
+            self.assertEqual(router.list_student_classes('u1'), [{'id': 'c-pg'}])
+
+    def test_list_org_classes_summary_is_gated_on_classes_flag(self):
+        os.environ['READ_PG_CLASSES'] = '1'
+        fs = types.SimpleNamespace(list_org_classes_summary=lambda *, org_id: [{'id': 'fs'}])
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: [{'id': 'pg'}]):
+            self.assertEqual(router.list_org_classes_summary(org_id='o1'), [{'id': 'pg'}])
+
+    def test_enrollment_point_get_shadow_allowlists_timestamps(self):
+        os.environ['READ_PG_ENROLLMENTS'] = 'shadow'
+        fs = types.SimpleNamespace(
+            get_student_class_enrollment=lambda cid, uid: {
+                'id': f'{cid}_{uid}', 'class_id': cid, 'status': 'active', 'updated_at': 'T1'})
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(
+            ReadRouter, '_pg_read',
+            lambda self, pc, eng: {'id': 'c1_u1', 'class_id': 'c1', 'status': 'active',
+                                   'updated_at': 'T2'}):
+            with self.assertLogs('backend.db.read_router', level='WARNING') as cm:
+                router.get_student_class_enrollment('c1', 'u1')
+        joined = ' '.join(cm.output)
+        self.assertNotIn('MISMATCH', joined)              # updated_at allowlisted
+        self.assertIn('1 compared, 0 mismatched', joined)
+
+    def test_enrollment_list_cutover_fails_open_on_pg_error(self):
+        os.environ['READ_PG_ENROLLMENTS'] = '1'
+        fs = types.SimpleNamespace(
+            list_class_enrollments=lambda cid, st='active': [{'id': 'e-fs'}])
+        router = ReadRouter(fs, sql_engine=lambda: object())
+
+        def boom(self, pc, eng):
+            raise RuntimeError('pg down')
+
+        with mock.patch.object(ReadRouter, '_pg_read', boom):
+            self.assertEqual(router.list_class_enrollments('c1'), [{'id': 'e-fs'}])
 
 
 if __name__ == '__main__':

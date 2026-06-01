@@ -119,6 +119,24 @@ class TestClassesReadPG(unittest.TestCase):
         self.assertEqual(out['org_id'], 'org-1')
         self.assertNotIn('src', out)  # served from PG, not the Firestore stub
 
+    def test_list_org_classes_summary_narrow_shape_all_statuses(self):
+        with Session(_engine) as s:
+            _seed(s)
+            # a second, ARCHIVED class — the summary includes ALL statuses (no filter)
+            backfill.upsert_class(s, {
+                'id': 'cls-2', 'org_id': 'org-1', 'name': 'French I', 'status': 'archived',
+                'teacher_membership_ids': ['mem-t']})
+            s.commit()
+        with Session(_engine) as s:
+            out = classes_read.list_org_classes_summary(s, 'org-1')
+        self.assertEqual({c['id'] for c in out}, {'cls-1', 'cls-2'})   # archived included
+        row = next(c for c in out if c['id'] == 'cls-1')
+        self.assertEqual(row['name'], 'Spanish I')
+        self.assertEqual(row['teacher_membership_ids'], ['mem-t'])
+        self.assertIsNone(row['last_activity_at'])
+        self.assertNotIn('status', row)        # curated shape — no full-record fields
+        self.assertNotIn('join_code', row)
+
 
 if __name__ == '__main__':
     unittest.main()

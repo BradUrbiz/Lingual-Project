@@ -513,6 +513,17 @@ def register_domain_blueprints():
                 'target set — class reads stay on Firestore (router fails open)'
             )
 
+    _read_enr = os.environ.get('READ_PG_ENROLLMENTS', '')
+    if _read_enr in ('shadow', '1'):
+        if sql_enabled():
+            print(f'[startup] READ_PG_ENROLLMENTS={_read_enr} — enrollment reads '
+                  f'{"shadow-compared against" if _read_enr == "shadow" else "served from"} Postgres')
+        else:
+            print(
+                f'[startup warning] READ_PG_ENROLLMENTS={_read_enr} but no Cloud SQL '
+                'target set — enrollment reads stay on Firestore (router fails open)'
+            )
+
     app.register_blueprint(create_auth_blueprint(deps))
     app.register_blueprint(create_chat_blueprint(deps))
     app.register_blueprint(create_assessment_blueprint(deps))

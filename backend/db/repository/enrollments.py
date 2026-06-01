@@ -27,9 +27,10 @@ import datetime
 import uuid
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from backend.db.models.org import Class, Enrollment, Membership
+from backend.db.models.org import Class, Enrollment, Membership, Organization
+from backend.db.repository.resolution import resolve_legacy_id
 
 
 def _utcnow() -> datetime.datetime:
@@ -164,6 +165,30 @@ def list_student_enrollments(
         stmt = stmt.where(Enrollment.status == status)
     stmt = stmt.order_by(Enrollment.updated_at.desc())
     return [_serialize(*r) for r in session.execute(stmt).all()]
+
+
+def count_org_students(session: Any, org_id: str) -> int:
+    """Active-student count for an org, as a single COUNT JOIN.
+
+    `org_id` is the org's Firestore doc id (the router passes the route's
+    Firestore string; resolution happens here). Counts ACTIVE enrollments across
+    ALL of the org's classes with NO class-status filter — mirroring the
+    Firestore aggregate (`count_org_students`), which gathers every class id for
+    the org (active or not) and counts active enrollments in them. Filtering on
+    class status here would silently drop students of archived classes and drift
+    the org dashboard count. Returns 0 when the org is unmigrated or class-less.
+    The N+1 / 30-item ``in``-chunk dance the Firestore version needs collapses to
+    one indexed JOIN here (the motivating relational win, TECH_SPEC §1)."""
+    org_uuid = resolve_legacy_id(session, Organization, org_id)
+    if org_uuid is None:
+        return 0
+    stmt = (
+        select(func.count())
+        .select_from(Enrollment)
+        .join(Class, Class.id == Enrollment.class_id)
+        .where(Class.org_id == org_uuid, Enrollment.status == 'active')
+    )
+    return session.execute(stmt).scalar_one() or 0
 
 
 def _set_status(session: Any, class_id: uuid.UUID, student_uid: str, status: str) -> None:

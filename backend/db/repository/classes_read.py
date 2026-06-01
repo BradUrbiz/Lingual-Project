@@ -10,8 +10,10 @@ Routes the class-entity readers that the now-backfilled junctions support:
   list_teacher_classes(mem_id, status)  -> classes a teacher membership teaches
   get_class_by_join_code(code)          -> the active-code class (student join)
 
-(`list_student_classes` + `list_org_classes_summary` ride slice 7 — they need the
-enrollments JOIN, not yet read-cut.)
+  list_student_classes(student_uid)     -> active classes a student is enrolled in
+                      (the read-cut of the Firestore N+1: enrollments JOIN classes)
+  list_org_classes_summary(org_id)      -> curated class-summary rows for the
+                      lingual-admin org-detail Classes tab (narrower shape)
 
 FK inversions + junction reconstruction (the read-side dual of the §3.8a writes):
   org_id           -> organizations.legacy_firestore_id   (JOIN; DEFECT D2 — the
@@ -35,6 +37,7 @@ from backend.db.models.org import (
     Class,
     ClassJoinCode,
     ClassTeacher,
+    Enrollment,
     Membership,
     Organization,
 )
@@ -177,3 +180,60 @@ def get_class_by_join_code(session: Any, code: str) -> dict[str, Any] | None:
     if result is None:
         return None
     return _hydrate(session, [result])[0]
+
+
+def list_student_classes(session: Any, student_uid: str) -> list[dict[str, Any]]:
+    """The active classes a student is actively enrolled in (full get_class shape).
+
+    The read-cut of the Firestore N+1 (`list_student_enrollments` then a `get_class`
+    per row): one JOIN of the student's ACTIVE enrollments to ACTIVE classes,
+    returning the same full doc shape (+junctions) as the other class readers. The
+    `(class_id, student_firebase_uid)` uniqueness already gives one enrollment per
+    class, so no dedup is needed. Routed by READ_PG_ENROLLMENTS ALONE: served from
+    PG it reads PG class rows via this JOIN directly (never the flag-gated
+    `get_class`), and the cutover sequencing keeps classes migrated before
+    enrollments — so a cross-flag gate would be redundant (READ_CUTOVER.md §3.2)."""
+    rows = session.execute(
+        select(Class, Organization.legacy_firestore_id)
+        .join(Enrollment, Enrollment.class_id == Class.id)
+        .outerjoin(Organization, Organization.id == Class.org_id)
+        .where(
+            Enrollment.student_firebase_uid == student_uid,
+            Enrollment.status == 'active',
+            Class.status == 'active',
+        )
+        .order_by(Class.updated_at.desc())
+    ).all()
+    return _hydrate(session, rows)
+
+
+def _serialize_class_summary(row: Class, teacher_ids: list) -> dict[str, Any]:
+    """The curated class-summary shape (lingual-admin org-detail Classes tab) —
+    intentionally narrower than `_serialize_class` (no status/locale/canvas/code)."""
+    return {
+        'id': row.legacy_firestore_id or str(row.id),
+        'name': row.name,
+        'term': row.term,
+        'subject': row.subject,
+        'teacher_membership_ids': teacher_ids,
+        'created_at': row.created_at,
+        # Not tracked on the PG row yet — matches the Firestore reader, whose
+        # last_activity_at is always None pending a class-activity-tracking task.
+        'last_activity_at': None,
+    }
+
+
+def list_org_classes_summary(session: Any, org_id: str) -> list[dict[str, Any]]:
+    """Curated class-summary rows for the lingual-admin org-detail Classes tab.
+
+    Mirrors the Firestore `list_org_classes_summary`: ALL of the org's classes (NO
+    status filter — distinct from `list_org_classes`, which filters to active), in
+    the narrow summary shape. org_id is the org's Firestore doc id. Routed by
+    READ_PG_CLASSES (class-only — no enrollments)."""
+    rows = session.execute(
+        select(Class)
+        .join(Organization, Organization.id == Class.org_id)
+        .where(Organization.legacy_firestore_id == org_id)
+    ).scalars().all()
+    teachers = _teacher_ids_by_class(session, [c.id for c in rows])
+    return [_serialize_class_summary(c, teachers.get(c.id, [])) for c in rows]

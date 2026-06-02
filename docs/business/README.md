@@ -50,6 +50,9 @@ Use these status labels consistently:
 | `14-product-teardown-research-plan.md` | Founders, PM, product | Research plan for hands-on competitor product teardown across assignment creation, student UX, feedback, and dashboards. |
 | `15-product-teardown-v1.md` | Founders, PM, product | First public-evidence product teardown across Korea and US priority competitors. |
 | `16-product-teardown-deep-dives.md` | Founders, PM, product | Competitor-by-competitor evidence notes from the parallel product teardown research pass. |
+| `17-positioning-competitiveness-research.md` | Founders, PM, GTM | Research-backed read on whether the proposed US and Korea positioning can compete. |
+| `18-plang-school-market-position-research.md` | Founders, PM, GTM | Focused Plang School market-position, Seoul/Jeonnam adoption, and Korea-response memo. |
+| `19-positioning-substitute-risk-research.md` | Founders, PM, GTM | Substitute-risk read for the teacher-designed natural conversation plus classroom-evidence positioning. |
 
 ## Source hierarchy
 

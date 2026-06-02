@@ -33,6 +33,7 @@ from typing import Any
 
 from sqlalchemy import delete, select, update
 
+from backend.db.models.assignment import Assignment
 from backend.db.models.migration import MigrationImportRun
 from backend.db.models.org import (
     Class,
@@ -43,11 +44,13 @@ from backend.db.models.org import (
     Organization,
 )
 from backend.db.repository.normalization import (
+    coerce_jsonb,
     coerce_str_list,
     normalize_enrollment_status,
     normalize_join_source,
     normalize_membership_status,
     normalize_org_status,
+    normalize_target_language_intensity,
     parse_firestore_timestamp,
 )
 from backend.db.repository.resolution import resolve_legacy_id
@@ -529,15 +532,103 @@ def upsert_enrollment(
     return row
 
 
+def upsert_assignment(
+    session: Any, doc: dict[str, Any], *, warnings: list[Any] | None = None
+) -> Assignment:
+    """Upsert one assignment. Idempotent by legacy_firestore_id (assignment doc id).
+
+    Resolves BOTH parents via legacy_firestore_id (RAISE if unresolved — the org
+    and class must be backfilled first; both are, the relational chain is live):
+      org_id   (Firestore org doc id)   -> organizations.id
+      class_id (Firestore class doc id) -> classes.id
+
+    Field rename: created_by_uid -> created_by_firebase_uid. Normalizations match
+    the AI-tutor read path so the migrated value is the canonical one:
+      target_language_intensity: legacy mostly_target -> target_led,
+        bilingual_scaffold -> english_led (the model CHECK rejects the legacy
+        values; assignment_resolver normalizes identically downstream).
+    release_at/due_at are Firestore ISO strings or '' -> timestamp|None. The
+    array/JSONB content fields coerce to their NOT-NULL column shapes.
+    """
+    legacy_id = doc.get('id')
+    org_firestore_id = doc.get('org_id')
+    org_uuid = resolve_legacy_id(session, Organization, org_firestore_id)
+    if org_uuid is None:
+        raise UnresolvedParentError(
+            f'assignment {legacy_id!r}: organization {org_firestore_id!r} has no '
+            'migrated row (organizations must be backfilled first)'
+        )
+    class_firestore_id = doc.get('class_id')
+    class_uuid = resolve_legacy_id(session, Class, class_firestore_id)
+    if class_uuid is None:
+        raise UnresolvedParentError(
+            f'assignment {legacy_id!r}: class {class_firestore_id!r} has no '
+            'migrated row (classes must be backfilled first)'
+        )
+
+    fields = {
+        'org_id': org_uuid,
+        'class_id': class_uuid,
+        'title': doc.get('title') or '',
+        'description': doc.get('description') or '',
+        'status': doc.get('status') or 'draft',
+        'release_at': parse_firestore_timestamp(doc.get('release_at')),
+        'due_at': parse_firestore_timestamp(doc.get('due_at')),
+        'modality_override': coerce_jsonb(doc.get('modality_override'), default={}),
+        'max_attempts': doc.get('max_attempts'),
+        'task_type': doc.get('task_type') or 'decision_making',
+        'success_criteria': coerce_str_list(doc.get('success_criteria')),
+        # Renamed: Firestore created_by_uid -> created_by_firebase_uid.
+        'created_by_firebase_uid': doc.get('created_by_uid') or '',
+        'instructions': doc.get('instructions') or '',
+        'generated_scenario': doc.get('generated_scenario') or '',
+        'objectives': coerce_str_list(doc.get('objectives')),
+        'target_expressions': coerce_str_list(doc.get('target_expressions')),
+        'target_vocabulary': coerce_str_list(doc.get('target_vocabulary')),
+        'focus_grammar': coerce_str_list(doc.get('focus_grammar')),
+        'teacher_notes': doc.get('teacher_notes') or '',
+        'student_instructions': doc.get('student_instructions') or '',
+        'target_language_intensity': normalize_target_language_intensity(
+            doc.get('target_language_intensity')
+        ),
+        # Nullable JSONB / Text — Firestore stores a map/None and '' respectively.
+        'canvas_module_item_ref': doc.get('canvas_module_item_ref'),
+        'canvas_module_item_id': doc.get('canvas_module_item_id') or None,
+    }
+
+    # Preserve the Firestore timestamps when the doc carries them (the backfill
+    # reads real docs with resolved timestamps), so a backfilled row keeps its TRUE
+    # created_at — the read adapter surfaces it once assignment reads cut over. The
+    # live shadow (shadow_create_assignment) strips the SERVER_TIMESTAMP sentinels
+    # to None, so live writes fall through to the column server_default now().
+    for ts_key in ('created_at', 'updated_at'):
+        ts_val = doc.get(ts_key)
+        if ts_val is not None:
+            fields[ts_key] = ts_val
+
+    row = _existing(session, Assignment, legacy_id)
+    if row is None:
+        row = Assignment(legacy_firestore_id=legacy_id, **fields)
+        session.add(row)
+    else:
+        for key, value in fields.items():
+            setattr(row, key, value)
+    session.flush()
+    return row
+
+
 # --- Orchestration -----------------------------------------------------------
 
 # Parent-first order (POSTGRES_SCHEMA.md "ID resolution"): a child can only
-# resolve its parent's UUID once the parent row exists.
+# resolve its parent's UUID once the parent row exists. Assignments resolve org +
+# class, so they come after classes (enrollments and assignments are siblings —
+# neither references the other).
 _PIPELINE = (
     ('organizations', Organization, upsert_organization),
     ('memberships', Membership, upsert_membership),
     ('classes', Class, upsert_class),
     ('enrollments', Enrollment, upsert_enrollment),
+    ('assignments', Assignment, upsert_assignment),
 )
 
 
@@ -552,6 +643,7 @@ def run_backfill(
     memberships: Any = (),
     classes: Any = (),
     enrollments: Any = (),
+    assignments: Any = (),
     dry_run: bool = False,
 ) -> dict[str, dict[str, Any]]:
     """Backfill the enrollment chain, parent-first.
@@ -587,6 +679,7 @@ def run_backfill(
         'memberships': memberships,
         'classes': classes,
         'enrollments': enrollments,
+        'assignments': assignments,
     }
     stats = {name: _empty_stats() for name, _model, _fn in _PIPELINE}
     # Dry-run only: per-model set of would-be-written legacy ids, so a child can
@@ -720,6 +813,16 @@ def _dry_run_one(
                     'foreign key would be left NULL'
                 ),
             })
+    elif name == 'assignments':
+        # Both parents are REQUIRED (NOT-NULL FKs); mirror upsert_assignment's RAISEs.
+        if not _resolvable(session, Organization, doc.get('org_id'), pending):
+            raise UnresolvedParentError(
+                f'assignment {legacy_id!r}: organization {doc.get("org_id")!r} unresolved'
+            )
+        if not _resolvable(session, Class, doc.get('class_id'), pending):
+            raise UnresolvedParentError(
+                f'assignment {legacy_id!r}: class {doc.get("class_id")!r} unresolved'
+            )
 
     existing = _existing(session, model, legacy_id)
     if existing is None:
@@ -786,6 +889,7 @@ def parity_report(
     memberships: Any = (),
     classes: Any = (),
     enrollments: Any = (),
+    assignments: Any = (),
 ) -> dict[str, dict[str, Any]]:
     """Compare the Firestore source id-set against migrated Postgres rows.
 
@@ -798,6 +902,7 @@ def parity_report(
         'memberships': (Membership, memberships),
         'classes': (Class, classes),
         'enrollments': (Enrollment, enrollments),
+        'assignments': (Assignment, assignments),
     }
     report: dict[str, dict[str, Any]] = {}
     for name, (model, docs) in inputs.items():

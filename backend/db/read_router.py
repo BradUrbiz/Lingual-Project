@@ -91,6 +91,25 @@ _CLASS_SHADOW_IGNORE = frozenset(
 # matters. (The list readers diff by id-set, so they never reach this allowlist.)
 _ENROLLMENT_SHADOW_IGNORE = frozenset({'created_at', 'updated_at'})
 
+# Known-divergent assignment keys to allowlist in point-get shadow parity:
+#   created_at/updated_at  - clock skew (Firestore SERVER_TIMESTAMP vs PG now()).
+#   release_at/due_at      - format skew: Firestore stores an ISO string (or ''),
+#                       the PG column a real timestamp; backfill parses string ->
+#                       datetime -> the read renders .isoformat(), which can differ
+#                       in tz suffix/precision from the raw Firestore string. The
+#                       PRESENCE/absence still matters but is low-stakes display.
+#   target_language_intensity - INTENDED normalization, not drift: legacy
+#                       mostly_target/bilingual_scaffold are remapped to the new
+#                       enum on migrate (the model CHECK rejects the legacy values),
+#                       and assignment_resolver normalizes identically downstream,
+#                       so the raw-legacy Firestore value vs the PG canonical value
+#                       is expected. The tutor-bearing content fields (instructions,
+#                       generated_scenario, target_*, task_type, status, FK legacy
+#                       ids) are NOT allowlisted — those are the parity that matters.
+_ASSIGNMENT_SHADOW_IGNORE = frozenset(
+    {'created_at', 'updated_at', 'release_at', 'due_at', 'target_language_intensity'}
+)
+
 # Sentinel a pg_call returns to say "I can't authoritatively answer this — fall open
 # to Firestore." Distinct from a real None / [] result, which IS authoritative in
 # mode '1'. The case that needs it: a child read whose PARENT id doesn't resolve to a
@@ -223,10 +242,16 @@ class ReadRouter:
     def _route_read(self, flag, fs_call, pg_call, *, ignore=frozenset(), extract=None, also=None):
         """The 3-state per-entity gate. See module docstring. `extract` (shadow only)
         maps each result to its comparable part for paginated/wrapped reads. `also`
-        (optional) is a SECOND entity flag this reader depends on — the effective mode
-        becomes the weaker of the two (cross-family readers, e.g. list_student_classes
-        which reads PG class rows via an enrollment JOIN)."""
-        mode = _weaker_mode(flag, also) if also else os.environ.get(flag, '')
+        (optional) is ONE or MORE additional entity flags this reader depends on — a
+        single flag string, or a tuple/list of them — and the effective mode becomes
+        the WEAKER of `flag` and every `also` flag (cross-family readers, e.g.
+        list_student_classes reads PG class rows via an enrollment JOIN; the analytics
+        session/event readers depend on two upstream families each)."""
+        if also:
+            also_flags = (also,) if isinstance(also, str) else tuple(also)
+            mode = _weaker_mode(flag, *also_flags)
+        else:
+            mode = os.environ.get(flag, '')
         if mode not in ('shadow', '1'):
             return fs_call()
         engine = _resolve_engine(self._sql_engine)
@@ -488,5 +513,34 @@ class ReadRouter:
         return self._route_read(
             'READ_PG_CLASSES',
             lambda: self._fs.list_org_classes_summary(org_id=org_id),
+            pg_call,
+        )
+
+    def get_assignment(self, assignment_id):
+        """assignments point-get (the FK parent of practice_sessions/learning_events,
+        and the AI-tutor prompt source), routed by READ_PG_ASSIGNMENTS. The adapter
+        emits org_id/class_id as the parents' legacy ids — only their store-invariant
+        legacy_firestore_id is read, so no cross-family `also` gate is needed."""
+        def pg_call(session):
+            from backend.db.repository import assignments_read
+            return assignments_read.get_assignment(session, assignment_id)
+
+        return self._route_read(
+            'READ_PG_ASSIGNMENTS',
+            lambda: self._fs.get_assignment(assignment_id),
+            pg_call,
+            ignore=_ASSIGNMENT_SHADOW_IGNORE,
+        )
+
+    def list_class_assignments(self, class_id, statuses=None):
+        """A class's assignments (status-filtered), routed by READ_PG_ASSIGNMENTS.
+        Shadow diffs by id-set (the list analog of parity_report)."""
+        def pg_call(session):
+            from backend.db.repository import assignments_read
+            return assignments_read.list_class_assignments(session, class_id, statuses)
+
+        return self._route_read(
+            'READ_PG_ASSIGNMENTS',
+            lambda: self._fs.list_class_assignments(class_id, statuses),
             pg_call,
         )

@@ -179,6 +179,7 @@ def create_test_harness_blueprint(deps: RouteDeps) -> Blueprint:
                 target_expressions=["bonjour", "comment ca va"],
                 focus_grammar=["present tense"],
                 teacher_notes="E2E test assignment",
+                sql_engine=deps.sql_engine,
             )
 
             # 8. Set up compliance (student is minor, voice granted for testing)

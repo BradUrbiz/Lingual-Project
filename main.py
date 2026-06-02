@@ -478,6 +478,16 @@ def register_domain_blueprints():
                 'are a no-op until one is configured'
             )
 
+    if os.environ.get('DUAL_WRITE_ASSIGNMENTS') == '1':
+        if sql_enabled():
+            print('[startup] DUAL_WRITE_ASSIGNMENTS=1 — assignment writes shadow to Postgres')
+        else:
+            print(
+                '[startup warning] DUAL_WRITE_ASSIGNMENTS=1 but no Cloud SQL target '
+                '(INSTANCE_CONNECTION_NAME/DATABASE_URL) set — assignment shadow writes '
+                'are a no-op until one is configured'
+            )
+
     # Read-cutover flag (default OFF). 'shadow' = Firestore authoritative + PG
     # parity compare logged; '1' = PG authoritative, fail-open to Firestore.
     _read_org = os.environ.get('READ_PG_ORGANIZATIONS', '')

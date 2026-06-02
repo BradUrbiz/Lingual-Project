@@ -640,6 +640,8 @@ class FakeDbBase:
         generated_scenario='',
         teacher_notes='',
         target_language_intensity='mostly_target',
+        student_instructions='',
+        sql_engine=None,
     ) -> str:
         aid = assignment_id or self._next_id("assign")
         self.assignments[aid] = {
@@ -695,10 +697,17 @@ class FakeDbBase:
         doc = self.canvas_course_content.get(content_id)
         return dict(doc) if doc else None
 
-    def link_assignment_to_canvas_item(self, assignment_id: str, content_id: str, canvas_module_item_id: str):
+    def link_assignment_to_canvas_item(
+        self, assignment_id: str, content_id: str, canvas_module_item_id: str, *, sql_engine=None
+    ):
         asg = self.assignments.get(assignment_id)
         if asg is not None:
             asg['canvas_module_item_id'] = canvas_module_item_id
+
+    def unlink_assignment_from_canvas_item(self, assignment_id: str, content_id: str, *, sql_engine=None):
+        asg = self.assignments.get(assignment_id)
+        if asg is not None:
+            asg['canvas_module_item_id'] = ''
 
     # -- Practice sessions --
 

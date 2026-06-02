@@ -16,8 +16,10 @@ from unittest import mock
 
 from backend.db import read_router
 from backend.db.read_router import ReadRouter, _diff, _diff_dict, _diff_list, _norm
+from backend.db.models.assignment import Assignment
 from backend.db.models.org import Class, Enrollment, Membership, Organization
 from backend.db.repository import (
+    assignments_read,
     classes_read,
     enrollments,
     memberships_read,
@@ -912,6 +914,192 @@ class TestEnrollmentRouting(unittest.TestCase):
 
         with mock.patch.object(ReadRouter, '_pg_read', boom):
             self.assertEqual(router.list_class_enrollments('c1'), [{'id': 'e-fs'}])
+
+
+def _make_assignment(**o):
+    a = Assignment()
+    a.id = o.get('id', uuid.uuid4())
+    a.legacy_firestore_id = o.get('legacy_firestore_id', 'asg-1')
+    a.org_id = o.get('org_id', uuid.uuid4())
+    a.class_id = o.get('class_id', uuid.uuid4())
+    a.title = o.get('title', 'Cafe ordering')
+    a.description = o.get('description', '')
+    a.status = o.get('status', 'published')
+    a.release_at = o.get('release_at', None)
+    a.due_at = o.get('due_at', None)
+    a.modality_override = o.get('modality_override', {})
+    a.max_attempts = o.get('max_attempts', None)
+    a.task_type = o.get('task_type', 'decision_making')
+    a.success_criteria = o.get('success_criteria', [])
+    a.created_by_firebase_uid = o.get('created_by_firebase_uid', 'teacher-1')
+    a.instructions = o.get('instructions', 'Order a drink.')
+    a.generated_scenario = o.get('generated_scenario', 'A cafe.')
+    a.objectives = o.get('objectives', [])
+    a.target_expressions = o.get('target_expressions', [])
+    a.target_vocabulary = o.get('target_vocabulary', [])
+    a.focus_grammar = o.get('focus_grammar', [])
+    a.teacher_notes = o.get('teacher_notes', '')
+    a.student_instructions = o.get('student_instructions', '')
+    a.target_language_intensity = o.get('target_language_intensity', 'target_led')
+    a.canvas_module_item_ref = o.get('canvas_module_item_ref', None)
+    a.canvas_module_item_id = o.get('canvas_module_item_id', None)
+    a.created_at = o.get('created_at', datetime.datetime(2026, 5, 30))
+    a.updated_at = o.get('updated_at', datetime.datetime(2026, 5, 30))
+    return a
+
+
+class TestAssignmentsReadAdapter(unittest.TestCase):
+    def test_serialize_emits_parent_legacy_ids_and_renames(self):
+        out = assignments_read._serialize_assignment(
+            _make_assignment(legacy_firestore_id='asg-7', created_by_firebase_uid='t-9'),
+            'org-fs-1', 'cls-fs-1')
+        self.assertEqual(out['id'], 'asg-7')
+        self.assertEqual(out['org_id'], 'org-fs-1')        # FK legacy id, not UUID
+        self.assertEqual(out['class_id'], 'cls-fs-1')       # FK legacy id, not UUID
+        self.assertEqual(out['created_by_uid'], 't-9')      # *_firebase_uid -> *_uid
+        self.assertNotIn('created_by_firebase_uid', out)
+
+    def test_serialize_null_canvas_item_id_renders_empty_string(self):
+        # Firestore stores '' (not None) for an unlinked assignment.
+        out = assignments_read._serialize_assignment(
+            _make_assignment(canvas_module_item_id=None), 'o', 'c')
+        self.assertEqual(out['canvas_module_item_id'], '')
+
+    def test_serialize_carries_tutor_bearing_content(self):
+        out = assignments_read._serialize_assignment(
+            _make_assignment(instructions='Greet the barista', task_type='information_gap',
+                             target_expressions=['bonjour']),
+            'o', 'c')
+        self.assertEqual(out['instructions'], 'Greet the barista')
+        self.assertEqual(out['task_type'], 'information_gap')
+        self.assertEqual(out['target_expressions'], ['bonjour'])
+
+    def test_get_assignment_found_and_missing(self):
+        a = _make_assignment(legacy_firestore_id='asg-1')
+        found = assignments_read.get_assignment(
+            _SeqSession(_SeqResult([(a, 'org-fs-1', 'cls-fs-1')])), 'asg-1')
+        self.assertEqual(found['id'], 'asg-1')
+        self.assertEqual(found['class_id'], 'cls-fs-1')
+        self.assertIsNone(assignments_read.get_assignment(_SeqSession(_SeqResult([])), 'ghost'))
+
+    def test_list_class_assignments_serializes_each_row(self):
+        rows = [(_make_assignment(legacy_firestore_id='a1'), 'o', 'cls-fs-1'),
+                (_make_assignment(legacy_firestore_id='a2'), 'o', 'cls-fs-1')]
+        out = assignments_read.list_class_assignments(_SeqSession(_SeqResult(rows)), 'cls-fs-1')
+        self.assertEqual([r['id'] for r in out], ['a1', 'a2'])
+
+
+class TestAssignmentRouting(unittest.TestCase):
+    def setUp(self):
+        os.environ.pop('READ_PG_ASSIGNMENTS', None)
+        self.addCleanup(lambda: os.environ.pop('READ_PG_ASSIGNMENTS', None))
+        read_router._shadow_stats.clear()
+        self.addCleanup(read_router._shadow_stats.clear)
+
+    def test_overrides_passthrough_when_off(self):
+        fs = types.SimpleNamespace(
+            get_assignment=lambda aid: {'id': aid, 'src': 'fs'},
+            list_class_assignments=lambda cid, statuses=None: [{'id': 'a1', 'c': cid, 's': statuses}],
+        )
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        self.assertEqual(router.get_assignment('a1'), {'id': 'a1', 'src': 'fs'})
+        self.assertEqual(router.list_class_assignments('c1', ['published'])[0]['s'], ['published'])
+
+    def test_get_assignment_cutover_returns_pg(self):
+        os.environ['READ_PG_ASSIGNMENTS'] = '1'
+        fs = types.SimpleNamespace(get_assignment=lambda aid: {'id': aid, 'src': 'fs'})
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: {'id': 'a1', 'src': 'pg'}):
+            self.assertEqual(router.get_assignment('a1'), {'id': 'a1', 'src': 'pg'})
+
+    def test_get_assignment_shadow_allowlists_intensity_and_timestamps(self):
+        os.environ['READ_PG_ASSIGNMENTS'] = 'shadow'
+        # Firestore raw legacy intensity + ISO date strings vs PG normalized value +
+        # parsed timestamp: BOTH allowlisted (intended normalization / format skew).
+        fs = types.SimpleNamespace(
+            get_assignment=lambda aid: {
+                'id': aid, 'status': 'published', 'instructions': 'X',
+                'target_language_intensity': 'mostly_target',
+                'due_at': '2026-06-01T00:00:00Z', 'updated_at': 'T1'})
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(
+            ReadRouter, '_pg_read',
+            lambda self, pc, eng: {
+                'id': 'a1', 'status': 'published', 'instructions': 'X',
+                'target_language_intensity': 'target_led',
+                'due_at': '2026-06-01T00:00:00+00:00', 'updated_at': 'T2'}):
+            with self.assertLogs('backend.db.read_router', level='WARNING') as cm:
+                router.get_assignment('a1')
+        joined = ' '.join(cm.output)
+        self.assertNotIn('MISMATCH', joined)              # intensity + dates allowlisted
+        self.assertIn('1 compared, 0 mismatched', joined)
+
+    def test_get_assignment_shadow_still_flags_content_drift(self):
+        os.environ['READ_PG_ASSIGNMENTS'] = 'shadow'
+        fs = types.SimpleNamespace(
+            get_assignment=lambda aid: {'id': aid, 'status': 'published', 'instructions': 'real'})
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        # instructions is tutor-bearing -> NOT allowlisted -> a real divergence surfaces
+        with mock.patch.object(
+            ReadRouter, '_pg_read',
+            lambda self, pc, eng: {'id': 'a1', 'status': 'published', 'instructions': 'wrong'}):
+            with self.assertLogs('backend.db.read_router', level='WARNING') as cm:
+                router.get_assignment('a1')
+        self.assertIn('MISMATCH', ' '.join(cm.output))
+
+    def test_list_class_assignments_shadow_diffs_by_id_set(self):
+        os.environ['READ_PG_ASSIGNMENTS'] = 'shadow'
+        fs = types.SimpleNamespace(
+            list_class_assignments=lambda cid, statuses=None: [{'id': 'a1'}, {'id': 'a2'}])
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: [{'id': 'a1'}]):
+            with self.assertLogs('backend.db.read_router', level='WARNING') as cm:
+                out = router.list_class_assignments('c1')
+        self.assertEqual(out, [{'id': 'a1'}, {'id': 'a2'}])  # Firestore authoritative
+        joined = ' '.join(cm.output)
+        self.assertIn('missing_in_pg', joined)
+        self.assertIn("'a2'", joined)
+
+
+class TestRouteReadAlsoTuple(unittest.TestCase):
+    """The `also` param accepts a single flag OR a tuple/list — the effective mode is
+    the WEAKER of `flag` and every `also` flag (forward-prep for the analytics
+    session/event readers, which each depend on two upstream families)."""
+    _FLAGS = ('RPG_A', 'RPG_B', 'RPG_C')
+
+    def setUp(self):
+        for f in self._FLAGS:
+            os.environ.pop(f, None)
+        self.addCleanup(lambda: [os.environ.pop(f, None) for f in self._FLAGS])
+        self.router = ReadRouter(types.SimpleNamespace(), sql_engine=lambda: object())
+
+    def test_tuple_also_all_cutover_serves_pg(self):
+        for f in self._FLAGS:
+            os.environ[f] = '1'
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: 'pg'):
+            out = self.router._route_read(
+                'RPG_A', lambda: 'fs', lambda s: 'pg', also=('RPG_B', 'RPG_C'))
+        self.assertEqual(out, 'pg')
+
+    def test_tuple_also_one_off_gates_to_firestore(self):
+        os.environ['RPG_A'] = '1'
+        os.environ['RPG_B'] = '1'   # RPG_C left OFF -> weaker mode OFF -> Firestore
+        pg_called = []
+        with mock.patch.object(ReadRouter, '_pg_read',
+                               lambda self, pc, eng: pg_called.append(1) or 'pg'):
+            out = self.router._route_read(
+                'RPG_A', lambda: 'fs', lambda s: 'pg', also=('RPG_B', 'RPG_C'))
+        self.assertEqual(out, 'fs')
+        self.assertEqual(pg_called, [])     # weaker-of-three is OFF -> PG untouched
+
+    def test_string_also_still_supported(self):
+        os.environ['RPG_A'] = '1'
+        os.environ['RPG_B'] = 'shadow'      # weaker of ('1','shadow') is shadow
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: 'fs'):
+            with self.assertLogs('backend.db.read_router', level='WARNING'):
+                out = self.router._route_read(
+                    'RPG_A', lambda: 'fs', lambda s: 'fs', also='RPG_B')
+        self.assertEqual(out, 'fs')          # shadow -> Firestore authoritative
 
 
 if __name__ == '__main__':

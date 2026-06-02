@@ -327,7 +327,10 @@ def create_integrations_blueprint(deps: RouteDeps) -> Blueprint:
         if not canvas_content_id:
             return jsonify({'success': False, 'error': 'canvasContentId is required'}), 400
 
-        deps.db.link_assignment_to_canvas_item(assignment_id, canvas_content_id, canvas_module_item_id)
+        deps.db.link_assignment_to_canvas_item(
+            assignment_id, canvas_content_id, canvas_module_item_id,
+            sql_engine=deps.sql_engine,
+        )
         return jsonify({'success': True})
 
     @bp.route('/api/teacher/assignments/<assignment_id>/canvas-link', methods=['DELETE'])
@@ -343,7 +346,9 @@ def create_integrations_blueprint(deps: RouteDeps) -> Blueprint:
         if not canvas_content_id:
             return jsonify({'success': False, 'error': 'canvasContentId is required'}), 400
 
-        deps.db.unlink_assignment_from_canvas_item(assignment_id, canvas_content_id)
+        deps.db.unlink_assignment_from_canvas_item(
+            assignment_id, canvas_content_id, sql_engine=deps.sql_engine,
+        )
         return jsonify({'success': True})
 
     return bp

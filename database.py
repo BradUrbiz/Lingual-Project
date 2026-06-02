@@ -2197,6 +2197,7 @@ def create_assignment(
     teacher_notes='',
     target_language_intensity='mostly_target',
     student_instructions='',
+    sql_engine=None,
 ):
     """Create an assignment document.
 
@@ -2204,6 +2205,10 @@ def create_assignment(
     ``curriculum_mappings`` collection has been deleted. Canvas content
     metadata still hangs off the assignment via ``canvas_module_item_id`` and
     ``canvas_module_item_ref``.
+
+    ``sql_engine`` (deps.sql_engine) opts into the fail-open Postgres assignment
+    shadow (gated on DUAL_WRITE_ASSIGNMENTS). Firestore is the system of record —
+    written first; the shadow mirrors after and never raises.
     """
     doc_ref = get_assignment_ref(assignment_id) if assignment_id else get_assignments_collection().document()
     assignment_data = {
@@ -2249,7 +2254,12 @@ def create_assignment(
         'created_at': firestore.SERVER_TIMESTAMP,
         'updated_at': firestore.SERVER_TIMESTAMP,
     }
-    doc_ref.set(assignment_data)
+    doc_ref.set(assignment_data)  # Firestore is the system of record — write it first.
+    if sql_engine is not None:
+        from backend.db import dual_write_analytics as _da
+        _da.shadow_create_assignment(
+            sql_engine, assignment_id=doc_ref.id, assignment_data=assignment_data
+        )
     return doc_ref.id
 
 
@@ -3297,8 +3307,13 @@ def count_canvas_roster_entries(class_id):
         return len(list_canvas_roster_entries(class_id))
 
 
-def link_assignment_to_canvas_item(assignment_id, canvas_content_id, canvas_module_item_id):
-    """Atomically link a Lingual assignment to a Canvas module item using a batch write."""
+def link_assignment_to_canvas_item(
+    assignment_id, canvas_content_id, canvas_module_item_id, *, sql_engine=None
+):
+    """Atomically link a Lingual assignment to a Canvas module item using a batch write.
+
+    ``sql_engine`` opts into the fail-open assignment shadow (mirrors the
+    canvas_module_item_id column; gated on DUAL_WRITE_ASSIGNMENTS)."""
     batch = get_db().batch()
     batch.update(get_assignment_ref(assignment_id), {
         'canvas_module_item_id': canvas_module_item_id,
@@ -3309,10 +3324,19 @@ def link_assignment_to_canvas_item(assignment_id, canvas_content_id, canvas_modu
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
     batch.commit()
+    if sql_engine is not None:
+        from backend.db import dual_write_analytics as _da
+        _da.shadow_update_assignment_canvas_link(
+            sql_engine, assignment_id=assignment_id,
+            canvas_module_item_id=canvas_module_item_id,
+        )
 
 
-def unlink_assignment_from_canvas_item(assignment_id, canvas_content_id):
-    """Atomically unlink a Lingual assignment from a Canvas module item."""
+def unlink_assignment_from_canvas_item(assignment_id, canvas_content_id, *, sql_engine=None):
+    """Atomically unlink a Lingual assignment from a Canvas module item.
+
+    ``sql_engine`` opts into the fail-open assignment shadow (clears the
+    canvas_module_item_id column; gated on DUAL_WRITE_ASSIGNMENTS)."""
     batch = get_db().batch()
     batch.update(get_assignment_ref(assignment_id), {
         'canvas_module_item_id': '',
@@ -3323,6 +3347,11 @@ def unlink_assignment_from_canvas_item(assignment_id, canvas_content_id):
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
     batch.commit()
+    if sql_engine is not None:
+        from backend.db import dual_write_analytics as _da
+        _da.shadow_update_assignment_canvas_link(
+            sql_engine, assignment_id=assignment_id, canvas_module_item_id='',
+        )
 
 
 def set_assignment_grade_config(assignment_id, grade_metric, grade_points):

@@ -48,10 +48,14 @@ class TestReadChain(unittest.TestCase):
                 ('class1_u', {'class_id': 'class1', 'student_uid': 'u'}),
                 ('class1_v', {'class_id': 'class1', 'student_uid': 'v'}),
             ],
+            'assignments': [('asg1', {'org_id': 'org1', 'class_id': 'class1', 'title': 'A1'})],
         })
         chain = read_chain(db)
 
-        self.assertEqual(set(chain), {'organizations', 'memberships', 'classes', 'enrollments'})
+        self.assertEqual(
+            set(chain),
+            {'organizations', 'memberships', 'classes', 'enrollments', 'assignments'},
+        )
         self.assertEqual(chain['organizations'][0]['id'], 'org1')
         self.assertEqual(chain['organizations'][0]['name'], 'A')
         self.assertEqual(len(chain['enrollments']), 2)

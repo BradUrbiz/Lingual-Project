@@ -193,11 +193,13 @@ def create_canvas_practice_blueprint(deps: RouteDeps) -> Blueprint:
                 generated_scenario=scenario,
                 teacher_notes=data.get('teacherNotes', ''),
                 target_language_intensity=data.get('targetLanguageIntensity', 'mostly_target') or 'mostly_target',
+                sql_engine=deps.sql_engine,
             )
 
             if canvas_module_item_id:
                 deps.db.link_assignment_to_canvas_item(
                     assignment_id, canvas_content_id, canvas_module_item_id,
+                    sql_engine=deps.sql_engine,
                 )
 
             return jsonify({

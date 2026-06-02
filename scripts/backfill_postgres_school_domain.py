@@ -20,8 +20,11 @@ Usage:
   python3 -m scripts.backfill_postgres_school_domain --write     # write + commit + ledger
   python3 -m scripts.backfill_postgres_school_domain --parity    # compare Firestore vs Postgres id-sets
 
-Scope: enrollment chain only. Assignments / compliance / Canvas / LTI / practice
-are out of scope (their own cutover increments).
+Scope: the school-domain chain — organizations, memberships, classes, enrollments,
+and assignments (ANALYTICS_MIGRATION Slice A; assignments resolve org + class, so
+they ride this unified parent-first run rather than a separate script). Compliance /
+Canvas / LTI / practice_sessions / learning_events are out of scope (their own
+cutover increments).
 """
 
 from __future__ import annotations
@@ -34,7 +37,9 @@ import sys
 
 logger = logging.getLogger('backfill_postgres')
 
-_COLLECTIONS = ('organizations', 'memberships', 'classes', 'enrollments')
+# Parent-first; `_PIPELINE` in backfill.py enforces org -> membership -> class ->
+# enrollment -> assignment ordering so each child resolves its parents' UUIDs.
+_COLLECTIONS = ('organizations', 'memberships', 'classes', 'enrollments', 'assignments')
 
 
 def _get_firestore_client():

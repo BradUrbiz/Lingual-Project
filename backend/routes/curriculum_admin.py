@@ -295,6 +295,7 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 teacher_notes=teacher_notes,
                 student_instructions=student_instructions,
                 target_language_intensity=target_language_intensity,
+                sql_engine=deps.sql_engine,
             )
 
             return jsonify({

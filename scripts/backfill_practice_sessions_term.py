@@ -146,8 +146,10 @@ def run(mode: str, term_start: datetime.datetime) -> int:
             try:
                 with pg_session.begin_nested():  # SAVEPOINT — isolate per-row failure
                     backfill.upsert_practice_session(pg_session, doc, warnings=stats['warnings'])
-                if not dry_run:
-                    stats['updated' if existed else 'inserted'] += 1
+                # Count would-be inserts/updates in BOTH modes: in dry-run the row is
+                # resolved + flushed inside the SAVEPOINT then the whole tx is rolled
+                # back at the end, so the count reflects what --write WOULD do.
+                stats['updated' if existed else 'inserted'] += 1
             except backfill.UnresolvedParentError as exc:
                 stats['errors'].append({'id': legacy_id, 'error': str(exc)})
             except Exception as exc:  # noqa: BLE001 — report per-row, never abort the run

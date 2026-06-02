@@ -166,11 +166,14 @@ substitutions:
   # Soak/flip order: deploy → READ_PG_ANALYTICS_SESSIONS=shadow (soak, run
   # scripts/analytics_read_parity.py Pass 1) → '1' → (after events live) EVENTS=shadow
   # → '1'. Apply Alembic 0003 (payload GIN) before EVENTS read perf matters.
-  # SESSIONS set to 'shadow' (LIVE soak) 2026-06-03 (rev 00058); Pass 1 in_sync 48/48,
-  # 0 mismatched (point-in-time). Default bumped 0->'shadow' so a redeploy preserves the
-  # soak. Flip to '1' (Slice E) after the 48h LIVE shadow soak. EVENTS stays '0' until
-  # the GIN (0003) is applied to prod + the event-read shadow soak.
-  _READ_PG_ANALYTICS_SESSIONS: 'shadow'
+  # SESSIONS FLIPPED to '1' (PG-AUTHORITATIVE, fail-open) 2026-06-03 (rev 00059-msz)
+  # after: Pass 1 session_summary parity in_sync 49/49 0 mismatched (incl. 1 LIVE
+  # non-backfilled smoke-test session), Pass 2 event-COUNT in_sync (1408=1408), a live
+  # shadow compare (1 compared/0 mismatched), and post-flip teacher analytics PG-served
+  # with 0 fail-open. Default bumped shadow->'1' for durability. Rollback instant: =shadow
+  # (or '0'). EVENTS stays '0' until the GIN (0003) is applied to prod + the event-read
+  # shadow soak.
+  _READ_PG_ANALYTICS_SESSIONS: '1'
   _READ_PG_ANALYTICS_EVENTS: '0'
 
 # Store images in Artifact Registry

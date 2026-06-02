@@ -1,7 +1,7 @@
 # Analytics Family (practice_sessions + learning_events) Migration Design
 
 **ADR-0001 Coexistence — Analytics Slice**
-Date: 2026-06-02 | Status: **DESIGN (proposed) — NEEDS REVISION on the events-ingest strategy.** Internal workflow verdict was GO-WITH-FIXES; an **independent codex code-grounded review (2026-06-02, see "Codex Independent Review" at the end) returned RECONSIDER** — 3 P1 shape problems, all in the EVENTS-INGEST path (Slices B/C/E). **Slice A (assignments dual-write + read adapters) is VALIDATED and independent — safe to implement.** Slices B/C/E need redesign first. Companion to `READ_CUTOVER.md` (relational chain, now flipped). NOTE: §2/§5 below describe the ORIGINAL (pre-codex) events design; read the Codex Independent Review section for what must change before B/C/E are built.
+Date: 2026-06-02 | Status: **DESIGN — events-ingest REVISED (see §5b). Ready to implement, gated on Slice A.** Internal workflow verdict was GO-WITH-FIXES → independent codex code-grounded review (2026-06-02, see "Codex Independent Review" at the end) returned RECONSIDER (3 P1 shape problems, all in the EVENTS-INGEST path) → **resolved by the revised events-ingest design in §5b** (ground-truth-first redesign workflow, 2026-06-02: 4 code-grounded fact-sets → 3 competing candidates → adversarial critique → synthesis). **Slice A (assignments dual-write + read adapters) is VALIDATED and independent — safe to implement.** Companion to `READ_CUTOVER.md` (relational chain, now flipped). NOTE: §2 and the original Slice B/C in §5 describe the ORIGINAL (pre-codex) events design and are **SUPERSEDED by §5b**; §1 (FK model), §3 (backfill), §4 (read cutover), and Slice A remain authoritative.
 
 ---
 
@@ -390,6 +390,61 @@ Minimum elapsed time: ~5 weeks from Slice A start to Slice E completion.
 
 ---
 
+## 5b. Events Ingest — Revised Design (supersedes §2, original Slice B, original Slice C)
+
+**Verdict of the redesign:** the original events-ingest design (Cloud Tasks → a Cloud Run **Job**, per-turn `session_summary` deferred to a session-close batch, events re-read from Firestore at close) is replaced by a **synchronous, batched, in-process dual-write with zero net-new external infra.** The async fan-out (outbox / Cloud Tasks → Cloud Run **Service**) is the correct *GA-scale* end state and is spec'd here as the upgrade path, but is **deferred until measured pool/latency pressure justifies it** — which does not exist at one-school beta.
+
+This was derived from a ground-truth-first redesign workflow (2026-06-02). The two decisive critiques split: **infra-simplicity** ranked synchronous-in-process first (zero new operational surfaces); **pool/latency** ranked it last (its naive form does up to 13 sequential PG round-trips per turn on the live voice path). The synthesis below **neutralizes the latency objection by batching**, keeping the simplicity win.
+
+### 5b.1 The load-bearing facts (verified against code)
+
+- **Pool:** `pool_size=8, max_overflow=2, pool_timeout=3s, pool_pre_ping=True` (`backend/db/sql.py:36-43`), **one pool per process**, prod gunicorn `--workers 1 --threads 8` (`Dockerfile:59`). Hard ceiling = 10 concurrent connections; `pool_timeout=3s` already caps checkout wait (**resolves codex P2b** for the main app).
+- **Hot path:** `POST /api/practice-sessions/<id>/events` is awaited by the SPA on **every conversational turn** — both the realtime voice path (`persistRealtimeMessage`) and the text path (`handleSendText`) (`AssignmentPracticeWorkspace.tsx`). Per student turn the handler writes **1 primary + up to ~11 derived events + 1 `update_practice_session`** — already ~13 sequential Firestore round-trips today (`curriculum_admin.py:556-578`, `practice_analytics.py:build_derived_learning_events`). The FK fields (`org_id, class_id, assignment_id, student_uid`) are **identical across all events in a turn** (copied from `session_record`, fetched at `:530`).
+- **Session close:** there is **no server-owned close today** — `session.ended` is client-fired, including a fire-and-forget unmount path; sessions can be left permanently `status='active'` (`curriculum_admin.py:535`, `AssignmentPracticeWorkspace.tsx:1068`). This is codex P1.2.
+- **Deploy:** single Cloud Run service via gunicorn; **no existing Cloud Tasks / Pub/Sub / second service**. The only async infra is the Firebase Cloud Functions package (`functions/main.py`) with existing `@scheduler_fn` jobs (email outbox retry, org auto-restore) — the natural, no-new-infra home for a sweeper.
+
+### 5b.2 The design
+
+**(1) One transaction per turn, not one per event.** New module `backend/db/dual_write_analytics.py`, `shadow_write_turn(engine, *, session_firestore_id, events, session_updates)`:
+- Opens **one** `_run` Session, `SET LOCAL statement_timeout` (tightened to **2000ms** on the hot path — grafted from the async candidate; 10s is a worst-case ceiling, not a hot-path budget).
+- Resolves the parent FKs (`session→UUID`, plus `assignment/class/org`) **once** per turn via `resolve_legacy_id` — not once per event.
+- Bulk-inserts primary + all derived events: `insert(LearningEvent).values([...]).on_conflict_do_nothing(index_elements=['legacy_firestore_id'])` (kept from original fix #3 — idempotent), then applies the `practice_sessions` UPDATE (rolling summary / finalize) as the **last statement**, then a single `commit`. Fail-open (swallow all).
+- **Result:** ONE pool checkout per turn (~20–40ms healthy), not 13. This is what kills the pool/latency objection — under PG degradation a turn waits `pool_timeout=3s` **once**, not 13×, and adds one transaction's latency to the voice path, not 13 serialized round-trips.
+
+**(2) `session_summary` stays inline (deliberate reversal of original fix #1).** The original moved the per-turn summary UPDATE into a close-time batch *because* per-event pool churn risked exhaustion. Batching removes that risk (one checkout/turn), so the summary UPDATE rides the same transaction — matching what Firestore does inline at `:578` today, keeping analytics **fresh per-turn** (teachers query immediately after class) and eliminating the need for an `events_synced_at` freshness gate.
+
+**(3) Durable post-cutover source (resolves P1.1).** Every row is built from request scope (`session_record` + event payload) and inserted in the same handler. **Firestore is never re-read.** When Firestore school-domain writes retire (Slice E), the write seam is unchanged — events still originate from the request. An invariant comment in `dual_write_analytics.py` forbids introducing a Firestore re-read.
+
+**(4) Server-owned finalize (resolves P1.2).** On the `session.ended` branch (`curriculum_admin.py:578`), after the Firestore update, the same `shadow_write_turn` call stamps PG `status`/`ended_at` as the final statement. No client dependency; idempotent (overwrite semantics match Firestore today).
+
+**(5) Reconciler for orphaned sessions (resolves P1.2).** A new `@scheduler_fn` in `functions/main.py` (existing Cloud Scheduler pattern — **no new infra category**), every 60 min: PG `practice_sessions WHERE status='active' AND started_at < now() - INTERVAL '90 min'` → `abandoned`, `ended_at=now()`, plus a synthetic `session.ended` event row. Runs in the Cloud Functions process with its **own** engine (isolated from the main app pool). **Gated on `DUAL_WRITE_ANALYTICS_SESSIONS=1`** — dormant until sessions are in PG. (90 min: a class period is ≤60 min.)
+
+**(6) No Cloud Run Job (resolves P1.3).** The wrong primitive is **removed**, not fixed. At beta the synchronous batched write is simpler-correct.
+
+### 5b.3 GA-scale upgrade path (deferred, not discarded)
+
+If Cloud Run request-latency **p95 on `POST /events` measurably degrades** at multi-school scale, move `shadow_write_turn` off the hot path **without changing the data model or FK logic** — two options, both already designed in the candidate set:
+- **PG outbox + in-process drain** (synchronous outbox row is the durability anchor; a daemon drains it). Note the Cloud-Run CPU-throttle caveat: a `threading.Event`-driven drain, not a bare sleep.
+- **Cloud Tasks → Cloud Run *Service*** (not a Job), event carried **in the task body** (never re-read from Firestore), OIDC auth to a private worker service.
+
+The task-body-self-contained row is forward-compatible with both. **Trigger to revisit:** measured p95 regression, expected only at ~3+ concurrent schools.
+
+### 5b.4 Re-sliced B/C (these supersede the originals in §5)
+
+- **Slice B (revised) — practice_sessions dual-write:** `shadow_create_practice_session` (at session-create) **and** `shadow_update_practice_session` (at `:578`, rolling summary **and** finalize). Server-owned finalize on `session.ended`. Cloud Scheduler reconciler (dormant until flag on). **No Cloud Tasks, no Alembic `0002` (`events_synced_at`) — summary is inline/fresh.** Term-scope backfill (kept) + session-summary parity (Pass 1, zero-divergence). Flag: `DUAL_WRITE_ANALYTICS_SESSIONS`.
+- **Slice C (revised) — learning_events dual-write:** `shadow_write_turn` batched single-transaction per turn (FKs resolved once, `on_conflict_do_nothing`). Chunked bulk term-scope backfill (kept) + count-based per-session parity (Pass 2, monotonic-convergence). Flag: `DUAL_WRITE_ANALYTICS_EVENTS`.
+- **Slices A, D, E:** unchanged. §4 read-cutover (Python-over-PG aggregation on the pre-aggregated `session_summary` JSONB — **resolves codex P2a**, no per-event N+1) and the `_weaker_mode` gates stand.
+
+### 5b.5 Hard prerequisite ordering (operational rule)
+
+`Slice A` (assignments in PG; `READ_PG_ASSIGNMENTS=1` soaked) → `DUAL_WRITE_ANALYTICS_SESSIONS=1` soaked → `DUAL_WRITE_ANALYTICS_EVENTS=1` → read flips. Enabling the events flag before sessions **and** assignments are in PG makes every event shadow a silent FK no-op. Enforce in TASKS/TECH_SPEC.
+
+### 5b.6 Accepted limitation
+
+A worker SIGKILL in the ~20–40ms window between the Firestore write and the `shadow_write_turn` commit drops that turn's events from PG (O(1) events/crash at beta). Closed by the **mandatory term-scope backfill + parity gate before Firestore writes retire** (Slice E). Record in LIMITATIONS.
+
+---
+
 ## 6. FK Resolution
 
 ### 6.1 Resolution Chain Per Entity
@@ -475,3 +530,9 @@ An independent gpt-5.5 (codex) review grounded against the live code, AFTER the 
 7. `_route_read(also=tuple)` is a clean small extension (`read_router.py:109/189`) — add string-vs-tuple test coverage.
 
 **Disposition:** Slice A proceeds as designed. Slices B/C/E events-ingest to be redesigned around a durable post-cutover event source (likely: dual-write events to PG from the request, or task-payload-sourced batch via a Cloud Run *service*) + a server-owned trigger + a reconciler. Re-review the revised events design before implementing.
+
+**RESOLVED (2026-06-02) — see §5b.** The redesign workflow (ground-truth-first: code-grounded facts → 3 candidates → critique → synthesis) closed all three P1s:
+- **P1.1 (post-cutover source):** events build from request scope and insert in the same handler; Firestore is never re-read (§5b.2 #3).
+- **P1.2 (server-owned trigger):** finalize on the `session.ended` branch + a `@scheduler_fn` reconciler for orphaned sessions, gated dormant until sessions are in PG (§5b.2 #4–5).
+- **P1.3 (wrong primitive):** the Cloud Run **Job** is removed; the beta design is synchronous in-process with **zero new infra**. The async path (outbox / Cloud Tasks → Cloud Run **Service**) is deferred to GA as a forward-compatible upgrade (§5b.3).
+- **P2a/P2b:** aggregation reads the pre-aggregated `session_summary` (no per-event N+1); the hot path does **one** pool checkout per turn, capped by `pool_timeout=3s` (§5b.1–2). The naive "13 round-trips per turn" objection is neutralized by batching all of a turn's events into a single transaction with FKs resolved once.

@@ -1079,6 +1079,26 @@ class TestAssignmentRouting(unittest.TestCase):
                 router.get_assignment('a1')
         self.assertIn('MISMATCH', ' '.join(cm.output))
 
+    def test_get_assignment_shadow_ignores_vestigial_mapping_id(self):
+        os.environ['READ_PG_ASSIGNMENTS'] = 'shadow'
+        # mapping_id is a vestigial legacy field (removed curriculum-overlay): 39/40
+        # pre-migration prod assignments carry a dangling one, the PG adapter
+        # intentionally does NOT emit it, and no read path consumes it. It is ignored
+        # so its absence in PG is not flagged, while a real content field still would be.
+        fs = types.SimpleNamespace(
+            get_assignment=lambda aid: {
+                'id': aid, 'status': 'published', 'instructions': 'X',
+                'mapping_id': 'legacy-overlay-ref'})
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(
+            ReadRouter, '_pg_read',
+            lambda self, pc, eng: {'id': 'a1', 'status': 'published', 'instructions': 'X'}):
+            with self.assertLogs('backend.db.read_router', level='WARNING') as cm:
+                router.get_assignment('a1')
+        joined = ' '.join(cm.output)
+        self.assertNotIn('MISMATCH', joined)              # mapping_id absence is intended
+        self.assertIn('1 compared, 0 mismatched', joined)
+
     def test_list_class_assignments_shadow_diffs_by_id_set(self):
         os.environ['READ_PG_ASSIGNMENTS'] = 'shadow'
         fs = types.SimpleNamespace(

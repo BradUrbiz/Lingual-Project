@@ -93,10 +93,23 @@ _ENROLLMENT_SHADOW_IGNORE = frozenset({'created_at', 'updated_at'})
 
 # Known-divergent assignment keys to allowlist in point-get shadow parity:
 #   created_at/updated_at - clock skew (Firestore SERVER_TIMESTAMP vs PG now()).
+#   mapping_id            - VESTIGIAL legacy field. It referenced the removed
+#                           curriculum-overlay/"mapping" entity (scenario content now
+#                           lives on the assignment document itself — see backend
+#                           CLAUDE.md "Assignment content lives on the assignment
+#                           document"; the mappings collection no longer exists). 39/40
+#                           pre-migration Firestore assignments still carry a dangling
+#                           mapping_id; no backend route, frontend component, or
+#                           analytics path reads it, and the test harness asserts NEW
+#                           assignments have none. The PG read adapter deliberately does
+#                           NOT carry this dead reference into the system-of-record
+#                           schema (the same document-and-don't-migrate posture as the
+#                           dirty-data backfill baseline). Ignored so the shadow stays
+#                           clean while real drift still surfaces.
 # release_at/due_at and target_language_intensity are NOT blanket-ignored — they are
 # compared after a canonical NORMALIZER (see _ASSIGNMENT_SHADOW_NORMALIZE below), so a
 # real value drift still surfaces while benign tz-suffix / legacy-enum skew does not.
-_ASSIGNMENT_SHADOW_IGNORE = frozenset({'created_at', 'updated_at'})
+_ASSIGNMENT_SHADOW_IGNORE = frozenset({'created_at', 'updated_at', 'mapping_id'})
 
 
 # Per-field normalizers applied to BOTH the Firestore and PG values before the

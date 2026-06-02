@@ -90,14 +90,18 @@ substitutions:
   # _DUAL_WRITE_ANALYTICS_SESSIONS gates the fail-open practice_session shadow
   # (ANALYTICS_MIGRATION Slice B — the FK parent of learning_events). Sessions ride
   # the LIVE practice path, so the shadow uses a bounded hot-path statement_timeout
-  # (1000ms create / 2000ms per-turn UPDATE), not the 10s `_run`. Default '0' until
-  # the MANDATORY term-scope backfill (scripts/backfill_practice_sessions_term.py)
-  # has run + parity is clean. Prereq (§5b.5): DUAL_WRITE_ASSIGNMENTS=1 +
-  # READ_PG_ASSIGNMENTS=1 live (they are) so session assignment_id FKs resolve.
+  # (1000ms create / 2000ms per-turn UPDATE), not the 10s `_run`. FLIPPED to '1' on
+  # 2026-06-02 (rev lingual-app-00056-kmv) after deploy rev 00055 (flag '0') →
+  # --update-env-vars flip → term-scope backfill `--write` (practice_sessions 48
+  # inserted/0 errors) + `--parity` (in_sync, fs 48 = pg 48, 0 missing/0 extra).
+  # Prereq (§5b.5) satisfied: DUAL_WRITE_ASSIGNMENTS=1 + READ_PG_ASSIGNMENTS=1 live so
+  # session assignment_id FKs resolve. Default bumped 0→1 here for durability (deploy
+  # uses --set-env-vars=REPLACE; a substitution still '0' would regress the live flip).
+  # Rollback is instant: --update-env-vars DUAL_WRITE_ANALYTICS_SESSIONS=0 (no rebuild).
   # The orphaned-session reconciler (POST /internal/analytics/sweep-orphaned-sessions)
-  # is dormant until this flag = '1'; activating it also needs INTERNAL_SCHEDULER_SECRET
-  # wired into --set-secrets + a Cloud Scheduler job (see ANALYTICS_MIGRATION rollout).
-  _DUAL_WRITE_ANALYTICS_SESSIONS: '0'
+  # is now armed but still needs INTERNAL_SCHEDULER_SECRET wired into --set-secrets +
+  # a Cloud Scheduler job to actually run (separate activation step).
+  _DUAL_WRITE_ANALYTICS_SESSIONS: '1'
   # Read-cutover flags (read phase). Per entity: '0'/'' = Firestore only,
   # 'shadow' = Firestore authoritative + PG parity compare (logged), '1' = PG
   # authoritative, fail-open to Firestore. organizations FLIPPED to '1' on

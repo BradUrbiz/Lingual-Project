@@ -130,7 +130,9 @@ def run(mode: str, term_start: datetime.datetime) -> int:
             return 0 if not missing else 1
 
         dry_run = mode == 'dry-run'
-        stats: dict = {'inserted': 0, 'updated': 0, 'errors': [], 'warnings': []}
+        # Keys must match backfill._empty_stats() — finish_import_run's _summarize_stats
+        # reads 'skipped' (+ inserted/updated/errors) when writing the ledger row.
+        stats: dict = {'inserted': 0, 'updated': 0, 'skipped': 0, 'errors': [], 'warnings': []}
         run_row = None
         if not dry_run:
             run_row = backfill.start_import_run(

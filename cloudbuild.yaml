@@ -110,14 +110,19 @@ substitutions:
   # instant --update-env-vars READ_PG_ENROLLMENTS=shadow (or '0'). org/class/enrollment
   # reads now all PG-authoritative; memberships stays 'shadow' by design (D4).
   _READ_PG_ENROLLMENTS: '1'
-  # assignments-read slice (A): 'shadow' (Firestore authoritative + PG parity-compare,
-  # logged) since 2026-06-02 (rev 00052) — get_assignment + list_class_assignments,
-  # following DUAL_WRITE_ASSIGNMENTS=1 + a clean unified backfill (assignments 40/40,
-  # 0 missing/0 extra). The read adapter inverts FKs to parents' store-invariant legacy
-  # ids and normalizes target_language_intensity/release_at/due_at before compare.
-  # Next: flip to '1' (PG-authoritative, fail-open) after a clean shadow soak. Rollback
-  # is instant via --update-env-vars READ_PG_ASSIGNMENTS=shadow (or '0'), no rebuild.
-  _READ_PG_ASSIGNMENTS: 'shadow'
+  # assignments-read slice (A): FLIPPED to '1' (PG-authoritative, fail-open) on
+  # 2026-06-02 (rev 00054) — get_assignment + list_class_assignments now read Postgres.
+  # Promoted after a COMPREHENSIVE pre-flip proof: an offline analog of the get_assignment
+  # shadow over ALL 41 prod assignments (40 backfilled + 1 live-created) returned 41/41
+  # clean, 0 mismatched — stronger than a sampled soak. That run surfaced one real
+  # divergence, the vestigial `mapping_id` legacy field (39/40 carry a dangling ref to the
+  # removed curriculum-overlay collection; no read path consumes it), now in
+  # _ASSIGNMENT_SHADOW_IGNORE (rev 00053). Live dual-write create verified (40->41 in PG),
+  # live shadow logged 0 MISMATCH, post-flip reads served from PG with 0 fail-open. The
+  # read adapter inverts FKs to parents' store-invariant legacy ids and normalizes
+  # target_language_intensity/release_at/due_at. Rollback is instant via
+  # --update-env-vars READ_PG_ASSIGNMENTS=shadow (or '0'), no rebuild.
+  _READ_PG_ASSIGNMENTS: '1'
 
 # Store images in Artifact Registry
 images:

@@ -62,6 +62,16 @@ def _run_with_timeout(
     coexistence no-op (parent not yet backfilled) logged at debug; any other
     exception is logged and NEVER re-raised into the live request. `with
     Session(engine)` returns the connection to the pool on every exit path.
+
+    LATENCY MODEL (codex P1 — do NOT mistake `timeout_ms` for a request-latency cap):
+    `timeout_ms` bounds the STATEMENT only. The first `execute()` is also where
+    SQLAlchemy checks out (or opens) a connection, which happens BEFORE Postgres can
+    apply statement_timeout. Healthy PG: ~tens of ms. Degraded PG: a contended checkout
+    waits up to `sql.py` pool_timeout (3s) and a cold connect up to its connect timeout
+    (~10s) before fail-open catches it. Callers MUST already have written Firestore (the
+    system of record) first, so this is a response-latency tail under a PG incident, not
+    data loss. Moving the shadow off the hot path is the GA upgrade (§5b.3); at one-school
+    beta this tail is accepted — it is the same exposure the live PG read paths carry.
     """
     from backend.db.dual_write import _resolve_engine
 
@@ -94,18 +104,14 @@ def _enabled_sessions() -> bool:
     return os.environ.get('DUAL_WRITE_ANALYTICS_SESSIONS') == '1'
 
 
-def _enabled_events() -> bool:
-    """learning_event shadow gate (Slice C — shadow_write_turn, not yet built).
-
-    Read here ONLY so the Slice B session-update shadow can self-disable when the
-    events flag is on: per the §5b.2 #7 flag matrix, when DUAL_WRITE_ANALYTICS_EVENTS=1
-    the per-turn `shadow_write_turn` writes the events AND the session-summary
-    UPDATE in ONE transaction (one pool checkout). The standalone
-    `shadow_update_practice_session` must NOT also fire, or the turn would take two
-    checkouts. So shadow_update is the events-flag-OFF path; shadow_write_turn
-    subsumes it when events are on.
-    """
-    return os.environ.get('DUAL_WRITE_ANALYTICS_EVENTS') == '1'
+# NOTE: there is deliberately NO `_enabled_events()` gate in Slice B. The §5b.2 #7
+# flag matrix says that when DUAL_WRITE_ANALYTICS_EVENTS=1, Slice C's per-turn
+# `shadow_write_turn` writes the events AND the session-summary UPDATE in one
+# transaction, and the standalone `shadow_update_practice_session` must self-disable
+# to keep one pool checkout per turn. That self-disable is a SLICE C change — it must
+# land in the SAME commit as shadow_write_turn. Adding it now (before that writer
+# exists) would silently drop the PG session UPDATE whenever the events flag is set
+# early — a footgun with no upside until Slice C (codex P2).
 
 
 def _utcnow() -> datetime.datetime:
@@ -247,12 +253,14 @@ def shadow_update_practice_session(
     gate reconciles it before Firestore writes retire. 2000ms hot-path budget
     (§5b.2 #1).
 
-    Events-flag-OFF path of the §5b.2 #7 matrix: when DUAL_WRITE_ANALYTICS_EVENTS
-    is on, Slice C's per-turn `shadow_write_turn` writes the events AND this
-    summary UPDATE in one transaction, so this standalone shadow MUST self-disable
-    (else two pool checkouts per turn). Hence the `not _enabled_events()` guard.
+    Slice C composition (§5b.2 #7): when DUAL_WRITE_ANALYTICS_EVENTS lands, its
+    per-turn `shadow_write_turn` will write the events AND this summary UPDATE in
+    ONE transaction. At THAT point Slice C must add a self-disable here (gated on
+    the events flag) so the turn takes one pool checkout, not two. It is NOT gated
+    on the events flag yet: shadow_write_turn does not exist, so self-disabling now
+    would SILENTLY DROP the PG session UPDATE if that flag were set early (codex P2).
     """
-    if not _enabled_sessions() or _enabled_events():
+    if not _enabled_sessions():
         return
     from sqlalchemy import update
 

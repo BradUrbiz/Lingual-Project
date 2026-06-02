@@ -172,15 +172,17 @@ class TestSessionShadowGating(unittest.TestCase):
                 lambda: object(), session_firestore_id='s1', updates={'prompt_version': 'v9'})
             run.assert_not_called()  # nothing PG-relevant -> no checkout
 
-    def test_update_self_disables_when_events_flag_on(self):
-        # §5b.2 #7: when EVENTS=1, Slice C's shadow_write_turn subsumes this UPDATE.
-        # The standalone shadow MUST NOT fire, or the turn takes two pool checkouts.
+    def test_update_still_fires_when_events_flag_set_early(self):
+        # §5b.2 #7 / codex P2: the self-disable lands WITH Slice C's shadow_write_turn,
+        # NOT now. Until then, an early DUAL_WRITE_ANALYTICS_EVENTS=1 must NOT silently
+        # drop the PG session UPDATE — shadow_update still fires on SESSIONS=1.
         os.environ['DUAL_WRITE_ANALYTICS_SESSIONS'] = '1'
         os.environ['DUAL_WRITE_ANALYTICS_EVENTS'] = '1'
-        # provider explodes if touched; reaching _run_with_timeout would resolve it.
-        da.shadow_update_practice_session(
-            _provider_that_explodes(), session_firestore_id='s1',
-            updates={'status': 'completed'})
+        with mock.patch.object(da, '_run_with_timeout') as run:
+            da.shadow_update_practice_session(
+                lambda: object(), session_firestore_id='s1',
+                updates={'status': 'completed'})
+            run.assert_called_once()
 
     def test_create_still_fires_when_events_flag_on(self):
         # Session-create is unchanged by the events flag (matrix: both on-rows use

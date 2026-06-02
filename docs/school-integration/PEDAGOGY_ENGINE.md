@@ -6,6 +6,7 @@
 **Supersedes scope of:** `docs/Pedagogy Research/2026-05-27-tutor-pedagogy-conversation-guidance-design.md` (that doc scoped the work to prompt enrichment; this one re-frames it as an engine and re-houses the prompt work as the engine's first render target).
 **Research inputs (cited, not restated):** `docs/Pedagogy Research/deep-research-report.md` (Input B — SLA/TBLT meta-analyses), `docs/Pedagogy Research/deep-research-report (2).md` (Input C — turn-level algorithm, constraint compiler, eval framework, governance), and the synthesis in the 2026-05-27 spec (Input A).
 **Grounded against code at:** current HEAD. File:line references are real and were verified, not inferred.
+**Review:** codex consult (2026-06-02), SHIP-WITH-FIXES — corrections applied inline; see §0.1 for the revision log and the narrowed S1 it produced. Detailed S1 design lives in `PEDAGOGY_ENGINE_S1.md`.
 
 ---
 
@@ -18,6 +19,16 @@ The 2026-05-27 work treated "make the tutor a better teacher" as **prompt engine
 **The spine is the Teacher-Constraint Compiler (Layer 2).** Every other layer hangs off its output. Get its data model right (§4) and the other five layers have a contract to plug into.
 
 **Why this matters to the mission.** Lingual's positioning is *"teacher-designed practice, AI-executed at student scale."* That sentence is an engine spec: the **compiler** is "teacher-designed," the **turn-decision + render** layers are "AI-executed," and *"at student scale"* is precisely why this must be a deterministic, regression-tested engine rather than behavior smuggled into a prompt and hoped for across thousands of unsupervised voice sessions. The engine *is* the moat; the prompt is a detail of one renderer.
+
+### 0.1 Revision log — codex review (2026-06-02)
+A skeptical-architect consult flagged that §14's S1 had quietly re-inherited most of the target architecture, recreating the cathedral this doc warns about. Corrections applied, and the discipline they imply:
+1. **Factual:** `learning_events` are **not** "written and never read" — admin/analytics paths already read them (`list_session_learning_events`, `list_assignment_learning_events`, derived builders in `practice_analytics.py`). The accurate gap: they are never fed back to **steer live tutoring**. (Fixed in §3 L3 row, §4.4, §11.)
+2. **Compliance boundary:** the engine must **not** compile a `safety_plan`. That would make it a policy compiler, contradicting invariant 10. The engine **receives** `resolved_launch_permissions` / `allowed_surface_capabilities` from compliance and renders only within them. (Fixed in §4.2/§4.3.)
+3. **The L2 model is a documented *target*, not S1 scope.** The full six-bucket `CompiledConstraints` stays as the north star but is explicitly provisional; **S1 builds only a thin `PromptPlan` subset** (§4.2a, §14).
+4. **Render-target boundary is right as an idea, overbuilt as S1 code.** With only two string-consuming surfaces today, S1 ships a `PromptPlan` + `render_assignment_prompt(plan, surface)` helper, not a pluggable renderer registry. The registry earns its keep at S3 when `coach_track` exists. (Fixed in §5, §14.)
+5. **New layer — Teacher Preview/Override (L8).** If the teacher is the policy-setter, they must see what the compiler inferred before students do. Without it the compiler silently converts teacher text into hidden policy — the drift path to an untrusted module. (Added §11a; builds on the existing `systemPromptPreview`.)
+6. **Agnosticism is now enforced, not asserted** (§2 invariant 7a): explicit import rules.
+7. **`custom_prompt` renamed honestly** to "raw tutor mode — no pedagogy guarantees" (§5); it is a product hole, not a clean abstraction.
 
 ---
 
@@ -56,6 +67,7 @@ These are load-bearing constraints, not style. Every layer must honor them.
 
 **Engineering invariants (Lingual-specific):**
 7. **Content-source-agnostic AND surface-agnostic** (§1.3).
+7a. **Enforced, not asserted** (the old engine died because this was never enforced). Two import rules, checkable in review/CI: (a) **no Canvas/content-pipeline imports into `backend/services/pedagogy/`** — the engine never reaches back into the resolver's Canvas-specific code; content arrives as already-neutral fields. (b) **no OpenAI API / payload logic inside `compiler` or `plan`** — only the `render/` layer knows about `session.update`, message shapes, or model quirks. If a compiler file imports an OpenAI client or a Canvas module, the boundary is already broken.
 8. **Teacher is the policy-setter, AI is the executor.** The engine never invents pedagogy the teacher didn't authorize; it compiles teacher intent and runs inside it. Teacher presence is an engagement variable, not a nicety (Input C).
 9. **No new persistence system.** Firestore stays system-of-record for beta (TECH_SPEC §1). Engine state is derived/snapshotted into existing collections (`practice_sessions.pedagogy_snapshot`, `analysis_state`; `learning_events`), not a new store. Postgres only via the sanctioned `backend/db/` migration.
 10. **Compliance fails closed.** Voice/consent gating is upstream of and independent from the engine. The engine may *reflect* allowed behavior; it never *grants* it. Retention/redaction/access are product policy, never prompt advice.
@@ -102,7 +114,7 @@ Layer-by-layer responsibility, current state, and gap. ("Today" reflects verifie
 |---|---|---|---|---|
 | **L1** | Teaching-plan | Turn teacher goal into a *situated task* with family, phases, completion condition | `task_type` ∈ {information_gap, opinion_gap, decision_making, custom_prompt} (`assignment.py:71`); one GPT `generated_scenario`; `build_task_template_prompt` directive | No reusable task **library**, no task-**family** pedagogy beyond 3 enums, no pretask→task→posttask phase model |
 | **L2** ⭐ | Constraint compiler | Compile teacher fields into typed hard/soft/prohibited/rubric/evidence/safety constraints | Fields concatenated into prompt sections (SPINE / TARGETS / TUTOR STANCE) by `build_assignment_system_prompt` (`resolver.py:1588`) | **No compiler** — intent never becomes structured, coverable constraint objects; coverage/quota untracked |
-| **L3** | Learner model | Hold *can this student speak right now* — proficiency + mastery + error patterns + WTC/anxiety/readiness | `proficiency_context`: static ACTFL band + age/rigor/frequency (`main.py:337`); fallback = Intermediate Mid/High | No session-state, no affect signal, no per-target mastery; `learning_events` emits the primitives but nothing reads them back |
+| **L3** | Learner model | Hold *can this student speak right now* — proficiency + mastery + error patterns + WTC/anxiety/readiness | `proficiency_context`: static ACTFL band + age/rigor/frequency (`main.py:337`); fallback = Intermediate Mid/High | No session-state, no affect signal, no per-target mastery; `learning_events` emits the primitives (read by analytics, not fed back to live tutoring) |
 | **L4** | Turn-decision / coach | Decide *what to do this learner turn*; run the coach track | Nothing — one system prompt set once at session start (`chat.py:489/506`); no per-turn or between-turns logic anywhere | No explicit turn algorithm, no parallel correction pass, no side channel |
 | **L5** | Feedback policy | Route correction by target-type × affect × timing | `default_feedback_policy` (`resolver.py:49`): `recast_default: True`, `elicitation_repeat_threshold: 3`, `mode` ∈ {fluency_first, balanced, accuracy_first} | Knobs exist; **routing logic doesn't** — `recast_default` is a flat switch, not a target-type/affect router |
 | **L6** | Multimodal UI | Voice-first + selective text scaffolding; surface the coach track + ASR confidence | Realtime voice (`gpt-realtime-mini`) + text/avatar (`gpt-5.3-chat-latest`); single prompt + history | No coach panel, no captions/highlights/replay/pronunciation-compare, no confidence surfacing |
@@ -138,16 +150,20 @@ From the assignment doc (`backend/db/models/assignment.py:34-64`, `database.py:1
 **Fields the old spec invented that do NOT exist on the assignment doc:** a first-class `rubric` and explicit `modality` / `task-preference` fields. Modality lives on `practice_sessions` (`modality`, `voice_enabled`, `text_enabled`); there is no stored rubric object. The compiler must therefore *derive* rubric/evidence from `success_criteria` + targets, and treat modality as session context, not assignment config. (This is a real divergence the old spec glossed; flagged here so we don't design against fields that aren't there.)
 
 ### 4.2 Output — `CompiledConstraints` (the typed model)
-A schematic data model (design notation, not code). Six constraint kinds:
+> **This is the TARGET model, not S1 scope.** Per the codex review (§0.1), freezing a six-bucket ontology before teachers have shown which controls they use would ossify guesses. The full model below is the north star; **§4.2a defines the thin subset S1 actually builds.** Grow buckets only when a real downstream route consumes them.
+
+A schematic data model (design notation, not code). Five engine-owned constraint kinds (+ one consumed-from-compliance):
 
 ```
 CompiledConstraints:
   hard_agenda:      [ TargetItem ]      # must be elicited; coverage-tracked, quota'd
   soft_agenda:      [ TargetItem ]      # elicit if natural; optional expansion
-  prohibited:       [ SafetyRule ]      # blocked topics / behaviors (fail-closed)
   rubric:           [ RubricDimension ] # what "success" is measured on (derived if absent)
   evidence_plan:    [ EvidenceItem ]    # what to capture for the teacher debrief
-  safety_plan:      SafetyPlan          # retention/redaction/visibility (routed to compliance, not prompt)
+  # NOT compiled by the engine — consumed as a resolved input from compliance (invariant 10):
+  allowances:       ResolvedAllowances  # resolved_launch_permissions + allowed_surface_capabilities
+                                        # (prohibited topics, retention, redaction, visibility already
+                                        #  decided upstream; the engine renders only within them)
 
 TargetItem:
   surface:          str                 # the expression / word / grammar form
@@ -163,19 +179,35 @@ RubricDimension:
   source:           {success_criteria, focus_grammar, derived}
   observable_via:   [ learning_event_type ]   # how the coverage tracker scores it
 
-SafetyRule / SafetyPlan:  → routed to compliance services (compliance_state, disclosure_logs);
-                            the engine consumes the *resolved allowance*, never sets policy.
+ResolvedAllowances:       # INPUT from compliance, not engine output
+  launch_permitted:       bool          # voice/text allowed for this learner+assignment
+  surface_capabilities:   [ str ]       # e.g. {voice, text, retain_transcript}
+  blocked_topics:         [ str ]        # resolved upstream; engine avoids, never decides
 ```
+
+### 4.2a S1 thin subset — `PromptPlan` (what actually gets built first)
+Per §0.1, S1 does **not** build `CompiledConstraints`. It builds a deliberately small intermediate the current assignment prompt path can be re-expressed over, with no new buckets the renderer doesn't already consume:
+
+```
+PromptPlan:                      # the S1 spine — grows into CompiledConstraints later
+  targets:        [ TargetItem (kind + feedback_route only; no quota/phase yet) ]
+  feedback_policy: { mode, recast_default, elicitation_repeat_threshold }   # existing dict, unchanged
+  task_type:      str            # existing enum, not yet a derived task_family
+  task_context:   { scenario, success_criteria, teacher_notes }
+  render_notes:   { surface_hints }   # e.g. critical-rules-last for voice
+```
+
+`compile_prompt_plan(bootstrap) -> PromptPlan` and `render_assignment_prompt(plan, surface) -> str`. That's the whole S1 engine surface. `rubric`, `evidence_plan`, `allowances`, coverage quotas, phases, and `task_family` derivation are **deferred to the slice that first consumes them** (S2 coverage, S4 debrief). Detailed in `PEDAGOGY_ENGINE_S1.md`.
 
 ### 4.3 Compilation rules (the routing the spec's §6.4 wanted but couldn't enforce in a prompt)
 - `focus_grammar[]` items → `kind=grammar_rule`. If rule-based (the common case), `feedback_route=prompt_first` (Lyster/Ammar-Spada: prompts beat recasts *specifically* for rule-based grammar). Under `feedbackPolicy.mode=accuracy_first`, lower the escalation threshold.
 - `target_expressions[]` / `target_vocabulary[]` → `kind=expression|vocabulary`, `feedback_route=recast_first` (formulaic/lexical targets fit recasts + flow), `min_uses≥1`, `introduced_phase=pretask|task`, `elicit_phase=task|posttask`.
 - `objectives[]` + `success_criteria[]` → `RubricDimension`s; if no explicit criteria, **derive** dimensions from targets + task family (don't fabricate a rubric the teacher didn't set; mark it `source=derived` so the debrief can caveat it).
 - Affect override (needs L3 signal — ②): under detected anxiety / low WTC, bias any route toward `recast_first` even for grammar (Rassaei). Compiler emits the route; L4 applies the override at runtime.
-- `prohibited` + `safety_plan` → handed to compliance; the engine receives back a resolved allowance and renders only within it.
+- **Safety is consumed, not compiled** (invariant 10): the engine takes `ResolvedAllowances` as an *input* from compliance and renders only within it. It does not derive blocked topics, retention, or visibility — those are decided upstream. (Corrected per §0.1 — the earlier draft had the engine compiling a `safety_plan`, which made it a policy compiler.)
 
 ### 4.4 Coverage / evidence state (closing the loop)
-The compiler's `hard_agenda` + `rubric` define *what to watch for*. The substrate already emits the watch-points — `learning_events` carries `metric.target_expression_hit`, `metric.target_vocabulary_hit`, `metric.self_correction`, `metric.error_detected`, `metric.repeated_error`, `metric.rubric_dimension_signal`, `task.completed` (`practice_analytics.py:10-28`). Today these are written and never read. The engine adds a **coverage/evidence reader** that folds them back into L3 (learner model) and L7 (debrief): which hard targets are still uncovered, which rubric dimensions have signal, which errors repeated. This is the single highest-leverage closed loop and it needs **no new event types** — only a reader.
+The compiler's `hard_agenda` + `rubric` define *what to watch for*. The substrate already emits the watch-points — `learning_events` carries `metric.target_expression_hit`, `metric.target_vocabulary_hit`, `metric.self_correction`, `metric.error_detected`, `metric.repeated_error`, `metric.rubric_dimension_signal`, `task.completed` (`practice_analytics.py:10-28`). These are already **read by analytics/admin paths** (`list_session_learning_events`, `list_assignment_learning_events`, derived-event builders) — but never fed back to **steer live tutoring** (corrected per §0.1). The engine adds a **live-steering reader** that folds them into L3 (learner model) and L7 (debrief): which hard targets are still uncovered, which rubric dimensions have signal, which errors repeated. This is the single highest-leverage closed loop and it needs **no new event types** — only a new *consumer* of an existing stream.
 
 ---
 
@@ -191,7 +223,9 @@ The engine produces a **TurnDirective / SessionPlan**; a *renderer* turns that i
 
 **Two consumer models, one renderer contract.** The `system_prompt` renderer must serve *both* `gpt-realtime-mini` (voice; critical-rules-last, lean, explicit/unconditional wording — voice adherence is fragile) and `gpt-5.3-chat-latest` (text/avatar; tolerates more). The renderer is parameterized by surface, not forked per builder — which is the unification the old spec's "shared tutor core" was reaching for, now expressed as *one renderer over one plan* rather than *two builders sharing a string*.
 
-**`custom_prompt` is the canonical bypass.** Today `task_type == "custom_prompt"` early-returns the base prompt (`resolver.py:1594`), skipping all overlays. In engine terms this is a **render bypass**: the teacher opted out of the scaffolded experience, so the engine compiles nothing and the renderer passes raw teacher instructions through. Keep it — it's the clean precedent for "engine off, teacher's words only," and a useful escape hatch. (Trade-off, unchanged from old spec §6.1: bypass means no anti-sycophancy / recycling / one-focus / coverage guarantees unless the teacher writes them. Surface this in authoring UX.)
+**Build it as a helper first, not a registry** (codex review, §0.1). With only two string-consuming surfaces today, S1 ships `render_assignment_prompt(plan, surface) -> str` — a parameterized helper over the `PromptPlan` (§4.2a), not a pluggable renderer registry with a `coach_track` / `session.update` plugin contract. The registry abstraction is real but only earns its indirection once a *second kind* of consumer (the coach track) exists — so it lands at **S3**, not S1. Until then the boundary is a function signature, not a framework.
+
+**"Raw tutor mode" — the honest name for the `custom_prompt` bypass.** Today `task_type == "custom_prompt"` early-returns the base prompt (`resolver.py:1594`), skipping all overlays. In engine terms it's a **render bypass**: the engine compiles nothing and passes raw teacher instructions through. Keep it as an escape hatch — but do **not** present it as equivalent to an engine-backed assignment. It is *raw tutor mode with no pedagogy guarantees*: no anti-sycophancy, no recycling, no one-focus correction, no coverage, none of the safety-shaped behavior. That's a real product hole, not a clean abstraction (codex #7). Surface the missing guarantees explicitly in authoring UX so a teacher choosing it knows what they're turning off.
 
 ---
 
@@ -287,6 +321,15 @@ Built on existing substrate — `practice_sessions` already carries `pedagogy_sn
 
 ---
 
+## 11a. Teacher Preview / Override (L8 — added per codex review)
+The compiler turns messy teacher input into structured policy. If that happens invisibly, the engine *silently converts teacher text into hidden behavior* — and a backend module that no one can see or correct is exactly how trust erodes and a `pedagogy/` module gets deleted again (§15). So L8 is not optional polish; it's the trust contract that keeps the engine legible to its policy-setter.
+
+**What it shows the teacher, before students launch:** the compiled targets (which expressions/grammar the engine will elicit and how aggressively it'll correct each), the derived correction posture (from `feedbackPolicy.mode`), the success/completion condition, and — for raw tutor mode — an explicit "pedagogy guarantees OFF" banner listing what's disabled.
+
+**What it lets the teacher do:** accept, or override any inferred field before publish. Overrides are stored as teacher intent, not re-inferred each session.
+
+**Builds on existing code:** `practice_sessions.system_prompt_preview` already persists a sanitized prompt preview, and the assignment builder already produces a `systemPromptPreview`. L8 promotes that from a debug artifact to a teacher-facing review surface over the `PromptPlan`. Lands with S1's compiler (the teacher should see the *first* thing the compiler ever infers), even if the richer override UI is incremental.
+
 ## 12. Governance layer (substrate)
 
 Not optional prompt advice — product/system policy (invariant 10). Principles (Input C, Korea + US): data minimization, **retention off-by-default**, **differential retention** for voice vs. transcript vs. translation logs, AI-use disclosure, **separation of learning-eval logs from operational logs**, teacher/school-configurable controls. Jurisdiction: Korea MOE AI-ethics + 2025 learning-SW selection criteria, PIPC 2025 generative-AI privacy guidance; US FERPA, COPPA (<13).
@@ -318,16 +361,18 @@ The pivot raises the *ceiling*, not the *batch size*. Build the engine in **vert
 
 | Slice | Delivers | Layers touched | Render target | Net new infra |
 |---|---|---|---|---|
-| **S1 — Spine** | Reborn `backend/services/pedagogy/` (content+surface-agnostic): `compiler` → `CompiledConstraints`, `plan` → `SessionPlan` (task_family + phases + completion), `policy` routing matrix. `system_prompt` renderer re-houses today's two builders over the plan. Free-chat reaches assignment-grade pedagogy. The 2026-05-27 doctrine ships *as the renderer's content*. | L1, L2, L5 + render | `system_prompt` | **none** (prompt-only, zero latency/cost) |
+| **S1 — Thin spine** (narrowed per codex §0.1) | Reborn `backend/services/pedagogy/`: `compile_prompt_plan(bootstrap) -> PromptPlan` (§4.2a — targets + feedback_policy + task_context only) and `render_assignment_prompt(plan, surface)`. Re-house **only the assignment path** over the plan; **do not touch free practice**; prove zero prompt regression via snapshot; ship **one** visible behavior win (grammar-target slips escalate per `feedbackPolicy.mode`). Detailed in `PEDAGOGY_ENGINE_S1.md`. | L2 (thin), L5 (routing only) + render-helper | `system_prompt` (assignment only) | new backend module + tests + eval harness (not "zero" — see note) |
 | **S2 — Closed loop** | Coverage/evidence reader over existing `learning_events`; L3 learner-model accumulates mastery + error patterns (no affect yet); feeds recycling + uncovered-target awareness back into S1's plan. | L3 (partial), L2 coverage | `system_prompt` | reader only (no new store) |
 | **S3 — Coach track** | Parallel correction model + side-channel; L4 turn algorithm; promote-back via existing `feedbackPolicy`; L6 coach panel (the multimodal text-support surface). Main tutor goes correction-light. | L4, L6, render | `coach_track` | parallel model call + UI |
 | **S4 — Affect + debrief** | WTC/anxiety signals into L3 (silence/turn-trend/repair/abandonment); affect override in L5; L7 evidence-backed teacher debrief over `practice_sessions`. | L3 (full), L5 affect, L7 | both | analytics presenter |
 | **S5 — Director (gated)** | Between-turns `session.update` re-steer on drift — **only if** S1–S4 eval shows static composition plateaus below target. | L4 runtime | `session.update` | +latency/cost; prove first |
 | **Eval harness** | Simulated-student + LLM-judge (§13.1) — built alongside **S1**, not after, so every slice is gated by regression, not vibes. | — | — | CI job |
 
-**Governance** rides alongside as an extension of existing compliance services, not a slice (it has no standalone student-facing increment).
+**Governance** rides alongside as an extension of existing compliance services, not a slice. **L8 Teacher Preview** rides with S1 (the teacher must see the compiler's first inference). **Free-chat parity** is deliberately *not* in S1 (codex #4) — it's a fast follow once the assignment path proves the plan→render contract, because free chat has no teacher targets and shouldn't gate the spine.
 
-S1 is the same prompt work the old spec scoped — but now it *is the renderer of the spine*, structured so S2–S5 bolt on without a rewrite. That structural difference is the entire point of the pivot.
+**On "net new infra":** S1 adds **no new persistence and no per-session latency/cost** — but it is not free. It's a new backend module, a migration of the live assignment prompt path, new tests/snapshots, and the eval harness is a real new CI + LLM-cost dependency. Calling that "zero infra" was the optimism codex flagged (§0.1 #4). The honest claim: *zero new datastores, real new code surface.*
+
+S1 is a **subset** of the prompt work the old spec scoped — assignment-path only, thin plan, one behavior win — but structured as the spine so S2–S5 bolt on without a rewrite. The discipline is the point: prove the plan→render contract on one path before generalizing it.
 
 ---
 

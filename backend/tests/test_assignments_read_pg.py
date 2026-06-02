@@ -141,6 +141,40 @@ class TestAssignmentsReadPG(unittest.TestCase):
             out = assignments_read.get_assignment(s, 'asg-1')
         self.assertEqual(out['canvas_module_item_id'], 'cmi-42')
 
+    def test_grade_config_round_trips(self):
+        # backfilled grade config reads back; the shadow set updates it in place.
+        with Session(_engine) as s:
+            _seed_parents(s)
+            backfill.upsert_assignment(
+                s, _assignment_doc(grade_metric='completion', grade_points=10.0))
+            s.commit()
+        with Session(_engine) as s:
+            out = assignments_read.get_assignment(s, 'asg-1')
+        self.assertEqual(out['grade_metric'], 'completion')
+        self.assertEqual(out['grade_points'], 10.0)
+        # the targeted shadow update mirrors a later set_assignment_grade_config:
+        from backend.db.dual_write_analytics import shadow_set_assignment_grade_config
+        os.environ['DUAL_WRITE_ASSIGNMENTS'] = '1'
+        try:
+            shadow_set_assignment_grade_config(
+                lambda: _engine, assignment_id='asg-1',
+                grade_metric='completion', grade_points=25.0)
+        finally:
+            os.environ.pop('DUAL_WRITE_ASSIGNMENTS', None)
+        with Session(_engine) as s:
+            out = assignments_read.get_assignment(s, 'asg-1')
+        self.assertEqual(out['grade_points'], 25.0)
+
+    def test_unset_dates_serialize_empty_string(self):
+        with Session(_engine) as s:
+            _seed_parents(s)
+            backfill.upsert_assignment(s, _assignment_doc())  # no release_at/due_at
+            s.commit()
+        with Session(_engine) as s:
+            out = assignments_read.get_assignment(s, 'asg-1')
+        self.assertEqual(out['release_at'], '')   # None column -> '' (Firestore shape)
+        self.assertEqual(out['due_at'], '')
+
     def test_missing_assignment_returns_none(self):
         with Session(_engine) as s:
             self.assertIsNone(assignments_read.get_assignment(s, 'ghost'))

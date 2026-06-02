@@ -667,6 +667,7 @@ class FakeDbBase:
             'focus_grammar': list(focus_grammar or []),
             'generated_scenario': generated_scenario or '',
             'teacher_notes': teacher_notes or '',
+            'student_instructions': student_instructions or '',
             'target_language_intensity': (
                 target_language_intensity
                 if target_language_intensity in ('target_only', 'mostly_target', 'bilingual_scaffold')
@@ -676,6 +677,12 @@ class FakeDbBase:
             'updated_at': datetime.now(UTC),
         }
         return aid
+
+    def set_assignment_grade_config(self, assignment_id, grade_metric, grade_points, *, sql_engine=None):
+        asg = self.assignments.get(assignment_id)
+        if asg is not None:
+            asg['grade_metric'] = grade_metric
+            asg['grade_points'] = grade_points
 
     def list_class_assignments(self, class_id: str):
         return [dict(a) for a in self.assignments.values() if a.get("class_id") == class_id]

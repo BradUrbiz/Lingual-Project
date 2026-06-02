@@ -594,6 +594,10 @@ def upsert_assignment(
         # Nullable JSONB / Text — Firestore stores a map/None and '' respectively.
         'canvas_module_item_ref': doc.get('canvas_module_item_ref'),
         'canvas_module_item_id': doc.get('canvas_module_item_id') or None,
+        # LTI grade-passback config (Firestore-only until this slice). metric is a
+        # string ('completion') or None; points is a float or None.
+        'grade_metric': doc.get('grade_metric'),
+        'grade_points': doc.get('grade_points'),
     }
 
     # Preserve the Firestore timestamps when the doc carries them (the backfill

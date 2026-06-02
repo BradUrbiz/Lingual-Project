@@ -35,9 +35,11 @@ organizations           (PG-authoritative, READ_PG_ORGANIZATIONS=1)
 
 ### 1.2 Model Assessment
 
-`backend/db/models/practice.py` and `backend/db/models/assignment.py` are schema-complete. **No DDL changes required** for the revised dual-write or backfill.
+`backend/db/models/practice.py` is schema-complete for the events/sessions dual-write. `backend/db/models/assignment.py` needed **one** addition (below).
 
-> **~~Alembic revision `0002` (events_synced_at)~~ — SUPERSEDED by §5b (codex P1.2).** The original design added a nullable `events_synced_at TIMESTAMPTZ` to `practice_sessions` as a session-close-batch freshness marker. The revised synchronous ingest has no batch and no freshness marker — read freshness is per-session **event-count parity** instead (§4.5/§5b.4). **Zero schema changes** for the analytics dual-write.
+> **Alembic revision `0002` (assignment grade config) — REQUIRED for Slice A.** Adds nullable `grade_metric TEXT` + `grade_points DOUBLE PRECISION` to `assignments`. These are the LTI grade-passback fields (`set_assignment_grade_config`); without them the PG read adapter is not a faithful inverse of Firestore `get_assignment`, so `api_get_grade_config` (lti.py) would return null once `READ_PG_ASSIGNMENTS=1` (codex Slice-A P1). **Apply `0002` to the live instance BEFORE enabling `DUAL_WRITE_ASSIGNMENTS=1`** — else the assignment shadow INSERT references a missing column and fail-opens to a silent no-op.
+
+> **~~Alembic revision (events_synced_at)~~ — SUPERSEDED by §5b (codex P1.2).** The original design added a nullable `events_synced_at TIMESTAMPTZ` to `practice_sessions` as a session-close-batch freshness marker. The revised synchronous ingest has no batch and no freshness marker — read freshness is per-session **event-count parity** instead (§4.5/§5b.4). The events/sessions dual-write needs **zero** schema changes.
 
 Critical serializer field rename (same class as enrollment D1 defect):
 

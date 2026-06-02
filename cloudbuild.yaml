@@ -81,9 +81,11 @@ substitutions:
   _DUAL_WRITE_SCHOOL_CHAIN: '1'
   _DUAL_WRITE_ENROLLMENTS: '1'
   # _DUAL_WRITE_ASSIGNMENTS gates the fail-open assignment shadow (ANALYTICS_MIGRATION
-  # Slice A — the FK parent of practice_sessions/learning_events). Default '0' (OFF)
-  # until the slice is deployed, the term-scope backfill is run, and parity is clean;
-  # then flip to '1' (instant --update-env-vars) and bump this default.
+  # Slice A — the FK parent of practice_sessions/learning_events). Default '0' (OFF).
+  # ROLLOUT ORDER: apply Alembic 0002 (grade_metric/grade_points columns) to the live
+  # instance FIRST — else every assignment shadow INSERT references a missing column
+  # and fail-opens to a silent no-op. Then enable '1', run the term-scope backfill,
+  # verify parity, and bump this default.
   _DUAL_WRITE_ASSIGNMENTS: '0'
   # Read-cutover flags (read phase). Per entity: '0'/'' = Firestore only,
   # 'shadow' = Firestore authoritative + PG parity compare (logged), '1' = PG

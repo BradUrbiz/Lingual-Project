@@ -3354,18 +3354,25 @@ def unlink_assignment_from_canvas_item(assignment_id, canvas_content_id, *, sql_
         )
 
 
-def set_assignment_grade_config(assignment_id, grade_metric, grade_points):
+def set_assignment_grade_config(assignment_id, grade_metric, grade_points, *, sql_engine=None):
     """Set the LTI grade-passback config (metric + points) on an assignment.
 
     Encapsulates the write so route code never manipulates the assignment ref
     directly — keeps the assignment entity behind the database contract so it
-    stays swappable for the Postgres cutover (see ADR-0001).
+    stays swappable for the Postgres cutover (see ADR-0001). ``sql_engine`` opts
+    into the fail-open assignment shadow (gated on DUAL_WRITE_ASSIGNMENTS).
     """
     get_assignment_ref(assignment_id).update({
         'grade_metric': grade_metric,
         'grade_points': grade_points,
         'updated_at': firestore.SERVER_TIMESTAMP,
     })
+    if sql_engine is not None:
+        from backend.db import dual_write_analytics as _da
+        _da.shadow_set_assignment_grade_config(
+            sql_engine, assignment_id=assignment_id,
+            grade_metric=grade_metric, grade_points=grade_points,
+        )
 
 
 def _build_school_request_payload(requester_uid, requester_email, requester_name,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import (
     CheckConstraint,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -54,6 +55,11 @@ class Assignment(Base):
     # Nullable, NO server default (Firestore stores a map or None).
     canvas_module_item_ref = mapped_column(JSONB)
     canvas_module_item_id = mapped_column(Text)
+    # LTI grade-passback config (set via set_assignment_grade_config). Nullable —
+    # only assignments linked to an LTI line item carry it. metric is currently
+    # always 'completion'; points is a float (or None).
+    grade_metric = mapped_column(Text)
+    grade_points = mapped_column(Float)
     created_at = created_at()
     updated_at = updated_at()
 

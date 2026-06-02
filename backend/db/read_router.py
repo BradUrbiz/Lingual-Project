@@ -92,23 +92,35 @@ _CLASS_SHADOW_IGNORE = frozenset(
 _ENROLLMENT_SHADOW_IGNORE = frozenset({'created_at', 'updated_at'})
 
 # Known-divergent assignment keys to allowlist in point-get shadow parity:
-#   created_at/updated_at  - clock skew (Firestore SERVER_TIMESTAMP vs PG now()).
-#   release_at/due_at      - format skew: Firestore stores an ISO string (or ''),
-#                       the PG column a real timestamp; backfill parses string ->
-#                       datetime -> the read renders .isoformat(), which can differ
-#                       in tz suffix/precision from the raw Firestore string. The
-#                       PRESENCE/absence still matters but is low-stakes display.
-#   target_language_intensity - INTENDED normalization, not drift: legacy
-#                       mostly_target/bilingual_scaffold are remapped to the new
-#                       enum on migrate (the model CHECK rejects the legacy values),
-#                       and assignment_resolver normalizes identically downstream,
-#                       so the raw-legacy Firestore value vs the PG canonical value
-#                       is expected. The tutor-bearing content fields (instructions,
-#                       generated_scenario, target_*, task_type, status, FK legacy
-#                       ids) are NOT allowlisted — those are the parity that matters.
-_ASSIGNMENT_SHADOW_IGNORE = frozenset(
-    {'created_at', 'updated_at', 'release_at', 'due_at', 'target_language_intensity'}
-)
+#   created_at/updated_at - clock skew (Firestore SERVER_TIMESTAMP vs PG now()).
+# release_at/due_at and target_language_intensity are NOT blanket-ignored — they are
+# compared after a canonical NORMALIZER (see _ASSIGNMENT_SHADOW_NORMALIZE below), so a
+# real value drift still surfaces while benign tz-suffix / legacy-enum skew does not.
+_ASSIGNMENT_SHADOW_IGNORE = frozenset({'created_at', 'updated_at'})
+
+
+# Per-field normalizers applied to BOTH the Firestore and PG values before the
+# shadow diff, so an INTENDED transform is not flagged but a real drift still is
+# (narrower + safer than ignoring the whole field). Lazy-imported inside the
+# callables to keep the flag-OFF footprint at os + logging.
+def _shadow_norm_intensity(value):
+    from backend.db.repository.normalization import normalize_target_language_intensity
+    return normalize_target_language_intensity(value)
+
+
+def _shadow_norm_timestamp(value):
+    # Both sides are ISO strings (or '') -> parse to a datetime; _norm then
+    # isoformats it, so '...Z' vs '...+00:00' compare equal but a real value
+    # difference (or an unparseable->None loss) still surfaces.
+    from backend.db.repository.normalization import parse_firestore_timestamp
+    return parse_firestore_timestamp(value)
+
+
+_ASSIGNMENT_SHADOW_NORMALIZE = {
+    'target_language_intensity': _shadow_norm_intensity,
+    'release_at': _shadow_norm_timestamp,
+    'due_at': _shadow_norm_timestamp,
+}
 
 # Sentinel a pg_call returns to say "I can't authoritatively answer this — fall open
 # to Firestore." Distinct from a real None / [] result, which IS authoritative in
@@ -146,16 +158,24 @@ def _norm(value: Any) -> Any:
     return value
 
 
-def _diff_dict(fs: dict | None, pg: dict | None, ignore: frozenset) -> dict:
+def _diff_dict(fs: dict | None, pg: dict | None, ignore: frozenset, normalize=None) -> dict:
     """Field-level diff of two point-get dicts over the union of keys minus
-    `ignore`. Returns {key: (fs_value, pg_value)} for mismatches only."""
+    `ignore`. Returns {key: (fs_value, pg_value)} for mismatches only. `normalize`
+    (optional {field: callable}) is applied to BOTH sides before comparing that
+    field, so an intended transform (legacy-enum remap, tz-suffix) is not flagged
+    while a real drift still is."""
     if fs is None and pg is None:
         return {}
     if fs is None or pg is None:
         return {'<presence>': (fs is not None, pg is not None)}
+    normalize = normalize or {}
     out: dict[str, Any] = {}
     for key in (set(fs) | set(pg)) - ignore:
-        a, b = _norm(fs.get(key)), _norm(pg.get(key))
+        raw_a, raw_b = fs.get(key), pg.get(key)
+        fn = normalize.get(key)
+        if fn is not None:
+            raw_a, raw_b = fn(raw_a), fn(raw_b)
+        a, b = _norm(raw_a), _norm(raw_b)
         if a != b:
             out[key] = (a, b)
     return out
@@ -175,12 +195,12 @@ def _diff_list(fs: list | None, pg: list | None, ignore: frozenset) -> dict:
     return out
 
 
-def _diff(fs: Any, pg: Any, ignore: frozenset) -> dict:
+def _diff(fs: Any, pg: Any, ignore: frozenset, normalize=None) -> dict:
     if isinstance(fs, list) or isinstance(pg, list):
         return _diff_list(fs if isinstance(fs, list) else None,
                           pg if isinstance(pg, list) else None, ignore)
     if isinstance(fs, dict) or isinstance(pg, dict):
-        return _diff_dict(fs, pg, ignore)
+        return _diff_dict(fs, pg, ignore, normalize)
     # scalar (e.g. a COUNT): direct compare after normalization.
     a, b = _norm(fs), _norm(pg)
     return {} if a == b else {'<value>': (a, b)}
@@ -212,11 +232,13 @@ class ReadRouter:
             )
             return pg_call(session)
 
-    def _shadow_compare(self, flag, fs_result, pg_call, engine, ignore, extract=None) -> None:
+    def _shadow_compare(self, flag, fs_result, pg_call, engine, ignore, extract=None, normalize=None) -> None:
         """Read PG, compare to the Firestore result, log mismatches + a periodic
         rolling summary. Never raises, never mutates the response (Firestore stays
         authoritative in shadow). `extract` maps each result to the comparable part
-        (e.g. a paginated reader's `items` list) without changing what's returned."""
+        (e.g. a paginated reader's `items` list) without changing what's returned.
+        `normalize` ({field: callable}) is applied to both sides per field before
+        the diff (intended-transform fields)."""
         try:
             pg_result = self._pg_read(pg_call, engine)
         except Exception:  # noqa: BLE001 — a broken shadow read must not affect the request
@@ -226,7 +248,7 @@ class ReadRouter:
             return
         fs_cmp = extract(fs_result) if extract else fs_result
         pg_cmp = extract(pg_result) if extract else pg_result
-        diff = _diff(fs_cmp, pg_cmp, ignore)
+        diff = _diff(fs_cmp, pg_cmp, ignore, normalize)
         stats = _shadow_stats.setdefault(flag, [0, 0])
         stats[0] += 1
         if diff:
@@ -239,14 +261,15 @@ class ReadRouter:
                 flag, stats[0], stats[1],
             )
 
-    def _route_read(self, flag, fs_call, pg_call, *, ignore=frozenset(), extract=None, also=None):
+    def _route_read(self, flag, fs_call, pg_call, *, ignore=frozenset(), extract=None, also=None, normalize=None):
         """The 3-state per-entity gate. See module docstring. `extract` (shadow only)
         maps each result to its comparable part for paginated/wrapped reads. `also`
         (optional) is ONE or MORE additional entity flags this reader depends on — a
         single flag string, or a tuple/list of them — and the effective mode becomes
         the WEAKER of `flag` and every `also` flag (cross-family readers, e.g.
         list_student_classes reads PG class rows via an enrollment JOIN; the analytics
-        session/event readers depend on two upstream families each)."""
+        session/event readers depend on two upstream families each). `normalize`
+        (shadow only) canonicalizes specific fields on both sides before the diff."""
         if also:
             also_flags = (also,) if isinstance(also, str) else tuple(also)
             mode = _weaker_mode(flag, *also_flags)
@@ -259,7 +282,7 @@ class ReadRouter:
             return fs_call()
         if mode == 'shadow':
             fs_result = fs_call()
-            self._shadow_compare(flag, fs_result, pg_call, engine, ignore, extract)
+            self._shadow_compare(flag, fs_result, pg_call, engine, ignore, extract, normalize)
             return fs_result
         try:                                     # mode == '1': PG authoritative
             pg_result = self._pg_read(pg_call, engine)
@@ -530,6 +553,7 @@ class ReadRouter:
             lambda: self._fs.get_assignment(assignment_id),
             pg_call,
             ignore=_ASSIGNMENT_SHADOW_IGNORE,
+            normalize=_ASSIGNMENT_SHADOW_NORMALIZE,
         )
 
     def list_class_assignments(self, class_id, statuses=None):

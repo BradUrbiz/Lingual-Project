@@ -943,6 +943,8 @@ def _make_assignment(**o):
     a.target_language_intensity = o.get('target_language_intensity', 'target_led')
     a.canvas_module_item_ref = o.get('canvas_module_item_ref', None)
     a.canvas_module_item_id = o.get('canvas_module_item_id', None)
+    a.grade_metric = o.get('grade_metric', None)
+    a.grade_points = o.get('grade_points', None)
     a.created_at = o.get('created_at', datetime.datetime(2026, 5, 30))
     a.updated_at = o.get('updated_at', datetime.datetime(2026, 5, 30))
     return a
@@ -964,6 +966,21 @@ class TestAssignmentsReadAdapter(unittest.TestCase):
         out = assignments_read._serialize_assignment(
             _make_assignment(canvas_module_item_id=None), 'o', 'c')
         self.assertEqual(out['canvas_module_item_id'], '')
+
+    def test_serialize_dates_are_iso_or_empty_and_grade_config_present(self):
+        # release_at/due_at must match the Firestore stored SHAPE (ISO string or '')
+        # so serialize_assignment doesn't pass a raw datetime through to the API.
+        unset = assignments_read._serialize_assignment(_make_assignment(), 'o', 'c')
+        self.assertEqual(unset['release_at'], '')          # None -> '' (Firestore default)
+        self.assertEqual(unset['due_at'], '')
+        set_ = assignments_read._serialize_assignment(
+            _make_assignment(due_at=datetime.datetime(2026, 6, 1)), 'o', 'c')
+        self.assertEqual(set_['due_at'], '2026-06-01T00:00:00')   # ISO string, not datetime
+        # grade config MUST be present (read by api_get_grade_config off this dict):
+        graded = assignments_read._serialize_assignment(
+            _make_assignment(grade_metric='completion', grade_points=10.0), 'o', 'c')
+        self.assertEqual(graded['grade_metric'], 'completion')
+        self.assertEqual(graded['grade_points'], 10.0)
 
     def test_serialize_carries_tutor_bearing_content(self):
         out = assignments_read._serialize_assignment(
@@ -1012,10 +1029,11 @@ class TestAssignmentRouting(unittest.TestCase):
         with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: {'id': 'a1', 'src': 'pg'}):
             self.assertEqual(router.get_assignment('a1'), {'id': 'a1', 'src': 'pg'})
 
-    def test_get_assignment_shadow_allowlists_intensity_and_timestamps(self):
+    def test_get_assignment_shadow_normalizes_intensity_and_dates(self):
         os.environ['READ_PG_ASSIGNMENTS'] = 'shadow'
-        # Firestore raw legacy intensity + ISO date strings vs PG normalized value +
-        # parsed timestamp: BOTH allowlisted (intended normalization / format skew).
+        # Firestore raw legacy intensity + 'Z'-suffixed ISO date vs PG canonical value
+        # + '+00:00' date: compared AFTER the per-field normalizer, so the intended
+        # transform/format skew is clean (not a blanket ignore). updated_at is ignored.
         fs = types.SimpleNamespace(
             get_assignment=lambda aid: {
                 'id': aid, 'status': 'published', 'instructions': 'X',
@@ -1031,8 +1049,22 @@ class TestAssignmentRouting(unittest.TestCase):
             with self.assertLogs('backend.db.read_router', level='WARNING') as cm:
                 router.get_assignment('a1')
         joined = ' '.join(cm.output)
-        self.assertNotIn('MISMATCH', joined)              # intensity + dates allowlisted
+        self.assertNotIn('MISMATCH', joined)              # normalized -> clean
         self.assertIn('1 compared, 0 mismatched', joined)
+
+    def test_get_assignment_shadow_flags_real_intensity_drift(self):
+        os.environ['READ_PG_ASSIGNMENTS'] = 'shadow'
+        # A NON-legacy divergence (balanced vs target_led) is NOT normalized away —
+        # it surfaces, proving the normalizer is narrower than a blanket ignore.
+        fs = types.SimpleNamespace(
+            get_assignment=lambda aid: {'id': aid, 'target_language_intensity': 'balanced'})
+        router = ReadRouter(fs, sql_engine=lambda: object())
+        with mock.patch.object(
+            ReadRouter, '_pg_read',
+            lambda self, pc, eng: {'id': 'a1', 'target_language_intensity': 'target_led'}):
+            with self.assertLogs('backend.db.read_router', level='WARNING') as cm:
+                router.get_assignment('a1')
+        self.assertIn('MISMATCH', ' '.join(cm.output))
 
     def test_get_assignment_shadow_still_flags_content_drift(self):
         os.environ['READ_PG_ASSIGNMENTS'] = 'shadow'

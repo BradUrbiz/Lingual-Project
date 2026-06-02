@@ -29,6 +29,14 @@ from backend.db.models.assignment import Assignment
 from backend.db.models.org import Class, Organization
 
 
+def _iso_or_empty(value) -> str:
+    """release_at/due_at match the Firestore stored SHAPE: an ISO string when set,
+    '' when unset (Firestore's create default). Emitting a raw datetime here would
+    make serialize_assignment pass it through unconverted, so the flag=1 API would
+    render RFC-1123 instead of the ISO string the SPA already receives."""
+    return value.isoformat() if value is not None else ''
+
+
 def _serialize_assignment(row: Assignment, org_legacy_id, class_legacy_id) -> dict[str, Any]:
     """Render an Assignment row as the Firestore `get_assignment` doc shape."""
     return {
@@ -38,8 +46,8 @@ def _serialize_assignment(row: Assignment, org_legacy_id, class_legacy_id) -> di
         'title': row.title,
         'description': row.description,
         'status': row.status,
-        'release_at': row.release_at,
-        'due_at': row.due_at,
+        'release_at': _iso_or_empty(row.release_at),
+        'due_at': _iso_or_empty(row.due_at),
         'modality_override': row.modality_override,
         'max_attempts': row.max_attempts,
         'task_type': row.task_type,
@@ -57,6 +65,10 @@ def _serialize_assignment(row: Assignment, org_legacy_id, class_legacy_id) -> di
         'teacher_notes': row.teacher_notes,
         'student_instructions': row.student_instructions,
         'target_language_intensity': row.target_language_intensity,
+        # LTI grade-passback config — read by api_get_grade_config off this dict;
+        # MUST be present or the grade-config GET returns null at flag=1.
+        'grade_metric': row.grade_metric,
+        'grade_points': row.grade_points,
         'created_at': row.created_at,
         'updated_at': row.updated_at,
     }
@@ -87,7 +99,9 @@ def list_class_assignments(
     `statuses`. Mirrors the Firestore reader, which returns ALL statuses when none is
     given. Ordered by created_at for determinism (the Firestore reader is unordered;
     the shadow diffs by id-set, so order is not compared)."""
-    allowed = {s for s in (statuses or []) if s}
+    # Match the Firestore reader's _normalize_string_list: a NON-list `statuses`
+    # (incl. a bare string) means NO filter — never iterate a string into chars.
+    allowed = {s for s in statuses if s} if isinstance(statuses, (list, tuple)) else set()
     stmt = (
         select(
             Assignment,

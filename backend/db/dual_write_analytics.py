@@ -94,3 +94,26 @@ def shadow_update_assignment_canvas_link(
         )
 
     _run(sql_engine, 'update_assignment_canvas_link', op)
+
+
+def shadow_set_assignment_grade_config(
+    sql_engine: Any, *, assignment_id: str, grade_metric: Any, grade_points: Any
+) -> None:
+    """Mirror set_assignment_grade_config: targeted UPDATE of the LTI grade fields
+    ONLY (so the PG read adapter is a faithful inverse of get_assignment — the
+    grade-config GET reads metric/points off that dict). Keyed by
+    legacy_firestore_id; no-op when the assignment row is absent. Never an upsert."""
+    if not _enabled_assignments():
+        return
+    from sqlalchemy import update
+
+    from backend.db.models.assignment import Assignment
+
+    def op(session: Any) -> None:
+        session.execute(
+            update(Assignment)
+            .where(Assignment.legacy_firestore_id == assignment_id)
+            .values(grade_metric=grade_metric, grade_points=grade_points, updated_at=_utcnow())
+        )
+
+    _run(sql_engine, 'set_assignment_grade_config', op)

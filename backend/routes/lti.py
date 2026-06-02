@@ -708,6 +708,7 @@ def create_lti_blueprint(deps: RouteDeps) -> Blueprint:
                 assignment_id,
                 grade_metric=metric,
                 grade_points=float(points) if points else None,
+                sql_engine=deps.sql_engine,
             )
             return jsonify({'success': True})
         except SchoolContextPermissionError as exc:

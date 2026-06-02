@@ -125,7 +125,7 @@ class FakeLtiRoutesDb(FakeDbBase):
     def get_assignment_ref(self, assignment_id: str):
         return _AssignmentRef(self, assignment_id)
 
-    def set_assignment_grade_config(self, assignment_id, grade_metric, grade_points):
+    def set_assignment_grade_config(self, assignment_id, grade_metric, grade_points, *, sql_engine=None):
         assignment = self.assignments[assignment_id]
         assignment["grade_metric"] = grade_metric
         assignment["grade_points"] = grade_points

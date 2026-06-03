@@ -413,12 +413,12 @@ def primary_write_turn(
     all parents (org/class/assignment) are PG-authoritative and the session was just
     created in PG, so resolution should always succeed; a failure is a real error.
 
-    Same §5b.2 #7 gating as the shadow: events-flag-ON path; subsumes the standalone
-    session UPDATE (which self-disables). DURABILITY INVARIANT (§5b.2 #3) holds — every
-    row is built from request scope, never re-read from Firestore.
+    Unlike the shadow this is NOT gated on DUAL_WRITE_ANALYTICS_EVENTS — under retirement
+    PG is the sole store, so events MUST persist; `write_turn` enforces the events=1 prereq
+    fail-closed before dispatching here (a silent no-op would be permanent event loss, the
+    codex P1). Subsumes the standalone session UPDATE (which self-disables). DURABILITY
+    INVARIANT (§5b.2 #3) holds — every row is built from request scope, never re-read.
     """
-    if not _enabled_events():
-        return
     valid_events, session_values = _prepare_turn(events, session_updates)
     if not valid_events and not session_values:
         return
@@ -454,13 +454,23 @@ def write_turn(
             events=events,
             session_updates=session_updates,
         )
-    else:
-        primary_write_turn(
-            sql_engine,
-            session_firestore_id=session_firestore_id,
-            events=events,
-            session_updates=session_updates,
+        return
+    # PG is the SOLE store (retirement). The DUAL_WRITE_ANALYTICS_EVENTS gate only makes
+    # sense while Firestore is the backup — under retirement it is a HARD prereq, enforced
+    # fail-closed here (codex P1): with events off, `database.create_learning_event` skips
+    # Firestore AND `primary_write_turn` would otherwise no-op, dropping the turn's events
+    # from BOTH stores while the request succeeds. Raise instead -> 500 -> operator fixes.
+    if not _enabled_events():
+        raise RuntimeError(
+            'WRITE_FIRESTORE_ANALYTICS=0 (Postgres sole store) requires '
+            'DUAL_WRITE_ANALYTICS_EVENTS=1 — refusing to drop learning_events'
         )
+    primary_write_turn(
+        sql_engine,
+        session_firestore_id=session_firestore_id,
+        events=events,
+        session_updates=session_updates,
+    )
 
 
 def primary_create_practice_session(sql_engine: Any, *, session_doc: dict[str, Any]) -> None:

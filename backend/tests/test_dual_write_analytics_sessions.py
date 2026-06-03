@@ -446,12 +446,23 @@ class TestWriteRetirement(unittest.TestCase):
         self.assertEqual(captured['op_name'], 'write_turn')
         self.assertEqual(captured['timeout_ms'], 2000)
 
-    def test_primary_write_turn_noop_when_events_flag_off(self):
-        # events flag off -> primary_write_turn self-guards like the shadow
+    def test_write_turn_raises_when_retired_and_events_off(self):
+        # codex P1: WRITE_FIRESTORE_ANALYTICS=0 + DUAL_WRITE_ANALYTICS_EVENTS=0 would drop
+        # the turn's events from BOTH stores — write_turn must fail-closed (raise), not no-op.
+        os.environ['WRITE_FIRESTORE_ANALYTICS'] = '0'  # events flag left OFF
+        with mock.patch.object(da, 'primary_write_turn') as primary:
+            with self.assertRaises(RuntimeError):
+                da.write_turn(lambda: object(), session_firestore_id='s1',
+                              events=[{'id': 'e1'}], session_updates={})
+            primary.assert_not_called()
+
+    def test_primary_write_turn_writes_regardless_of_events_flag(self):
+        # primary_write_turn no longer self-gates on the events flag (write_turn enforces
+        # the prereq); it persists whenever there is something to write.
         with mock.patch.object(da, '_run_with_timeout_strict') as run:
             da.primary_write_turn(lambda: object(), session_firestore_id='s1',
-                                  events=[{'id': 'e1'}], session_updates={})
-            run.assert_not_called()
+                                  events=[{'id': 'e1'}], session_updates={'status': 'completed'})
+            run.assert_called_once()
 
     def test_apply_turn_strict_raises_on_unresolved_parent(self):
         """Fail-closed core: with PG the sole store, an unresolved FK parent must RAISE
@@ -476,6 +487,14 @@ class TestWriteRetirement(unittest.TestCase):
                 session_values={}, strict=False,
             )
         self.assertEqual(rec.statements, [])  # no insert when parents unresolved
+
+    def test_database_update_raises_when_retired_without_engine(self):
+        # codex P2: under retirement, a missing engine is a misconfiguration, not a
+        # silent no-op (mirrors create_practice_session). Raises BEFORE touching Firestore.
+        import database
+        os.environ['WRITE_FIRESTORE_ANALYTICS'] = '0'
+        with self.assertRaises(RuntimeError):
+            database.update_practice_session('s1', {'status': 'completed'}, sql_engine=None)
 
     def test_primary_create_uses_strict_runner(self):
         captured = {}

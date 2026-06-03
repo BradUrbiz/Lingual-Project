@@ -2424,13 +2424,18 @@ def update_practice_session(session_id, updates, *, sql_engine=None):
                 sql_engine, session_firestore_id=session_id, updates=updates
             )
     else:
-        # WRITE_FIRESTORE_ANALYTICS=0: skip Firestore. The fail-closed PG UPDATE
-        # self-disables when DUAL_WRITE_ANALYTICS_EVENTS=1 (the per-turn UPDATE rides
-        # write_turn); it fires only in the degenerate sessions=1/events=0 state.
-        if sql_engine is not None:
-            _da.primary_update_practice_session(
-                sql_engine, session_firestore_id=session_id, updates=updates
+        # WRITE_FIRESTORE_ANALYTICS=0: skip Firestore. Fail-CLOSED — a missing engine is a
+        # misconfiguration (PG is the sole store), so raise rather than silently no-op
+        # (mirrors create_practice_session; codex P2). The PG UPDATE self-disables when
+        # DUAL_WRITE_ANALYTICS_EVENTS=1 (the per-turn UPDATE rides write_turn), so it only
+        # does work in the degenerate events=0 state.
+        if sql_engine is None:
+            raise RuntimeError(
+                'update_practice_session: WRITE_FIRESTORE_ANALYTICS=0 requires sql_engine'
             )
+        _da.primary_update_practice_session(
+            sql_engine, session_firestore_id=session_id, updates=updates
+        )
 
 
 def list_assignment_practice_sessions(assignment_id):

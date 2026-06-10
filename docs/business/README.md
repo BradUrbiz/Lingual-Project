@@ -54,6 +54,7 @@ Use these status labels consistently:
 | `18-plang-school-market-position-research.md` | Founders, PM, GTM | Focused Plang School market-position, Seoul/Jeonnam adoption, and Korea-response memo. |
 | `19-positioning-substitute-risk-research.md` | Founders, PM, GTM | Substitute-risk read for the teacher-designed natural conversation plus classroom-evidence positioning. |
 | `20-zeta-engagement-strategy-research.md` | Founders, PM, product | Strategy evaluation of adopting Zeta (Scatter Lab)-style narrative engagement/gamification to maximize voluntary student speaking time, with execution conditions and guardrails. Written in Korean. |
+| `21-generative-modality-expansion-research.md` | Founders, PM, engineering | Technical feasibility and utility analysis of adding generated image/audio modalities (scene illustration, picture-description tasks, low-cost TTS, ambient audio) via hosted/open models, with model/licensing/cost matrix and safety architecture. Written in Korean. |
 
 ## Source hierarchy
 

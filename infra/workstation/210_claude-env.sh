@@ -22,5 +22,14 @@ if [ -z "$CLAUDE_TOKEN" ]; then
   exit 0
 fi
 
-printf 'export CLAUDE_CODE_OAUTH_TOKEN=%s\n' "$CLAUDE_TOKEN" > /etc/profile.d/claude-token.sh
+# Secret lands user-readable-only in the dev user's home (runs after
+# 010_add-user.sh, so /home/user exists); /etc/profile.d gets a secret-free stub.
+umask 077
+mkdir -p /home/user/.config
+printf 'export CLAUDE_CODE_OAUTH_TOKEN=%s\n' "$CLAUDE_TOKEN" > /home/user/.config/claude-token.sh
+chown user:user /home/user/.config/claude-token.sh
+
+cat > /etc/profile.d/claude-token.sh <<'EOF'
+[ -r "$HOME/.config/claude-token.sh" ] && . "$HOME/.config/claude-token.sh"
+EOF
 chmod 644 /etc/profile.d/claude-token.sh

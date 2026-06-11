@@ -13,7 +13,7 @@ set -e
 
 KEY="-Users-new-Documents-GitHub-Lingual-U-Lingual-Project"
 LOCAL="$HOME/.claude/projects/$KEY"
-REMOTE=":gcs,env_auth:lingu-480600-claude-state/projects/$KEY"
+REMOTE=":gcs,env_auth,bucket_policy_only=true:lingu-480600-claude-state/projects/$KEY"
 
 exec rclone bisync "$LOCAL" "$REMOTE" \
   --conflict-resolve newer \

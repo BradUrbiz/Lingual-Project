@@ -29,7 +29,12 @@ mkdir -p /home/user/.config
 printf 'export CLAUDE_CODE_OAUTH_TOKEN=%s\n' "$CLAUDE_TOKEN" > /home/user/.config/claude-token.sh
 chown user:user /home/user/.config/claude-token.sh
 
+# Full-scope login creds (claude auth login, persisted in $HOME) take
+# precedence: the env token is inference-only and blocks Remote Control,
+# so only fall back to it when no login credentials exist.
 cat > /etc/profile.d/claude-token.sh <<'EOF'
-[ -r "$HOME/.config/claude-token.sh" ] && . "$HOME/.config/claude-token.sh"
+if [ ! -f "$HOME/.claude/.credentials.json" ]; then
+  [ -r "$HOME/.config/claude-token.sh" ] && . "$HOME/.config/claude-token.sh"
+fi
 EOF
 chmod 644 /etc/profile.d/claude-token.sh

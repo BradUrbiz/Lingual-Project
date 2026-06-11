@@ -29,6 +29,7 @@ DOTENV=$(fetch_secret dev-dotenv)
 if [ -n "$DOTENV" ]; then
   printf '%s\n' "$DOTENV" > "$REPO_DIR/.env"
   chown user:user "$REPO_DIR/.env"
+  chmod 600 "$REPO_DIR/.env"
 else
   echo "220_lingual-env: dev-dotenv fetch failed; keeping existing .env" >&2
 fi
@@ -37,6 +38,7 @@ SA_JSON=$(fetch_secret dev-service-account-json)
 if [ -n "$SA_JSON" ]; then
   printf '%s\n' "$SA_JSON" > "$REPO_DIR/service-account.json"
   chown user:user "$REPO_DIR/service-account.json"
+  chmod 600 "$REPO_DIR/service-account.json"
 else
   echo "220_lingual-env: dev-service-account-json fetch failed; keeping existing file" >&2
 fi

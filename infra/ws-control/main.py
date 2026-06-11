@@ -100,10 +100,12 @@ PAGE = f"""<!doctype html>
 <h1>Claude Workstation (claude-1)</h1>
 <button id="signin">Google로 로그인</button>
 <div id="state" class="authed">…</div>
-<a class="btn authed" id="open" href="{TERMINAL_URL}" target="_blank">🤖 Claude 터미널 열기</a>
+<a class="btn authed" id="open" href="{TERMINAL_URL}" target="_blank">🤖 Claude 터미널 열기 (새 탭)</a>
 <button class="authed" id="start" onclick="act('start')">▶️ 켜기</button>
 <button class="authed" id="stop" onclick="act('stop')">⏹ 끄기</button>
 <small class="authed">켜는 데 ~2분 · 30분 유휴 시 자동 종료</small>
+<iframe id="term" style="display:none; width:100%; max-width:900px; height:65vh;
+  border:1px solid #333; border-radius:12px;" allow="clipboard-read; clipboard-write"></iframe>
 <script type="module">
 import {{ initializeApp }} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {{ getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged }}
@@ -142,6 +144,10 @@ async function refresh() {{
     document.getElementById('open').classList.toggle('disabled', s !== 'STATE_RUNNING');
     document.getElementById('start').disabled = s !== 'STATE_STOPPED';
     document.getElementById('stop').disabled = s !== 'STATE_RUNNING';
+    const term = document.getElementById('term');
+    if (s === 'STATE_RUNNING' && !term.src) term.src = '{TERMINAL_URL}';
+    if (s !== 'STATE_RUNNING' && term.src) term.src = '';
+    term.style.display = s === 'STATE_RUNNING' ? 'block' : 'none';
   }} catch (e) {{ document.getElementById('state').textContent = 'ERR'; }}
 }}
 window.act = async a => {{

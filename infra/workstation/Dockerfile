@@ -27,9 +27,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 
 # Startup hooks: Secret Manager injection (Claude token, dev .env) and the
 # ttyd web terminal for mobile; claude-mobile is the ttyd entry command
-COPY 210_claude-env.sh 220_lingual-env.sh 230_ttyd.sh /etc/workstation-startup.d/
+COPY 205_bind-repo.sh 210_claude-env.sh 220_lingual-env.sh 230_ttyd.sh /etc/workstation-startup.d/
 COPY claude-mobile /usr/local/bin/claude-mobile
-RUN chmod +x /etc/workstation-startup.d/210_claude-env.sh \
+RUN chmod +x /etc/workstation-startup.d/205_bind-repo.sh \
+    /etc/workstation-startup.d/210_claude-env.sh \
     /etc/workstation-startup.d/220_lingual-env.sh \
     /etc/workstation-startup.d/230_ttyd.sh \
     /usr/local/bin/claude-mobile

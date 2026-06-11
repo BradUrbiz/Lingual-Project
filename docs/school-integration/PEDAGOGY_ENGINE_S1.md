@@ -10,7 +10,7 @@
 ## 1. The one sentence
 Introduce `backend/services/pedagogy/` with a thin `compile_prompt_plan(bootstrap) -> PromptPlan` and `render_assignment_prompt(plan, surface) -> str`, re-house **only the assignment prompt path** over it with **proven zero regression**, and ship **one** behavior win — grammar-target slips escalate to elicitation per `feedbackPolicy.mode` instead of waiting for the flat repeat threshold.
 
-That's it. No free-practice change, no learner model, no coach track, no coverage tracking, no renderer registry.
+That's it. No free-practice change, no learner model, no Conversation Sidecar / coach track, no coverage tracking, no renderer registry.
 
 ---
 
@@ -29,7 +29,7 @@ That's it. No free-practice change, no learner model, no coach track, no coverag
 - ❌ `CompiledConstraints` full model, `rubric`, `evidence_plan`, `allowances` — S2+.
 - ❌ `task_family` derivation, pretask/task/posttask phases — S2+.
 - ❌ Learner model, WTC/anxiety, coverage/evidence reader — S2/S4.
-- ❌ Coach track, `session.update`, pluggable renderer registry — S3.
+- ❌ Conversation Sidecar / coach track, Feedback / Ask side-panel UX, `session.update`, pluggable renderer registry — S3.
 - ❌ Affect-based routing override (needs a signal we don't capture) — S4.
 
 If a PR for S1 touches `main.py:build_system_prompt` or adds a second renderer plugin, it has left scope.
@@ -108,6 +108,8 @@ The existing section writers (`_build_assignment_spine` :1413, `_build_assignmen
 
 **`surface` parameter** (S1 use is minimal): `surface="voice"` vs `"text"`. In S1 the only surface-dependent behavior is **critical-rules-last ordering** and lean wording for voice (the realtime model's adherence is fragile). Text keeps current ordering. This is a function parameter, not a renderer plugin — the registry is S3.
 
+**Future sidecar compatibility:** S1 does not build the Conversation Sidecar. It must still keep target kind, feedback route, scaffold/output policy, and task context explicit in `PromptPlan` so S3 can feed the sidecar's **Feedback** mode without reparsing prompt text. Learner-initiated **Ask** mode (quick help, replay, clarification, translation, hint) is also deferred; S1 should not add UI or runtime calls for it.
+
 **`custom_prompt` / raw tutor mode:** `compile_prompt_plan` returns `None` for `task_type == "custom_prompt"`; the call site keeps today's early-return (`resolver.py:1594`) and the base prompt passes through. Engine off, no plan, exactly as now — just named honestly.
 
 ---
@@ -146,6 +148,7 @@ S1 doesn't build override UI. It does make the plan **inspectable**: `compile_pr
 - Grammar targets elicit-first per mode; vocab/expression recast; `recast_default` unchanged; zero stored-data migration.
 - Free practice untouched; `custom_prompt` passes through; all locales render; import-boundary test green; `make test-backend` green.
 - Plan serialized into `systemPromptPreview` for the future teacher preview.
+- S1 data shape remains sufficient for a later Conversation Sidecar Feedback mode; no Sidecar UI/runtime behavior ships in S1.
 
 ## 11. Doc-sync on completion
 - `TASKS.md`: mark S1 items; note free-chat parity + L8 override UI as fast-follows.

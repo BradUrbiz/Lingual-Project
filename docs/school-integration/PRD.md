@@ -331,4 +331,4 @@ Still open:
 
 - What retention defaults are acceptable across pilot schools after counsel review? (Tracks the counsel-review TASKS items for COPPA / FERPA / BIPA.)
 - Should pronunciation-specific audio storage be opt-in per assignment or per organization? (Currently no raw audio is persisted — see LIMITATIONS #16. The opt-in question only becomes live once recording infrastructure exists.)
-- How should the tutor pedagogy doctrine (short turns, scaffold ladder, anti-sycophancy, recycle cadence) be embedded into the realtime tutor without regressing instruction adherence on `gpt-realtime-mini`? Design spec: `docs/Pedagogy Research/2026-05-27-tutor-pedagogy-conversation-guidance-design.md`.
+- How should the tutor pedagogy doctrine (short turns, scaffold ladder, anti-sycophancy, recycle cadence) be embedded without overloading `gpt-realtime-mini`? Current direction: keep the main realtime tutor lean, compile teacher/student/course constraints in the Pedagogy Engine, and move side-channel correction + quick help into the Conversation Sidecar. Design specs: `docs/school-integration/PEDAGOGY_ENGINE.md` and `docs/school-integration/PEDAGOGY_ENGINE_S1.md`.

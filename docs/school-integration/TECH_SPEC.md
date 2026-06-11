@@ -1154,7 +1154,10 @@ Official references used to shape the architecture:
 ## 12. Open technical questions
 
 - Do we store any raw audio by default for general speaking assignments, or only for pronunciation-enabled assignments? (See LIMITATIONS #16 — no raw audio is persisted today.)
-- How should the tutor pedagogy layer (shared tutor doctrine + skill packs + optional coach track) be sequenced into the assignment resolver and free-chat builders without regressing instruction adherence on `gpt-realtime-mini`? Design spec: `docs/Pedagogy Research/2026-05-27-tutor-pedagogy-conversation-guidance-design.md`.
+
+Resolved current direction:
+
+- Tutor pedagogy sequencing is governed by `PEDAGOGY_ENGINE.md` and `PEDAGOGY_ENGINE_S1.md`: keep the main realtime tutor lean, compile teacher parameters + learner profile + course context into an engine plan, then introduce the Conversation Sidecar / coach track as the S3 side channel. The Sidecar has two learner-facing modes: **Feedback** for non-interruptive correction/self-repair chips and post-task review queue, and **Ask** for quick contextual help such as replay, clarification, translation, hints, or "how do I say X?" The after-conversation debrief remains a separate L7 teacher-facing surface, not the same thing as live sidecar feedback.
 
 Deferred (re-open with the Postgres migration):
 

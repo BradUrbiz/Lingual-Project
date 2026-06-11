@@ -3,8 +3,8 @@
 **Date:** 2026-06-02
 **Status:** Architecture / design. No code in this document. The build sequence (§14) is the bridge to implementation.
 **Owner:** (TBD)
-**Supersedes scope of:** `docs/Pedagogy Research/2026-05-27-tutor-pedagogy-conversation-guidance-design.md` (that doc scoped the work to prompt enrichment; this one re-frames it as an engine and re-houses the prompt work as the engine's first render target).
-**Research inputs (cited, not restated):** `docs/Pedagogy Research/deep-research-report.md` (Input B — SLA/TBLT meta-analyses), `docs/Pedagogy Research/deep-research-report (2).md` (Input C — turn-level algorithm, constraint compiler, eval framework, governance), and the synthesis in the 2026-05-27 spec (Input A).
+**Supersedes scope of:** the May 2026 tutor-guidance design (that doc scoped the work to prompt enrichment; this one re-frames it as an engine and re-houses the prompt work as the engine's first render target).
+**Research inputs (cited, not restated):** `docs/Pedagogy Research/deep-research-report.md` (Input B — SLA/TBLT meta-analyses), `docs/Pedagogy Research/deep-research-report (2).md` (Input C — turn-level algorithm, constraint compiler, eval framework, governance), and `docs/Pedagogy Research/Subagent Research.md` (voice-model prompting, eval harness, and coach-track synthesis).
 **Grounded against code at:** current HEAD. File:line references are real and were verified, not inferred.
 **Review:** codex consult (2026-06-02), SHIP-WITH-FIXES — corrections applied inline; see §0.1 for the revision log and the narrowed S1 it produced. Detailed S1 design lives in `PEDAGOGY_ENGINE_S1.md`.
 
@@ -89,8 +89,8 @@ These are load-bearing constraints, not style. Every layer must honor them.
     teacher fields)├──▶│ L2 CONSTRAINT    │──▶│ L1 TEACHING-  │──▶│ L4 TURN-     │──▶│  RENDER TARGET   │
                    │   │    COMPILER      │   │   PLAN        │   │  DECISION    │   │  (pluggable)     │
    LEARNER STATE ──┤   │   (the spine)    │   │ task family · │   │ per-turn     │   │ ├ system_prompt  │── today
-   (L3 learner ────┤   │ hard/soft/       │   │ pretask→task→ │   │ algorithm +  │   │ ├ coach_track    │── ②
-    model)         │   │ prohibited/      │   │ posttask ·    │   │ coach track  │   │ └ session.update │── ③
+   (L3 learner ────┤   │ hard/soft/       │   │ pretask→task→ │   │ algorithm +  │   │ ├ sidecar/feed   │── ②
+    model)         │   │ prohibited/      │   │ posttask ·    │   │ sidecar      │   │ └ session.update │── ③
                    │   │ rubric/evidence/ │   │ completion    │   │              │   │                  │
    TASK MODEL  ────┘   │ safety           │   │ condition     │   │ L5 FEEDBACK  │   └─────────────────┘
                        └──────────────────┘   └───────────────┘   │  POLICY      │            │
@@ -115,9 +115,9 @@ Layer-by-layer responsibility, current state, and gap. ("Today" reflects verifie
 | **L1** | Teaching-plan | Turn teacher goal into a *situated task* with family, phases, completion condition | `task_type` ∈ {information_gap, opinion_gap, decision_making, custom_prompt} (`assignment.py:71`); one GPT `generated_scenario`; `build_task_template_prompt` directive | No reusable task **library**, no task-**family** pedagogy beyond 3 enums, no pretask→task→posttask phase model |
 | **L2** ⭐ | Constraint compiler | Compile teacher fields into typed hard/soft/prohibited/rubric/evidence/safety constraints | Fields concatenated into prompt sections (SPINE / TARGETS / TUTOR STANCE) by `build_assignment_system_prompt` (`resolver.py:1588`) | **No compiler** — intent never becomes structured, coverable constraint objects; coverage/quota untracked |
 | **L3** | Learner model | Hold *can this student speak right now* — proficiency + mastery + error patterns + WTC/anxiety/readiness | `proficiency_context`: static ACTFL band + age/rigor/frequency (`main.py:337`); fallback = Intermediate Mid/High | No session-state, no affect signal, no per-target mastery; `learning_events` emits the primitives (read by analytics, not fed back to live tutoring) |
-| **L4** | Turn-decision / coach | Decide *what to do this learner turn*; run the coach track | Nothing — one system prompt set once at session start (`chat.py:489/506`); no per-turn or between-turns logic anywhere | No explicit turn algorithm, no parallel correction pass, no side channel |
+| **L4** | Turn-decision / coach | Decide *what to do this learner turn*; run the Conversation Sidecar / coach track | Nothing — one system prompt set once at session start (`chat.py:489/506`); no per-turn or between-turns logic anywhere | No explicit turn algorithm, no parallel correction pass, no side channel |
 | **L5** | Feedback policy | Route correction by target-type × affect × timing | `default_feedback_policy` (`resolver.py:49`): `recast_default: True`, `elicitation_repeat_threshold: 3`, `mode` ∈ {fluency_first, balanced, accuracy_first} | Knobs exist; **routing logic doesn't** — `recast_default` is a flat switch, not a target-type/affect router |
-| **L6** | Multimodal UI | Voice-first + selective text scaffolding; surface the coach track + ASR confidence | Realtime voice (`gpt-realtime-mini`) + text/avatar (`gpt-5.3-chat-latest`); single prompt + history | No coach panel, no captions/highlights/replay/pronunciation-compare, no confidence surfacing |
+| **L6** | Multimodal UI | Voice-first + selective text scaffolding; surface the sidecar/coach track + ASR confidence | Realtime voice (`gpt-realtime-mini`) + text/avatar (`gpt-5.3-chat-latest`); single prompt + history | No sidecar/coach panel, no captions/highlights/replay/pronunciation-compare, no confidence surfacing |
 | **L7** | Teacher analytics / debrief | Evidence-backed post-conversation report + dashboard + blended review | `practice_sessions` (rich: `pedagogy_snapshot`, `analysis_state`, `session_summary`, `transcript_ref`); `learning_events` taxonomy | No closed-loop debrief surface, no coverage report tied to L2 rubric, no confidence caveats packaged for teachers |
 | **Gov** | Governance | Retention / disclosure / log-separation / jurisdiction compliance | `compliance_state`, `disclosure_logs`, `guardian_packets`, `deletion_requests` | Differential voice/transcript/translation retention + eval-vs-operational separation not yet engine-aware |
 
@@ -213,12 +213,17 @@ The compiler's `hard_agenda` + `rubric` define *what to watch for*. The substrat
 
 ## 5. The render-target boundary (what makes it surface-agnostic)
 
-The engine produces a **TurnDirective / SessionPlan**; a *renderer* turns that into something a specific API consumes. Three renderers, one engine:
+The engine produces a **TurnDirective / SessionPlan**; a *renderer* turns that into something a specific API consumes. This creates a deliberate two-layer runtime model:
+
+1. **Main realtime tutor** — the voice/text partner the learner actually talks to. Its job is to hold the scene, keep turns short, invite production, and preserve momentum.
+2. **Curator / sidecar layer** — the engine-backed layer that compiles teacher parameters, learner profile, course context, task family, and feedback policy into plans, side-channel guidance, and eventually between-turn steering.
+
+The main tutor should do less as the sidecar matures. The curator layer carries the pedagogical load so the realtime prompt is not stuffed with every rule at once. Three render targets, one engine:
 
 | Renderer | Surface / API | Status | What it emits |
 |---|---|---|---|
 | `system_prompt` | Realtime voice (`gpt-realtime-mini`, `chat.py:489/506`) + text/avatar (`gpt-5.3-chat-latest`) | **today** | Assembled session-start prompt — exactly what `build_assignment_system_prompt` / `build_system_prompt` produce now, re-housed as a renderer over `SessionPlan` |
-| `coach_track` | Side-channel UI feed + parallel correction model | ② | Per-turn coach annotations; promote-back items into the main channel |
+| `conversation_sidecar` / `coach_track` | Side-channel UI feed + parallel correction/question model | ② | Per-turn coach annotations, learner quick-help answers, promote-back items into the main channel, post-task review feed |
 | `session.update` | Realtime between-turns steering | ③ (gated) | One-sentence re-steer on drift signals |
 
 **Two consumer models, one renderer contract.** The `system_prompt` renderer must serve *both* `gpt-realtime-mini` (voice; critical-rules-last, lean, explicit/unconditional wording — voice adherence is fragile) and `gpt-5.3-chat-latest` (text/avatar; tolerates more). The renderer is parameterized by surface, not forked per builder — which is the unification the old spec's "shared tutor core" was reaching for, now expressed as *one renderer over one plan* rather than *two builders sharing a string*.
@@ -243,7 +248,7 @@ For each learner turn:
 
 This is the same decision tree both research reports drew (Input C's mermaid `flowchart TD`); the engine implements it as L4 logic instead of hoping a voice model follows it implicitly.
 
-### 6.2 Coach track (the conversation-management payoff)
+### 6.2 Conversation Sidecar / coach track (the conversation-management payoff)
 A **parallel, cheaper correction model** analyzes each learner turn and writes findings to a **side channel** silently (preserves flow / WTC / low affective filter). **Promote-back rule:** repeated errors and errors on teacher hard-targets surface into the *main* conversation for in-the-moment self-repair ("Earlier you said X — want to try that again?"). Flow by default, uptake by exception.
 
 **Architectural payoff:** removing correction from the main tutor's job collapses it to *hold a good conversation* — directly easing the ~30% voice instruction-adherence ceiling, which worsens as instructions stack. The correction model can be accuracy-tuned free of flow constraints and tested independently.
@@ -251,6 +256,13 @@ A **parallel, cheaper correction model** analyzes each learner turn and writes f
 **Reuses existing knobs, no new config:** the promote-back policy *is* `feedbackPolicy` — `elicitation_repeat_threshold` becomes the promote-back threshold; `mode` sets aggressiveness (`fluency_first` rarely promotes, `accuracy_first` promotes sooner). The correction-ladder semantics move from "inline escalation" to "side-channel → main-channel escalation."
 
 **Risks** (carried from old spec §7.1, still live): under-promotion turns the coach track into an unread mistakes-list (losing uptake); split attention in voice (keep terse, surface at breakpoints, expand on demand); two-model disagreement (main tutor stays correction-light, leaving correction ownership to the coach model).
+
+**Product surface — Conversation Sidecar.** The learner-facing UI should expose the side channel as a compact sidecar with two modes:
+
+- **Feedback** — coach-track chips, target reminders, self-repair prompts, ASR-confidence caveats, and the accumulated post-task review queue.
+- **Ask** — learner-initiated quick help for "what was that word?", "how do I say X?", replay, clarification, translation, or a hint.
+
+The two modes share the same engine constraints: stay inside the assignment/course scope, respect `feedbackPolicy` + scaffold/output policy, never outsource the student's full answer, and log help usage separately from student production. Model answers, translations, and hints given through **Ask** are scaffolds, not evidence that the learner produced the form. Question responses should be terse (chip or 1-2 sentences), return responsibility to the learner, and prefer hint / forced choice / short model + retry over direct answer dumping.
 
 ---
 
@@ -307,15 +319,15 @@ Not one default — a router on **target-type × affect × timing**, atop a flow
 
 ## 10. Multimodal interface layer (L6)
 
-**Voice-first, text-supported** (ReCALL meta-analysis: mixed modality outperforms voice-only; visual support helps lower-proficiency learners *locate* errors to self-repair). The coach track (§6.2) *is* the primary text-support surface — promoting the old spec's "someday multimodal track" to first-class.
+**Voice-first, text-supported** (ReCALL meta-analysis: mixed modality outperforms voice-only; visual support helps lower-proficiency learners *locate* errors to self-repair). The Conversation Sidecar (§6.2) *is* the primary text-support surface — promoting the old spec's "someday multimodal track" to first-class.
 
-Surfaces, by priority: coach-track panel (voice: beside realtime UI; text: side panel/collapsible) → ASR-confidence surfacing (visually mark uncertain recognition) → key-expression highlights / captions → replay + pronunciation comparison (deferred extras). Frontend track touching `useRealtimeChat` + realtime/avatar UI. Keep terse; surface at breakpoints; expand on demand (split-attention risk).
+Surfaces, by priority: sidecar panel with **Feedback / Ask** toggle (voice: beside realtime UI; text: side panel/collapsible) → ASR-confidence surfacing (visually mark uncertain recognition) → key-expression highlights / captions → replay + pronunciation comparison (deferred extras). Frontend track touching `useRealtimeChat` + realtime/avatar UI. Keep terse; surface at breakpoints; expand on demand (split-attention risk). Never require reading while the learner is actively speaking; legal windows are silent write, between-turn chip, or post-task review.
 
 ---
 
 ## 11. Teacher analytics / debrief layer (L7)
 
-The coach track is *live, learner-facing*. L7 is the *after-conversation, teacher-facing* counterpart — a different problem (stable summary vs. in-the-moment momentum). It packages the §4.4 evidence state: hard-target coverage, learner uptake/self-repair, repeated-error families, **confidence caveats** (which pronunciation/listening claims were *not* made because ASR was uncertain — honesty over false precision), and a suggested next practice.
+The Conversation Sidecar is *live, learner-facing*. L7 is the *after-conversation, teacher-facing* counterpart — a different problem (stable summary vs. in-the-moment momentum). It packages the §4.4 evidence state: hard-target coverage, learner uptake/self-repair, repeated-error families, sidecar help usage, **confidence caveats** (which pronunciation/listening claims were *not* made because ASR was uncertain — honesty over false precision), and a suggested next practice.
 
 Built on existing substrate — `practice_sessions` already carries `pedagogy_snapshot`, `analysis_state`, `session_summary`, `transcript_ref`; `learning_events` carries the metrics. L7 is a *reader + presenter*, not a new pipeline. Depends on analytics maturity + retention policy + teacher UX, so it lands after the spine + coach track. **Do not** market a generated summary as evidence-backed until coverage tracking is real (LIMITATIONS #7/#8: analytics are heuristic for now).
 
@@ -363,7 +375,7 @@ The pivot raises the *ceiling*, not the *batch size*. Build the engine in **vert
 |---|---|---|---|---|
 | **S1 — Thin spine** (narrowed per codex §0.1) | Reborn `backend/services/pedagogy/`: `compile_prompt_plan(bootstrap) -> PromptPlan` (§4.2a — targets + feedback_policy + task_context only) and `render_assignment_prompt(plan, surface)`. Re-house **only the assignment path** over the plan; **do not touch free practice**; prove zero prompt regression via snapshot; ship **one** visible behavior win (grammar-target slips escalate per `feedbackPolicy.mode`). Detailed in `PEDAGOGY_ENGINE_S1.md`. | L2 (thin), L5 (routing only) + render-helper | `system_prompt` (assignment only) | new backend module + tests + eval harness (not "zero" — see note) |
 | **S2 — Closed loop** | Coverage/evidence reader over existing `learning_events`; L3 learner-model accumulates mastery + error patterns (no affect yet); feeds recycling + uncovered-target awareness back into S1's plan. | L3 (partial), L2 coverage | `system_prompt` | reader only (no new store) |
-| **S3 — Coach track** | Parallel correction model + side-channel; L4 turn algorithm; promote-back via existing `feedbackPolicy`; L6 coach panel (the multimodal text-support surface). Main tutor goes correction-light. | L4, L6, render | `coach_track` | parallel model call + UI |
+| **S3 — Conversation Sidecar / coach track** | Parallel correction model + side-channel; L4 turn algorithm; promote-back via existing `feedbackPolicy`; L6 sidecar panel with Feedback / Ask modes (the multimodal text-support surface). Main tutor goes correction-light. | L4, L6, render | `conversation_sidecar` / `coach_track` | parallel model call + UI |
 | **S4 — Affect + debrief** | WTC/anxiety signals into L3 (silence/turn-trend/repair/abandonment); affect override in L5; L7 evidence-backed teacher debrief over `practice_sessions`. | L3 (full), L5 affect, L7 | both | analytics presenter |
 | **S5 — Director (gated)** | Between-turns `session.update` re-steer on drift — **only if** S1–S4 eval shows static composition plateaus below target. | L4 runtime | `session.update` | +latency/cost; prove first |
 | **Eval harness** | Simulated-student + LLM-judge (§13.1) — built alongside **S1**, not after, so every slice is gated by regression, not vibes. | — | — | CI job |
@@ -380,8 +392,9 @@ S1 is a **subset** of the prompt work the old spec scoped — assignment-path on
 - **Cathedral risk** (the pivot's own failure mode): designing six layers tempts building them all. Mitigation: the vertical-slice sequence (§14); each slice ships student value; S5 is gated on eval, not faith.
 - **Reborn-engine recurrence:** the old `pedagogy/` died from content-source coupling. New invariant (content+surface-agnostic, §1.3) is the guard — but it must be *enforced in review*, not just stated.
 - **Recycling without SRS state:** S1/S2 do in-session + best-effort cross-session recycling; true spaced retrieval needs per-target acquisition state (deferred).
-- **Voice instruction adherence (~30%):** the coach track (S3) is the structural mitigation (shrink the main tutor's instruction load); until then, lean prompt + critical-rules-last.
-- **Two-model coordination** (main tutor vs. coach model): dedup/ownership rules needed (§6.2).
+- **Voice instruction adherence (~30%):** the Conversation Sidecar / coach track (S3) is the structural mitigation (shrink the main tutor's instruction load); until then, lean prompt + critical-rules-last.
+- **Two-model coordination** (main tutor vs. coach model): dedup/ownership rules needed (§6.2); the sidecar must know when the main tutor already addressed an issue.
+- **Ask-mode answer outsourcing:** learner quick-help can become a covert answer generator. Mitigation: scope to hints/clarification/replay/short model + retry, mark sidecar-assisted turns, and exclude direct sidecar answers from student-production evidence.
 - **Derived rubric honesty:** when the compiler derives a rubric the teacher didn't set, the debrief must caveat it (`source=derived`) — don't present inferred dimensions as teacher intent.
 - **ASR accent/age bias:** confidence-gate correction, human-anchor pronunciation, subgroup audits before scale, conservative auto-correction for minors/beginners.
 - **Translation dependence:** treat MT as emergency scaffold; mark MT-assisted turns; keep them out of the productivity signal; governed by the existing language-mix policy.
@@ -389,7 +402,7 @@ S1 is a **subset** of the prompt work the old spec scoped — assignment-path on
 - **Vendor-reported efficacy** (Duolingo/Khanmigo/TalkPal): directional, not RCTs.
 
 ## 16. Relationship to existing docs (doc-sync)
-- **`TECH_SPEC.md`:** add the Pedagogy Engine as a content+surface-agnostic subsystem (`backend/services/pedagogy/` reborn): compiler → plan → policy → pluggable renderer; note the coach track + render-target boundary; note L7 debrief as an analytics-backed surface distinct from live coach feedback.
+- **`TECH_SPEC.md`:** add the Pedagogy Engine as a content+surface-agnostic subsystem (`backend/services/pedagogy/` reborn): compiler → plan → policy → pluggable renderer; note the Conversation Sidecar / coach track + render-target boundary; note L7 debrief as an analytics-backed surface distinct from live sidecar feedback.
 - **`TASKS.md`:** add S1–S5 + eval-harness as phased items (§14).
 - **`LIMITATIONS.md`:** in-session-only recycling (no SRS), pronunciation/listening deferred beyond confidence-aware confirmation, younger-child mode out of scope, `custom_prompt` render-bypass excludes engine guarantees, derived-rubric caveat, heuristic analytics until coverage tracking is real.
 - **`PRD.md`:** frame the engine as the technical embodiment of "teacher-designed practice, AI-executed at student scale."

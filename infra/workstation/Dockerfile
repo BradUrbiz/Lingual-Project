@@ -25,6 +25,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @anthropic-ai/claude-code firebase-tools
 
-# Startup hook: pulls the Claude OAuth token from Secret Manager at boot
-COPY 210_claude-env.sh /etc/workstation-startup.d/210_claude-env.sh
-RUN chmod +x /etc/workstation-startup.d/210_claude-env.sh
+# Startup hooks: pull the Claude OAuth token and Lingual dev secrets
+# from Secret Manager at boot
+COPY 210_claude-env.sh 220_lingual-env.sh /etc/workstation-startup.d/
+RUN chmod +x /etc/workstation-startup.d/210_claude-env.sh \
+    /etc/workstation-startup.d/220_lingual-env.sh

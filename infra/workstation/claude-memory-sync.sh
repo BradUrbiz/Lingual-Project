@@ -11,6 +11,10 @@
 # so real conflicts can only come from memory/*.md edits on both sides.
 set -e
 
+# Hook-safe: hooks run with a minimal PATH; cover Homebrew and ~/.local/bin
+export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
+command -v rclone >/dev/null || { echo "rclone not installed; skipping sync"; exit 0; }
+
 KEY="-Users-new-Documents-GitHub-Lingual-U-Lingual-Project"
 LOCAL="$HOME/.claude/projects/$KEY"
 REMOTE=":gcs,env_auth,bucket_policy_only=true:lingu-480600-claude-state/projects/$KEY"

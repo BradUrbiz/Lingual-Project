@@ -1,0 +1,7 @@
+#!/bin/bash
+# Entry command for the ttyd web terminal: drop straight into the shared
+# tmux session with Claude Code running in the repo — no typing needed.
+# Same session name as the Mac-side `wst` alias, so phone and desktop
+# attach to the same live session.
+cd /Users/new/Documents/GitHub/Lingual-U/Lingual-Project 2>/dev/null || cd "$HOME"
+exec bash -lc 'tmux new -As work claude'

@@ -8,7 +8,7 @@ FROM us-central1-docker.pkg.dev/cloud-workstations-images/predefined/base:latest
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv \
     default-jre-headless \
-    tmux ripgrep jq make \
+    tmux ripgrep jq make ttyd \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI (official apt repo — Debian's packaged gh is too old)
@@ -25,8 +25,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @anthropic-ai/claude-code firebase-tools
 
-# Startup hooks: pull the Claude OAuth token and Lingual dev secrets
-# from Secret Manager at boot
-COPY 210_claude-env.sh 220_lingual-env.sh /etc/workstation-startup.d/
+# Startup hooks: Secret Manager injection (Claude token, dev .env) and the
+# ttyd web terminal for mobile; claude-mobile is the ttyd entry command
+COPY 210_claude-env.sh 220_lingual-env.sh 230_ttyd.sh /etc/workstation-startup.d/
+COPY claude-mobile /usr/local/bin/claude-mobile
 RUN chmod +x /etc/workstation-startup.d/210_claude-env.sh \
-    /etc/workstation-startup.d/220_lingual-env.sh
+    /etc/workstation-startup.d/220_lingual-env.sh \
+    /etc/workstation-startup.d/230_ttyd.sh \
+    /usr/local/bin/claude-mobile

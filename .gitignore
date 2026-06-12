@@ -26,6 +26,9 @@ frontend/.omc/
 .claude/
 .agents/
 
+# Local education-session article drafts
+docs/school-integration/PEDAGOGY_HARNESS_EDUCATION.md
+
 # Sales outreach working data — contains real teacher contacts.
 # Schema reference lives in docs/sales/*.example.csv (tracked).
 docs/sales/teacher_dmv.csv

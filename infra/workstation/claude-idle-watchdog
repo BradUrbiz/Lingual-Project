@@ -1,0 +1,91 @@
+#!/bin/bash
+# claude-idle-watchdog — activity-aware auto-stop for the claude-1 workstation.
+#
+# Cloud Workstations' native idleTimeout is *connection*-based: it stops the VM
+# a fixed time after the last SSH/HTTP gateway connection drops, regardless of
+# what the machine is doing. That would kill a long autonomous Claude run the
+# moment the phone disconnects. So we disable the native idle timeout
+# (idleTimeout=0) and let this daemon decide instead:
+#
+#   * stay up while Claude is genuinely ACTIVE, even with no connection;
+#   * self-stop only after GRACE seconds of real inactivity.
+#
+# runningTimeout remains an independent hard backstop: if this daemon ever dies,
+# the VM still stops on its own eventually. Launched as root by 250_watchdog.sh.
+
+set -u
+
+GRACE=${GRACE:-1800}            # seconds of real inactivity before self-stop
+INTERVAL=${INTERVAL:-120}       # seconds between checks
+LOAD_THRESH=${LOAD_THRESH:-0.40} # 1-min loadavg at/above this = "working"
+TMUX_USER=${TMUX_USER:-user}
+TMUX_SESSION=${TMUX_SESSION:-work}
+
+WS_RESOURCE="projects/lingu-480600/locations/us-central1/workstationClusters/claude-cluster/workstationConfigs/claude-dev/workstations/claude-1"
+META_TOKEN_URL="http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
+
+log() { echo "$(date '+%F %T') watchdog: $*"; }
+
+pane_hash() {
+  # Talks to the dev user's tmux server; empty if the session isn't up yet.
+  runuser -u "$TMUX_USER" -- tmux capture-pane -t "$TMUX_SESSION" -p 2>/dev/null \
+    | md5sum | cut -d' ' -f1
+}
+
+# Returns 0 (active) if any sign of life; updates LAST_HASH as a side effect.
+is_active() {
+  # 1) interactive login present (e.g. an SSH pty) — keep alive while attached.
+  who 2>/dev/null | grep -q . && return 0
+
+  # 2) load average above threshold — real CPU work (builds, tests, tool calls)
+  #    even when the screen isn't visibly changing.
+  local load
+  load=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null)
+  awk -v l="$load" -v t="$LOAD_THRESH" 'BEGIN{exit !(l+0 >= t+0)}' && return 0
+
+  # 3) tmux pane changed since last check — Claude is streaming output.
+  local h
+  h=$(pane_hash)
+  if [ -n "$h" ] && [ "$h" != "$LAST_HASH" ]; then
+    LAST_HASH=$h
+    return 0
+  fi
+  return 1
+}
+
+stop_self() {
+  log "inactive >= ${GRACE}s — requesting workstation stop"
+  local tok
+  tok=$(curl -s -H "Metadata-Flavor: Google" "$META_TOKEN_URL" \
+        | jq -r '.access_token // empty')
+  if [ -z "$tok" ]; then
+    log "no metadata token; cannot stop"
+    return 1
+  fi
+  curl -s -X POST -H "Authorization: Bearer $tok" \
+    "https://workstations.googleapis.com/v1/${WS_RESOURCE}:stop" \
+    -o /tmp/watchdog-stop.json
+  log "stop API response: $(head -c 200 /tmp/watchdog-stop.json 2>/dev/null)"
+}
+
+LAST_HASH=$(pane_hash)
+LAST_ACTIVE=$(date +%s)
+log "started (grace=${GRACE}s interval=${INTERVAL}s load_thresh=${LOAD_THRESH})"
+
+while true; do
+  sleep "$INTERVAL"
+  if is_active; then
+    LAST_ACTIVE=$(date +%s)
+    continue
+  fi
+  now=$(date +%s)
+  idle=$(( now - LAST_ACTIVE ))
+  log "inactive ${idle}s / ${GRACE}s"
+  if [ "$idle" -ge "$GRACE" ]; then
+    stop_self
+    # The VM normally disappears here. If the stop didn't take (transient
+    # error), reset the timer and keep watching rather than hammering the API.
+    sleep 60
+    LAST_ACTIVE=$(date +%s)
+  fi
+done

@@ -25,13 +25,17 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @anthropic-ai/claude-code firebase-tools
 
-# Startup hooks: Secret Manager injection (Claude token, dev .env) and the
-# ttyd web terminal for mobile; claude-mobile is the ttyd entry command
-COPY 205_bind-repo.sh 210_claude-env.sh 220_lingual-env.sh 230_ttyd.sh 240_claude-session.sh /etc/workstation-startup.d/
-COPY claude-mobile /usr/local/bin/claude-mobile
+# Startup hooks: Secret Manager injection (Claude token, dev .env), the ttyd
+# web terminal for mobile, Claude auto-start, and the activity-aware idle
+# watchdog (250). claude-mobile is the ttyd entry command; claude-idle-watchdog
+# is the self-stop daemon that replaces the connection-based idleTimeout.
+COPY 205_bind-repo.sh 210_claude-env.sh 220_lingual-env.sh 230_ttyd.sh 240_claude-session.sh 250_watchdog.sh /etc/workstation-startup.d/
+COPY claude-mobile claude-idle-watchdog /usr/local/bin/
 RUN chmod +x /etc/workstation-startup.d/205_bind-repo.sh \
     /etc/workstation-startup.d/210_claude-env.sh \
     /etc/workstation-startup.d/220_lingual-env.sh \
     /etc/workstation-startup.d/230_ttyd.sh \
     /etc/workstation-startup.d/240_claude-session.sh \
-    /usr/local/bin/claude-mobile
+    /etc/workstation-startup.d/250_watchdog.sh \
+    /usr/local/bin/claude-mobile \
+    /usr/local/bin/claude-idle-watchdog

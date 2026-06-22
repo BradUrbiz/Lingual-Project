@@ -1,6 +1,6 @@
 # Pedagogy Engine — S2 Closed-Loop Recycling (detailed design)
 
-**Status:** DESIGN APPROVED 2026-06-22 — not yet built. Sibling to `PEDAGOGY_ENGINE_S1.md`; realizes the **S2 row** of `PEDAGOGY_ENGINE.md` §14 and the §4.4 / §7 closed loop.
+**Status:** BUILT behind flag 2026-06-23 — `PEDAGOGY_ENGINE_RECYCLING` (cloudbuild default `'0'`), **not yet cut over**. Sibling to `PEDAGOGY_ENGINE_S1.md`; realizes the **S2 row** of `PEDAGOGY_ENGINE.md` §14 and the §4.4 / §7 closed loop. **As-built narrowing vs this design:** coverage tiering is **expression + vocabulary targets only** (the surfaces with real per-target hit maps in `session_summary`); grammar rules + objectives stay on S1 routing and are out of S2 coverage scope. The route coverage compute is **fail-open** (any reader/compute failure → `coverage_state=None`, never a live-path 500) and gated on BOTH `PEDAGOGY_ENGINE_RECYCLING=1` and `PEDAGOGY_ENGINE_ASSIGNMENT_RENDER=1` (zero extra reads when off).
 **Prereq:** S1 is live in prod (`PEDAGOGY_ENGINE_ASSIGNMENT_RENDER=1`, rev 00067; see `PEDAGOGY_ENGINE_S1.md` §10 and LIMITATIONS #53). Recycling only renders through the engine, so S2 has no effect unless the S1 render flag is on.
 
 ---
@@ -79,10 +79,11 @@ class CoverageState:
 ## 5. The reader (fetch + aggregate — reuse, don't reinvent)
 - **Fetch:** `deps.db.list_student_class_learning_events(class_id, student_uid)` (PG-authoritative via ReadRouter), filtered to `assignment_id`; prior-session count from the student's prior `practice_sessions` for the assignment. If a per-(student, assignment) reader proves cleaner than client-side filtering, add `list_student_assignment_learning_events` to the ReadRouter + repository (thin, mirrors the existing student-class reader).
 - **Aggregate (in `practice_analytics`):** per-target hits from `metric.target_expression_hit` / `metric.target_vocabulary_hit` / `metric.rubric_dimension_signal` keyed to the compiled target surfaces; error families from `metric.error_detected` / `metric.repeated_error` via the existing `_aggregate_error_event_metadata`. Output a plain `{hit_counts: {surface:int}, error_counts: {label:int}, prior_session_count:int}` for the pedagogy layer.
+- **As-built scope note:** coverage tiering covers **expression + vocabulary targets only** — they are the surfaces with real per-target hit maps in `session_summary`. Grammar rules + objectives are NOT tiered for coverage; they stay on S1's feedback routing. **As built**, the route reads via the dedicated `deps.db.list_student_assignment_practice_sessions(...)` + `list_assignment_learning_events(...)` (filtered to the student) rather than client-side filtering `list_student_class_learning_events`.
 
 ## 6. Pedagogy decision (`compute_coverage_state`, pure)
 - **Tiers:** `not_attempted` (0 hits) / `emerging` (1–2 hits) / `solid` (≥3 hits). Thresholds are module constants (`EMERGING_MAX_HITS=2`, `SOLID_MIN_HITS=3`).
-- **Selection:** `uncovered` = not_attempted *hard* targets (expressions, vocabulary, grammar, objectives — the same set S1 compiles); `recycle` = emerging; `solid` = solid.
+- **Selection:** `uncovered` = not_attempted targets; `recycle` = emerging; `solid` = solid. **As built**, the tiered target set is **expression + vocabulary surfaces only** (the surfaces with real per-target hit maps); grammar rules + objectives are out of S2 coverage scope and stay on S1's feedback routing.
 - **Repeated errors:** include `RepeatedError` where `count ≥ REPEATED_ERROR_MIN=2`.
 - **Window:** cumulative across all prior sessions for the assignment.
 - Grammar targets keep S1's `prompt_first` route; recycling is orthogonal to (and composes with) the S1 feedback routing.
@@ -118,7 +119,7 @@ New flag **`PEDAGOGY_ENGINE_RECYCLING`** (default off), independent of `PEDAGOGY
 **Definition of Done:** all deterministic tests green in `make test-backend`; behavioral eval passes its three claims on the seeded scenarios; flag-off path proven inert (no extra reads, identical prompt); cutover follows the S1 cadence.
 
 ## 11. Defaults & open items
-- Mastery thresholds (emerging 1–2, solid ≥3) and repeated-error threshold (≥2) are first-cut constants — tune once real session data informs them.
+- Mastery thresholds (emerging 1–2, solid ≥3) and repeated-error threshold (≥2) are first-cut constants — tune once real session data informs them. **SHIPPED** as module constants in `coverage.py` (`EMERGING_MAX_HITS=2`, `SOLID_MIN_HITS=3`, `REPEATED_ERROR_MIN=2`); window = cumulative across all prior sessions for the assignment.
 - Error-family labeling depends on the `learning_events` error payload shape; resolve the exact grouping key in the plan (reuse `_aggregate_error_event_metadata`'s labels).
 - If client-side filtering of `list_student_class_learning_events` is hot-path-expensive, add the dedicated per-(student, assignment) reader (step 4).
 

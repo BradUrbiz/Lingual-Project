@@ -1,33 +1,31 @@
-"""Pedagogy Engine S1 (thin spine) — harness + behaviour-win tests.
+"""Pedagogy Engine (assignment prompt) — harness + behaviour-win tests.
 
-Two safety nets, two distinct failure modes:
+The assignment prompt path is now unconditionally engine-rendered
+(``compile_prompt_plan`` -> ``render_assignment_prompt``); the legacy
+``build_assignment_system_prompt`` builder was retired after cutover.
 
-  * **Characterization** (:class:`CharacterizationTestCase`): the live
-    ``build_assignment_system_prompt`` still matches the frozen goldens
-    captured before any code moved. Catches drift introduced while relocating
-    the writers into ``backend/services/pedagogy/``.
+  * **Characterization** (:class:`CharacterizationTestCase`): the engine render
+    still matches the frozen goldens. The goldens were re-frozen from the engine
+    when the builder was retired; for non-grammar fixtures they are byte-identical
+    to the historical builder output, so this also pins no drift from the old
+    prompt. Catches drift introduced by later refactors.
 
-  * **Equivalence** (:class:`EquivalenceTestCase`): the new
-    ``compile_prompt_plan`` -> ``render_assignment_prompt`` path is byte-equal
-    to the old builder EXCEPT the intended grammar-routing delta (and, for the
-    voice surface, the tutor-stance-last reordering). Catches a delta that
-    leaks beyond its intended scope.
+  * **EngineRenderTestCase**: grammar fixtures carry the prompt-first routing win
+    and raw-tutor (``custom_prompt``) bypasses to the base prompt unchanged.
 
-Plus focused unit suites for routing, plan compilation, and import boundaries.
+Plus focused unit suites for routing, plan compilation, surface ordering, the
+render seam, and import boundaries.
 """
 
 from __future__ import annotations
 
-import os
 import pathlib
 import subprocess
 import sys
 import unittest
-from unittest import mock
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
-from backend.services.assignment_resolver import build_assignment_system_prompt
 from backend.services.pedagogy.plan import (
     PromptPlan,
     Target,
@@ -42,22 +40,6 @@ from backend.services.pedagogy.routing import (
 )
 from backend.tests._pedagogy_s1_corpus import CORPUS
 
-# Stable prefixes for the only lines the S1 behaviour-win may change.
-_REPAIR_PREFIXES = (
-    "- On a target slip,",
-    "- On a grammar-target slip",
-    "- On an expression or vocabulary slip",
-)
-
-
-def _strip_repair_lines(prompt: str) -> str:
-    return "\n".join(
-        line
-        for line in prompt.splitlines()
-        if not line.startswith(_REPAIR_PREFIXES)
-    )
-
-
 def _section_block(prompt: str, header: str) -> str:
     """Return the section starting at ``header`` up to the next blank-line break."""
     start = prompt.index(header)
@@ -67,58 +49,44 @@ def _section_block(prompt: str, header: str) -> str:
 
 GOLDEN_DIR = pathlib.Path(__file__).parent / "fixtures" / "pedagogy_s1_goldens"
 
-# The exact repair line the legacy builder emits in TUTOR STANCE. The S1 win
-# replaces this single flat line with target-type-aware routing lines.
-LEGACY_REPAIR_PREFIX = "- On a target slip,"
-
-
 def load_golden(name: str) -> str:
     return (GOLDEN_DIR / f"{name}.txt").read_text(encoding="utf-8")
 
 
 class CharacterizationTestCase(unittest.TestCase):
-    """The live legacy builder must still reproduce every frozen golden."""
+    """The engine render must still reproduce every frozen golden (text surface).
+
+    The goldens were re-frozen from the engine when the legacy builder was retired;
+    for non-grammar fixtures they are byte-identical to the old builder's output, so
+    this also pins that the engine did not drift from the historical prompt.
+    """
 
     def test_every_fixture_matches_its_golden(self):
         for fixture in CORPUS:
             with self.subTest(fixture=fixture.name):
                 self.assertEqual(
-                    build_assignment_system_prompt(fixture.bootstrap),
+                    render_assignment_prompt(compile_prompt_plan(fixture.bootstrap), "text"),
                     load_golden(fixture.name),
-                    f"Legacy builder drifted from golden for {fixture.name!r}. "
+                    f"Engine render drifted from golden for {fixture.name!r}. "
                     "If this change is intentional, regenerate via "
                     "`python3 -m backend.tests.fixtures.gen_pedagogy_s1_goldens` "
                     "and review the diff.",
                 )
 
 
-class EquivalenceTestCase(unittest.TestCase):
-    """New plan->render path == legacy builder, except the grammar-routing delta."""
+class EngineRenderTestCase(unittest.TestCase):
+    """The render carries the grammar-routing win and the raw-tutor bypass."""
 
-    def _render_new(self, fixture, surface="text"):
+    def _render(self, fixture, surface="text"):
         return render_assignment_prompt(compile_prompt_plan(fixture.bootstrap), surface)
 
-    def test_no_grammar_fixtures_are_byte_identical(self):
+    def test_grammar_fixtures_carry_the_prompt_first_win(self):
         for fixture in CORPUS:
-            if fixture.is_custom_prompt or fixture.has_grammar:
+            if not fixture.has_grammar or fixture.is_custom_prompt:
                 continue
             with self.subTest(fixture=fixture.name):
-                self.assertEqual(
-                    self._render_new(fixture, "text"),
-                    build_assignment_system_prompt(fixture.bootstrap),
-                )
-
-    def test_grammar_fixtures_differ_only_in_repair_lines(self):
-        for fixture in CORPUS:
-            if not fixture.has_grammar:
-                continue
-            with self.subTest(fixture=fixture.name):
-                old = build_assignment_system_prompt(fixture.bootstrap)
-                new = self._render_new(fixture, "text")
-                self.assertNotEqual(new, old, "grammar fixture should carry the win")
-                # Everything outside the correction lines is unchanged.
-                self.assertEqual(_strip_repair_lines(new), _strip_repair_lines(old))
-                # The win is present, the flat line is gone.
+                new = self._render(fixture, "text")
+                # The grammar-target routing is present; the legacy flat line is gone.
                 self.assertIn("On a grammar-target slip", new)
                 self.assertNotIn("- On a target slip,", new)
 
@@ -127,8 +95,7 @@ class EquivalenceTestCase(unittest.TestCase):
             if not fixture.is_custom_prompt:
                 continue
             with self.subTest(fixture=fixture.name):
-                new = self._render_new(fixture, "text")
-                self.assertEqual(new, build_assignment_system_prompt(fixture.bootstrap))
+                new = self._render(fixture, "text")
                 self.assertEqual(new, fixture.bootstrap["systemPromptPreview"].strip())
 
 
@@ -171,44 +138,24 @@ class SurfaceOrderingTestCase(unittest.TestCase):
         self.assertEqual(_section_block(text, "TUTOR STANCE:"), _section_block(voice, "TUTOR STANCE:"))
 
 
-class IntegrationFlagTestCase(unittest.TestCase):
-    """The PEDAGOGY_ENGINE_ASSIGNMENT_RENDER flag selects legacy vs engine path."""
+class ResolveSeamTestCase(unittest.TestCase):
+    """resolve_assignment_system_prompt always renders via the engine (no flag)."""
 
     def setUp(self):
         self.fixture = next(
             f for f in CORPUS if f.has_grammar and not f.is_custom_prompt
         )
 
-    def test_flag_off_returns_the_legacy_builder_output(self):
-        from backend.services.pedagogy.integration import (
-            assignment_render_enabled,
-            resolve_assignment_system_prompt,
+    def test_resolve_renders_via_engine_with_the_win(self):
+        from backend.services.pedagogy.integration import resolve_assignment_system_prompt
+
+        out = resolve_assignment_system_prompt(self.fixture.bootstrap, surface="voice")
+        self.assertEqual(
+            out,
+            render_assignment_prompt(compile_prompt_plan(self.fixture.bootstrap), "voice"),
         )
-
-        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": ""}, clear=False):
-            self.assertFalse(assignment_render_enabled())
-            out = resolve_assignment_system_prompt(self.fixture.bootstrap, surface="voice")
-            self.assertEqual(out, build_assignment_system_prompt(self.fixture.bootstrap))
-            # Legacy path => flat correction line, no win.
-            self.assertIn("- On a target slip,", out)
-
-    def test_flag_on_returns_the_engine_render_with_the_win(self):
-        from backend.services.pedagogy.integration import (
-            assignment_render_enabled,
-            resolve_assignment_system_prompt,
-        )
-
-        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": "1"}, clear=False):
-            self.assertTrue(assignment_render_enabled())
-            out = resolve_assignment_system_prompt(self.fixture.bootstrap, surface="voice")
-            self.assertEqual(
-                out,
-                render_assignment_prompt(
-                    compile_prompt_plan(self.fixture.bootstrap), "voice"
-                ),
-            )
-            self.assertIn("On a grammar-target slip", out)
-            self.assertNotIn("- On a target slip,", out)
+        self.assertIn("On a grammar-target slip", out)
+        self.assertNotIn("- On a target slip,", out)
 
 
 class ImportBoundaryTestCase(unittest.TestCase):

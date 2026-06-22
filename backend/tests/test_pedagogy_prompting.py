@@ -1,7 +1,6 @@
 import unittest
 
 from backend.services.assignment_resolver import (
-    build_assignment_system_prompt,
     build_correction_ladder_prompt,
     build_feedback_mode_prompt,
     build_output_pressure_prompt,
@@ -10,6 +9,14 @@ from backend.services.assignment_resolver import (
     normalize_output_policy,
     serialize_output_policy,
 )
+from backend.services.pedagogy.plan import compile_prompt_plan
+from backend.services.pedagogy.render.assignment_prompt import render_assignment_prompt
+
+
+def _assignment_prompt(bootstrap):
+    """Render the assignment system prompt via the engine (the always-on path that
+    replaced the retired build_assignment_system_prompt builder)."""
+    return render_assignment_prompt(compile_prompt_plan(bootstrap), "text")
 
 
 class PedagogyPoliciesTestCase(unittest.TestCase):
@@ -248,7 +255,7 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
             },
         }
 
-        prompt = build_assignment_system_prompt(bootstrap)
+        prompt = _assignment_prompt(bootstrap)
 
         self.assertIn('Base assignment prompt', prompt)
         self.assertIn('ASSIGNMENT:', prompt)
@@ -275,7 +282,7 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
         self.assertNotIn('finish within about', prompt)
 
     def test_build_assignment_system_prompt_includes_teacher_notes_when_present(self):
-        prompt = build_assignment_system_prompt(
+        prompt = _assignment_prompt(
             {
                 'systemPromptPreview': 'Base assignment prompt',
                 'assignment': {
@@ -298,7 +305,7 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
         )
 
     def test_build_assignment_system_prompt_preserves_scaffold_ladder_and_zero_limits(self):
-        prompt = build_assignment_system_prompt(
+        prompt = _assignment_prompt(
             {
                 'systemPromptPreview': 'Base assignment prompt',
                 'assignment': {
@@ -327,7 +334,7 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
         self.assertNotIn('forced choice', prompt)
 
     def test_build_assignment_system_prompt_respects_disabled_end_review_and_clarification_support(self):
-        prompt = build_assignment_system_prompt(
+        prompt = _assignment_prompt(
             {
                 'systemPromptPreview': 'Base assignment prompt',
                 'assignment': {

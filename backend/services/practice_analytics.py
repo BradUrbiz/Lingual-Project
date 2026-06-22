@@ -2152,9 +2152,7 @@ def compute_assignment_coverage_state(
     (which serializes it into ``analysis_state['coverage']``). Keeping both on one
     helper means their safety behavior cannot diverge.
 
-    Returns ``None`` (and does ZERO extra reads) unless BOTH the render and
-    recycling flags are on — the legacy/render-off prompt path ignores coverage,
-    so computing it then would only waste the prior-session/event reads.
+    Returns ``None`` (and does ZERO extra reads) unless the recycling flag is on.
 
     ``current_session_id`` is the practice session that is *currently in flight*
     (the one the SPA already created before chat/realtime runs). It is excluded
@@ -2169,14 +2167,11 @@ def compute_assignment_coverage_state(
     """
     # Lazy import keeps this seam off the module import surface so the engine's
     # plan/routing/coverage import boundary stays untouched when the flag is off.
-    from backend.services.pedagogy.integration import (
-        assignment_render_enabled,
-        recycling_enabled,
-    )
+    from backend.services.pedagogy.integration import recycling_enabled
 
     # Flag gate stays OUTSIDE the try: flag-off must do ZERO reads, and there is
     # nothing here that can fail. Only the enrichment below is fail-open.
-    if not (recycling_enabled() and assignment_render_enabled()):
+    if not recycling_enabled():
         return None
 
     try:

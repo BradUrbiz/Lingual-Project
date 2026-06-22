@@ -1,15 +1,16 @@
 """Render a :class:`PromptPlan` into the assignment system prompt.
 
-This reproduces ``assignment_resolver.build_assignment_system_prompt`` exactly,
-with two intended deltas:
+This is the assignment system-prompt renderer — the unconditional path that
+replaced the retired ``build_assignment_system_prompt`` builder. Two behaviours
+worth calling out:
 
   1. the tutor stance is built with ``plan.targets`` so grammar slips route
-     prompt-first (the S1 behaviour win); and
+     prompt-first (the target-type-aware feedback win); and
   2. on the voice surface the (most adherence-sensitive) TUTOR STANCE block is
      moved last — "critical-rules-last" for the realtime model, whose
-     instruction adherence is fragile. Text keeps the legacy order.
+     instruction adherence is fragile. Text keeps the original section order.
 
-For S1 the section writers (spine / targets / guidance / task template) still
+The section writers (spine / targets / guidance / task template) still
 live in ``assignment_resolver`` and are imported here as pure functions; their
 physical relocation into this package is a documented fast-follow. That import
 is why ``render`` is NOT pulled into ``pedagogy/__init__`` eagerly (it would

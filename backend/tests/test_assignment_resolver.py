@@ -8,9 +8,16 @@ from backend.services.assignment_resolver import (
     serialize_assignment,
     resolve_assignment_bootstrap,
     resolve_assignment_bootstrap_for_user,
-    build_assignment_system_prompt,
 )
 from backend.services.membership_context import SchoolRequestContext
+from backend.services.pedagogy.plan import compile_prompt_plan
+from backend.services.pedagogy.render.assignment_prompt import render_assignment_prompt
+
+
+def _assignment_prompt(bootstrap):
+    """Render the assignment system prompt via the engine (the always-on path that
+    replaced the retired build_assignment_system_prompt builder)."""
+    return render_assignment_prompt(compile_prompt_plan(bootstrap), "text")
 
 
 class FakeResolverDb:
@@ -321,7 +328,7 @@ class TestResolveAssignmentBootstrap(unittest.TestCase):
         self.assertEqual(bootstrap["mapping"]["objectiveIds"], ["canvas-objective-1", "canvas-objective-2"])
         # System prompt includes the scenario + target expressions + grammar.
         prompt = bootstrap["systemPromptPreview"]
-        full_prompt = build_assignment_system_prompt(bootstrap)
+        full_prompt = _assignment_prompt(bootstrap)
         self.assertIn("Mi familia", prompt)
         self.assertIn("madre", prompt)
         self.assertIn("You meet a new classmate", prompt)
@@ -532,7 +539,7 @@ class TestCanvasGeneratedBootstrapFromAssignment(unittest.TestCase):
         # to the model via build_assignment_system_prompt. Assert it returns
         # exactly the preview for scaffold-free assignments — no pedagogy
         # overlay, envelope, objectives, or priority rules.
-        runtime_prompt = build_assignment_system_prompt(bootstrap)
+        runtime_prompt = _assignment_prompt(bootstrap)
         self.assertEqual(runtime_prompt, prompt)
         self.assertNotIn("ASSIGNMENT ENVELOPE", runtime_prompt)
         self.assertNotIn("ASSIGNMENT OBJECTIVES", runtime_prompt)
@@ -574,7 +581,7 @@ class TestCanvasGeneratedBootstrapFromAssignment(unittest.TestCase):
             deps=self.deps, uid="u1", context=self.context,
             assignment_id="asg-normal", ui_language="en",
         )
-        runtime_prompt = build_assignment_system_prompt(bootstrap)
+        runtime_prompt = _assignment_prompt(bootstrap)
         self.assertIn("ASSIGNMENT:", runtime_prompt)
         self.assertIn("Normal assignment", runtime_prompt)
         self.assertIn("CONVERSATION STYLE:", runtime_prompt)

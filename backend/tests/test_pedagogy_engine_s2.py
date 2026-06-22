@@ -167,13 +167,12 @@ class IntegrationRecyclingFlagTestCase(unittest.TestCase):
         with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_RECYCLING": ""}, clear=False):
             self.assertFalse(integration.recycling_enabled())
 
-    def test_coverage_threads_into_render_when_render_flag_on(self):
+    def test_coverage_threads_into_render(self):
         bootstrap = _assignment_bootstrap()
         cov = compute_coverage_state(["quisiera", "la cuenta"], {"quisiera": 0, "la cuenta": 4}, {}, 2)
-        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": "1"}, clear=False):
-            prompt = integration.resolve_assignment_system_prompt(
-                bootstrap, surface="text", coverage_state=cov
-            )
+        prompt = integration.resolve_assignment_system_prompt(
+            bootstrap, surface="text", coverage_state=cov
+        )
         self.assertIn("RECYCLING (prior sessions)", prompt)
 
 
@@ -239,10 +238,7 @@ _COVERAGE_BOOTSTRAP = {
     }
 }
 
-_FLAGS_ON = {
-    "PEDAGOGY_ENGINE_RECYCLING": "1",
-    "PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": "1",
-}
+_FLAGS_ON = {"PEDAGOGY_ENGINE_RECYCLING": "1"}
 
 
 class ComputeAssignmentCoverageStateTestCase(unittest.TestCase):
@@ -250,33 +246,7 @@ class ComputeAssignmentCoverageStateTestCase(unittest.TestCase):
         db = _RaisingDb()
         deps = _FakeDeps(db)
         with mock.patch.dict(
-            os.environ,
-            {"PEDAGOGY_ENGINE_RECYCLING": "", "PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": "1"},
-            clear=False,
-        ):
-            result = _compute_assignment_coverage_state(deps, _COVERAGE_BOOTSTRAP, "uid-1", "asg-1")
-        self.assertIsNone(result)
-        self.assertEqual(db.calls, [])
-
-    def test_render_flag_off_does_no_reads(self):
-        db = _RaisingDb()
-        deps = _FakeDeps(db)
-        with mock.patch.dict(
-            os.environ,
-            {"PEDAGOGY_ENGINE_RECYCLING": "1", "PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": ""},
-            clear=False,
-        ):
-            result = _compute_assignment_coverage_state(deps, _COVERAGE_BOOTSTRAP, "uid-1", "asg-1")
-        self.assertIsNone(result)
-        self.assertEqual(db.calls, [])
-
-    def test_both_flags_off_does_no_reads(self):
-        db = _RaisingDb()
-        deps = _FakeDeps(db)
-        with mock.patch.dict(
-            os.environ,
-            {"PEDAGOGY_ENGINE_RECYCLING": "", "PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": ""},
-            clear=False,
+            os.environ, {"PEDAGOGY_ENGINE_RECYCLING": ""}, clear=False
         ):
             result = _compute_assignment_coverage_state(deps, _COVERAGE_BOOTSTRAP, "uid-1", "asg-1")
         self.assertIsNone(result)

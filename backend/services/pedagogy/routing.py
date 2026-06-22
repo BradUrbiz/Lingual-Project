@@ -14,6 +14,8 @@ this routing is a refinement layered on top, not a flip.
 
 from __future__ import annotations
 
+from backend.services.pedagogy.coverage import CoverageState
+
 # Kinds that benefit from prompt-first / self-repair-first correction.
 _PROMPT_FIRST_KINDS = frozenset({"grammar_rule"})
 
@@ -84,3 +86,43 @@ def repair_directive_lines(
         f"same error repeats {threshold}+ times, pause to repair and prompt self-correction."
     )
     return [grammar_line, lexical_line]
+
+
+def _join_surfaces(surfaces: list[str], limit: int) -> str:
+    shown = surfaces[:limit]
+    return ", ".join(f"“{s}”" for s in shown)
+
+
+def recycling_directive_lines(
+    coverage_state: CoverageState,
+    *,
+    feedback_mode: str,
+    surface: str,
+) -> list[str]:
+    """Prior-coverage recycling directives, modulated by feedback mode + surface.
+
+    Empty when there is nothing to recycle (first session / no signal). Voice is
+    terser than text (adherence is fragile); accuracy_first is directed,
+    fluency_first is low-pressure.
+    """
+    if coverage_state.is_empty():
+        return []
+
+    limit = 2 if surface == "voice" else 4
+    directed = feedback_mode == "accuracy_first"
+    lines: list[str] = []
+
+    if coverage_state.uncovered:
+        targets = _join_surfaces(coverage_state.uncovered, limit)
+        if directed:
+            lines.append(f"Make an opening to practice {targets} — they haven't used these yet.")
+        else:
+            lines.append(f"If it comes up naturally, give them a chance to use {targets}.")
+    if coverage_state.solid and surface != "voice":
+        lines.append(
+            f"They've handled {_join_surfaces(coverage_state.solid, limit)} well — vary or extend; don't re-drill."
+        )
+    if coverage_state.repeated_errors:
+        label = coverage_state.repeated_errors[0].label
+        lines.append(f"Earlier they slipped on {label}; watch for it and prompt self-repair if it recurs.")
+    return lines

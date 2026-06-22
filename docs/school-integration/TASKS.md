@@ -18,6 +18,17 @@ This file lists **active and open work only.** Completed phases are summarized a
 - [ ] Review docs with product lead and confirm post-beta school scope.
 - [ ] Convert remaining open questions in `PRD.md` §13 into explicit architecture decisions in `TECH_SPEC.md`.
 
+## Pedagogy Engine (`PEDAGOGY_ENGINE.md`)
+
+- [x] **S1 — thin spine, BUILT behind flag 2026-06-22 (not cut over).** Reborn `backend/services/pedagogy/`: `compile_prompt_plan → PromptPlan` + `render_assignment_prompt(plan, surface)`, target-type-aware feedback routing (grammar → prompt-first), wired into the assignment chat sites behind `PEDAGOGY_ENGINE_ASSIGNMENT_RENDER` (default off). Frozen-golden characterization + old-vs-new equivalence harness (`test_pedagogy_engine_s1.py`, 26 tests; 1246 backend green); enforced import boundary; `serialize_plan_preview` (L8 data). Detail: `PEDAGOGY_ENGINE_S1.md` §10, LIMITATIONS #53.
+- [ ] **S1 cutover.** Deploy → `PEDAGOGY_ENGINE_ASSIGNMENT_RENDER=1` → burn-in → delete the legacy `build_assignment_system_prompt`. (Mirror the PG dual-write→cutover discipline.)
+- [ ] **S1 fast-follows.** Relocate the SPINE/TARGETS/GUIDANCE/TASK-TEMPLATE section writers into `pedagogy/render`; route free practice (`build_system_prompt`) through the engine; persist `serialize_plan_preview` into `practice_sessions.system_prompt_preview`.
+- [ ] **S2 — closed loop.** Coverage/evidence reader over `learning_events` (live-steering consumer); L3 learner model accrues mastery + error patterns; recycling + uncovered-target awareness fed back into the plan.
+- [ ] **S3 — Conversation Sidecar / coach track.** Parallel correction model + side channel; L4 turn algorithm; promote-back via `feedbackPolicy`; Feedback/Ask UI; pluggable renderer registry.
+- [ ] **S4 — affect + debrief.** WTC/anxiety signals into L3 + affect-based routing override; L7 teacher debrief; L8 override UI bound to `serialize_plan_preview`.
+- [ ] **S5 — director (gated).** Between-turns `session.update` re-steer — only if eval shows static composition plateaus.
+- [ ] **Eval harness.** Simulated-student + LLM-judge (§13.1), built alongside the slices to gate by regression not vibes.
+
 ## Postgres school-domain migration
 
 - [x] Accept persistence ADR: Firestore remains auth/profile/legacy; Postgres becomes school-domain system of record.

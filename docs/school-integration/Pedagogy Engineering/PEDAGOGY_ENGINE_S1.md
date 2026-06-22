@@ -142,15 +142,18 @@ S1 doesn't build override UI. It does make the plan **inspectable**: `compile_pr
 
 ---
 
-## 10. Definition of done
-- `pedagogy/` module exists with enforced import boundaries; policy helpers moved out of the resolver.
-- Flag-gated assignment render path is byte-equivalent to the old builder except the routed correction delta.
-- Grammar targets elicit-first per mode; vocab/expression recast; `recast_default` unchanged; zero stored-data migration.
-- Free practice untouched; `custom_prompt` passes through; all locales render; import-boundary test green; `make test-backend` green.
-- Plan serialized into `systemPromptPreview` for the future teacher preview.
-- S1 data shape remains sufficient for a later Conversation Sidecar Feedback mode; no Sidecar UI/runtime behavior ships in S1.
+## 10. Definition of done — SHIPPED behind flag 2026-06-22 (not yet cut over)
+- [x] `pedagogy/` module exists with enforced import boundaries — `test_pedagogy_engine_s1.ImportBoundaryTestCase` proves `plan.py`/`routing.py` import no OpenAI/Canvas/resolver, in a subprocess. **Scope note:** only the *policy-normalizer family* (§3's `:49-230`) physically moved into `policies.py`; the SPINE/TARGETS/GUIDANCE/TASK-TEMPLATE section writers still live in `assignment_resolver` and are imported by `render/` as pure functions (their relocation is a documented fast-follow — it doesn't affect the boundary, enforced via lazy `render` export in `__init__`).
+- [x] Flag-gated assignment render path byte-equivalent to the old builder except the routed delta — frozen-golden **characterization** harness (13 fixtures) + old-vs-new **equivalence** suite; no-grammar fixtures are byte-identical, grammar fixtures differ only in the repair lines.
+- [x] Grammar targets elicit-first per mode (`accuracy_first`/`balanced` → first slip, `fluency_first` → second slip); vocab/expression recast; `recast_default` unchanged; zero stored-data migration.
+- [x] Free practice untouched (`build_system_prompt` not routed); `custom_prompt` passes through; locale-parametric (base prompt carried verbatim); import-boundary test green; `make test-backend` green (1246).
+- [x] Plan **serializable** for the teacher preview — `serialize_plan_preview(plan)`. **Narrowed:** S1 ships the pure serializer only; persisting it into `practice_sessions.system_prompt_preview` + the override UI is S4 (LIMITATIONS #53f).
+- [x] `PromptPlan` keeps target kind + feedback route + policies + task context explicit, so a later Sidecar Feedback mode needn't reparse prompt text; no Sidecar UI/runtime ships in S1.
+- [x] **Added beyond spec:** voice surface relocates the tutor stance last ("critical-rules-last", §6) — a second intended delta on the voice path, tested by `SurfaceOrderingTestCase`. Lean-wording-for-voice deferred.
+- [ ] **Cutover** (`PEDAGOGY_ENGINE_ASSIGNMENT_RENDER=1` in prod, burn-in, then delete the legacy builder) — NOT done; flag defaults off.
 
-## 11. Doc-sync on completion
-- `TASKS.md`: mark S1 items; note free-chat parity + L8 override UI as fast-follows.
-- `LIMITATIONS.md`: S1 covers the assignment path only (free practice still on the legacy builder); raw-tutor-mode (`custom_prompt`) carries no pedagogy guarantees; routing is target-type-aware but not yet affect-aware.
-- `PEDAGOGY_ENGINE.md`: tick S1 in §14 when the flag is fully cut over.
+## 11. Doc-sync on completion — DONE 2026-06-22
+- [x] `LIMITATIONS.md` #53 (Pedagogy Engine section): assignment-path-only; raw-tutor-mode no guarantees; target-type-aware not affect-aware; voice = stance-last; section-writer relocation + L8 persistence deferred.
+- [x] `backend/CLAUDE.md`: `pedagogy/` line rewritten to describe the reborn engine + enforced boundary + flag.
+- [x] `TASKS.md`: Pedagogy Engine section added — S1 done, cutover + fast-follows + S2–S5 + eval harness as open work.
+- [x] `PEDAGOGY_ENGINE.md` §14: S1 row marked **✅ BUILT (behind flag, not cut over)** (full tick deferred until cutover).

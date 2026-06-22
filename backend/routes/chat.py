@@ -10,11 +10,11 @@ from openai import APIStatusError, RateLimitError
 from backend.route_deps import RouteDeps
 from backend.services.assignment_resolver import (
     build_assignment_prompt_bootstrap_from_practice_session,
-    build_assignment_system_prompt,
     load_assignment_bundle,
     resolve_assignment_bootstrap_for_user,
     user_can_access_assignment,
 )
+from backend.services.pedagogy.integration import resolve_assignment_system_prompt
 from backend.services.compliance import create_consent_event, resolve_assignment_launch
 from backend.services.suspended_org_guard import SuspendedOrgError, enforce_org_active
 
@@ -486,7 +486,9 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                         'error': reason,
                         'blockedReasons': blocked_reasons,
                     }), 403
-                system_instructions = build_assignment_system_prompt(bootstrap)
+                system_instructions = resolve_assignment_system_prompt(
+                    bootstrap, surface="voice"
+                )
                 learning_locale = (
                     (class_record or {}).get('learning_locale')
                     or (bootstrap.get('class') or {}).get('learningLocale')
@@ -853,7 +855,7 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     if practice_session.get('status') != 'active':
                         return jsonify({'success': False, 'error': 'Practice session is no longer active.'}), 409
 
-                system_prompt = build_assignment_system_prompt(bootstrap)
+                system_prompt = resolve_assignment_system_prompt(bootstrap, surface="text")
             else:
                 proficiency_context = deps.get_user_proficiency_context()
                 profile_context = deps.db.get_user_profile_context(uid) or {}

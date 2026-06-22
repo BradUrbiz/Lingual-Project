@@ -7,6 +7,25 @@ from typing import Any
 from backend.services.compliance import resolve_assignment_launch
 from backend.services.suspended_org_guard import enforce_org_active
 
+# Policy normalization helpers now live in backend/services/pedagogy/policies.py
+# (the reborn pedagogy engine owns them). Re-imported here for back-compat with
+# existing callers (test_pedagogy_prompting, _empty_canvas_mapping_dto, etc.).
+from backend.services.pedagogy.policies import (
+    _coerce_nonnegative_int,
+    _derived_output_policy_defaults,
+    _feedback_mode,
+    default_feedback_policy,
+    default_output_policy,
+    default_scaffold_policy,
+    normalize_feedback_policy,
+    normalize_output_policy,
+    normalize_scaffold_policy,
+    serialize_feedback_policy,
+    serialize_output_policy,
+    serialize_scaffold_policy,
+)
+from backend.services.pedagogy.routing import repair_directive_lines
+
 
 SUPPORTED_ASSIGNMENT_STATUSES = {"draft", "published", "archived"}
 SUPPORTED_TASK_TYPES = {"information_gap", "opinion_gap", "decision_making"}
@@ -15,219 +34,6 @@ SUPPORTED_FEEDBACK_MODES = {"fluency_first", "balanced", "accuracy_first"}
 SUPPORTED_OUTPUT_PRESSURES = {"light", "balanced", "high"}
 TEACHER_ALLOWED_ROLES = {"teacher", "school_admin"}
 HIDDEN_ASSIGNMENT_TIME_LIMIT_SEC = 6000
-
-
-# ---------------------------------------------------------------------------
-# Inlined policy + prompt helpers (formerly backend/services/pedagogy/).
-#
-# These were extracted from the now-deleted ``backend/services/pedagogy/``
-# package (Task C1 of the Canvas-content migration). They power:
-#   * Policy normalization / serialization for feedback, scaffold, output —
-#     used by the Canvas-generated resolver and the surviving mapping CRUD.
-#   * Modular prompt section builders — used by
-#     ``build_assignment_system_prompt`` to overlay teacher policy,
-#     scaffolding, and task-template guidance onto every assignment prompt.
-# ---------------------------------------------------------------------------
-
-def _coerce_nonnegative_int(value: Any) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return max(0, value)
-    if isinstance(value, float):
-        return max(0, int(value))
-    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
-        return max(0, int(value.strip()))
-    return None
-
-
-def _feedback_mode(value: Any) -> str:
-    mode = value.strip() if isinstance(value, str) else ""
-    return mode if mode in SUPPORTED_FEEDBACK_MODES else "balanced"
-
-
-def default_feedback_policy() -> dict[str, Any]:
-    return {
-        "mode": "balanced",
-        "target_only_strict": False,
-        "recast_default": True,
-        "elicitation_repeat_threshold": 3,
-        "end_review_enabled": True,
-    }
-
-
-def default_scaffold_policy() -> dict[str, Any]:
-    return {
-        "silence_tolerance_ms": 3000,
-        "hint_ladder": ["wait", "context_hint", "choice_prompt", "model_and_retry"],
-        "max_modeling_steps": 1,
-    }
-
-
-def default_output_policy() -> dict[str, Any]:
-    return {
-        "min_student_turn_words": 8,
-        "follow_up_pressure": "balanced",
-        "allow_clarification_requests": True,
-    }
-
-
-def normalize_feedback_policy(policy: Any) -> dict[str, Any]:
-    normalized = default_feedback_policy()
-    if isinstance(policy, dict):
-        normalized["mode"] = _feedback_mode(policy.get("mode"))
-
-        target_only_strict = policy.get("target_only_strict", policy.get("targetOnlyStrict"))
-        recast_default = policy.get("recast_default", policy.get("recastDefault"))
-        elicitation_repeat_threshold = policy.get(
-            "elicitation_repeat_threshold",
-            policy.get("elicitationRepeatThreshold"),
-        )
-        end_review_enabled = policy.get("end_review_enabled", policy.get("endReviewEnabled"))
-
-        if isinstance(target_only_strict, bool):
-            normalized["target_only_strict"] = target_only_strict
-        if isinstance(recast_default, bool):
-            normalized["recast_default"] = recast_default
-        if isinstance(elicitation_repeat_threshold, int):
-            normalized["elicitation_repeat_threshold"] = max(1, elicitation_repeat_threshold)
-        if isinstance(end_review_enabled, bool):
-            normalized["end_review_enabled"] = end_review_enabled
-    return normalized
-
-
-def normalize_scaffold_policy(policy: Any) -> dict[str, Any]:
-    normalized = default_scaffold_policy()
-    if isinstance(policy, dict):
-        silence_tolerance_ms = policy.get("silence_tolerance_ms", policy.get("silenceToleranceMs"))
-        hint_ladder = policy.get("hint_ladder", policy.get("hintLadder"))
-        max_modeling_steps = policy.get("max_modeling_steps", policy.get("maxModelingSteps"))
-
-        normalized_hint_ladder: list[str] = []
-        seen = set()
-        if isinstance(hint_ladder, list):
-            for item in hint_ladder:
-                cleaned = item.strip() if isinstance(item, str) else ""
-                if not cleaned or cleaned in seen:
-                    continue
-                normalized_hint_ladder.append(cleaned)
-                seen.add(cleaned)
-
-        if isinstance(silence_tolerance_ms, int):
-            normalized["silence_tolerance_ms"] = max(0, silence_tolerance_ms)
-        if normalized_hint_ladder:
-            normalized["hint_ladder"] = normalized_hint_ladder
-        if isinstance(max_modeling_steps, int):
-            normalized["max_modeling_steps"] = max(0, max_modeling_steps)
-    return normalized
-
-
-def _derived_output_policy_defaults(
-    *,
-    task_type: str = "",
-    evidence: dict[str, Any] | None = None,
-    feedback_mode: str = "balanced",
-) -> dict[str, Any]:
-    derived = default_output_policy()
-    normalized_task_type = task_type.strip() if isinstance(task_type, str) else ""
-    normalized_feedback_mode = _feedback_mode(feedback_mode)
-    evidence = evidence if isinstance(evidence, dict) else {}
-
-    if normalized_task_type == "information_gap":
-        derived["min_student_turn_words"] = 6
-        derived["follow_up_pressure"] = "balanced"
-    elif normalized_task_type == "opinion_gap":
-        derived["min_student_turn_words"] = 10
-        derived["follow_up_pressure"] = "high"
-    elif normalized_task_type == "decision_making":
-        derived["min_student_turn_words"] = 9
-        derived["follow_up_pressure"] = "high"
-
-    min_turns = _coerce_nonnegative_int(evidence.get("minTurns"))
-    if min_turns is not None and min_turns >= 5:
-        derived["min_student_turn_words"] = max(derived["min_student_turn_words"], 9)
-
-    if normalized_feedback_mode == "fluency_first":
-        derived["follow_up_pressure"] = "light"
-    elif normalized_feedback_mode == "accuracy_first":
-        derived["follow_up_pressure"] = "high"
-        derived["min_student_turn_words"] = max(derived["min_student_turn_words"], 8)
-
-    return derived
-
-
-def normalize_output_policy(
-    policy: Any,
-    *,
-    task_type: str = "",
-    evidence: dict[str, Any] | None = None,
-    feedback_mode: str = "balanced",
-) -> dict[str, Any]:
-    normalized = _derived_output_policy_defaults(
-        task_type=task_type,
-        evidence=evidence,
-        feedback_mode=feedback_mode,
-    )
-    if isinstance(policy, dict):
-        min_student_turn_words = policy.get(
-            "min_student_turn_words",
-            policy.get("minStudentTurnWords"),
-        )
-        follow_up_pressure_raw = policy.get("follow_up_pressure", policy.get("followUpPressure"))
-        follow_up_pressure = follow_up_pressure_raw.strip() if isinstance(follow_up_pressure_raw, str) else ""
-        allow_clarification_requests = policy.get(
-            "allow_clarification_requests",
-            policy.get("allowClarificationRequests"),
-        )
-
-        coerced_min_words = _coerce_nonnegative_int(min_student_turn_words)
-        if coerced_min_words is not None:
-            normalized["min_student_turn_words"] = max(1, coerced_min_words)
-        if follow_up_pressure in SUPPORTED_OUTPUT_PRESSURES:
-            normalized["follow_up_pressure"] = follow_up_pressure
-        if isinstance(allow_clarification_requests, bool):
-            normalized["allow_clarification_requests"] = allow_clarification_requests
-    return normalized
-
-
-def serialize_feedback_policy(policy: Any) -> dict[str, Any]:
-    normalized = normalize_feedback_policy(policy)
-    return {
-        "mode": normalized["mode"],
-        "targetOnlyStrict": normalized["target_only_strict"],
-        "recastDefault": normalized["recast_default"],
-        "elicitationRepeatThreshold": normalized["elicitation_repeat_threshold"],
-        "endReviewEnabled": normalized["end_review_enabled"],
-    }
-
-
-def serialize_scaffold_policy(policy: Any) -> dict[str, Any]:
-    normalized = normalize_scaffold_policy(policy)
-    return {
-        "silenceToleranceMs": normalized["silence_tolerance_ms"],
-        "hintLadder": normalized["hint_ladder"],
-        "maxModelingSteps": normalized["max_modeling_steps"],
-    }
-
-
-def serialize_output_policy(
-    policy: Any,
-    *,
-    task_type: str = "",
-    evidence: dict[str, Any] | None = None,
-    feedback_mode: str = "balanced",
-) -> dict[str, Any]:
-    normalized = normalize_output_policy(
-        policy,
-        task_type=task_type,
-        evidence=evidence,
-        feedback_mode=feedback_mode,
-    )
-    return {
-        "minStudentTurnWords": normalized["min_student_turn_words"],
-        "followUpPressure": normalized["follow_up_pressure"],
-        "allowClarificationRequests": normalized["allow_clarification_requests"],
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -1499,6 +1305,7 @@ def _build_tutor_stance(
     feedback_policy: dict[str, Any],
     scaffold_policy: dict[str, Any],
     output_policy: dict[str, Any],
+    targets: list[Any] | None = None,
 ) -> str:
     normalized_feedback = normalize_feedback_policy(feedback_policy)
     normalized_scaffold = normalize_scaffold_policy(scaffold_policy)
@@ -1527,10 +1334,20 @@ def _build_tutor_stance(
         "Balance flow with timely correction; escalate when the same target keeps slipping.",
     )
 
-    first_repair = "recast briefly" if recast_default else "cue elicitation"
-    repair_line = (
-        f"On a target slip, {first_repair} the first time; if the same error "
-        f"repeats {threshold}+ times, pause to repair and prompt self-correction."
+    # Correction directive(s), routed by target type (Pedagogy Engine S1). When
+    # no grammar target is present (incl. the legacy call with targets=None),
+    # this is byte-identical to the historical flat line.
+    repair_block = "".join(
+        f"- {line}\n"
+        for line in repair_directive_lines(
+            has_grammar_target=any(
+                getattr(target, "kind", None) == "grammar_rule"
+                for target in (targets or [])
+            ),
+            feedback_mode=mode,
+            recast_default=recast_default,
+            elicitation_repeat_threshold=threshold,
+        )
     )
 
     scaffold_line = (
@@ -1575,7 +1392,7 @@ def _build_tutor_stance(
     return (
         "TUTOR STANCE:\n"
         f"- {feedback_line}\n"
-        f"- {repair_line}\n"
+        f"{repair_block}"
         f"- {scaffold_line}\n"
         f"- {modeling_line}\n"
         f"- {output_line}\n"

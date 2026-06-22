@@ -38,7 +38,7 @@ Domain logic that blueprints compose.
 - `compliance.py`, `disclosure_logging.py`, `deletion_requests.py`, `guardian_packets.py` — the compliance surface
 - `canvas/` — Canvas LMS client, AES-256-GCM PAT encryption, roster sync, practice generator
 - `lti/` — LTI 1.3 identity, config, grade passback, JWKS keys
-- `pedagogy/` — pedagogy-driven prompt shaping helpers
+- `pedagogy/` — the **Pedagogy Engine** (reborn S1 thin spine). `policies.py` (teacher-policy normalizers, relocated from the resolver), `routing.py` (target-type-aware feedback routing — the behaviour win), `plan.py` (`compile_prompt_plan` → `PromptPlan` + `serialize_plan_preview`), `render/assignment_prompt.py` (`render_assignment_prompt(plan, surface)`), `integration.py` (flag-gated dispatch). **Import boundary (enforced + tested):** `plan.py`/`routing.py` import no OpenAI/Canvas/resolver — verified by `test_pedagogy_engine_s1.ImportBoundaryTestCase`. Gated by `PEDAGOGY_ENGINE_ASSIGNMENT_RENDER` (default off → legacy `build_assignment_system_prompt`). See `docs/school-integration/Pedagogy Engineering/`.
 - `assignment_workspace.py` — teacher-side assignment authoring helpers
 
 ## Cloud SQL (PostgreSQL) migration layer (`backend/db/`)

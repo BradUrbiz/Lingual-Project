@@ -802,6 +802,9 @@ def default_analysis_state() -> dict[str, Any]:
         # S2 cross-session recycling snapshot (serialized at session create when
         # PEDAGOGY_ENGINE_RECYCLING is on); None when there is nothing to recycle.
         'coverage': None,
+        # S3.1 model-verified post-task coach review (generated lazily on read
+        # when PEDAGOGY_ENGINE_COACH_REVIEW is on); None until generated.
+        'coach_review': None,
     }
 
 
@@ -837,6 +840,10 @@ def normalize_analysis_state(value: Any) -> dict[str, Any]:
     coverage = value.get('coverage')
     if isinstance(coverage, dict):
         normalized['coverage'] = coverage
+
+    coach_review = value.get('coach_review', value.get('coachReview'))
+    if isinstance(coach_review, dict):
+        normalized['coach_review'] = coach_review
 
     return normalized
 

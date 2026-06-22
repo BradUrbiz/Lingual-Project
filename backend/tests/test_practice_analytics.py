@@ -808,6 +808,20 @@ class TestAnalysisStateCoverage(unittest.TestCase):
         self.assertIsNone(normalize_analysis_state({'coverage': 'not-a-dict'})['coverage'])
         self.assertIsNone(normalize_analysis_state({})['coverage'])
 
+    def test_normalize_analysis_state_preserves_and_defaults_coach_review(self):
+        from backend.services.practice_analytics import default_analysis_state, normalize_analysis_state
+
+        # default carries the key as None
+        self.assertIsNone(default_analysis_state()['coach_review'])
+
+        # a dict coach_review survives normalization
+        review = {'model': 'gpt-5.4-mini-2026-03-17', 'wins': [], 'work_on': []}
+        self.assertEqual(normalize_analysis_state({'coach_review': review})['coach_review'], review)
+
+        # a non-dict coach_review is dropped to None, and absence defaults to None
+        self.assertIsNone(normalize_analysis_state({'coach_review': 'nope'})['coach_review'])
+        self.assertIsNone(normalize_analysis_state({})['coach_review'])
+
 
 if __name__ == "__main__":
     unittest.main()

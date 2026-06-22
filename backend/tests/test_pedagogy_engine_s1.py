@@ -169,6 +169,7 @@ class ImportBoundaryTestCase(unittest.TestCase):
             "import backend.services.pedagogy.plan\n"
             "import backend.services.pedagogy.routing\n"
             "import backend.services.pedagogy.coverage\n"
+            "import backend.services.pedagogy.coach_review\n"
             "forbidden = sorted(\n"
             "    m for m in sys.modules\n"
             "    if 'openai' in m.lower()\n"
@@ -188,7 +189,7 @@ class ImportBoundaryTestCase(unittest.TestCase):
         self.assertEqual(
             result.stdout.strip(),
             "",
-            f"plan.py/routing.py/coverage.py pulled forbidden modules: {result.stdout.strip()}",
+            f"plan/routing/coverage/coach_review pulled forbidden modules: {result.stdout.strip()}",
         )
 
     def test_compiling_a_plan_does_not_require_the_renderer_or_canvas(self):

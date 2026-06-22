@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from backend.services.pedagogy.coverage import CoverageState
 from backend.services.pedagogy.policies import (
     normalize_feedback_policy,
     normalize_output_policy,
@@ -60,6 +61,7 @@ class PromptPlan:
     output_policy: dict[str, Any]  # normalized WITH evidence (mirrors the resolver)
     task_context: dict[str, Any]  # raw assignment/classroom/mapping/curriculum/pedagogy
     render_notes: dict[str, Any] = field(default_factory=dict)  # reserved (S3 surface hints)
+    coverage_state: CoverageState | None = None  # S2 cross-session recycling (None in raw mode)
 
 
 def _clean_string_list(value: Any) -> list[str]:
@@ -91,7 +93,9 @@ def _typed(surfaces: list[str], kind: str) -> list[Target]:
     return [Target(surface=surface, kind=kind, feedback_route=route) for surface in surfaces]
 
 
-def compile_prompt_plan(bootstrap: dict[str, Any]) -> PromptPlan:
+def compile_prompt_plan(
+    bootstrap: dict[str, Any], coverage_state: CoverageState | None = None
+) -> PromptPlan:
     """Compile a resolved assignment ``bootstrap`` into a :class:`PromptPlan`.
 
     For ``task_type == "custom_prompt"`` (raw tutor mode) the engine is off: the
@@ -157,6 +161,7 @@ def compile_prompt_plan(bootstrap: dict[str, Any]) -> PromptPlan:
         output_policy=output_policy,
         task_context=task_context,
         render_notes={},
+        coverage_state=coverage_state,
     )
 
 
@@ -176,7 +181,7 @@ def serialize_plan_preview(plan: PromptPlan) -> dict[str, Any]:
         }
 
     feedback = normalize_feedback_policy(plan.feedback_policy)
-    return {
+    preview: dict[str, Any] = {
         "engineEnabled": True,
         "rawTutorMode": False,
         "taskType": plan.task_type,
@@ -190,3 +195,13 @@ def serialize_plan_preview(plan: PromptPlan) -> dict[str, Any]:
             for t in plan.targets
         ],
     }
+    if plan.coverage_state is not None and not plan.coverage_state.is_empty():
+        cs = plan.coverage_state
+        preview["recycling"] = {
+            "uncovered": list(cs.uncovered),
+            "recycle": list(cs.recycle),
+            "solid": list(cs.solid),
+            "repeatedErrors": [{"label": e.label, "count": e.count} for e in cs.repeated_errors],
+            "priorSessionCount": cs.prior_session_count,
+        }
+    return preview

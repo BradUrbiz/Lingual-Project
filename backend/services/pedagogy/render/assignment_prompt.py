@@ -27,6 +27,7 @@ from backend.services.assignment_resolver import (
     build_task_template_prompt,
 )
 from backend.services.pedagogy.plan import PromptPlan
+from backend.services.pedagogy.routing import recycling_directive_lines
 
 
 def render_assignment_prompt(plan: PromptPlan, surface: str = "text") -> str:
@@ -66,7 +67,19 @@ def render_assignment_prompt(plan: PromptPlan, surface: str = "text") -> str:
         pedagogy=pedagogy,
         mapping=mapping,
     ).strip()
+
+    recycling_block = ""
+    coverage_state = plan.coverage_state
+    if coverage_state is not None and not coverage_state.is_empty():
+        feedback_mode = (plan.feedback_policy or {}).get("mode", "balanced")
+        lines = recycling_directive_lines(coverage_state, feedback_mode=feedback_mode, surface=surface)
+        if lines:
+            body = "".join(f"- {line}\n" for line in lines)
+            recycling_block = f"RECYCLING (prior sessions)\n{body}".strip()
+
     post_stance: list[str] = [task_directive] if task_directive else []
+    if recycling_block:
+        post_stance.append(recycling_block)
 
     if surface == "voice":
         # Critical-rules-last: stance after the task template for the voice model.

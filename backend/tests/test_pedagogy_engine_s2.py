@@ -80,3 +80,57 @@ class RecyclingDirectiveLinesTestCase(unittest.TestCase):
         text = recycling_directive_lines(s, feedback_mode="accuracy_first", surface="text")
         voice = recycling_directive_lines(s, feedback_mode="accuracy_first", surface="voice")
         self.assertLessEqual(len(" ".join(voice)), len(" ".join(text)))
+
+
+from backend.services.pedagogy.plan import compile_prompt_plan, serialize_plan_preview
+from backend.services.pedagogy.render.assignment_prompt import render_assignment_prompt
+
+
+def _assignment_bootstrap():
+    return {
+        "systemPromptPreview": "BASE",
+        "assignment": {"taskType": "information_gap", "title": "Cafe"},
+        "class": {"name": "Spanish I"},
+        "mapping": {
+            "targetExpressions": ["quisiera", "la cuenta"],
+            "feedbackPolicy": {"mode": "accuracy_first"},
+        },
+        "curriculum": {},
+    }
+
+
+class PlanCoverageTestCase(unittest.TestCase):
+    def test_empty_coverage_renders_identically_to_none(self):
+        bootstrap = _assignment_bootstrap()
+        empty = compute_coverage_state(["quisiera", "la cuenta"], {}, {}, 0)
+        without = render_assignment_prompt(compile_prompt_plan(bootstrap), "text")
+        with_empty = render_assignment_prompt(
+            compile_prompt_plan(bootstrap, coverage_state=empty), "text"
+        )
+        self.assertEqual(without, with_empty)
+
+    def test_nonempty_coverage_adds_recycling_section(self):
+        bootstrap = _assignment_bootstrap()
+        cov = compute_coverage_state(
+            ["quisiera", "la cuenta"], {"quisiera": 0, "la cuenta": 4}, {}, 2
+        )
+        prompt = render_assignment_prompt(
+            compile_prompt_plan(bootstrap, coverage_state=cov), "text"
+        )
+        self.assertIn("RECYCLING (prior sessions)", prompt)
+        self.assertIn("quisiera", prompt)
+
+    def test_custom_prompt_ignores_coverage(self):
+        bootstrap = {"systemPromptPreview": "RAW", "assignment": {"taskType": "custom_prompt"}}
+        cov = compute_coverage_state(["x"], {"x": 0}, {}, 3)
+        prompt = render_assignment_prompt(
+            compile_prompt_plan(bootstrap, coverage_state=cov), "text"
+        )
+        self.assertEqual(prompt, "RAW")
+
+    def test_preview_includes_recycling_summary(self):
+        cov = compute_coverage_state(["quisiera"], {"quisiera": 0}, {}, 1)
+        plan = compile_prompt_plan(_assignment_bootstrap(), coverage_state=cov)
+        preview = serialize_plan_preview(plan)
+        self.assertIn("recycling", preview)
+        self.assertEqual(preview["recycling"]["uncovered"], ["quisiera"])

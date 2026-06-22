@@ -47,3 +47,6 @@ docs/sales/enrichment/
 /student-*.yml
 /teacher-*.yml
 /verify-*.yml
+
+# subagent-driven-development scratch (ledger)
+.superpowers/

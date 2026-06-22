@@ -19,6 +19,7 @@ from backend.services.assignment_resolver import (
 )
 from backend.services.assignment_workspace import build_student_assignment_workspace
 from backend.services.canvas.practice_generator import generate_canvas_practice
+from backend.services.coach_review_service import generate_coach_review
 from backend.services.compliance import (
     create_consent_event,
     resolve_student_compliance_record,
@@ -664,6 +665,39 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             })
         except Exception as exc:
             print(f'Practice session event error: {exc}')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/practice-sessions/<session_id>/coach-review', methods=['GET'])
+    @deps.login_required
+    def api_get_practice_session_coach_review(session_id):
+        try:
+            uid = deps.get_current_user_uid()
+            session_record = deps.db.get_practice_session(session_id)
+            if not session_record:
+                return jsonify({'success': False, 'error': 'Practice session not found.'}), 404
+            if session_record.get('student_uid') != uid:
+                return jsonify({'success': False, 'error': 'Practice session is not available for this user.'}), 403
+
+            review = None
+            assignment_id = session_record.get('assignment_id')
+            if assignment_id:
+                ui_language = _normalize_string(session_record.get('ui_language')) or 'en'
+                try:
+                    bootstrap = resolve_assignment_bootstrap_for_user(
+                        deps,
+                        uid=uid,
+                        context=deps.get_school_request_context(),
+                        assignment_id=assignment_id,
+                        ui_language=ui_language,
+                    )
+                except Exception:
+                    bootstrap = None
+                if bootstrap:
+                    review = generate_coach_review(deps, bootstrap, uid, session_id)
+
+            return jsonify({'success': True, 'coachReview': review})
+        except Exception as exc:
+            print(f'Coach review error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
 
     @bp.route('/api/teacher/assignments/<assignment_id>/analytics', methods=['GET'])

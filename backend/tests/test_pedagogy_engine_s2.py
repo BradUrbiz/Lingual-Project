@@ -152,7 +152,7 @@ class BuildCoverageInputTestCase(unittest.TestCase):
         out = build_assignment_coverage_input(sessions, events, ["quisiera", "cafe"])
         self.assertEqual(out["hit_counts"], {"quisiera": 3, "cafe": 1})
         self.assertEqual(out["prior_session_count"], 2)
-        self.assertGreaterEqual(out["error_counts"].get("ser/estar", 0), 1)
+        self.assertEqual(out["error_counts"], {"ser/estar": 2})
 
 
 import os
@@ -197,6 +197,34 @@ class _RaisingDb:
     def list_assignment_learning_events(self, assignment_id):
         self.calls.append("list_assignment_learning_events")
         raise RuntimeError("reader should not be called / must fail open")
+
+
+class _CurrentOnlyDb:
+    """DB reader stub: the session list returns ONLY the in-flight session.
+
+    Mirrors the production race where the SPA POSTs /practice-sessions (201) and
+    that active session already exists when chat/realtime mints the prompt. Used
+    to prove the current session is excluded from prior evidence (first-session
+    no-op).
+    """
+
+    def __init__(self, current_session_id):
+        self.calls = []
+        self._current_session_id = current_session_id
+
+    def list_student_assignment_practice_sessions(self, assignment_id, uid):
+        self.calls.append("list_student_assignment_practice_sessions")
+        return [
+            {
+                "id": self._current_session_id,
+                "status": "active",
+                "session_summary": {},
+            }
+        ]
+
+    def list_assignment_learning_events(self, assignment_id):
+        self.calls.append("list_assignment_learning_events")
+        return []
 
 
 class _FakeDeps:
@@ -258,11 +286,21 @@ class ComputeAssignmentCoverageStateTestCase(unittest.TestCase):
         db = _RaisingDb()
         deps = _FakeDeps(db)
         with mock.patch.dict(os.environ, _FLAGS_ON, clear=False):
-            # Must not propagate the RuntimeError into the live route.
-            result = _compute_assignment_coverage_state(deps, _COVERAGE_BOOTSTRAP, "uid-1", "asg-1")
+            # Must not propagate the RuntimeError into the live route. Capture the
+            # expected fail-open error log (via assertLogs) so its traceback does
+            # not leak into the green suite output.
+            with self.assertLogs(
+                "backend.services.practice_analytics", level="ERROR"
+            ) as captured:
+                result = _compute_assignment_coverage_state(
+                    deps, _COVERAGE_BOOTSTRAP, "uid-1", "asg-1"
+                )
         self.assertIsNone(result)
         # The reader was reached (flags on, targets present) and raised.
         self.assertEqual(db.calls, ["list_student_assignment_practice_sessions"])
+        self.assertTrue(
+            any("recycling coverage computation failed" in m for m in captured.output)
+        )
 
     def test_non_dict_mapping_fails_open(self):
         db = _RaisingDb()
@@ -271,5 +309,73 @@ class ComputeAssignmentCoverageStateTestCase(unittest.TestCase):
         with mock.patch.dict(os.environ, _FLAGS_ON, clear=False):
             result = _compute_assignment_coverage_state(deps, bootstrap, "uid-1", "asg-1")
         # No targets extractable ⇒ None, and no reader hit.
+        self.assertIsNone(result)
+        self.assertEqual(db.calls, [])
+
+    def test_first_session_excludes_current_and_is_no_op(self):
+        """The student's FIRST session must not count itself as prior evidence.
+
+        The SPA creates the practice session BEFORE chat/realtime runs, so the
+        session reader returns the current (active) session. With the current id
+        threaded through and excluded, there are zero prior sessions and zero
+        events ⇒ empty coverage (no recycling fires on session one).
+        """
+        current_id = "sess-current"
+        db = _CurrentOnlyDb(current_id)
+        deps = _FakeDeps(db)
+        with mock.patch.dict(os.environ, _FLAGS_ON, clear=False):
+            result = _compute_assignment_coverage_state(
+                deps,
+                _COVERAGE_BOOTSTRAP,
+                "uid-1",
+                "asg-1",
+                current_session_id=current_id,
+            )
+        # Both readers were reached, but after excluding the current session
+        # there is no prior evidence ⇒ empty coverage state.
+        self.assertEqual(db.calls, [
+            "list_student_assignment_practice_sessions",
+            "list_assignment_learning_events",
+        ])
+        self.assertIsNotNone(result)
+        self.assertEqual(result.prior_session_count, 0)
+        self.assertTrue(result.is_empty())
+
+
+from backend.routes.curriculum_admin import _assignment_coverage_snapshot
+
+
+class AssignmentCoverageSnapshotTestCase(unittest.TestCase):
+    """The session-create snapshot path must share the chat helper's fail-open
+    contract: a reader/DB/compute failure with both flags on degrades to ``None``
+    instead of propagating and 500-ing the student launch (create_practice_session).
+    """
+
+    def test_snapshot_fails_open_when_reader_raises(self):
+        db = _RaisingDb()
+        deps = _FakeDeps(db)
+        with mock.patch.dict(os.environ, _FLAGS_ON, clear=False):
+            with self.assertLogs(
+                "backend.services.practice_analytics", level="ERROR"
+            ):
+                result = _assignment_coverage_snapshot(
+                    deps, _COVERAGE_BOOTSTRAP, "uid-1", "asg-1"
+                )
+        self.assertIsNone(result)
+        # The reader was reached (flags on, targets present) and raised inside the
+        # shared compute helper.
+        self.assertEqual(db.calls, ["list_student_assignment_practice_sessions"])
+
+    def test_snapshot_no_reads_when_flag_off(self):
+        db = _RaisingDb()
+        deps = _FakeDeps(db)
+        with mock.patch.dict(
+            os.environ,
+            {"PEDAGOGY_ENGINE_RECYCLING": "", "PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": "1"},
+            clear=False,
+        ):
+            result = _assignment_coverage_snapshot(
+                deps, _COVERAGE_BOOTSTRAP, "uid-1", "asg-1"
+            )
         self.assertIsNone(result)
         self.assertEqual(db.calls, [])

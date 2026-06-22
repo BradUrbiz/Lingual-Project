@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 from flask import Blueprint, jsonify, request
@@ -34,14 +35,17 @@ from backend.services.practice_analytics import (
     SUPPORTED_EVENT_TYPES,
     apply_learning_event_to_session,
     build_assignment_analytics_payload,
-    build_assignment_coverage_input,
     build_class_analytics_payload,
     build_derived_learning_events,
     build_learning_event_payload,
     build_practice_session_payload,
     build_student_drill_down_payload,
+    compute_assignment_coverage_state,
     serialize_practice_session,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_string(value):
@@ -167,38 +171,39 @@ def _assignment_coverage_snapshot(deps, bootstrap, uid, assignment_id):
     """Serialized S2 recycling snapshot for a new session's ``analysis_state``.
 
     ``None`` (zero extra reads) unless BOTH the render and recycling flags are on
-    and the student has prior evidence. Reuses the existing PG-authoritative
-    readers; the shape mirrors ``serialize_plan_preview(...)['recycling']``.
+    and the student has prior evidence. Shares the gated + fail-open +
+    current-session-excluded compute with the chat routes via
+    ``compute_assignment_coverage_state`` so their safety behavior cannot diverge;
+    here we only serialize the resulting ``CoverageState`` to the shape that
+    mirrors ``serialize_plan_preview(...)['recycling']``.
+
+    This runs BEFORE ``create_practice_session`` (the session row does not exist
+    yet), so there is no in-flight session to exclude — ``current_session_id`` is
+    left ``None`` and the helper does no exclusion.
     """
-    from backend.services.pedagogy.integration import (
-        assignment_render_enabled,
-        recycling_enabled,
+    coverage_state = compute_assignment_coverage_state(
+        deps.db, bootstrap, uid, assignment_id
     )
-
-    if not (recycling_enabled() and assignment_render_enabled()):
-        return None
-    mapping = bootstrap.get('mapping') or {} if isinstance(bootstrap, dict) else {}
-    mapping = mapping if isinstance(mapping, dict) else {}
-    targets = [
-        *_normalize_string_list(mapping.get('targetExpressions')),
-        *_normalize_string_list(mapping.get('targetVocabulary')),
-    ]
-    if not (uid and assignment_id and targets):
+    if coverage_state is None:
         return None
 
-    from backend.services.pedagogy.coverage import compute_coverage_state
-    from backend.services.pedagogy.plan import compile_prompt_plan, serialize_plan_preview
+    # Serialization is pure (stdlib render), but keep it inside the fail-open
+    # contract too: a snapshot is OPTIONAL enrichment of analysis_state and must
+    # never 500 the student launch (create_practice_session).
+    try:
+        from backend.services.pedagogy.plan import compile_prompt_plan, serialize_plan_preview
 
-    prior_sessions = deps.db.list_student_assignment_practice_sessions(assignment_id, uid) or []
-    prior_events = [
-        e
-        for e in (deps.db.list_assignment_learning_events(assignment_id) or [])
-        if isinstance(e, dict) and e.get('student_uid') == uid
-    ]
-    cov_input = build_assignment_coverage_input(prior_sessions, prior_events, targets)
-    coverage_state = compute_coverage_state(targets, **cov_input)
-    preview = serialize_plan_preview(compile_prompt_plan(bootstrap, coverage_state=coverage_state))
-    return preview.get('recycling')
+        preview = serialize_plan_preview(
+            compile_prompt_plan(bootstrap, coverage_state=coverage_state)
+        )
+        return preview.get('recycling')
+    except Exception:
+        logger.exception(
+            'recycling coverage snapshot serialization failed; degrading to no '
+            'snapshot (assignment_id=%s)',
+            assignment_id,
+        )
+        return None
 
 
 def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:

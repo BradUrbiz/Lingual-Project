@@ -391,71 +391,28 @@ def _extract_practice_session_id(payload: dict[str, Any]) -> str | None:
     return None
 
 
-def _clean_surfaces(value: Any) -> list[str]:
-    """Non-empty trimmed strings from a list (else []). Used for coverage targets."""
-    if not isinstance(value, list):
-        return []
-    return [s for s in value if isinstance(s, str) and s.strip()]
-
-
-def _compute_assignment_coverage_state(deps, bootstrap, uid, assignment_id):
+def _compute_assignment_coverage_state(
+    deps, bootstrap, uid, assignment_id, *, current_session_id=None
+):
     """S2 cross-session recycling state for this student+assignment, or ``None``.
 
-    Returns ``None`` (and does ZERO extra reads) unless BOTH the render and
-    recycling flags are on. The legacy/render-off prompt path ignores coverage,
-    so computing it then would only waste the prior-session/event reads. When on,
-    coverage is built from the student's expression+vocabulary target surfaces and
-    their prior sessions/events for this assignment (existing PG-authoritative
-    readers; no new reader, no ReadRouter change).
+    Thin route-side wrapper over the shared, single-source-of-truth helper in
+    ``practice_analytics`` so the chat path and the session-create snapshot path
+    share one gated + fail-open + current-session-excluded compute (their safety
+    behavior cannot diverge). Returns a ``CoverageState`` to thread into the prompt,
+    or ``None`` (and does ZERO extra reads) when either flag is off or coverage is
+    unavailable. ``current_session_id`` is the in-flight session, excluded from the
+    prior evidence so a student's FIRST session is a no-op.
     """
-    # Lazy imports keep this seam off the module import surface so the engine's
-    # plan/routing import boundary stays untouched when the flag is off.
-    from backend.services.pedagogy.integration import (
-        assignment_render_enabled,
-        recycling_enabled,
+    from backend.services.practice_analytics import compute_assignment_coverage_state
+
+    return compute_assignment_coverage_state(
+        deps.db,
+        bootstrap,
+        uid,
+        assignment_id,
+        current_session_id=current_session_id,
     )
-
-    # Flag gate stays OUTSIDE the try: flag-off must do ZERO reads, and there is
-    # nothing here that can fail. Only the enrichment below is fail-open.
-    if not (recycling_enabled() and assignment_render_enabled()):
-        return None
-
-    # Recycling is OPTIONAL enrichment. Any failure here (a malformed bootstrap,
-    # a reader/DB error, a coverage-compute error) must degrade to ``None`` — the
-    # prompt renders correctly without a recycling section — and never break the
-    # realtime-mint or text-chat route that previously succeeded.
-    try:
-        if not (bootstrap and uid and assignment_id):
-            return None
-
-        mapping = bootstrap.get('mapping')
-        if not isinstance(mapping, dict):
-            mapping = {}
-        targets = [
-            *_clean_surfaces(mapping.get('targetExpressions')),
-            *_clean_surfaces(mapping.get('targetVocabulary')),
-        ]
-        if not targets:
-            return None
-
-        from backend.services.pedagogy.coverage import compute_coverage_state
-        from backend.services.practice_analytics import build_assignment_coverage_input
-
-        prior_sessions = deps.db.list_student_assignment_practice_sessions(assignment_id, uid) or []
-        prior_events = [
-            e
-            for e in (deps.db.list_assignment_learning_events(assignment_id) or [])
-            if isinstance(e, dict) and e.get('student_uid') == uid
-        ]
-        cov_input = build_assignment_coverage_input(prior_sessions, prior_events, targets)
-        return compute_coverage_state(targets, **cov_input)
-    except Exception:
-        logger.exception(
-            'recycling coverage computation failed; degrading to no recycling '
-            '(assignment_id=%s)',
-            assignment_id,
-        )
-        return None
 
 
 def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
@@ -558,7 +515,8 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                         'blockedReasons': blocked_reasons,
                     }), 403
                 coverage_state = _compute_assignment_coverage_state(
-                    deps, bootstrap, uid, assignment_id
+                    deps, bootstrap, uid, assignment_id,
+                    current_session_id=practice_session_id,
                 )
                 system_instructions = resolve_assignment_system_prompt(
                     bootstrap, surface="voice", coverage_state=coverage_state
@@ -929,8 +887,14 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     if practice_session.get('status') != 'active':
                         return jsonify({'success': False, 'error': 'Practice session is no longer active.'}), 409
 
+                current_session_id = (
+                    practice_session_id.strip()
+                    if isinstance(practice_session_id, str) and practice_session_id.strip()
+                    else None
+                )
                 coverage_state = _compute_assignment_coverage_state(
-                    deps, bootstrap, uid, assignment_id
+                    deps, bootstrap, uid, assignment_id,
+                    current_session_id=current_session_id,
                 )
                 system_prompt = resolve_assignment_system_prompt(
                     bootstrap, surface="text", coverage_state=coverage_state

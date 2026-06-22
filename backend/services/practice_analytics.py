@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+import logging
 import re
 import unicodedata
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_PROMPT_VERSION = 'assignment_bootstrap.v1'
 SESSION_STATUSES = {'active', 'completed', 'abandoned'}
@@ -2131,6 +2134,93 @@ def build_assignment_coverage_input(
         'error_counts': error_counts,
         'prior_session_count': prior_session_count,
     }
+
+
+def compute_assignment_coverage_state(
+    db: Any,
+    bootstrap: Any,
+    uid: Any,
+    assignment_id: Any,
+    *,
+    current_session_id: Any = None,
+):
+    """S2 cross-session recycling state for one student+assignment, or ``None``.
+
+    Single source of truth for the gated + fail-open + current-session-excluded
+    coverage compute shared by the chat routes (which thread the returned
+    ``CoverageState`` into the prompt) and the session-create snapshot path
+    (which serializes it into ``analysis_state['coverage']``). Keeping both on one
+    helper means their safety behavior cannot diverge.
+
+    Returns ``None`` (and does ZERO extra reads) unless BOTH the render and
+    recycling flags are on — the legacy/render-off prompt path ignores coverage,
+    so computing it then would only waste the prior-session/event reads.
+
+    ``current_session_id`` is the practice session that is *currently in flight*
+    (the one the SPA already created before chat/realtime runs). It is excluded
+    from the prior-evidence aggregation so a student's FIRST session counts zero
+    prior sessions — "first session = no-op, prior evidence only". When ``None``
+    (no current session known), nothing is excluded.
+
+    The read + compute is fail-open: any failure (malformed bootstrap, reader/DB
+    error, compute error) degrades to ``None`` so the prompt renders correctly
+    without a recycling section and the route that previously succeeded never
+    breaks.
+    """
+    # Lazy import keeps this seam off the module import surface so the engine's
+    # plan/routing/coverage import boundary stays untouched when the flag is off.
+    from backend.services.pedagogy.integration import (
+        assignment_render_enabled,
+        recycling_enabled,
+    )
+
+    # Flag gate stays OUTSIDE the try: flag-off must do ZERO reads, and there is
+    # nothing here that can fail. Only the enrichment below is fail-open.
+    if not (recycling_enabled() and assignment_render_enabled()):
+        return None
+
+    try:
+        if not (bootstrap and uid and assignment_id):
+            return None
+
+        mapping = bootstrap.get('mapping') if isinstance(bootstrap, dict) else None
+        if not isinstance(mapping, dict):
+            return None
+        targets = [
+            *_normalize_string_list(mapping.get('targetExpressions')),
+            *_normalize_string_list(mapping.get('targetVocabulary')),
+        ]
+        if not targets:
+            return None
+
+        from backend.services.pedagogy.coverage import compute_coverage_state
+
+        all_sessions = db.list_student_assignment_practice_sessions(assignment_id, uid) or []
+        # Exclude the in-flight session: it already exists by the time chat/realtime
+        # runs, but it is NOT prior evidence. Match on the 'id' field both the PG and
+        # Firestore readers stamp onto each session record.
+        if current_session_id:
+            prior_sessions = [
+                s
+                for s in all_sessions
+                if not (isinstance(s, dict) and s.get('id') == current_session_id)
+            ]
+        else:
+            prior_sessions = all_sessions
+        prior_events = [
+            e
+            for e in (db.list_assignment_learning_events(assignment_id) or [])
+            if isinstance(e, dict) and e.get('student_uid') == uid
+        ]
+        cov_input = build_assignment_coverage_input(prior_sessions, prior_events, targets)
+        return compute_coverage_state(targets, **cov_input)
+    except Exception:
+        logger.exception(
+            'recycling coverage computation failed; degrading to no recycling '
+            '(assignment_id=%s)',
+            assignment_id,
+        )
+        return None
 
 
 def _rubric_thresholds(curriculum: dict[str, Any]) -> dict[str, float]:

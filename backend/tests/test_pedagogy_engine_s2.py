@@ -134,3 +134,22 @@ class PlanCoverageTestCase(unittest.TestCase):
         preview = serialize_plan_preview(plan)
         self.assertIn("recycling", preview)
         self.assertEqual(preview["recycling"]["uncovered"], ["quisiera"])
+
+
+from backend.services.practice_analytics import build_assignment_coverage_input
+
+
+class BuildCoverageInputTestCase(unittest.TestCase):
+    def test_sums_hits_across_sessions_and_counts_errors(self):
+        sessions = [
+            {"session_summary": {"target_expression_hits": {"quisiera": 1}, "target_vocabulary_hits": {}}},
+            {"session_summary": {"target_expression_hits": {"quisiera": 2}, "target_vocabulary_hits": {"cafe": 1}}},
+        ]
+        events = [
+            {"event_type": "metric.repeated_error", "payload": {"errorId": "ser_estar", "label": "ser/estar"}},
+            {"event_type": "metric.repeated_error", "payload": {"errorId": "ser_estar", "label": "ser/estar"}},
+        ]
+        out = build_assignment_coverage_input(sessions, events, ["quisiera", "cafe"])
+        self.assertEqual(out["hit_counts"], {"quisiera": 3, "cafe": 1})
+        self.assertEqual(out["prior_session_count"], 2)
+        self.assertGreaterEqual(out["error_counts"].get("ser/estar", 0), 1)

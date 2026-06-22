@@ -2089,6 +2089,43 @@ def _aggregate_error_event_metadata(
     return metadata_by_id, student_ids_by_error
 
 
+def build_assignment_coverage_input(
+    sessions: list[dict[str, Any]] | None,
+    learning_events: list[dict[str, Any]] | None,
+    target_surfaces: list[str],
+) -> dict[str, Any]:
+    """Aggregate one student's prior evidence for an assignment into plain counts.
+
+    Pure: callers fetch ``sessions`` + ``learning_events`` first. Hit counts come
+    from each session's normalized summary (already per-surface); error counts
+    come from error/repeated-error events grouped by label.
+    """
+    hit_counts: dict[str, int] = {surface: 0 for surface in target_surfaces}
+    prior_session_count = 0
+    for session in sessions or []:
+        prior_session_count += 1
+        summary = normalize_session_summary(session.get('session_summary'))
+        for source in ('target_expression_hits', 'target_vocabulary_hits'):
+            for surface, count in (summary.get(source) or {}).items():
+                if surface in hit_counts:
+                    hit_counts[surface] += int(count)
+
+    error_counts: dict[str, int] = {}
+    for event in learning_events or []:
+        if _normalize_string(event.get('event_type')) not in {'metric.error_detected', 'metric.repeated_error'}:
+            continue
+        payload = event.get('payload', {}) if isinstance(event.get('payload'), dict) else {}
+        label = _normalize_string(payload.get('label')) or _normalize_string(payload.get('errorId'))
+        if label:
+            error_counts[label] = error_counts.get(label, 0) + (_coerce_int(payload.get('count')) or 1)
+
+    return {
+        'hit_counts': hit_counts,
+        'error_counts': error_counts,
+        'prior_session_count': prior_session_count,
+    }
+
+
 def _rubric_thresholds(curriculum: dict[str, Any]) -> dict[str, float]:
     thresholds: dict[str, float] = {}
     for objective in curriculum.get('objectives', []) if isinstance(curriculum, dict) else []:

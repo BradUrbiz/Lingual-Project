@@ -32,6 +32,15 @@ def recycling_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_RECYCLING", "").strip().lower() in _TRUTHY
 
 
+def coach_review_enabled() -> bool:
+    """Whether the S3.1 post-task coach review is active (default off).
+
+    Gates the route's transcript read + correction-model call. Flag off ⇒ the
+    coach-review endpoint returns a null review doing zero reads/LLM calls.
+    """
+    return os.environ.get("PEDAGOGY_ENGINE_COACH_REVIEW", "").strip().lower() in _TRUTHY
+
+
 def resolve_assignment_system_prompt(
     bootstrap: dict[str, Any], *, surface: str, coverage_state: "CoverageState | None" = None
 ) -> str:

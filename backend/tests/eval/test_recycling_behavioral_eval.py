@@ -95,6 +95,63 @@ def _format_transcript(transcript):
     return "\n".join(f"{role.upper()}: {text}" for role, text in transcript)
 
 
+_VERDICT_KEYS = ("elicits_uncovered", "no_overdrill", "flags_error")
+_TRUE_STRINGS = frozenset({"true", "yes", "1"})
+_FALSE_STRINGS = frozenset({"false", "no", "0"})
+
+
+def _coerce_one(key, value):
+    """Coerce a single judge field to a real bool, or raise ValueError.
+
+    Genuine JSON booleans pass through. Common string forms ("true"/"yes"/"1"
+    and "false"/"no"/"0") are normalized case-insensitively. Anything else —
+    None, "maybe", numbers, objects — is NOT unambiguously truthy/falsey and
+    must surface as an error rather than silently defaulting to a pass.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        token = value.strip().lower()
+        if token in _TRUE_STRINGS:
+            return True
+        if token in _FALSE_STRINGS:
+            return False
+        raise ValueError(
+            f"judge field {key!r} is an unrecognized string verdict: {value!r}"
+        )
+    raise ValueError(
+        f"judge field {key!r} is not a recognized boolean verdict: {value!r} "
+        f"(type {type(value).__name__})"
+    )
+
+
+def _coerce_judge_verdict(raw):
+    """Deterministically parse the judge's response into three real bools.
+
+    Accepts the raw response as a JSON string OR an already-parsed dict. Returns
+    ``{elicits_uncovered, no_overdrill, flags_error}`` with genuine Python bools.
+    A missing key, a null, or any non-boolean / unrecognized-string value raises
+    a descriptive ``ValueError`` — never a silent ``True`` (the false-pass bug).
+    """
+    if isinstance(raw, str):
+        parsed = json.loads(raw)
+    elif isinstance(raw, dict):
+        parsed = raw
+    else:
+        raise ValueError(
+            f"judge response must be a JSON string or dict, got {type(raw).__name__}"
+        )
+    if not isinstance(parsed, dict):
+        raise ValueError(f"judge response did not parse to an object: {parsed!r}")
+
+    verdict = {}
+    for key in _VERDICT_KEYS:
+        if key not in parsed:
+            raise ValueError(f"judge response missing required field {key!r}")
+        verdict[key] = _coerce_one(key, parsed[key])
+    return verdict
+
+
 def _judge(client, scenario, transcript):
     """LLM judge: returns {elicits_uncovered, no_overdrill, flags_error} booleans.
 
@@ -125,12 +182,7 @@ def _judge(client, scenario, transcript):
     )
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
-    verdict = json.loads(raw)
-    return {
-        "elicits_uncovered": bool(verdict.get("elicits_uncovered")),
-        "no_overdrill": bool(verdict.get("no_overdrill")),
-        "flags_error": bool(verdict.get("flags_error")),
-    }
+    return _coerce_judge_verdict(raw)
 
 
 @unittest.skipUnless(
@@ -170,6 +222,83 @@ class RecyclingBehavioralEvalTestCase(unittest.TestCase):
                         verdict["flags_error"],
                         f"{sc['name']}: tutor did not flag the repeated error\n{rendered}",
                     )
+
+
+class CoerceJudgeVerdictTestCase(unittest.TestCase):
+    """Pure, deterministic tests for the verdict parser — NO LLM calls.
+
+    Not gated behind RUN_PEDAGOGY_EVAL: it runs in the default suite and makes
+    no OpenAI/main import, so it stays inside the import boundary and costs
+    nothing. Guards the false-pass bug where ``bool("false")`` was ``True``.
+    """
+
+    def _all_true(self):
+        return {"elicits_uncovered": True, "no_overdrill": True, "flags_error": True}
+
+    def test_real_bools_pass_through(self):
+        raw = {"elicits_uncovered": True, "no_overdrill": False, "flags_error": True}
+        self.assertEqual(
+            _coerce_judge_verdict(raw),
+            {"elicits_uncovered": True, "no_overdrill": False, "flags_error": True},
+        )
+
+    def test_json_string_with_real_booleans(self):
+        raw = '{"elicits_uncovered": true, "no_overdrill": false, "flags_error": true}'
+        self.assertEqual(
+            _coerce_judge_verdict(raw),
+            {"elicits_uncovered": True, "no_overdrill": False, "flags_error": True},
+        )
+
+    def test_string_false_maps_to_false(self):
+        # The bug case: bool("false") is True. The parser must return False.
+        verdict = _coerce_judge_verdict(
+            {"elicits_uncovered": "false", "no_overdrill": "true", "flags_error": "false"}
+        )
+        self.assertFalse(verdict["elicits_uncovered"])
+        self.assertTrue(verdict["no_overdrill"])
+        self.assertFalse(verdict["flags_error"])
+
+    def test_yes_no_and_case_insensitivity(self):
+        verdict = _coerce_judge_verdict(
+            {"elicits_uncovered": "Yes", "no_overdrill": "NO", "flags_error": " True "}
+        )
+        self.assertEqual(
+            verdict,
+            {"elicits_uncovered": True, "no_overdrill": False, "flags_error": True},
+        )
+
+    def test_numeric_strings_map(self):
+        verdict = _coerce_judge_verdict(
+            {"elicits_uncovered": "1", "no_overdrill": "0", "flags_error": "1"}
+        )
+        self.assertEqual(
+            verdict,
+            {"elicits_uncovered": True, "no_overdrill": False, "flags_error": True},
+        )
+
+    def test_ambiguous_string_raises(self):
+        with self.assertRaises(ValueError):
+            _coerce_judge_verdict({**self._all_true(), "no_overdrill": "maybe"})
+
+    def test_missing_key_raises(self):
+        with self.assertRaises(ValueError):
+            _coerce_judge_verdict({"elicits_uncovered": True, "no_overdrill": True})
+
+    def test_none_value_raises(self):
+        with self.assertRaises(ValueError):
+            _coerce_judge_verdict({**self._all_true(), "flags_error": None})
+
+    def test_numeric_value_raises(self):
+        with self.assertRaises(ValueError):
+            _coerce_judge_verdict({**self._all_true(), "elicits_uncovered": 1})
+
+    def test_non_object_json_raises(self):
+        with self.assertRaises(ValueError):
+            _coerce_judge_verdict("[true, false, true]")
+
+    def test_unsupported_type_raises(self):
+        with self.assertRaises(ValueError):
+            _coerce_judge_verdict(42)
 
 
 if __name__ == "__main__":

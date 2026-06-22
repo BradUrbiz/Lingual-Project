@@ -796,6 +796,9 @@ def default_analysis_state() -> dict[str, Any]:
             'content': '',
             'turn_index': None,
         },
+        # S2 cross-session recycling snapshot (serialized at session create when
+        # PEDAGOGY_ENGINE_RECYCLING is on); None when there is nothing to recycle.
+        'coverage': None,
     }
 
 
@@ -827,6 +830,10 @@ def normalize_analysis_state(value: Any) -> dict[str, Any]:
                 'turn_index': _coerce_int(turn.get('turn_index', turn.get('turnIndex'))),
             })
         normalized['recent_turns'] = collected
+
+    coverage = value.get('coverage')
+    if isinstance(coverage, dict):
+        normalized['coverage'] = coverage
 
     return normalized
 

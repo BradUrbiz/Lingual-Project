@@ -734,6 +734,13 @@ class FakeDbBase:
     def list_assignment_practice_sessions(self, assignment_id: str):
         return [dict(s) for s in self.practice_sessions.values() if s.get("assignment_id") == assignment_id]
 
+    def list_student_assignment_practice_sessions(self, assignment_id: str, student_uid: str):
+        return [
+            dict(s)
+            for s in self.practice_sessions.values()
+            if s.get("assignment_id") == assignment_id and s.get("student_uid") == student_uid
+        ]
+
     def list_class_practice_sessions(self, class_id: str):
         return [dict(s) for s in self.practice_sessions.values() if s.get("class_id") == class_id]
 

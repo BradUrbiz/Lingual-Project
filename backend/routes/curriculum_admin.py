@@ -34,6 +34,7 @@ from backend.services.practice_analytics import (
     SUPPORTED_EVENT_TYPES,
     apply_learning_event_to_session,
     build_assignment_analytics_payload,
+    build_assignment_coverage_input,
     build_class_analytics_payload,
     build_derived_learning_events,
     build_learning_event_payload,
@@ -160,6 +161,44 @@ def _filter_sessions_by_date(
             continue
         filtered.append(session)
     return filtered
+
+
+def _assignment_coverage_snapshot(deps, bootstrap, uid, assignment_id):
+    """Serialized S2 recycling snapshot for a new session's ``analysis_state``.
+
+    ``None`` (zero extra reads) unless BOTH the render and recycling flags are on
+    and the student has prior evidence. Reuses the existing PG-authoritative
+    readers; the shape mirrors ``serialize_plan_preview(...)['recycling']``.
+    """
+    from backend.services.pedagogy.integration import (
+        assignment_render_enabled,
+        recycling_enabled,
+    )
+
+    if not (recycling_enabled() and assignment_render_enabled()):
+        return None
+    mapping = bootstrap.get('mapping') or {} if isinstance(bootstrap, dict) else {}
+    mapping = mapping if isinstance(mapping, dict) else {}
+    targets = [
+        *_normalize_string_list(mapping.get('targetExpressions')),
+        *_normalize_string_list(mapping.get('targetVocabulary')),
+    ]
+    if not (uid and assignment_id and targets):
+        return None
+
+    from backend.services.pedagogy.coverage import compute_coverage_state
+    from backend.services.pedagogy.plan import compile_prompt_plan, serialize_plan_preview
+
+    prior_sessions = deps.db.list_student_assignment_practice_sessions(assignment_id, uid) or []
+    prior_events = [
+        e
+        for e in (deps.db.list_assignment_learning_events(assignment_id) or [])
+        if isinstance(e, dict) and e.get('student_uid') == uid
+    ]
+    cov_input = build_assignment_coverage_input(prior_sessions, prior_events, targets)
+    coverage_state = compute_coverage_state(targets, **cov_input)
+    preview = serialize_plan_preview(compile_prompt_plan(bootstrap, coverage_state=coverage_state))
+    return preview.get('recycling')
 
 
 def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
@@ -476,6 +515,11 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 chat_id=chat_id,
                 ui_language=ui_language,
             )
+            # S2: snapshot cross-session recycling into the new session's
+            # analysis_state (no-op + zero extra reads when the flags are off).
+            coverage_snapshot = _assignment_coverage_snapshot(deps, bootstrap, uid, assignment_id)
+            if coverage_snapshot and isinstance(session_payload.get('analysis_state'), dict):
+                session_payload['analysis_state']['coverage'] = coverage_snapshot
             # In-flight grace anchor: capture the org status at session
             # creation. Future event POSTs on this session pass through if
             # *this* snapshot is 'active', even after the org is suspended.

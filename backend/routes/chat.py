@@ -387,6 +387,56 @@ def _extract_practice_session_id(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _clean_surfaces(value: Any) -> list[str]:
+    """Non-empty trimmed strings from a list (else []). Used for coverage targets."""
+    if not isinstance(value, list):
+        return []
+    return [s for s in value if isinstance(s, str) and s.strip()]
+
+
+def _compute_assignment_coverage_state(deps, bootstrap, uid, assignment_id):
+    """S2 cross-session recycling state for this student+assignment, or ``None``.
+
+    Returns ``None`` (and does ZERO extra reads) unless BOTH the render and
+    recycling flags are on. The legacy/render-off prompt path ignores coverage,
+    so computing it then would only waste the prior-session/event reads. When on,
+    coverage is built from the student's expression+vocabulary target surfaces and
+    their prior sessions/events for this assignment (existing PG-authoritative
+    readers; no new reader, no ReadRouter change).
+    """
+    # Lazy imports keep this seam off the module import surface so the engine's
+    # plan/routing import boundary stays untouched when the flag is off.
+    from backend.services.pedagogy.integration import (
+        assignment_render_enabled,
+        recycling_enabled,
+    )
+
+    if not (recycling_enabled() and assignment_render_enabled()):
+        return None
+    if not (bootstrap and uid and assignment_id):
+        return None
+
+    mapping = bootstrap.get('mapping') or {}
+    targets = [
+        *_clean_surfaces(mapping.get('targetExpressions')),
+        *_clean_surfaces(mapping.get('targetVocabulary')),
+    ]
+    if not targets:
+        return None
+
+    from backend.services.pedagogy.coverage import compute_coverage_state
+    from backend.services.practice_analytics import build_assignment_coverage_input
+
+    prior_sessions = deps.db.list_student_assignment_practice_sessions(assignment_id, uid) or []
+    prior_events = [
+        e
+        for e in (deps.db.list_assignment_learning_events(assignment_id) or [])
+        if isinstance(e, dict) and e.get('student_uid') == uid
+    ]
+    cov_input = build_assignment_coverage_input(prior_sessions, prior_events, targets)
+    return compute_coverage_state(targets, **cov_input)
+
+
 def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
     bp = Blueprint('chat_routes', __name__)
 
@@ -486,8 +536,11 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                         'error': reason,
                         'blockedReasons': blocked_reasons,
                     }), 403
+                coverage_state = _compute_assignment_coverage_state(
+                    deps, bootstrap, uid, assignment_id
+                )
                 system_instructions = resolve_assignment_system_prompt(
-                    bootstrap, surface="voice"
+                    bootstrap, surface="voice", coverage_state=coverage_state
                 )
                 learning_locale = (
                     (class_record or {}).get('learning_locale')
@@ -855,7 +908,12 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     if practice_session.get('status') != 'active':
                         return jsonify({'success': False, 'error': 'Practice session is no longer active.'}), 409
 
-                system_prompt = resolve_assignment_system_prompt(bootstrap, surface="text")
+                coverage_state = _compute_assignment_coverage_state(
+                    deps, bootstrap, uid, assignment_id
+                )
+                system_prompt = resolve_assignment_system_prompt(
+                    bootstrap, surface="text", coverage_state=coverage_state
+                )
             else:
                 proficiency_context = deps.get_user_proficiency_context()
                 profile_context = deps.db.get_user_profile_context(uid) or {}

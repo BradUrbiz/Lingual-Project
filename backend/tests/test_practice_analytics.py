@@ -4,7 +4,9 @@ from backend.services.practice_analytics import (
     apply_learning_event_to_session,
     build_derived_learning_events,
     build_practice_session_payload,
+    default_analysis_state,
     default_session_summary,
+    normalize_analysis_state,
     normalize_session_summary,
     serialize_session_summary,
     _count_words,
@@ -790,6 +792,21 @@ class TestMultiTurnSession(unittest.TestCase):
         self.assertGreater(summary["total_student_words"], 0)
         self.assertGreater(summary["target_expression_total_hits"], 0)
         self.assertEqual(summary["objective_turn_counts"].get("obj-1"), 2)
+
+
+class TestAnalysisStateCoverage(unittest.TestCase):
+    def test_default_analysis_state_carries_none_coverage(self):
+        self.assertIn('coverage', default_analysis_state())
+        self.assertIsNone(default_analysis_state()['coverage'])
+
+    def test_normalize_carries_dict_coverage_through(self):
+        recycling = {'uncovered': ['quisiera'], 'priorSessionCount': 2}
+        normalized = normalize_analysis_state({'coverage': recycling})
+        self.assertEqual(normalized['coverage'], recycling)
+
+    def test_normalize_drops_non_dict_coverage_to_none(self):
+        self.assertIsNone(normalize_analysis_state({'coverage': 'not-a-dict'})['coverage'])
+        self.assertIsNone(normalize_analysis_state({})['coverage'])
 
 
 if __name__ == "__main__":

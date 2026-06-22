@@ -153,3 +153,25 @@ class BuildCoverageInputTestCase(unittest.TestCase):
         self.assertEqual(out["hit_counts"], {"quisiera": 3, "cafe": 1})
         self.assertEqual(out["prior_session_count"], 2)
         self.assertGreaterEqual(out["error_counts"].get("ser/estar", 0), 1)
+
+
+import os
+from unittest import mock
+from backend.services.pedagogy import integration
+
+
+class IntegrationRecyclingFlagTestCase(unittest.TestCase):
+    def test_recycling_enabled_reads_env(self):
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_RECYCLING": "on"}, clear=False):
+            self.assertTrue(integration.recycling_enabled())
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_RECYCLING": ""}, clear=False):
+            self.assertFalse(integration.recycling_enabled())
+
+    def test_coverage_threads_into_render_when_render_flag_on(self):
+        bootstrap = _assignment_bootstrap()
+        cov = compute_coverage_state(["quisiera", "la cuenta"], {"quisiera": 0, "la cuenta": 4}, {}, 2)
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": "1"}, clear=False):
+            prompt = integration.resolve_assignment_system_prompt(
+                bootstrap, surface="text", coverage_state=cov
+            )
+        self.assertIn("RECYCLING (prior sessions)", prompt)

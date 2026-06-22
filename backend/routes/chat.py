@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import math
 import os
 from typing import Any
@@ -17,6 +18,9 @@ from backend.services.assignment_resolver import (
 from backend.services.pedagogy.integration import resolve_assignment_system_prompt
 from backend.services.compliance import create_consent_event, resolve_assignment_launch
 from backend.services.suspended_org_guard import SuspendedOrgError, enforce_org_active
+
+
+logger = logging.getLogger(__name__)
 
 
 AVATAR_EMOTION_KEYS = [
@@ -411,30 +415,47 @@ def _compute_assignment_coverage_state(deps, bootstrap, uid, assignment_id):
         recycling_enabled,
     )
 
+    # Flag gate stays OUTSIDE the try: flag-off must do ZERO reads, and there is
+    # nothing here that can fail. Only the enrichment below is fail-open.
     if not (recycling_enabled() and assignment_render_enabled()):
         return None
-    if not (bootstrap and uid and assignment_id):
+
+    # Recycling is OPTIONAL enrichment. Any failure here (a malformed bootstrap,
+    # a reader/DB error, a coverage-compute error) must degrade to ``None`` — the
+    # prompt renders correctly without a recycling section — and never break the
+    # realtime-mint or text-chat route that previously succeeded.
+    try:
+        if not (bootstrap and uid and assignment_id):
+            return None
+
+        mapping = bootstrap.get('mapping')
+        if not isinstance(mapping, dict):
+            mapping = {}
+        targets = [
+            *_clean_surfaces(mapping.get('targetExpressions')),
+            *_clean_surfaces(mapping.get('targetVocabulary')),
+        ]
+        if not targets:
+            return None
+
+        from backend.services.pedagogy.coverage import compute_coverage_state
+        from backend.services.practice_analytics import build_assignment_coverage_input
+
+        prior_sessions = deps.db.list_student_assignment_practice_sessions(assignment_id, uid) or []
+        prior_events = [
+            e
+            for e in (deps.db.list_assignment_learning_events(assignment_id) or [])
+            if isinstance(e, dict) and e.get('student_uid') == uid
+        ]
+        cov_input = build_assignment_coverage_input(prior_sessions, prior_events, targets)
+        return compute_coverage_state(targets, **cov_input)
+    except Exception:
+        logger.exception(
+            'recycling coverage computation failed; degrading to no recycling '
+            '(assignment_id=%s)',
+            assignment_id,
+        )
         return None
-
-    mapping = bootstrap.get('mapping') or {}
-    targets = [
-        *_clean_surfaces(mapping.get('targetExpressions')),
-        *_clean_surfaces(mapping.get('targetVocabulary')),
-    ]
-    if not targets:
-        return None
-
-    from backend.services.pedagogy.coverage import compute_coverage_state
-    from backend.services.practice_analytics import build_assignment_coverage_input
-
-    prior_sessions = deps.db.list_student_assignment_practice_sessions(assignment_id, uid) or []
-    prior_events = [
-        e
-        for e in (deps.db.list_assignment_learning_events(assignment_id) or [])
-        if isinstance(e, dict) and e.get('student_uid') == uid
-    ]
-    cov_input = build_assignment_coverage_input(prior_sessions, prior_events, targets)
-    return compute_coverage_state(targets, **cov_input)
 
 
 def create_chat_blueprint(deps: RouteDeps) -> Blueprint:

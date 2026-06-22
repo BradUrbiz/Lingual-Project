@@ -175,3 +175,101 @@ class IntegrationRecyclingFlagTestCase(unittest.TestCase):
                 bootstrap, surface="text", coverage_state=cov
             )
         self.assertIn("RECYCLING (prior sessions)", prompt)
+
+
+from backend.routes.chat import _compute_assignment_coverage_state
+
+
+class _RaisingDb:
+    """DB reader stub: every reader the helper might touch raises if called.
+
+    Used to prove the no-read gate (flag-off ⇒ readers untouched) and the
+    fail-open contract (reader exception ⇒ helper returns ``None``, no propagate).
+    """
+
+    def __init__(self):
+        self.calls = []
+
+    def list_student_assignment_practice_sessions(self, assignment_id, uid):
+        self.calls.append("list_student_assignment_practice_sessions")
+        raise RuntimeError("reader should not be called / must fail open")
+
+    def list_assignment_learning_events(self, assignment_id):
+        self.calls.append("list_assignment_learning_events")
+        raise RuntimeError("reader should not be called / must fail open")
+
+
+class _FakeDeps:
+    def __init__(self, db):
+        self.db = db
+
+
+_COVERAGE_BOOTSTRAP = {
+    "mapping": {
+        "targetExpressions": ["quisiera", "la cuenta"],
+        "targetVocabulary": ["mesa"],
+    }
+}
+
+_FLAGS_ON = {
+    "PEDAGOGY_ENGINE_RECYCLING": "1",
+    "PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": "1",
+}
+
+
+class ComputeAssignmentCoverageStateTestCase(unittest.TestCase):
+    def test_recycling_flag_off_does_no_reads(self):
+        db = _RaisingDb()
+        deps = _FakeDeps(db)
+        with mock.patch.dict(
+            os.environ,
+            {"PEDAGOGY_ENGINE_RECYCLING": "", "PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": "1"},
+            clear=False,
+        ):
+            result = _compute_assignment_coverage_state(deps, _COVERAGE_BOOTSTRAP, "uid-1", "asg-1")
+        self.assertIsNone(result)
+        self.assertEqual(db.calls, [])
+
+    def test_render_flag_off_does_no_reads(self):
+        db = _RaisingDb()
+        deps = _FakeDeps(db)
+        with mock.patch.dict(
+            os.environ,
+            {"PEDAGOGY_ENGINE_RECYCLING": "1", "PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": ""},
+            clear=False,
+        ):
+            result = _compute_assignment_coverage_state(deps, _COVERAGE_BOOTSTRAP, "uid-1", "asg-1")
+        self.assertIsNone(result)
+        self.assertEqual(db.calls, [])
+
+    def test_both_flags_off_does_no_reads(self):
+        db = _RaisingDb()
+        deps = _FakeDeps(db)
+        with mock.patch.dict(
+            os.environ,
+            {"PEDAGOGY_ENGINE_RECYCLING": "", "PEDAGOGY_ENGINE_ASSIGNMENT_RENDER": ""},
+            clear=False,
+        ):
+            result = _compute_assignment_coverage_state(deps, _COVERAGE_BOOTSTRAP, "uid-1", "asg-1")
+        self.assertIsNone(result)
+        self.assertEqual(db.calls, [])
+
+    def test_reader_raises_fails_open_to_none(self):
+        db = _RaisingDb()
+        deps = _FakeDeps(db)
+        with mock.patch.dict(os.environ, _FLAGS_ON, clear=False):
+            # Must not propagate the RuntimeError into the live route.
+            result = _compute_assignment_coverage_state(deps, _COVERAGE_BOOTSTRAP, "uid-1", "asg-1")
+        self.assertIsNone(result)
+        # The reader was reached (flags on, targets present) and raised.
+        self.assertEqual(db.calls, ["list_student_assignment_practice_sessions"])
+
+    def test_non_dict_mapping_fails_open(self):
+        db = _RaisingDb()
+        deps = _FakeDeps(db)
+        bootstrap = {"mapping": "not-a-dict"}
+        with mock.patch.dict(os.environ, _FLAGS_ON, clear=False):
+            result = _compute_assignment_coverage_state(deps, bootstrap, "uid-1", "asg-1")
+        # No targets extractable ⇒ None, and no reader hit.
+        self.assertIsNone(result)
+        self.assertEqual(db.calls, [])

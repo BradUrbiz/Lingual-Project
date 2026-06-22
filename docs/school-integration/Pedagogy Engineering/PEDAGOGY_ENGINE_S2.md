@@ -10,7 +10,7 @@ S1 made the assignment prompt a *render target of a plan*. S2 makes that plan **
 
 ## 1. Scope & decisions
 **Chosen (this brainstorm, 2026-06-22):**
-1. **Student-facing recycling, full loop** — the reader feeds the *live tutor* (not a teacher-only debrief). The plan gains `coverage_state`; the renderer adds a recycling section; L3 accumulates per-target mastery + repeated-error patterns. **No affect** (WTC/anxiety) — that's S4.
+1. **Student-facing recycling, full loop** — the reader feeds the *live tutor* (not a teacher-only debrief). The plan gains `coverage_state`; the renderer adds a recycling section; L3 accumulates per-target **heuristic coverage tiers (a hit-count proxy, NOT model-verified mastery — see §11 / LIMITATIONS #53(g))** + repeated-error patterns. **No affect** (WTC/anxiety) — that's S4.
 2. **Mode-modulated weaving** — how hard the tutor pushes uncovered targets is governed by `feedbackPolicy.mode` (the existing teacher knob, same one S1 used for grammar escalation): `fluency_first` weaves opportunistically, `accuracy_first` actively creates openings. Not a fixed posture.
 3. **Focused behavioral eval built with S2** — a simulated-student + LLM-judge harness validates that the model *acts on* the recycling section, alongside deterministic unit tests that validate the prompt is *correct*.
 
@@ -105,7 +105,7 @@ New flag **`PEDAGOGY_ENGINE_RECYCLING`** (default off), independent of `PEDAGOGY
 
 ## 9. Eval harness
 - **Deterministic layer (gates in `make test-backend`):** unit tests on `compute_coverage_state` (counts → tiers/selection), `recycling_directive_lines` (state × mode × surface → lines), plan enrichment (`compile_prompt_plan` attaches coverage; custom_prompt ignores it), render section presence/absence and the `is_empty` no-op, and the extended import-boundary test for `coverage.py`.
-- **Behavioral layer (separate opt-in CI job; real LLM cost, NOT in the unit gate):** a **simulated student** scripted to hit/miss seeded targets, run through the live engine-rendered prompt against the configured model; an **LLM judge** scores three claims per scenario — (a) elicited the uncovered target, (b) did *not* over-drill the solid target, (c) flagged the repeated error — across `fluency_first` and `accuracy_first`. Seeded `CoverageState` fixtures: {uncovered-only, solid-only, repeated-error, mixed}. Honest cost accounting; this is the §13.1 dev harness, scoped to recycling.
+- **Behavioral layer (separate opt-in dev harness, `RUN_PEDAGOGY_EVAL=1`; real LLM cost, NOT CI-gated and NOT in the unit gate):** a **simulated student** scripted to hit/miss seeded targets, run through the live engine-rendered prompt against the configured model; an **LLM judge** scores three claims per scenario — (a) elicited the uncovered target, (b) did *not* over-drill the solid target, (c) flagged the repeated error — across `fluency_first` and `accuracy_first`. Seeded `CoverageState` fixtures: {uncovered-only, solid-only, repeated-error, mixed}. Honest cost accounting; this is the §13.1 dev harness, scoped to recycling.
 
 ## 10. Build sequence (TDD, red→green per step) + DoD
 1. `compute_coverage_state` (pure) + unit tests.
@@ -119,12 +119,12 @@ New flag **`PEDAGOGY_ENGINE_RECYCLING`** (default off), independent of `PEDAGOGY
 **Definition of Done:** all deterministic tests green in `make test-backend`; behavioral eval passes its three claims on the seeded scenarios; flag-off path proven inert (no extra reads, identical prompt); cutover follows the S1 cadence.
 
 ## 11. Defaults & open items
-- Mastery thresholds (emerging 1–2, solid ≥3) and repeated-error threshold (≥2) are first-cut constants — tune once real session data informs them. **SHIPPED** as module constants in `coverage.py` (`EMERGING_MAX_HITS=2`, `SOLID_MIN_HITS=3`, `REPEATED_ERROR_MIN=2`); window = cumulative across all prior sessions for the assignment.
+- Coverage-tier thresholds (emerging 1–2, solid ≥3) and repeated-error threshold (≥2) are first-cut **heuristic hit-count constants — a coverage proxy, NOT model-verified mastery** — tune once real session data informs them. **SHIPPED** as module constants in `coverage.py` (`EMERGING_MAX_HITS=2`, `SOLID_MIN_HITS=3`, `REPEATED_ERROR_MIN=2`); window = cumulative across all prior sessions for the assignment.
 - Error-family labeling depends on the `learning_events` error payload shape; resolve the exact grouping key in the plan (reuse `_aggregate_error_event_metadata`'s labels).
 - If client-side filtering of `list_student_class_learning_events` is hot-path-expensive, add the dedicated per-(student, assignment) reader (step 4).
 
 ## 12. Non-goals (deferred by slice)
-- **Affect / WTC / anxiety signals** → S4 (this slice is mastery + error patterns only).
+- **Affect / WTC / anxiety signals** → S4 (this slice is heuristic coverage tiers + error patterns only — not validated mastery).
 - **Cross-assignment carryover** → later (same-assignment only).
 - **Live mid-session re-steer** (`session.update`) → S5 (gated on eval).
 - **Teacher-facing debrief over coverage** (L7) → S4 (the reader is shared, but S2 surfaces value student-side only).

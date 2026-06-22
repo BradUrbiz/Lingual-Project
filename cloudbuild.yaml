@@ -214,11 +214,11 @@ substitutions:
   # the ASSIGNMENT path only (free practice untouched); the sole behavior delta is
   # target-type-aware feedback routing (grammar slips escalate prompt-first per
   # feedbackPolicy.mode). Deploy uses --set-env-vars=REPLACE, so the flag MUST live
-  # here or a redeploy drops it. HELD '0' for the inert-first cutover: deploy code
-  # flag-off (provably equivalent) → verify health → --update-env-vars
-  # PEDAGOGY_ENGINE_ASSIGNMENT_RENDER=1 (instant live flip, instant rollback) →
-  # burn-in → bump this default 0->1 for durability + delete the legacy builder.
-  _PEDAGOGY_ENGINE_ASSIGNMENT_RENDER: '0'
+  # here or a redeploy drops it. CUT OVER: flipped live on rev 00067 (2026-06-22),
+  # burn-in clean; default bumped 0->1 here (2026-06-23) for durability so a redeploy
+  # cannot regress S1 to the legacy builder. Legacy build_assignment_system_prompt
+  # deletion follows in a subsequent change (removes the flag-off fallback path).
+  _PEDAGOGY_ENGINE_ASSIGNMENT_RENDER: '1'
   # Pedagogy Engine S2 closed-loop recycling (PEDAGOGY_ENGINE.md §14 S2 row,
   # PEDAGOGY_ENGINE_S2.md §8). Independent of the S1 render flag but INERT without
   # it: the route gates the extra prior-session/event reads + coverage compute on

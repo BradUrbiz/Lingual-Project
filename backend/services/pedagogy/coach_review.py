@@ -50,6 +50,12 @@ def _s(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _as_list(value: object) -> list:
+    """A section that isn't a list/tuple (e.g. a scalar or null) yields []. Keeps
+    ``parse_coach_review`` total for any dict payload — only a non-dict ``raw`` raises."""
+    return list(value) if isinstance(value, (list, tuple)) else []
+
+
 def parse_coach_review(
     raw: object,
     *,
@@ -70,14 +76,14 @@ def parse_coach_review(
     cap = WORK_ON_CAPS.get(feedback_mode, DEFAULT_WORK_ON_CAP)
 
     wins: list[ReviewWin] = []
-    for item in raw.get("wins") or []:
+    for item in _as_list(raw.get("wins")):
         if isinstance(item, dict) and _s(item.get("text")):
             wins.append(ReviewWin(text=_s(item.get("text"))))
         if len(wins) >= MAX_WINS:
             break
 
     work_on: list[ReviewItem] = []
-    for item in raw.get("work_on") or []:
+    for item in _as_list(raw.get("work_on")):
         if not isinstance(item, dict):
             continue
         utterance, better = _s(item.get("utterance")), _s(item.get("better"))
@@ -95,7 +101,7 @@ def parse_coach_review(
             break
 
     coverage: list[TargetCoverageItem] = []
-    for item in raw.get("target_coverage") or []:
+    for item in _as_list(raw.get("target_coverage")):
         if not isinstance(item, dict):
             continue
         s_surface, status = _s(item.get("surface")), _s(item.get("status"))

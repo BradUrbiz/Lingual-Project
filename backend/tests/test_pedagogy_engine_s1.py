@@ -192,6 +192,36 @@ class ImportBoundaryTestCase(unittest.TestCase):
             f"plan/routing/coverage/coach_review pulled forbidden modules: {result.stdout.strip()}",
         )
 
+    def test_coach_review_imports_no_forbidden_modules_in_isolation(self):
+        # Import ONLY coach_review in a fresh interpreter, so a clean sibling
+        # (plan/coverage) in the combined probe cannot mask coach_review itself
+        # pulling a forbidden dependency. Cross-pedagogy imports remain allowed;
+        # the invariant is specifically the OpenAI/Canvas/resolver/compliance set.
+        probe = (
+            "import sys\n"
+            "import backend.services.pedagogy.coach_review\n"
+            "forbidden = sorted(\n"
+            "    m for m in sys.modules\n"
+            "    if 'openai' in m.lower()\n"
+            "    or 'canvas' in m.lower()\n"
+            "    or m == 'backend.services.assignment_resolver'\n"
+            "    or m.endswith('.compliance')\n"
+            ")\n"
+            "print(';'.join(forbidden))\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout.strip(),
+            "",
+            f"coach_review (isolated) pulled forbidden modules: {result.stdout.strip()}",
+        )
+
     def test_compiling_a_plan_does_not_require_the_renderer_or_canvas(self):
         # Compiling a plan (the engine's pure step) must not drag in the render
         # layer or Canvas — only rendering does.

@@ -37,6 +37,16 @@ class ParseCoachReviewTestCase(unittest.TestCase):
         review = parse_coach_review(self._raw(), feedback_mode='balanced', surface='text')
         self.assertEqual(len(review.wins), 2)
 
+    def test_scalar_sections_do_not_raise(self):
+        # A dict payload whose sections are scalars/null must yield an empty review,
+        # not a TypeError — only a non-dict ``raw`` raises.
+        review = parse_coach_review(
+            {'wins': 1, 'work_on': 'nope', 'target_coverage': None},
+            feedback_mode='balanced', surface='text',
+        )
+        self.assertTrue(review.is_empty())
+        self.assertEqual(review.target_coverage, ())
+
     def test_work_on_cap_by_mode(self):
         self.assertEqual(len(parse_coach_review(self._raw(), feedback_mode='fluency_first', surface='text').work_on), 2)
         self.assertEqual(len(parse_coach_review(self._raw(), feedback_mode='balanced', surface='text').work_on), 3)
@@ -110,11 +120,18 @@ class BuildCoachReviewPromptTestCase(unittest.TestCase):
     def test_ui_language_threaded(self):
         self.assertIn('en', self._msgs(ui_language='en')[0]['content'])
 
-    def test_voice_is_terser_than_text(self):
-        sys_voice = self._msgs(surface='voice')[0]['content']
-        sys_text = self._msgs(surface='text')[0]['content']
+    def test_voice_mentions_confidence_caveat_text_does_not(self):
+        # The voice variant differs from text by adding the ASR/confidence-caveat
+        # instruction (text never mentions confidence). This is the behaviour that
+        # matters — not raw length (the voice prompt is in fact slightly longer).
+        sys_voice = self._msgs(surface='voice')[0]['content'].lower()
+        sys_text = self._msgs(surface='text')[0]['content'].lower()
         self.assertNotEqual(sys_voice, sys_text)
-        self.assertIn('confidence', sys_voice.lower())  # voice mentions ASR-confidence caveat
+        # The voice-only rule names the SPOKEN/ASR-confidence caveat; text has no
+        # such rule. (Both mention the confidence_caveat JSON *field*, so the
+        # discriminator is the rule sentence, not the bare word "confidence".)
+        self.assertIn('spoken session', sys_voice)
+        self.assertNotIn('spoken session', sys_text)
 
     def test_json_instruction_present(self):
         self.assertIn('json', self._msgs()[0]['content'].lower())

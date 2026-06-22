@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Hand, History, Loader2, MessageSquareText, Mic } from 'lucide-react';
 import {
   createAssignmentPracticeSession,
@@ -7,6 +7,7 @@ import {
 } from '@/api/assignments';
 import { createChatSession, getChatSession, saveMessageToChat, sendChatMessage } from '@/api/chat';
 import { ChatInput, ChatMessage, SpeakingSpeedControl } from '@/components/chat';
+import { ReviewLauncher } from '@/components/learning/ReviewLauncher';
 import { Alert, AlertDescription, Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useRealtimeChat } from '@/hooks/useRealtimeChat';
@@ -564,6 +565,8 @@ interface AssignmentConversationViewProps {
   selectedChatId: string | null;
   messages: ChatMessageType[];
   loadingChat: boolean;
+  reviewSessionId: string | null;
+  canReview: boolean;
   status: AssignmentConversationHeaderProps['status'];
   composerState: AssignmentComposerState;
   holdLabels: HoldButtonLabels;
@@ -581,6 +584,8 @@ function AssignmentConversationView({
   selectedChatId,
   messages,
   loadingChat,
+  reviewSessionId,
+  canReview,
   status,
   composerState,
   holdLabels,
@@ -600,6 +605,7 @@ function AssignmentConversationView({
         status={status}
       />
       <AssignmentMessagesPane loadingChat={loadingChat} messages={messages} />
+      <ReviewLauncher sessionId={reviewSessionId} canReview={canReview} label="See coach review" />
       {selectedThread ? (
         <AssignmentComposerPanel
           state={composerState}
@@ -626,6 +632,8 @@ interface AssignmentPracticeWorkspaceController {
   loading: boolean;
   loadingChat: boolean;
   error: string | null;
+  reviewSessionId: string | null;
+  canReview: boolean;
   displayMessages: ChatMessageType[];
   sidebarExpansion: SidebarExpansionState;
   conversationStatus: AssignmentConversationHeaderProps['status'];
@@ -670,6 +678,7 @@ function useAssignmentPracticeWorkspaceController({
     error,
   } = state;
   const [speakingSpeed, setSpeakingSpeed] = useRealtimeSpeakingSpeed();
+  const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const selectedChatIdRef = useRef<string | null>(null);
   const nextMessageOrderRef = useRef(0);
   const closeWithoutAbandonRef = useRef(false);
@@ -960,6 +969,7 @@ function useAssignmentPracticeWorkspaceController({
 
   const handleEndSession = async () => {
     if (!selectedActivePracticeSession) return;
+    const endedId = selectedActivePracticeSession.id; // capture before reload nulls the selector
     dispatch({ type: 'patch', payload: { isMutating: true, error: null } });
     try {
       clearRealtimePersistenceTarget();
@@ -974,6 +984,7 @@ function useAssignmentPracticeWorkspaceController({
       clearMessages();
       disconnect();
       await loadWorkspace(selectedActivePracticeSession.chatId || null);
+      setReviewSessionId(endedId);
     } catch (endError) {
       dispatch({
         type: 'patch',
@@ -1172,6 +1183,8 @@ function useAssignmentPracticeWorkspaceController({
     dispatch({ type: 'patch', payload: { textInput: nextText } });
   }, []);
 
+  const canReview = !!reviewSessionId && !isConnected;
+
   return {
     lang,
     workspace,
@@ -1181,6 +1194,8 @@ function useAssignmentPracticeWorkspaceController({
     loading,
     loadingChat,
     error,
+    reviewSessionId,
+    canReview,
     displayMessages,
     sidebarExpansion,
     conversationStatus,
@@ -1215,6 +1230,8 @@ export function AssignmentPracticeWorkspace(props: AssignmentPracticeWorkspacePr
     loading,
     loadingChat,
     error,
+    reviewSessionId,
+    canReview,
     displayMessages,
     sidebarExpansion,
     conversationStatus,
@@ -1282,6 +1299,8 @@ export function AssignmentPracticeWorkspace(props: AssignmentPracticeWorkspacePr
               selectedChatId={selectedChatId}
               messages={displayMessages}
               loadingChat={loadingChat}
+              reviewSessionId={reviewSessionId}
+              canReview={canReview}
               status={conversationStatus}
               composerState={composerState}
               holdLabels={holdLabels}

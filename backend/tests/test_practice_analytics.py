@@ -814,9 +814,10 @@ class TestAnalysisStateCoverage(unittest.TestCase):
         # default carries the key as None
         self.assertIsNone(default_analysis_state()['coach_review'])
 
-        # a dict coach_review survives normalization
+        # a dict coach_review survives normalization (both snake_case and camelCase input)
         review = {'model': 'gpt-5.4-mini-2026-03-17', 'wins': [], 'work_on': []}
         self.assertEqual(normalize_analysis_state({'coach_review': review})['coach_review'], review)
+        self.assertEqual(normalize_analysis_state({'coachReview': review})['coach_review'], review)
 
         # a non-dict coach_review is dropped to None, and absence defaults to None
         self.assertIsNone(normalize_analysis_state({'coach_review': 'nope'})['coach_review'])

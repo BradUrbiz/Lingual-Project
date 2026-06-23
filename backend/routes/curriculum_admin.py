@@ -746,7 +746,7 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({'success': True, 'coachChip': chip})
         except Exception as exc:
             print(f'Coach chip error: {exc}')
-            return jsonify({'success': False, 'error': str(exc)}), 500
+            return jsonify({'success': True, 'coachChip': None})
 
     @bp.route('/api/teacher/assignments/<assignment_id>/analytics', methods=['GET'])
     @deps.login_required

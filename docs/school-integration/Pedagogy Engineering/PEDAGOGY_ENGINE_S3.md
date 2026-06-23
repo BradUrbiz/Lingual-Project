@@ -268,17 +268,20 @@ Gating signals (checked at turn N or the immediately preceding turn N+1 context)
 Sits beside S3.1's `analysis_state['coach_review']` and S2's `analysis_state['coverage']`.
 
 ```jsonc
-{
-  "chips": [
-    {
-      "turn_index": 3,
-      "generated_at": "<iso8601>",
-      "model": "gpt-5.4-mini-2026-03-17",
-      "text": "<brief chip text in ui_language>",
-      "target": "focus_grammar:present-irregular" | null
-    }
-  ]
-}
+// analysis_state['coach_chips'] is a FLAT LIST — no "chips" wrapper
+[
+  {
+    "turn_index": 7,
+    "generated_at": "<iso8601>",
+    "model": "gpt-5.4-mini-2026-03-17",
+    "surface": "voice" | "text",
+    "utterance": "<learner's actual words, target language>",
+    "better": "<corrected form, target language>",
+    "why": "<explanation in ui_language>",
+    "target": "focus_grammar:present-irregular" | null,
+    "confidence_caveat": false
+  }
+]
 ```
 
 New chips are appended; the list accumulates across the session. Cache persistence to be verified during cutover burn-in (a second chip on a later turn appends; reload shows persisted chips).

@@ -219,7 +219,7 @@ def build_coach_chip_prompt(
         f"Feedback mode: {mode}",
         "Assignment targets: " + (", ".join(targets) if targets else "(none)"),
         "",
-        "Recent turns (the last is the latest learner turn):",
+        "Recent turns (most recent last, each labeled Learner/Tutor). Correct the most recent LEARNER turn; a Tutor reply shown after it is context, not a target.",
     ]
     for turn in recent_turns or []:
         if not isinstance(turn, dict):

@@ -385,6 +385,21 @@ class BuildCoachChipPromptTestCase(unittest.TestCase):
         self.assertIn('focus_grammar:ir', user)
         self.assertIn('Yo va al tienda', user)
 
+    def test_window_ending_with_tutor_turn_has_honest_header(self):
+        # The chip fires AFTER the tutor reply, so the window can end on an assistant turn.
+        # The header must NOT claim "the last is the latest learner turn" (that would be false),
+        # and it MUST still instruct correcting the most recent LEARNER turn.
+        from backend.services.pedagogy.coach_review import build_coach_chip_prompt
+        msgs = build_coach_chip_prompt(
+            [{'role': 'user', 'content': 'Yo va al tienda'},
+             {'role': 'assistant', 'content': 'Quieres decir "voy"?'}],
+            ['focus_grammar:ir'], {'mode': 'balanced'}, 'text', 'en',
+        )
+        user_body = msgs[1]['content']
+        self.assertNotIn('the last is the latest learner turn', user_body)
+        # Must still tell the model to target the most recent LEARNER turn
+        self.assertIn('LEARNER', user_body)
+
 
 class ParseCoachChipTestCase(unittest.TestCase):
     def _raw(self, **over):

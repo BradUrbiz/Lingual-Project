@@ -115,6 +115,22 @@ class CoachChipRouteTestCase(unittest.TestCase):
         self.assertTrue(body['success'])
         self.assertIsNone(body['coachChip'])
 
+    def test_unexpected_route_exception_fails_open_not_500(self):
+        # An unexpected exception from the ownership read (get_practice_session raises) must
+        # hit the outer except and return HTTP 200 with coachChip null — never a 500.
+        # This verifies the outer except is fail-open (the bug: it used to return 500).
+        class _RaisingDb:
+            def get_practice_session(self, session_id):
+                raise RuntimeError('db unavailable')
+
+        client = _app(_RaisingDb()).test_client()
+        _login(client)
+        resp = client.post('/api/practice-sessions/sess-1/coach-chip', json={'turn_index': 4})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertIsNone(body['coachChip'])
+
 
 if __name__ == '__main__':
     unittest.main()

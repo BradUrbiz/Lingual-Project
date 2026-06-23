@@ -47,6 +47,7 @@ interface SendMessageOptions {
   assignmentId?: string;
   practiceSessionId?: string;
   uiLanguage?: 'en' | 'ko';
+  coachNote?: string;
 }
 
 interface SaveMessageResponse {
@@ -165,6 +166,7 @@ export const sendChatMessage = async (
     ...(options?.assignmentId ? { assignmentId: options.assignmentId } : {}),
     ...(options?.practiceSessionId ? { practiceSessionId: options.practiceSessionId } : {}),
     ...(options?.uiLanguage ? { uiLanguage: options.uiLanguage } : {}),
+    ...(options?.coachNote ? { coachNote: options.coachNote } : {}),
   });
   if (response.data.success) {
     return response.data;

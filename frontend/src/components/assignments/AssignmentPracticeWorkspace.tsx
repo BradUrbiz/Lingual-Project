@@ -1076,10 +1076,13 @@ function useAssignmentPracticeWorkspaceController({
       const userTurnIndex = nextMessageOrderRef.current;
       const assistantTurnIndex = userTurnIndex + 1;
       nextMessageOrderRef.current += 2;
+      const coachNote = pendingPromoteBackRef.current;
+      pendingPromoteBackRef.current = null;
       const response = await sendChatMessage(selectedChatId, message, {
         assignmentId: bootstrap.assignment.id,
         practiceSessionId: practiceSession.id,
         uiLanguage: lang,
+        ...(coachNote ? { coachNote } : {}),
       });
       dispatch({
         type: 'appendHistoryMessages',

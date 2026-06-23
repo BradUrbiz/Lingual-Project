@@ -871,4 +871,95 @@ describe('AssignmentPracticeWorkspace', () => {
       expect(injectPromoteBackSpy).toHaveBeenCalledWith('COACH NOTE: try voy');
     });
   });
+
+  it('attaches a pending text promote note to the NEXT send then clears it', async () => {
+    const TEXT_PROMOTE: import('@/api/coachChips').CoachChip = {
+      turn_index: 0,
+      generated_at: 'now',
+      model: 'm',
+      surface: 'text',
+      utterance: 'Yo va',
+      better: 'Yo voy',
+      why: 'ir',
+      target: 'focus_grammar:ir',
+      confidence_caveat: false,
+      promote: true,
+      promote_prompt: 'COACH NOTE: try voy',
+      promote_reason: 'hard_target',
+    };
+
+    const TEXT_BOOTSTRAP: AssignmentBootstrapData = {
+      ...BOOTSTRAP,
+      launch: {
+        ...BOOTSTRAP.launch,
+        modality: { mode: 'text_only', voiceMinutesCap: 0, textFallbackEnabled: false },
+        voiceAllowed: false,
+        textAllowed: true,
+      },
+    };
+    const TEXT_SESSION: PracticeSessionDto = {
+      ...ACTIVE_SESSION,
+      modality: 'text_only',
+      voiceEnabled: false,
+      textEnabled: true,
+    };
+    const TEXT_WORKSPACE: AssignmentWorkspaceData = {
+      ...WORKSPACE,
+      bootstrap: TEXT_BOOTSTRAP,
+      threads: [
+        {
+          ...WORKSPACE.threads[0],
+          latestPracticeSession: TEXT_SESSION,
+          attempts: [TEXT_SESSION],
+        },
+      ],
+    };
+
+    getStudentAssignmentWorkspaceMock.mockResolvedValue(TEXT_WORKSPACE);
+    // First send: postCoachChip returns a text promote chip
+    postCoachChipMock.mockResolvedValue(TEXT_PROMOTE);
+    sendChatMessageMock.mockResolvedValue({ response: 'Bien' });
+    reportPracticeSessionEventMock.mockResolvedValue(undefined);
+
+    render(
+      <AssignmentPracticeWorkspace
+        open
+        bootstrap={TEXT_BOOTSTRAP}
+        onClose={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Type your assignment response...')).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText('Type your assignment response...');
+
+    // First send — triggerCoachChip fires with TEXT_PROMOTE, sets pendingPromoteBackRef
+    fireEvent.change(input, { target: { value: 'Yo voy' } });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() => {
+      expect(postCoachChipMock).toHaveBeenCalledWith(TEXT_SESSION.id, expect.any(Number));
+    });
+
+    // Second send — coachNote should be attached from the pending promote
+    postCoachChipMock.mockResolvedValue(null);
+    fireEvent.change(input, { target: { value: 'Second message' } });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() => {
+      const lastOpts = sendChatMessageMock.mock.calls.at(-1)?.[2];
+      expect(lastOpts).toMatchObject({ coachNote: 'COACH NOTE: try voy' });
+    });
+
+    // Third send — pending note was cleared after one use, coachNote must be absent
+    fireEvent.change(input, { target: { value: 'Third message' } });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() => {
+      const lastOpts = sendChatMessageMock.mock.calls.at(-1)?.[2];
+      expect(lastOpts?.coachNote).toBeUndefined();
+    });
+  });
 });

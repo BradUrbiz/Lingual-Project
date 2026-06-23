@@ -1,6 +1,6 @@
 # Pedagogy Engine — S3 Conversation Sidecar / Coach Track (detailed design)
 
-**Status:** **S3.1 CUT OVER 2026-06-23** — `PEDAGOGY_ENGINE_COACH_REVIEW=1` live (rev `lingual-app-00075-7p7`, cloudbuild default bumped `0→1`). Prod burn-in verified the review renders end-to-end on the **text** surface (wins / work_on / target_coverage; caught a planted error; fail-open `null` on scaffold-free). The burn-in caught + fixed a cache-persist bug (commit `a509168`; see §"Cache persistence" below). **S3.2 CUT OVER 2026-06-24** — `PEDAGOGY_ENGINE_COACH_CHIPS=1` live (rev `lingual-app-00078-wrc`, cloudbuild default bumped `0→1`; see §"S3.2 as-built cutover" below). **S3.3 BUILT behind flag (`PEDAGOGY_ENGINE_PROMOTE_BACK=0`), NOT yet cut over** (promote-back + correction-light main tutor; see the S3.3 section below). S3.4 pending. Sibling to `PEDAGOGY_ENGINE_S1.md` + `PEDAGOGY_ENGINE_S2.md`; realizes the **S3 row** of `PEDAGOGY_ENGINE.md` §14 and the §6.1 / §6.2 coach-track architecture.
+**Status:** **S3.1 CUT OVER 2026-06-23** — `PEDAGOGY_ENGINE_COACH_REVIEW=1` live (rev `lingual-app-00075-7p7`, cloudbuild default bumped `0→1`). Prod burn-in verified the review renders end-to-end on the **text** surface (wins / work_on / target_coverage; caught a planted error; fail-open `null` on scaffold-free). The burn-in caught + fixed a cache-persist bug (commit `a509168`; see §"Cache persistence" below). **S3.2 CUT OVER 2026-06-24** — `PEDAGOGY_ENGINE_COACH_CHIPS=1` live (rev `lingual-app-00078-wrc`, cloudbuild default bumped `0→1`; see §"S3.2 as-built cutover" below). **S3.3 BUILT behind flag (`PEDAGOGY_ENGINE_PROMOTE_BACK=0`), NOT yet cut over** (promote-back + correction-light main tutor; see the S3.3 section below). **S3.4 BUILT behind flag (`PEDAGOGY_ENGINE_ASK_MODE=0`), NOT yet cut over** (Ask mode — learner-initiated quick help; see the S3.4 section below). Sibling to `PEDAGOGY_ENGINE_S1.md` + `PEDAGOGY_ENGINE_S2.md`; realizes the **S3 row** of `PEDAGOGY_ENGINE.md` §14 and the §6.1 / §6.2 coach-track architecture.
 **Design spec:** `docs/superpowers/specs/2026-06-23-pedagogy-s3.1-post-task-coach-review-design.md` (approved, pre-implementation). This doc is the as-built record.
 
 ---
@@ -18,7 +18,7 @@ That is a **subsystem cluster, not one feature.** It decomposes by **timing × d
 | **S3.1** | Post-task correction pass over the finished transcript → read-only **post-task review** panel on both surfaces | ✅ **CUT OVER 2026-06-23** (`PEDAGOGY_ENGINE_COACH_REVIEW=1` live, default `1`) | Low — no live timing, no two-model coordination, no split-attention |
 | **S3.2** | Live, silent between-turn coach chips (side channel only, no promote-back) — same `coach_review.py` module/model/rubric family as S3.1, with chip-specific pure functions (`build_coach_chip_prompt` / `parse_coach_chip` / `serialize_coach_chip`) that reuse ReviewItem + rubric constants + anti-sycophancy/locale rules, per-turn instead of once at the end | ✅ **CUT OVER 2026-06-24** (`PEDAGOGY_ENGINE_COACH_CHIPS=1` live, rev `lingual-app-00078-wrc`, cloudbuild default `1`) | Medium — real-time transport |
 | **S3.3** | Promote-back into the main channel + main tutor goes correction-light (the structural ~30% voice-adherence mitigation) | **BUILT behind flag (`PEDAGOGY_ENGINE_PROMOTE_BACK=0`), not cut over** | High — two-model coordination, voice injection, under/over-promotion |
-| **S3.4** | Ask mode (learner-initiated quick help) — largely independent of the correction track | Pending | Low–Medium |
+| **S3.4** | Ask mode (learner-initiated quick help) — largely independent of the correction track | **BUILT behind flag (`PEDAGOGY_ENGINE_ASK_MODE=0`), not cut over** | Low–Medium |
 
 S3.2 shares `coach_review.py`'s module, model, and rubric family with chip-specific pure functions (`build_coach_chip_prompt` / `parse_coach_chip` / `serialize_coach_chip`) that reuse the ReviewItem dataclass, rubric constants, and anti-sycophancy/locale rules — not a verbatim reuse of the post-task prompt builder. The pure-module boundary is why S3.1's correction work lives there rather than inline in the orchestrator.
 
@@ -306,16 +306,19 @@ See `LIMITATIONS.md` #53 sub-items (s)–(v).
 
 ## 13. Relationship to existing docs (doc-sync targets)
 
-- `PEDAGOGY_ENGINE.md` §14 — S3 row: "S3.1 shipped (post-task review, model-verified); S3.2 CUT OVER 2026-06-24 (live chips, `PEDAGOGY_ENGINE_COACH_CHIPS=1`, default `1`); S3.3 BUILT behind flag (`PEDAGOGY_ENGINE_PROMOTE_BACK=0`), not cut over; S3.4 pending."
-- `docs/school-integration/TASKS.md` — S3.1 build + flag-wiring/doc-sync items (complete) + S3.1 cutover + S3.2 build item (complete) + S3.2 cutover (complete) + S3.3 build item (complete, behind flag) + S3.3 cutover (pending) + S3.4 (pending).
-- `docs/school-integration/LIMITATIONS.md` — #53 sub-items (m)–(r) (the S3.1 constraints) + sub-items (s)–(v) (the S3.2 constraints) + sub-items (w)–(aa) (the S3.3 constraints).
-- `backend/CLAUDE.md` — `pedagogy/` line: chip pure functions in `coach_review.py` + `coach_chip_service.py` (impure orchestrator) + `PEDAGOGY_ENGINE_COACH_CHIPS` flag (LIVE, default `'1'`, cut over 2026-06-24) + `promote_back.py` (pure decision module) + `PEDAGOGY_ENGINE_PROMOTE_BACK` flag (BUILT, default `'0'`, not cut over).
+- `PEDAGOGY_ENGINE.md` §14 — S3 row: "S3.1 shipped (post-task review, model-verified); S3.2 CUT OVER 2026-06-24 (live chips, `PEDAGOGY_ENGINE_COACH_CHIPS=1`, default `1`); S3.3 BUILT behind flag (`PEDAGOGY_ENGINE_PROMOTE_BACK=0`), not cut over; S3.4 BUILT behind flag (`PEDAGOGY_ENGINE_ASK_MODE=0`), not cut over."
+- `docs/school-integration/TASKS.md` — S3.1 build + flag-wiring/doc-sync items (complete) + S3.1 cutover + S3.2 build item (complete) + S3.2 cutover (complete) + S3.3 build item (complete, behind flag) + S3.3 cutover (pending) + S3.4 build item (complete, behind flag) + S3.4 cutover (pending).
+- `docs/school-integration/LIMITATIONS.md` — #53 sub-items (m)–(r) (the S3.1 constraints) + sub-items (s)–(v) (the S3.2 constraints) + sub-items (w)–(aa) (the S3.3 constraints) + sub-items (bb)–(ff) (the S3.4 constraints).
+- `backend/CLAUDE.md` — `pedagogy/` line: chip pure functions in `coach_review.py` + `coach_chip_service.py` (impure orchestrator) + `PEDAGOGY_ENGINE_COACH_CHIPS` flag (LIVE, default `'1'`, cut over 2026-06-24) + `promote_back.py` (pure decision module) + `PEDAGOGY_ENGINE_PROMOTE_BACK` flag (BUILT, default `'0'`, not cut over) + `ask.py` (pure) + `ask_service.py` (impure) + `PEDAGOGY_ENGINE_ASK_MODE` flag (BUILT, default `'0'`, not cut over).
 - Design spec: `docs/superpowers/specs/2026-06-23-pedagogy-s3.1-post-task-coach-review-design.md`.
 
 ## 14. Open questions / future hooks
 
 - **S3.2 cutover:** DONE 2026-06-24 (rev `lingual-app-00078-wrc`, cloudbuild default `'1'`). See §S3.2-0 for the full cutover sequence, Spanish catalog, and burn-in status. Post-launch: monitor Spanish-session chip rate and expand feedback catalogs as real tutor phrasings are observed; add native catalogs for ko/ru/he/tl when sufficient tutor-phrase samples exist.
 - **S3.3 cutover (pending):** deploy inert (flag `'0'`, verify prompt byte-identical) → `gcloud run services update ... --update-env-vars PEDAGOGY_ENGINE_PROMOTE_BACK=1` → text burn-in (drive a repeated error past threshold → confirm correction-light tutor + in-thread promote-back) → bump cloudbuild default `0→1` for durability → doc-sync the cutover. Voice burn-in limited by the WebRTC-mic constraint (shared with S3.1/S3.2). Rollback: `--update-env-vars PEDAGOGY_ENGINE_PROMOTE_BACK=0`.
+- **S3.4 cutover (pending):** deploy inert (flag `'0'`, Ask tab hidden, `/ask` endpoint returns null) → `gcloud run services update ... --update-env-vars PEDAGOGY_ENGINE_ASK_MODE=1` → burn-in (ask "how do I say X?" → scaffolded answer; "just give me the answer" → redirect with `kind:"refusal"`; confirm `ask_log` populated and `learning_events` untouched) → bump cloudbuild default `'0'→'1'`. Rollback: `--update-env-vars PEDAGOGY_ENGINE_ASK_MODE=0`. **Independent of the deferred S3.3 cutover.**
+- **S3.4 anti-answer-dump eval:** the `kind:"refusal"` fire rate in prod should be measured and compared to the prompt-enforced refusal target after the cutover burn-in.
+- **S3.4 multi-turn Ask memory:** the current Ask implementation is single Q→A (each ask is a stateless LLM call; no multi-turn Ask history). Multi-turn Ask memory is deferred.
 - **S2 / L7 cross-consumption:** `coach_review` is structured (`target_coverage`, model-verified) so S2 recycling could later prefer it over heuristic coverage, and L7 could present it to teachers. Deferred — not built in S3.1. Note: S3.3's `promotions[]` list on `analysis_state` is also structured for future S2/L7 consumption — not wired yet (LIMITATIONS #53(aa)).
 - **`session.ended` pre-warm:** generation could optionally be pre-warmed when a `session.ended` event *does* fire, so the first read is instant. Deferred optimization; the GET endpoint remains the source of truth.
 
@@ -401,3 +404,91 @@ Every failure path resolves to `promote=false` on the chip — never a 500, neve
 ## S3.3-6. As-built narrowing (LIMITATIONS #53 S3.3)
 
 See `LIMITATIONS.md` #53 sub-items (w)–(aa).
+
+---
+
+# S3.4 — Ask Mode (as built)
+
+**Status: BUILT behind `PEDAGOGY_ENGINE_ASK_MODE` (default `'0'`). NOT cut over — flag is off in prod. Cutover is a separate post-merge step. Independent of the correction track and the deferred S3.3 cutover.**
+
+## S3.4-1. Goal
+
+Give the learner a **text-only quick-help channel** during an assignment practice session: the learner types a question (e.g. "How do I say 'I went to the store'?"), and the system replies with a scaffolded answer. The reply is **never a direct translation** — the anti-answer-dump contract (see §S3.4-4) requires the system to scaffold understanding rather than hand the learner the target answer verbatim. Ask answers are help, not evidence of language production — they are **excluded from `learning_events`** and do not affect coverage, recycling, or the coach review.
+
+## S3.4-2. Architecture — pure / impure split
+
+```
+PURE   backend/services/pedagogy/ask.py                    (stdlib only — import-boundary clean)
+         • build_ask_prompt(question, recent_turns, targets, feedback_policy, scaffold_policy, surface, ui_language) -> list[message]
+             anti-answer-dump contract: instructs the model to scaffold understanding,
+             never give the target phrase verbatim
+         • parse_ask_answer(raw) -> AskAnswer{answer: str, kind: "hint"|"translation"|"definition"|"clarification"|"phrase"|"refusal"}
+             ASK_KINDS = those 6 values; an unknown/missing kind normalizes to DEFAULT_KIND="clarification"
+             "refusal" kind = the model determined the question requested the answer directly
+             (anti-answer-dump enforcement; parse returns kind="refusal" on a compliant model refusal)
+         • serialize_ask_answer(answer) -> dict   ({answer, kind}; the ask_log entry — question/turn_index/
+             generated_at/model — is assembled inline in ask_service.py, not by a pure serializer)
+
+IMPURE backend/services/ask_service.py                     (orchestrator — imports OpenAI/db)
+         • answer_ask(deps, bootstrap, uid, session_id, question, turn_index=None) -> dict | None
+             One LLM call (gpt-5.4-mini-2026-03-17, reasoning_effort="high"); result appended
+             to analysis_state['ask_log'] via update_practice_session_analysis_state; fail-open.
+         • ASK_MODEL = "gpt-5.4-mini-2026-03-17"
+
+GATE   backend/services/pedagogy/integration.py
+         • ask_mode_enabled()  (reads PEDAGOGY_ENGINE_ASK_MODE; mirrors other flag helpers)
+
+ROUTE  backend/routes/curriculum_admin.py
+         • POST /api/practice-sessions/<session_id>/ask  ->  thin wrapper over answer_ask
+             Body: {question: str, turn_index?: int}
+             Returns: {answer: str, kind: "hint"|"translation"|"definition"|"clarification"|"phrase"|"refusal"} | null (flag-off or error)
+
+FRONT  frontend/src/api/ask.ts                             • postAsk(sessionId, question, turnIndex?)
+       frontend/src/components/learning/AskPanel.tsx       (new — question input + answer display)
+       frontend/src/components/learning/ConversationSidecar.tsx
+             (updated — Feedback | Ask tab toggle; askModeEnabled prop gates the Ask tab)
+       frontend/src/components/learning/AssignmentPracticeWorkspace.tsx
+             (updated — passes askModeEnabled from the launch bootstrap to ConversationSidecar)
+```
+
+**Import boundary:** `ask.py` is stdlib-only and imports no OpenAI/Canvas/resolver/compliance — enforced by the `ImportBoundaryTestCase` in `test_pedagogy_engine_s1.py` (extended to cover `ask.py`). The impure orchestrator (`ask_service.py`) lives outside `pedagogy/` at `backend/services/ask_service.py`.
+
+## S3.4-3. Data contract — `analysis_state['ask_log']`
+
+Sits beside S3.1's `analysis_state['coach_review']`, S3.2's `analysis_state['coach_chips']`, and S3.3's `analysis_state['promote_back_state']`/`promotions`. **Separate from `learning_events`** (help is not evidence of language production).
+
+```jsonc
+// analysis_state['ask_log'] — flat list; one entry per ask Q→A
+[
+  {
+    "question":     "<learner's raw question text>",
+    "answer":       "<scaffolded answer from the model>",
+    "kind":         "hint"|"translation"|"definition"|"clarification"|"phrase"|"refusal",  // DEFAULT_KIND="clarification"
+    "turn_index":   <int> | null,          // the session turn the learner was on when asking
+    "generated_at": "<iso8601>",
+    "model":        "gpt-5.4-mini-2026-03-17"
+  }
+]
+```
+
+`ask_log` is **not** a `learning_event` — it is never written to `learning_events` and is invisible to the coverage reader (S2), the coach review (S3.1), and any L7 analytics surface.
+
+## S3.4-4. Anti-answer-dump contract
+
+The load-bearing pedagogical constraint: `build_ask_prompt` instructs the model to scaffold understanding (give hints, examples, grammar explanations, related structures) **without** stating the target answer phrase verbatim. If the learner's question is "just give me the full sentence," the model should produce a `kind:"refusal"` response that redirects to a hint. The contract is **prompt-enforced and heuristic** — `parse_ask_answer` maps the model's compliant refusal to `kind:"refusal"`; the actual fire rate in prod requires post-cutover eval and monitoring (see §14 and LIMITATIONS #53(cc)).
+
+## S3.4-5. `askModeEnabled` on the launch bootstrap
+
+`answer_ask` requires the session to be assignment-linked. `askModeEnabled` is resolved from the launch bootstrap (same `bootstrap` dict the other S3 orchestrators receive) and threaded to the frontend at session launch. The ConversationSidecar's Ask tab is hidden when `askModeEnabled` is false (flag off, non-assignment session, or unresolvable bootstrap).
+
+## S3.4-6. Fail-open invariants
+
+Every failure path resolves to `null` — never a 500, never a blocked session: flag off · not assignment-linked · unresolvable bootstrap · OpenAI error/timeout · malformed JSON. Flag-off requests run only the cheap ownership lookup (no bootstrap, no LLM). The ConversationSidecar hides the Ask tab when `askModeEnabled` is false.
+
+## S3.4-7. Flag & rollout
+
+New flag **`PEDAGOGY_ENGINE_ASK_MODE`** (default `'0'`), independent of all other S3 flags. Brand-new — ABSENT in live service → default `'0'` is REPLACE-safe. Deploy uses `--set-env-vars=REPLACE`, so the flag MUST be listed in `cloudbuild.yaml` AND its default MUST match the live value. Bump to `'1'` only after the live flip + burn-in. Rollback instant: `--update-env-vars PEDAGOGY_ENGINE_ASK_MODE=0`.
+
+## S3.4-8. As-built narrowing (LIMITATIONS #53 S3.4)
+
+See `LIMITATIONS.md` #53 sub-items (bb)–(ff).

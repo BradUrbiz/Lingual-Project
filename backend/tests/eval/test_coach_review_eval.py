@@ -24,8 +24,10 @@ import unittest
 
 # Reasoning model for both the coach pass and the judge. Reasoning models reject
 # a custom temperature, so callers below pass reasoning_effort instead and never
-# set temperature. Override via PEDAGOGY_EVAL_MODEL if needed.
-_EVAL_MODEL = os.environ.get("PEDAGOGY_EVAL_MODEL", "gpt-5.4-mini-2026-03-17")
+# set temperature. Fixed (no env override): the project convention is that all
+# text LLM calls use gpt-5.4-mini-2026-03-17 — the eval must not silently run on
+# a different/forbidden model.
+_EVAL_MODEL = "gpt-5.4-mini-2026-03-17"
 
 
 # Seeded transcripts: each has exactly one known learner error to catch, and at

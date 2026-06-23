@@ -2438,6 +2438,37 @@ def update_practice_session(session_id, updates, *, sql_engine=None):
         )
 
 
+def update_practice_session_analysis_state(session_id, analysis_state, *, sql_engine=None):
+    """Persist a post-hoc ``analysis_state`` update (e.g. the S3.1 coach-review cache).
+
+    Distinct from :func:`update_practice_session`: that path self-disables when
+    ``DUAL_WRITE_ANALYTICS_EVENTS=1`` because the per-turn ``write_turn`` carries the
+    session summary. ``analysis_state`` is NOT carried by any turn write, so a
+    post-task write (coach review) must ALWAYS apply or it is silently dropped under
+    the live retirement flags. Writes Postgres (sole store, fail-closed) when
+    ``WRITE_FIRESTORE_ANALYTICS=0``; under ``=1`` writes Firestore (system of record)
+    and mirrors to PG so the PG-authoritative cache read still resolves.
+    """
+    from backend.db import dual_write_analytics as _da
+    if _da.firestore_analytics_enabled():
+        get_practice_session_ref(session_id).update({
+            'analysis_state': analysis_state,
+            'updated_at': _utc_now(),
+        })
+        if sql_engine is not None:
+            _da.write_session_analysis_state(
+                sql_engine, session_firestore_id=session_id, analysis_state=analysis_state
+            )
+    else:
+        if sql_engine is None:
+            raise RuntimeError(
+                'update_practice_session_analysis_state: WRITE_FIRESTORE_ANALYTICS=0 requires sql_engine'
+            )
+        _da.write_session_analysis_state(
+            sql_engine, session_firestore_id=session_id, analysis_state=analysis_state
+        )
+
+
 def list_assignment_practice_sessions(assignment_id):
     """List practice sessions for an assignment."""
     docs = get_practice_sessions_collection().where('assignment_id', '==', assignment_id).stream()

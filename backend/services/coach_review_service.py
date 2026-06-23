@@ -128,7 +128,11 @@ def generate_coach_review(deps: Any, bootstrap: dict, uid: str, session_id: str)
             else analysis_state
         )
         target_state["coach_review"] = serialized
-        deps.db.update_practice_session(session_id, {"analysis_state": target_state}, sql_engine=deps.sql_engine)
+        # Dedicated analysis_state write: update_practice_session self-disables under
+        # DUAL_WRITE_ANALYTICS_EVENTS=1 (the per-turn write_turn carries the summary),
+        # which would silently drop this post-task cache write and regenerate on every
+        # read. This path always applies. See database.update_practice_session_analysis_state.
+        deps.db.update_practice_session_analysis_state(session_id, target_state, sql_engine=deps.sql_engine)
         return serialized
     except Exception:
         logger.exception("coach review generation failed; degrading to no review (session_id=%s)", session_id)

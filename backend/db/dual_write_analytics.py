@@ -524,6 +524,50 @@ def primary_update_practice_session(
     _run_with_timeout_strict(sql_engine, 'update_practice_session', op, timeout_ms=2000)
 
 
+def write_session_analysis_state(
+    sql_engine: Any, *, session_firestore_id: str, analysis_state: dict[str, Any]
+) -> None:
+    """Persist a post-hoc ``analysis_state`` UPDATE (e.g. the S3.1 coach-review cache).
+
+    Deliberately NOT gated on ``DUAL_WRITE_ANALYTICS_EVENTS``: unlike the per-turn
+    summary, ``analysis_state`` is never carried by ``write_turn``, so the events
+    self-disable that ``primary_update_practice_session`` uses (§5b.2 #7) would
+    silently drop this write under the live retirement flags (events=1) — exactly the
+    gap that left the coach review regenerating on every read. A standalone targeted
+    UPDATE keyed by ``legacy_firestore_id``; fail-closed (PG is the sole store under
+    retirement), with the coach-review service supplying its own fail-open guard.
+    2000ms budget, matching ``primary_update_practice_session``.
+    """
+    values = {'analysis_state': analysis_state, 'updated_at': _utcnow()}
+
+    def op(session: Any) -> None:
+        from sqlalchemy import update
+
+        from backend.db.models.practice import PracticeSession
+
+        result = session.execute(
+            update(PracticeSession)
+            .where(PracticeSession.legacy_firestore_id == session_firestore_id)
+            .values(**values)
+        )
+        # A 0-row update commits cleanly (the strict runner only raises on engine/SQL
+        # errors). That happens only for a session not in Postgres — i.e. a pre-migration
+        # Firestore-only session whose read fell open to Firestore. We do NOT raise:
+        # this is a fail-open cache write, so the caller still returns a correct (just
+        # uncached) review and regenerates next time, which beats surfacing nothing.
+        # We DO log so the otherwise-silent drop is observable rather than mysterious.
+        if getattr(result, 'rowcount', None) == 0:
+            _log.warning(
+                'update_practice_session_analysis_state matched 0 rows; session not in '
+                'Postgres (legacy Firestore-only?) — cache write dropped, review will '
+                'regenerate on next read (session=%s)', session_firestore_id,
+            )
+
+    _run_with_timeout_strict(
+        sql_engine, 'update_practice_session_analysis_state', op, timeout_ms=2000
+    )
+
+
 def _prepare_turn(
     events: list[dict[str, Any]] | None, session_updates: dict[str, Any] | None
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:

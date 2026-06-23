@@ -212,6 +212,11 @@ class _FakeDb:
         if isinstance(self._session, dict):
             self._session.update(updates)
 
+    def update_practice_session_analysis_state(self, session_id, analysis_state, *, sql_engine=None):
+        self.updates.append({'analysis_state': analysis_state})
+        if isinstance(self._session, dict):
+            self._session['analysis_state'] = analysis_state
+
 
 class _FakeDeps:
     def __init__(self, db, client):

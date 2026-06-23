@@ -512,5 +512,73 @@ class TestWriteRetirement(unittest.TestCase):
         self.assertEqual(captured['timeout_ms'], 1000)
 
 
+class TestSessionAnalysisStateWrite(unittest.TestCase):
+    """Post-hoc analysis_state write (S3.1 coach-review cache). UNLIKE the per-turn
+    UPDATE this must NOT self-disable under DUAL_WRITE_ANALYTICS_EVENTS=1 — analysis_state
+    is never carried by write_turn, so the events self-disable would silently drop it."""
+
+    def setUp(self):
+        for k in ('WRITE_FIRESTORE_ANALYTICS', 'DUAL_WRITE_ANALYTICS_EVENTS'):
+            os.environ.pop(k, None)
+            self.addCleanup(lambda key=k: os.environ.pop(key, None))
+
+    def test_issues_update_even_when_events_enabled(self):
+        os.environ['DUAL_WRITE_ANALYTICS_EVENTS'] = '1'  # would self-disable primary_update
+        captured = {}
+
+        def fake_strict(engine, op_name, fn, *, timeout_ms):
+            captured['op_name'] = op_name
+            captured['timeout_ms'] = timeout_ms
+            sess = _RecordingSession()
+            fn(sess)
+            captured['sql'] = [str(s) for s in sess.statements]
+
+        with mock.patch.object(da, '_run_with_timeout_strict', fake_strict):
+            da.write_session_analysis_state(
+                lambda: object(), session_firestore_id='s1',
+                analysis_state={'coach_review': {'model': 'm'}})
+
+        self.assertEqual(captured['op_name'], 'update_practice_session_analysis_state')
+        self.assertEqual(captured['timeout_ms'], 2000)
+        self.assertIn('UPDATE practice_sessions', '\n'.join(captured['sql']))
+
+    def test_zero_row_update_warns_but_does_not_raise(self):
+        # A session absent from PG (legacy Firestore-only) -> 0-row update. Fail-open
+        # cache write must NOT raise (the caller still returns a correct uncached
+        # review), but the otherwise-silent drop must be logged.
+        os.environ['DUAL_WRITE_ANALYTICS_EVENTS'] = '1'
+
+        class _ZeroRowSession(_RecordingSession):
+            def execute(self, stmt):
+                super().execute(stmt)
+                return type('R', (), {'rowcount': 0})()
+
+        def fake_strict(engine, op_name, fn, *, timeout_ms):
+            fn(_ZeroRowSession())
+
+        with mock.patch.object(da, '_run_with_timeout_strict', fake_strict):
+            with self.assertLogs('backend.db.dual_write_analytics', level='WARNING') as cm:
+                da.write_session_analysis_state(
+                    lambda: object(), session_firestore_id='ghost',
+                    analysis_state={'coach_review': {'model': 'm'}})
+        self.assertTrue(any('0 rows' in m for m in cm.output))
+
+    def test_database_wrapper_raises_when_retired_without_engine(self):
+        import database
+        os.environ['WRITE_FIRESTORE_ANALYTICS'] = '0'
+        with self.assertRaises(RuntimeError):
+            database.update_practice_session_analysis_state('s1', {'coach_review': {}}, sql_engine=None)
+
+    def test_database_wrapper_calls_pg_write_when_retired(self):
+        import database
+        os.environ['WRITE_FIRESTORE_ANALYTICS'] = '0'
+        with mock.patch.object(da, 'write_session_analysis_state') as w:
+            database.update_practice_session_analysis_state(
+                's1', {'coach_review': {'x': 1}}, sql_engine=object())
+        w.assert_called_once()
+        self.assertEqual(w.call_args.kwargs['session_firestore_id'], 's1')
+        self.assertEqual(w.call_args.kwargs['analysis_state'], {'coach_review': {'x': 1}})
+
+
 if __name__ == '__main__':
     unittest.main()

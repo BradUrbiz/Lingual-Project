@@ -84,3 +84,7 @@ The change is purely additive. The `spanish_catalog=None` default ensures every 
 ## Concerns
 
 None. The pattern catalog is conservative; precision is prioritized over recall. Additional patterns can be added as more live session data is observed.
+
+## Fix round 1
+
+Removed the bare `r'\botra vez\b'` entry from `SPANISH_ASSISTANT_FEEDBACK_PATTERNS['feedback.elicitation']`. "Otra vez" ("again") is ordinary non-corrective Spanish and over-fired on any assistant line using it (e.g. re-serving an order). The corrective-specific forms `r'\bintenta otra vez\b'` and `r'\bpuedes decirlo otra vez\b'` are retained and cover the real elicitation cases. Added `test_spanish_bare_otra_vez_no_elicitation` guard test to `backend/tests/test_practice_analytics.py`; all 87 tests pass.

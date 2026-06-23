@@ -156,7 +156,6 @@ SPANISH_ASSISTANT_FEEDBACK_PATTERNS = {
         r'\bla forma correcta\b',
     ),
     'feedback.elicitation': (
-        r'\botra vez\b',
         r'\bpuedes repetir\b',
         r'\bpuedes decirlo otra vez\b',
         r'\bcomo se dice\b',

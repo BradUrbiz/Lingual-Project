@@ -279,6 +279,16 @@ class TestDetectFeedbackEventTypes(unittest.TestCase):
         )
         self.assertEqual(len(detected), 0)
 
+    def test_spanish_bare_otra_vez_no_elicitation(self):
+        # False-positive guard: ordinary "otra vez" (non-corrective) must NOT fire elicitation.
+        # e.g. assistant re-serving a café order — "otra vez" means "again", not "try again".
+        detected = _detect_feedback_event_types(
+            "Claro, pediste un cafe otra vez. Aqui tienes.",
+            locale="es-ES",
+        )
+        event_types = [d["eventType"] for d in detected]
+        self.assertNotIn("feedback.elicitation", event_types)
+
 
 class TestDetectStudentErrors(unittest.TestCase):
 

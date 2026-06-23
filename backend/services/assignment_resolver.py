@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -1045,6 +1046,7 @@ def _resolve_canvas_generated_bootstrap(
             "modality": serialize_modality_policy(launch_modality),
             "voiceAllowed": launch_modality.get("mode") in {"voice_only", "hybrid"},
             "textAllowed": launch_modality.get("mode") in {"text_only", "hybrid"},
+            "askModeEnabled": os.environ.get("PEDAGOGY_ENGINE_ASK_MODE", "").strip().lower() in {"1", "true", "yes", "on"},
             "fallbackApplied": False,
             "blockedReasons": [],
             "retentionPolicy": None,

@@ -1,5 +1,7 @@
+import os
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 from backend.services.assignment_resolver import (
     load_assignment_bundle,
@@ -665,6 +667,55 @@ class TestCanvasGeneratedBootstrapFromAssignment(unittest.TestCase):
     def test_legacy_bilingual_scaffold_normalizes_to_english_led(self):
         prompt = self._prompt_for_intensity("bilingual_scaffold")
         self.assertIn("English leads the conversation", prompt)
+
+
+# ---------------------------------------------------------------------------
+# askModeEnabled on the launch bootstrap (Task 6 — S3.4)
+# ---------------------------------------------------------------------------
+class TestAskModeEnabledOnBootstrap(unittest.TestCase):
+    """launch["askModeEnabled"] reflects the PEDAGOGY_ENGINE_ASK_MODE env flag."""
+
+    def _make_bootstrap(self):
+        deps = _make_deps()
+        assignment = {
+            "id": "a-ask",
+            "org_id": "org-1",
+            "class_id": "c-1",
+            "title": "Ask mode test",
+            "status": "published",
+            "task_type": "information_gap",
+            "generated_scenario": "You are ordering coffee.",
+            "objectives": ["Ask for a drink"],
+            "target_expressions": ["Je voudrais"],
+            "focus_grammar": ["polite conditional"],
+        }
+        class_record = {
+            "id": "c-1",
+            "org_id": "org-1",
+            "name": "French",
+            "learning_locale": "fr-FR",
+            "subject": "French",
+            "status": "active",
+        }
+        return resolve_assignment_bootstrap(deps, assignment=assignment, class_record=class_record)
+
+    def test_ask_mode_enabled_true_when_flag_is_1(self):
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASK_MODE": "1"}):
+            bootstrap = self._make_bootstrap()
+        self.assertIs(bootstrap["launch"]["askModeEnabled"], True)
+
+    def test_ask_mode_enabled_false_when_flag_is_0(self):
+        env = {k: v for k, v in os.environ.items() if k != "PEDAGOGY_ENGINE_ASK_MODE"}
+        env["PEDAGOGY_ENGINE_ASK_MODE"] = "0"
+        with mock.patch.dict(os.environ, env, clear=True):
+            bootstrap = self._make_bootstrap()
+        self.assertIs(bootstrap["launch"]["askModeEnabled"], False)
+
+    def test_ask_mode_enabled_false_when_flag_is_absent(self):
+        env = {k: v for k, v in os.environ.items() if k != "PEDAGOGY_ENGINE_ASK_MODE"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            bootstrap = self._make_bootstrap()
+        self.assertIs(bootstrap["launch"]["askModeEnabled"], False)
 
 
 if __name__ == "__main__":

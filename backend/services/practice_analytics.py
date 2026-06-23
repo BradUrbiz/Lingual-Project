@@ -143,6 +143,34 @@ FRENCH_ASSISTANT_FEEDBACK_PATTERNS = {
     ),
 }
 
+SPANISH_ASSISTANT_FEEDBACK_PATTERNS = {
+    'feedback.recast': (
+        r'\bpequeno ajuste\b',
+        r'\bpequenos ajustes\b',
+        r'\bse dice\b',
+        r'\bse escribe\b',
+        r'\bdecimos\b',
+        r'\bmejor usar\b',
+        r'\bmejor di\b',
+        r'\bquieres decir\b',
+        r'\bla forma correcta\b',
+    ),
+    'feedback.elicitation': (
+        r'\botra vez\b',
+        r'\bpuedes repetir\b',
+        r'\bpuedes decirlo otra vez\b',
+        r'\bcomo se dice\b',
+        r'\bintentalo\b',
+        r'\bintenta otra vez\b',
+    ),
+    'feedback.review_item': (
+        r'\brecuerda\b',
+        r'\brepasemos\b',
+        r'\bhoy practicamos\b',
+        r'\brepaso rapido\b',
+    ),
+}
+
 GENERIC_CONTEXT_TAG_PATTERNS = {
     'beliefs_values': (
         r'\bvalue\b',
@@ -577,6 +605,8 @@ def _detect_locale_key(locale: Any) -> str:
     normalized = _normalize_string(locale).lower()
     if normalized.startswith('fr'):
         return 'fr'
+    if normalized.startswith('es'):
+        return 'es'
     return 'en'
 
 
@@ -638,10 +668,14 @@ def _catalog_patterns(
     generic_catalog: dict[str, tuple[str, ...]],
     french_catalog: dict[str, tuple[str, ...]],
     signal_id: str,
+    spanish_catalog: dict[str, tuple[str, ...]] | None = None,
 ) -> tuple[str, ...]:
     patterns = list(generic_catalog.get(signal_id, ()))
-    if _detect_locale_key(locale) == 'fr':
+    locale_key = _detect_locale_key(locale)
+    if locale_key == 'fr':
         patterns.extend(french_catalog.get(signal_id, ()))
+    elif locale_key == 'es' and spanish_catalog is not None:
+        patterns.extend(spanish_catalog.get(signal_id, ()))
     return tuple(patterns)
 
 
@@ -705,6 +739,7 @@ def _detect_feedback_event_types(content: str, *, locale: str) -> list[dict[str,
             generic_catalog=GENERIC_ASSISTANT_FEEDBACK_PATTERNS,
             french_catalog=FRENCH_ASSISTANT_FEEDBACK_PATTERNS,
             signal_id=event_type,
+            spanish_catalog=SPANISH_ASSISTANT_FEEDBACK_PATTERNS,
         )
         matches = _find_pattern_matches(search_text, patterns)
         if matches:

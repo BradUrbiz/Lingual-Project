@@ -103,6 +103,15 @@ class TestDetectLocaleKey(unittest.TestCase):
     def test_empty_defaults_english(self):
         self.assertEqual(_detect_locale_key(""), "en")
 
+    def test_spanish_locale(self):
+        self.assertEqual(_detect_locale_key("es-ES"), "es")
+
+    def test_spanish_locale_mx(self):
+        self.assertEqual(_detect_locale_key("es-MX"), "es")
+
+    def test_korean_defaults_english(self):
+        self.assertEqual(_detect_locale_key("ko-KR"), "en")
+
 
 class TestCountTargetExpressionHits(unittest.TestCase):
 
@@ -208,6 +217,66 @@ class TestDetectFeedbackEventTypes(unittest.TestCase):
 
     def test_no_match(self):
         detected = _detect_feedback_event_types("Hello, how are you?", locale="en-US")
+        self.assertEqual(len(detected), 0)
+
+    # --- Spanish catalog tests ---
+
+    def test_spanish_recast_pequeno_ajuste(self):
+        # Live tutor line: "Pequeño ajuste: mejor 'una galleta'."
+        detected = _detect_feedback_event_types(
+            "Pequeño ajuste: mejor 'una galleta'.",
+            locale="es-ES",
+        )
+        event_types = [d["eventType"] for d in detected]
+        self.assertIn("feedback.recast", event_types)
+
+    def test_spanish_elicitation_intenta_otra_vez(self):
+        detected = _detect_feedback_event_types(
+            "Intenta otra vez.",
+            locale="es-ES",
+        )
+        event_types = [d["eventType"] for d in detected]
+        self.assertIn("feedback.elicitation", event_types)
+
+    def test_spanish_review_recuerda(self):
+        detected = _detect_feedback_event_types(
+            "Recuerda usar quisiera.",
+            locale="es-ES",
+        )
+        event_types = [d["eventType"] for d in detected]
+        self.assertIn("feedback.review_item", event_types)
+
+    def test_spanish_recast_not_detected_for_en_us(self):
+        # "pequeño ajuste" must NOT fire for English locale (catalog is locale-gated)
+        detected = _detect_feedback_event_types(
+            "Pequeño ajuste: mejor 'una galleta'.",
+            locale="en-US",
+        )
+        event_types = [d["eventType"] for d in detected]
+        self.assertNotIn("feedback.recast", event_types)
+
+    def test_english_recast_still_detected_for_en(self):
+        detected = _detect_feedback_event_types(
+            "Did you mean you went to the store?",
+            locale="en-US",
+        )
+        event_types = [d["eventType"] for d in detected]
+        self.assertIn("feedback.recast", event_types)
+
+    def test_french_recast_still_detected_for_fr(self):
+        detected = _detect_feedback_event_types(
+            "Tu veux dire que tu es allé au magasin?",
+            locale="fr-FR",
+        )
+        event_types = [d["eventType"] for d in detected]
+        self.assertIn("feedback.recast", event_types)
+
+    def test_spanish_praise_no_feedback_events(self):
+        # False-positive guard: ordinary praise must not fire feedback events
+        detected = _detect_feedback_event_types(
+            "¡Muy bien! Gracias.",
+            locale="es-ES",
+        )
         self.assertEqual(len(detected), 0)
 
 

@@ -196,10 +196,11 @@ class _FakeOpenAI:
 
 
 class _FakeDb:
-    def __init__(self, session=None, chat=None, raise_on=None):
+    def __init__(self, session=None, chat=None, raise_on=None, events=None):
         self._session = dict(session) if session else None
         self._chat = chat
         self._raise_on = raise_on or set()
+        self._events = events or []
         self.updates = []
 
     def get_practice_session(self, session_id):
@@ -219,6 +220,9 @@ class _FakeDb:
         self.updates.append({'analysis_state': analysis_state})
         if isinstance(self._session, dict):
             self._session['analysis_state'] = analysis_state
+
+    def list_session_learning_events(self, session_id):
+        return list(self._events)
 
 
 class _FakeDeps:
@@ -428,6 +432,77 @@ class ParseCoachChipTestCase(unittest.TestCase):
         self.assertEqual(serialize_coach_chip(item), {
             'utterance': 'Yo va al tienda', 'better': 'Yo voy a la tienda',
             'why': 'ir is irregular', 'target': 'focus_grammar:ir', 'confidence_caveat': True})
+
+
+_CHIP_JSON = ('{"chip":{"utterance":"Yo va al tienda","better":"Yo voy a la tienda",'
+              '"why":"ir is irregular","target":null,"confidence_caveat":false}}')
+_CHIP_NULL_JSON = '{"chip": null}'
+_CORRECTIVE_EVENTS = [{'turn_index': 4, 'event_type': 'feedback.recast'}]
+
+
+def _chips_on():
+    return mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_COACH_CHIPS': '1'})
+
+
+class GenerateCoachChipTestCase(unittest.TestCase):
+    def test_flag_off_returns_none_without_reads(self):
+        from backend.services.coach_chip_service import generate_coach_chip
+        db = _FakeDb(session=_SESSION, chat=_CHAT, raise_on={'get_practice_session'})
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_COACH_CHIPS': '0'}):
+            self.assertIsNone(generate_coach_chip(_FakeDeps(db, _FakeOpenAI()), _BOOTSTRAP, 'student-1', 'sess-1', 4))
+
+    def test_no_corrective_signal_skips_llm(self):
+        from backend.services.coach_chip_service import generate_coach_chip
+        client = _FakeOpenAI(content=_CHIP_JSON)
+        db = _FakeDb(session=_SESSION, chat=_CHAT, events=[{'turn_index': 4, 'event_type': 'student.turn'}])
+        with _chips_on():
+            self.assertIsNone(generate_coach_chip(_FakeDeps(db, client), _BOOTSTRAP, 'student-1', 'sess-1', 4))
+        self.assertEqual(client.create_calls, 0)
+
+    def test_happy_path_generates_and_appends(self):
+        from backend.services.coach_chip_service import generate_coach_chip
+        client = _FakeOpenAI(content=_CHIP_JSON)
+        db = _FakeDb(session=_SESSION, chat=_CHAT, events=_CORRECTIVE_EVENTS)
+        with _chips_on():
+            chip = generate_coach_chip(_FakeDeps(db, client), _BOOTSTRAP, 'student-1', 'sess-1', 4)
+        self.assertIsNotNone(chip)
+        self.assertEqual(chip['turn_index'], 4)
+        self.assertEqual(chip['model'], 'gpt-5.4-mini-2026-03-17')
+        self.assertEqual(chip['utterance'], 'Yo va al tienda')
+        self.assertEqual(len(db.updates), 1)
+        self.assertEqual(db.updates[0]['analysis_state']['coach_chips'][0]['turn_index'], 4)
+
+    def test_model_silent_returns_none_no_write(self):
+        from backend.services.coach_chip_service import generate_coach_chip
+        client = _FakeOpenAI(content=_CHIP_NULL_JSON)
+        db = _FakeDb(session=_SESSION, chat=_CHAT, events=_CORRECTIVE_EVENTS)
+        with _chips_on():
+            self.assertIsNone(generate_coach_chip(_FakeDeps(db, client), _BOOTSTRAP, 'student-1', 'sess-1', 4))
+        self.assertEqual(len(db.updates), 0)
+
+    def test_dedup_existing_turn_returns_without_llm(self):
+        from backend.services.coach_chip_service import generate_coach_chip
+        existing = {'turn_index': 4, 'utterance': 'cached'}
+        session = {**_SESSION, 'analysis_state': {'coach_chips': [existing]}}
+        client = _FakeOpenAI(content=_CHIP_JSON)
+        db = _FakeDb(session=session, chat=_CHAT, events=_CORRECTIVE_EVENTS)
+        with _chips_on():
+            chip = generate_coach_chip(_FakeDeps(db, client), _BOOTSTRAP, 'student-1', 'sess-1', 4)
+        self.assertEqual(chip, existing)
+        self.assertEqual(client.create_calls, 0)
+
+    def test_no_targets_returns_none(self):
+        from backend.services.coach_chip_service import generate_coach_chip
+        bootstrap = {'mapping': {'targetExpressions': [], 'targetVocabulary': [], 'focusGrammar': []}}
+        db = _FakeDb(session=_SESSION, chat=_CHAT, events=_CORRECTIVE_EVENTS)
+        with _chips_on():
+            self.assertIsNone(generate_coach_chip(_FakeDeps(db, _FakeOpenAI()), bootstrap, 'student-1', 'sess-1', 4))
+
+    def test_fail_open_on_db_error(self):
+        from backend.services.coach_chip_service import generate_coach_chip
+        db = _FakeDb(session=_SESSION, chat=_CHAT, events=_CORRECTIVE_EVENTS, raise_on={'get_practice_session'})
+        with _chips_on():
+            self.assertIsNone(generate_coach_chip(_FakeDeps(db, _FakeOpenAI(content=_CHIP_JSON)), _BOOTSTRAP, 'student-1', 'sess-1', 4))
 
 
 if __name__ == '__main__':

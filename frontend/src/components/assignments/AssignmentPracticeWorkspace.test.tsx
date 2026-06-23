@@ -647,7 +647,21 @@ describe('AssignmentPracticeWorkspace', () => {
     });
   });
 
-  it('hydrates coach chips from the backend on mount for the active practice session', async () => {
+  it('hydrates coach chips from the backend and renders them in FeedbackSidecar', async () => {
+    const PERSISTED_CHIP: import('@/api/coachChips').CoachChip = {
+      turn_index: 3,
+      generated_at: '2026-06-24T10:00:00Z',
+      model: 'gpt-5.4-mini',
+      surface: 'voice',
+      utterance: 'voy a la tienda',
+      better: 'Yo voy a la tienda',
+      why: 'Adding the subject pronoun makes the sentence clearer.',
+      target: null,
+      confidence_caveat: false,
+    };
+
+    getCoachChipsMock.mockResolvedValue([PERSISTED_CHIP]);
+
     render(
       <AssignmentPracticeWorkspace
         open
@@ -656,8 +670,109 @@ describe('AssignmentPracticeWorkspace', () => {
       />
     );
 
+    // Verify the fetch was called with the active session id
     await waitFor(() => {
       expect(getCoachChipsMock).toHaveBeenCalledWith(ACTIVE_SESSION.id);
+    });
+
+    // Verify the persisted chip's `better` text is actually rendered in FeedbackSidecar
+    expect(await screen.findByText('Yo voy a la tienda')).toBeInTheDocument();
+  });
+
+  it('merges live postCoachChip and hydrated getCoachChips chips without clobbering either', async () => {
+    // Use a text-modality session so we can trigger postCoachChip via a text send.
+    const TEXT_BOOTSTRAP: AssignmentBootstrapData = {
+      ...BOOTSTRAP,
+      launch: {
+        ...BOOTSTRAP.launch,
+        modality: { mode: 'text_only', voiceMinutesCap: 0, textFallbackEnabled: false },
+        voiceAllowed: false,
+        textAllowed: true,
+      },
+    };
+    const TEXT_SESSION: PracticeSessionDto = {
+      ...ACTIVE_SESSION,
+      modality: 'text_only',
+      voiceEnabled: false,
+      textEnabled: true,
+    };
+    const TEXT_WORKSPACE: AssignmentWorkspaceData = {
+      ...WORKSPACE,
+      bootstrap: TEXT_BOOTSTRAP,
+      threads: [
+        {
+          ...WORKSPACE.threads[0],
+          latestPracticeSession: TEXT_SESSION,
+          attempts: [TEXT_SESSION],
+        },
+      ],
+    };
+
+    // Live chip produced by postCoachChip (turn_index 2)
+    const LIVE_CHIP: import('@/api/coachChips').CoachChip = {
+      turn_index: 2,
+      generated_at: '2026-06-24T10:01:00Z',
+      model: 'gpt-5.4-mini',
+      surface: 'text',
+      utterance: 'je voudrais un cafe',
+      better: 'Je voudrais un café, s\'il vous plaît.',
+      why: 'Adding the polite closer improves register.',
+      target: null,
+      confidence_caveat: false,
+    };
+
+    // Persisted chip from getCoachChips (different turn_index 5)
+    const HYDRATED_CHIP: import('@/api/coachChips').CoachChip = {
+      turn_index: 5,
+      generated_at: '2026-06-24T09:00:00Z',
+      model: 'gpt-5.4-mini',
+      surface: 'text',
+      utterance: 'voy a la tienda',
+      better: 'Yo voy a la tienda',
+      why: 'Subject pronoun clarifies the sentence.',
+      target: null,
+      confidence_caveat: false,
+    };
+
+    // Hold getCoachChips resolution until after the live chip fires
+    let resolveHydration!: (chips: import('@/api/coachChips').CoachChip[]) => void;
+    getCoachChipsMock.mockReturnValue(new Promise<import('@/api/coachChips').CoachChip[]>((resolve) => {
+      resolveHydration = resolve;
+    }));
+
+    postCoachChipMock.mockResolvedValue(LIVE_CHIP);
+    sendChatMessageMock.mockResolvedValue({ response: 'Très bien !' });
+    reportPracticeSessionEventMock.mockResolvedValue(undefined);
+    getStudentAssignmentWorkspaceMock.mockResolvedValue(TEXT_WORKSPACE);
+
+    render(
+      <AssignmentPracticeWorkspace
+        open
+        bootstrap={TEXT_BOOTSTRAP}
+        onClose={vi.fn()}
+      />
+    );
+
+    // Wait for text input to be ready
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Type your assignment response...')).toBeInTheDocument();
+    });
+
+    // Send a message — triggers postCoachChip which appends the live chip
+    const input = screen.getByPlaceholderText('Type your assignment response...');
+    fireEvent.change(input, { target: { value: 'je voudrais un cafe' } });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+
+    // Wait for the live chip to appear in the sidecar
+    expect(await screen.findByText('Je voudrais un café, s\'il vous plaît.')).toBeInTheDocument();
+
+    // Now resolve the hydration fetch with a chip at a DIFFERENT turn_index
+    resolveHydration([HYDRATED_CHIP]);
+
+    // Both the live chip AND the hydrated chip must be rendered (merge, not overwrite)
+    await waitFor(() => {
+      expect(screen.getByText('Je voudrais un café, s\'il vous plaît.')).toBeInTheDocument();
+      expect(screen.getByText('Yo voy a la tienda')).toBeInTheDocument();
     });
   });
 });

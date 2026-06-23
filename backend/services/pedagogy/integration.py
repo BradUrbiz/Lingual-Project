@@ -41,6 +41,12 @@ def coach_review_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_COACH_REVIEW", "").strip().lower() in _TRUTHY
 
 
+def coach_chips_enabled() -> bool:
+    """Whether S3.2 live between-turn coach chips are on (independent of the
+    coach-review and recycling flags). Reads PEDAGOGY_ENGINE_COACH_CHIPS."""
+    return os.environ.get("PEDAGOGY_ENGINE_COACH_CHIPS", "").strip().lower() in _TRUTHY
+
+
 def resolve_assignment_system_prompt(
     bootstrap: dict[str, Any], *, surface: str, coverage_state: "CoverageState | None" = None
 ) -> str:

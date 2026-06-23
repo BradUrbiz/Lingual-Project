@@ -336,5 +336,21 @@ class CoachReviewEnabledTestCase(unittest.TestCase):
             self.assertFalse(coach_review_enabled())
 
 
+class CoachChipsEnabledTestCase(unittest.TestCase):
+    def test_truthy_values_enable(self):
+        from backend.services.pedagogy.integration import coach_chips_enabled
+        for v in ('1', 'true', 'YES', 'on'):
+            with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_COACH_CHIPS': v}):
+                self.assertTrue(coach_chips_enabled())
+
+    def test_absent_or_falsey_disables(self):
+        from backend.services.pedagogy.integration import coach_chips_enabled
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('PEDAGOGY_ENGINE_COACH_CHIPS', None)
+            self.assertFalse(coach_chips_enabled())
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_COACH_CHIPS': '0'}):
+            self.assertFalse(coach_chips_enabled())
+
+
 if __name__ == '__main__':
     unittest.main()

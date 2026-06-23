@@ -21,6 +21,7 @@ from backend.services.assignment_workspace import build_student_assignment_works
 from backend.services.canvas.practice_generator import generate_canvas_practice
 from backend.services.coach_review_service import generate_coach_review
 from backend.services.coach_chip_service import generate_coach_chip
+from backend.services.ask_service import answer_ask
 from backend.services.compliance import (
     create_consent_event,
     resolve_student_compliance_record,
@@ -769,6 +770,48 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
         except Exception as exc:
             print(f'Coach chips GET error: {exc}')
             return jsonify({'success': True, 'coachChips': []})
+
+    @bp.route('/api/practice-sessions/<session_id>/ask', methods=['POST'])
+    @deps.login_required
+    def api_post_practice_session_ask(session_id):
+        try:
+            uid = deps.get_current_user_uid()
+            session_record = deps.db.get_practice_session(session_id)
+            if not session_record:
+                return jsonify({'success': False, 'error': 'Practice session not found.'}), 404
+            if session_record.get('student_uid') != uid:
+                return jsonify({'success': False, 'error': 'Practice session is not available for this user.'}), 403
+
+            data = request.get_json(silent=True) or {}
+            question = _normalize_string(data.get('question'))
+            turn_index = _coerce_optional_int(data.get('turnIndex', data.get('turn_index')))
+
+            ask = None
+            assignment_id = session_record.get('assignment_id')
+            # Flag gate at the route too: when Ask is off, skip bootstrap entirely.
+            from backend.services.pedagogy.integration import ask_mode_enabled
+            if assignment_id and question and ask_mode_enabled():
+                ui_language = _normalize_string(session_record.get('ui_language')) or 'en'
+                try:
+                    bootstrap = resolve_assignment_bootstrap_for_user(
+                        deps,
+                        uid=uid,
+                        context=deps.get_school_request_context(),
+                        assignment_id=assignment_id,
+                        ui_language=ui_language,
+                    )
+                except Exception:
+                    bootstrap = None
+                if bootstrap:
+                    try:
+                        ask = answer_ask(deps, bootstrap, uid, session_id, question, turn_index)
+                    except Exception:
+                        ask = None
+
+            return jsonify({'success': True, 'ask': ask})
+        except Exception as exc:
+            print(f'Ask error: {exc}')
+            return jsonify({'success': True, 'ask': None})
 
     @bp.route('/api/teacher/assignments/<assignment_id>/analytics', methods=['GET'])
     @deps.login_required

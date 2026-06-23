@@ -226,5 +226,75 @@ class GetCoachChipsRouteTestCase(unittest.TestCase):
         self.assertEqual(body['coachChips'], [])
 
 
+class AskRouteTestCase(unittest.TestCase):
+    def setUp(self):
+        self._bootstrap_patcher = mock.patch(
+            'backend.routes.curriculum_admin.resolve_assignment_bootstrap_for_user',
+            return_value={'mapping': {}},
+        )
+        self.bootstrap_resolver = self._bootstrap_patcher.start()
+
+        self._ask_patcher = mock.patch(
+            'backend.routes.curriculum_admin.answer_ask',
+            return_value={'answer': 'Because of conjugation.', 'kind': 'grammar'},
+        )
+        self._ask_patcher.start()
+
+    def tearDown(self):
+        self._bootstrap_patcher.stop()
+        self._ask_patcher.stop()
+
+    def test_missing_session_returns_404(self):
+        # db returning None -> 404
+        client = _app(_Db(None)).test_client()
+        _login(client)
+        resp = client.post('/api/practice-sessions/nope/ask', json={'question': 'Why?'})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_not_owner_returns_403(self):
+        # session_record student_uid != current uid
+        client = _app(_Db({'student_uid': 'someone-else', 'assignment_id': 'a1'})).test_client()
+        _login(client)
+        resp = client.post('/api/practice-sessions/sess-1/ask', json={'question': 'Why?'})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_flag_off_returns_null_without_bootstrap(self):
+        # PEDAGOGY_ENGINE_ASK_MODE unset -> {'success': True, 'ask': None}; bootstrap resolver NOT called
+        client = _app(_Db(_OWNER_SESSION)).test_client()
+        _login(client)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('PEDAGOGY_ENGINE_ASK_MODE', None)
+            resp = client.post('/api/practice-sessions/sess-1/ask', json={'question': 'Why?'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.get_json()['ask'])
+        self.bootstrap_resolver.assert_not_called()
+
+    def test_flag_on_returns_answer(self):
+        # PEDAGOGY_ENGINE_ASK_MODE=1; answer_ask patched -> {'answer','kind'}; response ask == that
+        client = _app(_Db(_OWNER_SESSION)).test_client()
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_ASK_MODE': '1'}):
+            resp = client.post('/api/practice-sessions/sess-1/ask', json={'question': 'Why?'})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertEqual(body['ask']['answer'], 'Because of conjugation.')
+        self.assertEqual(body['ask']['kind'], 'grammar')
+
+    def test_unexpected_error_fails_open_not_500(self):
+        # a raising db in the read path -> 200 {'success': True, 'ask': None}; never 500
+        class _RaisingDb:
+            def get_practice_session(self, session_id):
+                raise RuntimeError('db unavailable')
+
+        client = _app(_RaisingDb()).test_client()
+        _login(client)
+        resp = client.post('/api/practice-sessions/sess-1/ask', json={'question': 'Why?'})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertIsNone(body['ask'])
+
+
 if __name__ == '__main__':
     unittest.main()

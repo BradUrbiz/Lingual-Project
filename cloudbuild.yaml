@@ -240,11 +240,12 @@ substitutions:
   # Pedagogy Engine S3.2 live coach chips (PEDAGOGY_ENGINE_S3.md). '0' = the
   # coach-chip endpoint does NO work beyond the cheap ownership lookup; '1' =
   # heuristic-gated per-turn chips appended to analysis_state['coach_chips'].
-  # Default HELD '0': lands inert, flipped live via --update-env-vars after a
-  # health check (strangler-fig, same cadence as S1/S2/S3.1). --set-env-vars=REPLACE,
-  # so the flag MUST live here; default '0' matches the currently-absent live value.
-  # Rollback instant: --update-env-vars PEDAGOGY_ENGINE_COACH_CHIPS=0.
-  _PEDAGOGY_ENGINE_COACH_CHIPS: '0'
+  # CUT OVER 2026-06-24: deployed inert (rev 00076) -> flipped live via
+  # --update-env-vars (rev 00077) -> default bumped '0'->'1' for durability so a
+  # rebuild can't regress the live flip (strangler-fig, same cadence as S1/S2/S3.1).
+  # --set-env-vars=REPLACE, so the flag MUST live here AND its default MUST match
+  # the live value ('1'). Rollback instant: --update-env-vars PEDAGOGY_ENGINE_COACH_CHIPS=0.
+  _PEDAGOGY_ENGINE_COACH_CHIPS: '1'
 
 # Store images in Artifact Registry
 images:

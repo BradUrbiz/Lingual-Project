@@ -1,6 +1,6 @@
 # Pedagogy Engine — S3 Conversation Sidecar / Coach Track (detailed design)
 
-**Status:** **S3.1 BUILT 2026-06-23**, behind `PEDAGOGY_ENGINE_COACH_REVIEW` (cloudbuild default `'0'`, NOT yet cut over). S3.2 / S3.3 / S3.4 pending. Sibling to `PEDAGOGY_ENGINE_S1.md` + `PEDAGOGY_ENGINE_S2.md`; realizes the **S3 row** of `PEDAGOGY_ENGINE.md` §14 and the §6.1 / §6.2 coach-track architecture.
+**Status:** **S3.1 CUT OVER 2026-06-23** — `PEDAGOGY_ENGINE_COACH_REVIEW=1` live (rev `lingual-app-00075-7p7`, cloudbuild default bumped `0→1`). Prod burn-in verified the review renders end-to-end on the **text** surface (wins / work_on / target_coverage; caught a planted error; fail-open `null` on scaffold-free). The burn-in caught + fixed a cache-persist bug (commit `a509168`; see §"Cache persistence" below). S3.2 / S3.3 / S3.4 pending. Sibling to `PEDAGOGY_ENGINE_S1.md` + `PEDAGOGY_ENGINE_S2.md`; realizes the **S3 row** of `PEDAGOGY_ENGINE.md` §14 and the §6.1 / §6.2 coach-track architecture.
 **Design spec:** `docs/superpowers/specs/2026-06-23-pedagogy-s3.1-post-task-coach-review-design.md` (approved, pre-implementation). This doc is the as-built record.
 
 ---
@@ -15,7 +15,7 @@ That is a **subsystem cluster, not one feature.** It decomposes by **timing × d
 
 | Slice | What | Status | Risk |
 |---|---|---|---|
-| **S3.1** | Post-task correction pass over the finished transcript → read-only **post-task review** panel on both surfaces | ✅ **BUILT 2026-06-23** (flag default off, not cut over) | Low — no live timing, no two-model coordination, no split-attention |
+| **S3.1** | Post-task correction pass over the finished transcript → read-only **post-task review** panel on both surfaces | ✅ **CUT OVER 2026-06-23** (`PEDAGOGY_ENGINE_COACH_REVIEW=1` live, default `1`) | Low — no live timing, no two-model coordination, no split-attention |
 | **S3.2** | Live, silent between-turn coach chips (side channel only, no promote-back) — invokes the **same** `coach_review.py` schema + model + prompt builder, per-turn instead of once at the end | Pending | Medium — real-time transport |
 | **S3.3** | Promote-back into the main channel + main tutor goes correction-light (the structural ~30% voice-adherence mitigation) | Pending | High — two-model coordination, voice injection, under/over-promotion |
 | **S3.4** | Ask mode (learner-initiated quick help) — largely independent of the correction track | Pending | Low–Medium |
@@ -130,8 +130,8 @@ Learner ends an assignment practice session (AssignmentPracticeWorkspace -> hand
             9. client.chat.completions.create(model=COACH_REVIEW_MODEL, reasoning_effort='high',
                                               response_format={'type':'json_object'}, messages=msgs)
            10. review = parse_coach_review(json.loads(resp), feedback_mode=..., surface=...)   [pure]
-           11. snapshot serialize_coach_review(review) into analysis_state['coach_review']
-               via deps.db.update_practice_session(session_id, {...}, sql_engine=deps.sql_engine)
+           11. re-read session, snapshot serialize_coach_review(review) into analysis_state['coach_review']
+               via deps.db.update_practice_session_analysis_state(session_id, state, sql_engine=deps.sql_engine)
            12. return serialized review
             (steps 5–11 wrapped in try/except -> return None; logger.exception; never raises)
         -> {success: True, coachReview: <obj> | null}
@@ -139,6 +139,10 @@ Learner ends an assignment practice session (AssignmentPracticeWorkspace -> hand
 ```
 
 First open pays the LLM latency (~2–5s) behind a "Generating your review…" state; subsequent opens hit the cache (step 2, no second LLM call).
+
+### 6.1 Cache persistence (post-cutover fix, commit `a509168`)
+
+Step 11 originally wrote via `update_practice_session`. Under the **live retirement flags** (`WRITE_FIRESTORE_ANALYTICS=0` + `DUAL_WRITE_ANALYTICS_EVENTS=1`) that path **self-disables** — its standalone session UPDATE is subsumed by the per-turn `write_turn`, so a flag-on guard short-circuits it. But the coach-review cache write is a **post-task** write with no turn to ride on, so the snapshot was silently dropped and the review **regenerated on every read** (the prod burn-in caught this: two reads returned different `generated_at`). Fix: a dedicated `database.update_practice_session_analysis_state` → `dual_write_analytics.write_session_analysis_state` — a targeted `UPDATE practice_sessions SET analysis_state=…` keyed by `legacy_firestore_id`, **not** gated on the events flag, fail-closed (2000ms); a 0-row update (legacy Firestore-only session) **warns rather than raises**, preserving the fail-open contract (the learner still gets a correct, merely-uncached review). The per-turn self-disable seam is untouched. **S3.2 (per-turn chips) must use this same path, not `update_practice_session`, for any post-hoc `analysis_state` write.**
 
 ## 7. Backend detail
 

@@ -182,3 +182,91 @@ def build_coach_review_prompt(
     user = {"role": "user", "content": "\n".join(lines)}
 
     return [system, user]
+
+
+def build_coach_chip_prompt(
+    recent_turns: list[dict],
+    targets: list[str],
+    feedback_policy: dict,
+    surface: str,
+    ui_language: str,
+) -> list[dict]:
+    """Build [system, user] for a LIVE per-turn chip: at most one correction for
+    the latest learner turn, or none. Leaner sibling of build_coach_review_prompt."""
+    mode = _s((feedback_policy or {}).get("mode")) or "balanced"
+    is_voice = surface == "voice"
+
+    rules = [
+        "You are a live language coach watching a practice conversation in real time.",
+        "The learner just finished a turn. Identify AT MOST ONE most-impactful correction "
+        "for the LATEST learner turn, or none if nothing is worth a side note (stay silent by default).",
+        f"Write the explanation in the learner's UI language (code: {ui_language}); "
+        "quote the learner's own words and the corrected form verbatim in the target language.",
+        "Tie the correction to one of the assignment targets when it matches; otherwise leave target null.",
+    ]
+    if is_voice:
+        rules.append(
+            "This was a SPOKEN turn: set confidence_caveat=true on a correction that depends "
+            "on possibly-misheard (low ASR-confidence) audio."
+        )
+    rules.append(
+        'Return STRICT JSON. Either {"chip": null} when there is nothing worth saying, or '
+        '{"chip": {"utterance":...,"better":...,"why":...,"target":...,"confidence_caveat":...}}.'
+    )
+    system = {"role": "system", "content": "\n".join(rules)}
+
+    lines = [
+        f"Feedback mode: {mode}",
+        "Assignment targets: " + (", ".join(targets) if targets else "(none)"),
+        "",
+        "Recent turns (the last is the latest learner turn):",
+    ]
+    for turn in recent_turns or []:
+        if not isinstance(turn, dict):
+            continue
+        content = _s(turn.get("content"))
+        if not content:
+            continue
+        speaker = "Learner" if turn.get("role") == "user" else "Tutor"
+        lines.append(f"{speaker}: {content}")
+    user = {"role": "user", "content": "\n".join(lines)}
+
+    return [system, user]
+
+
+def parse_coach_chip(
+    raw: object,
+    *,
+    surface: str,
+    known_targets: list[str] | None = None,
+) -> "ReviewItem | None":
+    """Parse a live-chip payload into a single ReviewItem, or None when the model
+    stayed silent / the chip is unusable. Raises ValueError only on a non-dict payload."""
+    if not isinstance(raw, dict):
+        raise ValueError("coach chip payload must be a JSON object")
+
+    chip = raw.get("chip")
+    if not isinstance(chip, dict):
+        return None
+
+    utterance, better = _s(chip.get("utterance")), _s(chip.get("better"))
+    if not utterance or not better:
+        return None
+
+    known = set(known_targets or [])
+    target = _s(chip.get("target")) or None
+    if target and known and target not in known:
+        target = None
+    caveat = bool(chip.get("confidence_caveat")) if surface == "voice" else False
+    return ReviewItem(utterance=utterance, better=better, why=_s(chip.get("why")),
+                      target=target, confidence_caveat=caveat)
+
+
+def serialize_coach_chip(item: ReviewItem) -> dict:
+    return {
+        "utterance": item.utterance,
+        "better": item.better,
+        "why": item.why,
+        "target": item.target,
+        "confidence_caveat": item.confidence_caveat,
+    }

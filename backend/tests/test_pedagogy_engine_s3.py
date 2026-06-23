@@ -6,8 +6,11 @@ from backend.services.pedagogy.coach_review import (
     CoachReview,
     ReviewItem,
     ReviewWin,
+    build_coach_chip_prompt,
     build_coach_review_prompt,
+    parse_coach_chip,
     parse_coach_review,
+    serialize_coach_chip,
     serialize_coach_review,
 )
 
@@ -350,6 +353,81 @@ class CoachChipsEnabledTestCase(unittest.TestCase):
             self.assertFalse(coach_chips_enabled())
         with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_COACH_CHIPS': '0'}):
             self.assertFalse(coach_chips_enabled())
+
+
+class BuildCoachChipPromptTestCase(unittest.TestCase):
+    def _msgs(self, surface='text'):
+        from backend.services.pedagogy.coach_review import build_coach_chip_prompt
+        return build_coach_chip_prompt(
+            [{'role': 'user', 'content': 'Yo va al tienda'},
+             {'role': 'assistant', 'content': 'Quieres decir "voy"?'}],
+            ['focus_grammar:ir'], {'mode': 'balanced'}, surface, 'en')
+
+    def test_returns_system_then_user(self):
+        msgs = self._msgs()
+        self.assertEqual([m['role'] for m in msgs], ['system', 'user'])
+
+    def test_system_demands_one_focus_or_silent_and_strict_json(self):
+        system = self._msgs()[0]['content']
+        self.assertIn('at most one', system.lower())
+        self.assertIn('"chip"', system)
+
+    def test_voice_mentions_spoken_text_does_not(self):
+        self.assertIn('spoken', self._msgs('voice')[0]['content'].lower())
+        self.assertNotIn('spoken', self._msgs('text')[0]['content'].lower())
+
+    def test_user_carries_targets_and_transcript(self):
+        user = self._msgs()[1]['content']
+        self.assertIn('focus_grammar:ir', user)
+        self.assertIn('Yo va al tienda', user)
+
+
+class ParseCoachChipTestCase(unittest.TestCase):
+    def _raw(self, **over):
+        chip = {'utterance': 'Yo va al tienda', 'better': 'Yo voy a la tienda',
+                'why': 'ir is irregular', 'target': 'focus_grammar:ir', 'confidence_caveat': True}
+        chip.update(over)
+        return {'chip': chip}
+
+    def test_non_dict_raises(self):
+        from backend.services.pedagogy.coach_review import parse_coach_chip
+        with self.assertRaises(ValueError):
+            parse_coach_chip(['nope'], surface='text')
+
+    def test_valid_chip_returns_review_item(self):
+        from backend.services.pedagogy.coach_review import parse_coach_chip, ReviewItem
+        item = parse_coach_chip(self._raw(), surface='text', known_targets=['focus_grammar:ir'])
+        self.assertIsInstance(item, ReviewItem)
+        self.assertEqual(item.utterance, 'Yo va al tienda')
+        self.assertEqual(item.better, 'Yo voy a la tienda')
+
+    def test_null_or_missing_chip_returns_none(self):
+        from backend.services.pedagogy.coach_review import parse_coach_chip
+        self.assertIsNone(parse_coach_chip({'chip': None}, surface='text'))
+        self.assertIsNone(parse_coach_chip({}, surface='text'))
+
+    def test_missing_utterance_or_better_returns_none(self):
+        from backend.services.pedagogy.coach_review import parse_coach_chip
+        self.assertIsNone(parse_coach_chip(self._raw(utterance=''), surface='text'))
+        self.assertIsNone(parse_coach_chip(self._raw(better=''), surface='text'))
+
+    def test_unknown_target_normalized_to_none(self):
+        from backend.services.pedagogy.coach_review import parse_coach_chip
+        item = parse_coach_chip(self._raw(target='focus_grammar:zzz'), surface='text',
+                                known_targets=['focus_grammar:ir'])
+        self.assertIsNone(item.target)
+
+    def test_confidence_caveat_forced_false_on_text_kept_on_voice(self):
+        from backend.services.pedagogy.coach_review import parse_coach_chip
+        self.assertFalse(parse_coach_chip(self._raw(), surface='text').confidence_caveat)
+        self.assertTrue(parse_coach_chip(self._raw(), surface='voice').confidence_caveat)
+
+    def test_serialize_roundtrip(self):
+        from backend.services.pedagogy.coach_review import parse_coach_chip, serialize_coach_chip
+        item = parse_coach_chip(self._raw(), surface='voice', known_targets=['focus_grammar:ir'])
+        self.assertEqual(serialize_coach_chip(item), {
+            'utterance': 'Yo va al tienda', 'better': 'Yo voy a la tienda',
+            'why': 'ir is irregular', 'target': 'focus_grammar:ir', 'confidence_caveat': True})
 
 
 if __name__ == '__main__':

@@ -520,5 +520,88 @@ class GenerateCoachChipTestCase(unittest.TestCase):
             self.assertIsNone(generate_coach_chip(_FakeDeps(db, _FakeOpenAI(content=_CHIP_JSON)), _BOOTSTRAP, 'student-1', 'sess-1', 4))
 
 
+class PromoteBackTestCase(unittest.TestCase):
+    def _chip(self, **over):
+        base = {"utterance": "Yo va al tienda", "better": "Yo voy a la tienda",
+                "why": "ir is irregular", "target": None, "confidence_caveat": False}
+        base.update(over)
+        return base
+
+    def test_error_signature_prefers_target(self):
+        from backend.services.pedagogy.promote_back import error_signature
+        self.assertEqual(error_signature(self._chip(target="focus_grammar:ir")), "focus_grammar:ir")
+
+    def test_error_signature_falls_back_to_normalized_better(self):
+        from backend.services.pedagogy.promote_back import error_signature
+        # accent-stripped, lowercased, whitespace-collapsed
+        self.assertEqual(error_signature(self._chip(target=None, better="  Yo VOY  a la tiénda ")),
+                         "yo voy a la tienda")
+
+    def test_mode_threshold_by_mode(self):
+        from backend.services.pedagogy.promote_back import mode_threshold
+        self.assertEqual(mode_threshold({"mode": "balanced"}), (2, 1))           # base 2
+        self.assertEqual(mode_threshold({"mode": "accuracy_first"}), (1, 1))     # max(1, 2-1), max(1, 2-2)
+        self.assertEqual(mode_threshold({"mode": "fluency_first"}), (3, 2))      # 2+1, 2+0
+        self.assertEqual(mode_threshold({"mode": "balanced", "elicitation_repeat_threshold": 4}), (4, 3))
+
+    def test_promote_fires_on_threshold_then_resets(self):
+        from backend.services.pedagogy.promote_back import decide_promote_back
+        chip = self._chip(target=None, better="voy")  # regular, balanced threshold 2
+        state = {}
+        d1, state = decide_promote_back(state, chip, {"mode": "balanced"}, turn_index=0)
+        self.assertFalse(d1.promote)                       # count 1 < 2
+        d2, state = decide_promote_back(state, chip, {"mode": "balanced"}, turn_index=4)
+        self.assertTrue(d2.promote)                        # count 2 >= 2, cooldown ok (no prior)
+        self.assertEqual(d2.reason, "repeat")
+        self.assertEqual(state["counts"][d2.signature], 0) # reset-on-promote
+        self.assertEqual(state["promoted_count"], 1)
+        self.assertEqual(state["last_promoted_turn"], 4)
+
+    def test_hard_target_promotes_one_sooner(self):
+        from backend.services.pedagogy.promote_back import decide_promote_back
+        chip = self._chip(target="focus_grammar:ir")      # balanced hard-target threshold 1
+        d, state = decide_promote_back({}, chip, {"mode": "balanced"}, turn_index=0)
+        self.assertTrue(d.promote)
+        self.assertEqual(d.reason, "hard_target")
+
+    def test_cooldown_blocks_back_to_back(self):
+        from backend.services.pedagogy.promote_back import decide_promote_back
+        chip = self._chip(target="focus_grammar:ir")      # would promote at count 1
+        d1, state = decide_promote_back({}, chip, {"mode": "balanced"}, turn_index=5)
+        self.assertTrue(d1.promote)
+        # a DIFFERENT hard-target error one turn later: cooldown (need >=2 turns) blocks it
+        d2, state = decide_promote_back(state, self._chip(target="focus_grammar:ser"),
+                                        {"mode": "balanced"}, turn_index=6)
+        self.assertFalse(d2.promote)
+
+    def test_per_session_cap(self):
+        from backend.services.pedagogy.promote_back import decide_promote_back
+        policy = {"mode": "fluency_first"}                 # cap 2
+        state = {"counts": {}, "last_promoted_turn": None, "promoted_count": 2}
+        d, _ = decide_promote_back(state, self._chip(target="focus_grammar:ir"), policy, turn_index=20)
+        self.assertFalse(d.promote)                        # cap reached
+
+    def test_does_not_mutate_input_state(self):
+        from backend.services.pedagogy.promote_back import decide_promote_back
+        original = {"counts": {"focus_grammar:ir": 1}, "last_promoted_turn": None, "promoted_count": 0}
+        snapshot = {"counts": {"focus_grammar:ir": 1}, "last_promoted_turn": None, "promoted_count": 0}
+        decide_promote_back(original, self._chip(target="focus_grammar:ir"), {"mode": "balanced"}, turn_index=0)
+        self.assertEqual(original, snapshot)               # unchanged
+
+    def test_build_promote_prompt_grammar_elicits(self):
+        from backend.services.pedagogy.promote_back import build_promote_prompt
+        out = build_promote_prompt(self._chip(target="focus_grammar:ir"), surface="text")
+        self.assertIn("Yo va al tienda", out)              # quoted learner words
+        self.assertIn("Yo voy a la tienda", out)           # quoted target form
+        self.assertIn("self-correct", out.lower())         # elicitation, not a flat recast
+
+    def test_build_promote_prompt_lexical_recasts_and_voice_is_terser(self):
+        from backend.services.pedagogy.promote_back import build_promote_prompt
+        lexical = build_promote_prompt(self._chip(target=None, better="la biblioteca"), surface="text")
+        self.assertIn("model", lexical.lower())
+        voice = build_promote_prompt(self._chip(target="focus_grammar:ir"), surface="voice")
+        self.assertIn("one short sentence", voice.lower())
+
+
 if __name__ == '__main__':
     unittest.main()

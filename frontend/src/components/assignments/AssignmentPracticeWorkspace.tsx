@@ -717,7 +717,7 @@ function useAssignmentPracticeWorkspaceController({
   }, [activePracticeSession]);
 
   useEffect(() => {
-    const sessionId = activePracticeSession?.id;
+    const sessionId = selectedActivePracticeSession?.id;
     setCoachChips([]);                 // reset for the new/!active session (fixes stale chips across session/thread switch)
     if (!sessionId) return;
     let cancelled = false;
@@ -734,7 +734,7 @@ function useAssignmentPracticeWorkspaceController({
       })
       .catch(() => { /* fail-open: no hydration on error, live chips still work */ });
     return () => { cancelled = true; };
-  }, [activePracticeSession?.id]);
+  }, [selectedActivePracticeSession?.id]);
 
   const getActivePracticeSession = useCallback(() => activePracticeSessionRef.current, []);
   const getSelectedChatId = useCallback(() => selectedChatIdRef.current, []);

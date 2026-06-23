@@ -775,4 +775,44 @@ describe('AssignmentPracticeWorkspace', () => {
       expect(screen.getByText('Yo voy a la tienda')).toBeInTheDocument();
     });
   });
+
+  it('clears coach chips when switching to a historical thread with no active session', async () => {
+    // WORKSPACE already has two threads:
+    //   chat-1 → ACTIVE_SESSION (status: active) — has coach chips
+    //   chat-2 → HISTORICAL_SESSION (status: completed) — no active session
+
+    const CHIP_FOR_ACTIVE: import('@/api/coachChips').CoachChip = {
+      turn_index: 1,
+      generated_at: '2026-06-24T10:00:00Z',
+      model: 'gpt-5.4-mini',
+      surface: 'voice',
+      utterance: 'je voudrais un cafe',
+      better: 'UniqueChipTextForLeakTest',
+      why: 'Subject pronoun clarifies.',
+      target: null,
+      confidence_caveat: false,
+    };
+
+    // Active session's chips resolve immediately
+    getCoachChipsMock.mockResolvedValue([CHIP_FOR_ACTIVE]);
+
+    render(
+      <AssignmentPracticeWorkspace
+        open
+        bootstrap={BOOTSTRAP}
+        onClose={vi.fn()}
+      />
+    );
+
+    // Wait for the chip from the active session to appear
+    expect(await screen.findByText('UniqueChipTextForLeakTest')).toBeInTheDocument();
+
+    // Now switch to the historical thread (no active session)
+    fireEvent.click(screen.getByRole('button', { name: /Past attempt thread/i }));
+
+    // After the switch, the chip must be gone (no stale-chip leak)
+    await waitFor(() => {
+      expect(screen.queryByText('UniqueChipTextForLeakTest')).not.toBeInTheDocument();
+    });
+  });
 });

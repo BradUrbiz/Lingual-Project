@@ -1,6 +1,6 @@
 # Pedagogy Engine — S3 Conversation Sidecar / Coach Track (detailed design)
 
-**Status:** **S3.1 CUT OVER 2026-06-23** — `PEDAGOGY_ENGINE_COACH_REVIEW=1` live (rev `lingual-app-00075-7p7`, cloudbuild default bumped `0→1`). Prod burn-in verified the review renders end-to-end on the **text** surface (wins / work_on / target_coverage; caught a planted error; fail-open `null` on scaffold-free). The burn-in caught + fixed a cache-persist bug (commit `a509168`; see §"Cache persistence" below). S3.2 / S3.3 / S3.4 pending. Sibling to `PEDAGOGY_ENGINE_S1.md` + `PEDAGOGY_ENGINE_S2.md`; realizes the **S3 row** of `PEDAGOGY_ENGINE.md` §14 and the §6.1 / §6.2 coach-track architecture.
+**Status:** **S3.1 CUT OVER 2026-06-23** — `PEDAGOGY_ENGINE_COACH_REVIEW=1` live (rev `lingual-app-00075-7p7`, cloudbuild default bumped `0→1`). Prod burn-in verified the review renders end-to-end on the **text** surface (wins / work_on / target_coverage; caught a planted error; fail-open `null` on scaffold-free). The burn-in caught + fixed a cache-persist bug (commit `a509168`; see §"Cache persistence" below). **S3.2 BUILT behind `PEDAGOGY_ENGINE_COACH_CHIPS` (default off), NOT yet cut over** (see §"S3.2 — Live Between-Turn Coach Chips" below). S3.3 / S3.4 pending. Sibling to `PEDAGOGY_ENGINE_S1.md` + `PEDAGOGY_ENGINE_S2.md`; realizes the **S3 row** of `PEDAGOGY_ENGINE.md` §14 and the §6.1 / §6.2 coach-track architecture.
 **Design spec:** `docs/superpowers/specs/2026-06-23-pedagogy-s3.1-post-task-coach-review-design.md` (approved, pre-implementation). This doc is the as-built record.
 
 ---
@@ -16,7 +16,7 @@ That is a **subsystem cluster, not one feature.** It decomposes by **timing × d
 | Slice | What | Status | Risk |
 |---|---|---|---|
 | **S3.1** | Post-task correction pass over the finished transcript → read-only **post-task review** panel on both surfaces | ✅ **CUT OVER 2026-06-23** (`PEDAGOGY_ENGINE_COACH_REVIEW=1` live, default `1`) | Low — no live timing, no two-model coordination, no split-attention |
-| **S3.2** | Live, silent between-turn coach chips (side channel only, no promote-back) — invokes the **same** `coach_review.py` schema + model + prompt builder, per-turn instead of once at the end | Pending | Medium — real-time transport |
+| **S3.2** | Live, silent between-turn coach chips (side channel only, no promote-back) — invokes the **same** `coach_review.py` schema + model + prompt builder, per-turn instead of once at the end | ⚑ **BUILT behind `PEDAGOGY_ENGINE_COACH_CHIPS` (default off), NOT yet cut over** | Medium — real-time transport |
 | **S3.3** | Promote-back into the main channel + main tutor goes correction-light (the structural ~30% voice-adherence mitigation) | Pending | High — two-model coordination, voice injection, under/over-promotion |
 | **S3.4** | Ask mode (learner-initiated quick help) — largely independent of the correction track | Pending | Low–Medium |
 
@@ -209,16 +209,100 @@ New flag **`PEDAGOGY_ENGINE_COACH_REVIEW`** (default off), independent of `PEDAG
 
 S3.1 ships **single-pass, post-task only, assignment-linked only**; `why` explanations in `ui_language`; **not yet feeding S2 recycling or the L7 teacher debrief** (additive + structured for that later, but the cross-consumption is not wired); and reviewability is bound to the explicit **"End session" finish path** — restart/resume reviewability of an earlier session is a fast-follow. See `LIMITATIONS.md` #53 sub-items (m)–(r).
 
+---
+
+# S3.2 — Live Between-Turn Coach Chips (as built)
+
+## S3.2-1. Goal
+
+Between-turn "chips": a silent, heuristic-gated per-turn analysis that surfaces a brief correction or encouragement chip to the learner in the conversation sidecar **after each tutor turn**, without modifying the main tutor's behavior. Chips are additive only (no promote-back — that is S3.3); the main tutor is unchanged.
+
+This is the "live, between-turn side channel" half of §6.2's Feedback mode. It reuses S3.1's `coach_review.py` prompt builder, schema, and model verbatim — called with a single-turn transcript slice instead of the full post-task transcript.
+
+**Built behind `PEDAGOGY_ENGINE_COACH_CHIPS` (default off). NOT yet cut over.**
+
+## S3.2-2. Scope & decisions
+
+**In scope:**
+- Per-turn heuristic gate: a chip is generated only when the current or immediately preceding turn carries a corrective signal (`feedback.recast`, `feedback.elicitation`, `feedback.review_item`, or `metric.repeated_error` at turn N or N+1).
+- A structured `coach_chip` artifact stored on `practice_sessions.analysis_state['coach_chips']` (invariant 9 — no new store). Chips are appended per turn; a reload shows the accumulated list.
+- `POST /api/practice-sessions/<id>/coach-chip` endpoint: generates a chip for the just-completed turn, persists it via `update_practice_session_analysis_state`, and returns it.
+- Voice chips fire after the tutor turn at the between-turn breakpoint (the legal window where the learner is not actively speaking).
+- Flag-gated rollout (`PEDAGOGY_ENGINE_COACH_CHIPS`, default off), fail-open (chip generation failure → `null`; the session is never blocked).
+
+**Non-goals (deferred):**
+- **Promote-back** into the main conversation; main tutor going correction-light → S3.3.
+- **Ask mode** → S3.4.
+- The S3.1 post-task review is unaffected; S3.2 chips are additive alongside it.
+
+## S3.2-3. Architecture — pure / impure split (mirrors S3.1)
+
+```
+PURE   backend/services/pedagogy/coach_review.py        (same module as S3.1 — no changes)
+         • build_coach_chip_prompt / parse_coach_chip / serialize_coach_chip   (new functions in the module)
+
+IMPURE backend/services/coach_chip_service.py           (new impure orchestrator — imports OpenAI/db)
+         • generate_coach_chip(deps, bootstrap, uid, session_id, turn_index) -> dict | None
+
+GATE   backend/services/pedagogy/integration.py
+         • coach_chips_enabled()  (reads PEDAGOGY_ENGINE_COACH_CHIPS; mirrors coach_review_enabled())
+
+ROUTE  backend/routes/curriculum_admin.py
+         • POST /api/practice-sessions/<session_id>/coach-chip  ->  thin wrapper over generate_coach_chip
+```
+
+**Pure / impure discipline:** `build_coach_chip_prompt`, `parse_coach_chip`, and `serialize_coach_chip` are pure functions added to the existing `pedagogy/coach_review.py` (stdlib only, import-boundary clean). The impure orchestrator (`coach_chip_service.py`) handles the per-turn heuristic check, the single-turn transcript slice, the OpenAI call (same model + reasoning effort as S3.1), and the `analysis_state` snapshot via `update_practice_session_analysis_state` (the same dedicated path the S3.1 cache-persist fix introduced — not `update_practice_session`, which self-disables under the live `DUAL_WRITE_ANALYTICS_EVENTS=1`).
+
+## S3.2-4. Heuristic gate
+
+A chip is generated only when the turn carries a corrective signal. The gate is a **necessary condition, not a sufficient one**: it bounds live coverage to turns where the heuristic stream already detected an error, elicitation, or repeated mistake. Turns the heuristic stream misses receive no chip — the S3.1 post-task review is the full-transcript safety net for heuristic blind spots.
+
+Gating signals (checked at turn N or the immediately preceding turn N+1 context):
+- `feedback.recast`
+- `feedback.elicitation`
+- `feedback.review_item`
+- `metric.repeated_error`
+
+## S3.2-5. Data contract — `analysis_state['coach_chips']`
+
+Sits beside S3.1's `analysis_state['coach_review']` and S2's `analysis_state['coverage']`.
+
+```jsonc
+{
+  "chips": [
+    {
+      "turn_index": 3,
+      "generated_at": "<iso8601>",
+      "model": "gpt-5.4-mini-2026-03-17",
+      "text": "<brief chip text in ui_language>",
+      "target": "focus_grammar:present-irregular" | null
+    }
+  ]
+}
+```
+
+New chips are appended; the list accumulates across the session. A second chip on a later turn appends; a reload shows persisted chips (verified by cache-persistence re-check on cutover).
+
+## S3.2-6. Fail-open invariants
+
+Every failure path resolves to `null` / no chip — never a 500, never a blocked session: flag off · heuristic gate miss · not assignment-linked · no transcript slice · OpenAI error/timeout · malformed JSON. The same `update_practice_session_analysis_state` path used by S3.1 ensures the write does not self-disable under the live analytics flags.
+
+## S3.2-7. As-built narrowing vs. the design (LIMITATIONS #53 S3.2)
+
+See `LIMITATIONS.md` #53 sub-items (s)–(v).
+
+---
+
 ## 13. Relationship to existing docs (doc-sync targets)
 
-- `PEDAGOGY_ENGINE.md` §14 — S3 row: "S3.1 shipped (post-task review, model-verified); S3.2/S3.3/S3.4 pending."
-- `docs/school-integration/TASKS.md` — S3.1 build + flag-wiring/doc-sync items (complete) + S3.1 cutover + S3.2/S3.3/S3.4 (pending).
-- `docs/school-integration/LIMITATIONS.md` — #53 sub-items (m)–(r) (the S3.1 constraints).
-- `backend/CLAUDE.md` — `pedagogy/` line: add `coach_review.py` (pure) + note `coach_review_service.py` (impure orchestrator) + the `PEDAGOGY_ENGINE_COACH_REVIEW` flag (default off).
+- `PEDAGOGY_ENGINE.md` §14 — S3 row: "S3.1 shipped (post-task review, model-verified); S3.2 built behind flag (live chips, not yet cut over); S3.3/S3.4 pending."
+- `docs/school-integration/TASKS.md` — S3.1 build + flag-wiring/doc-sync items (complete) + S3.1 cutover + S3.2 build item (complete) + S3.2 cutover + S3.3/S3.4 (pending).
+- `docs/school-integration/LIMITATIONS.md` — #53 sub-items (m)–(r) (the S3.1 constraints) + sub-items (s)–(v) (the S3.2 constraints).
+- `backend/CLAUDE.md` — `pedagogy/` line: add chip pure functions in `coach_review.py` + `coach_chip_service.py` (impure orchestrator) + `PEDAGOGY_ENGINE_COACH_CHIPS` flag (default off).
 - Design spec: `docs/superpowers/specs/2026-06-23-pedagogy-s3.1-post-task-coach-review-design.md`.
 
 ## 14. Open questions / future hooks
 
-- **S3.2 reuse:** the live coach track invokes the same `coach_review.py` prompt builder + schema + model per-turn; S3.1's pure module is designed to be called with a single-turn transcript slice without change.
+- **S3.2 cutover:** S3.2 is built behind `PEDAGOGY_ENGINE_COACH_CHIPS` (default off). Cutover follows the S3.1 pattern: deploy inert → `--update-env-vars PEDAGOGY_ENGINE_COACH_CHIPS=1` → burn-in (chip appears on both surfaces; second chip appends; reload shows persisted chips; S3.1 review unaffected) → bump cloudbuild default `0→1`.
 - **S2 / L7 cross-consumption:** `coach_review` is structured (`target_coverage`, model-verified) so S2 recycling could later prefer it over heuristic coverage, and L7 could present it to teachers. Deferred — not built in S3.1.
 - **`session.ended` pre-warm:** generation could optionally be pre-warmed when a `session.ended` event *does* fire, so the first read is instant. Deferred optimization; the GET endpoint remains the source of truth.

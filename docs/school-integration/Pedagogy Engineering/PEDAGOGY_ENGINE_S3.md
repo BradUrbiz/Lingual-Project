@@ -148,7 +148,7 @@ First open pays the LLM latency (~2–5s) behind a "Generating your review…" s
 - `parse_coach_review`: validates types, coerces missing/extra fields, **caps `work_on`** per §7.3, drops items lacking a learner `utterance`, normalizes `target` against the known target surfaces, and on the voice surface honors `confidence_caveat`. Raises `ValueError` on structurally-unusable JSON (caught by the orchestrator → `None`).
 
 ### 7.2 `coach_review_service.py` (impure)
-- `generate_coach_review(deps, bootstrap, uid, session_id) -> dict | None` per §6. Flag gate **before any read** (so flag-off does zero work). The whole compute body is `try/except Exception: return None` with `logger.exception`. Reuses `deps.get_openai_client()`, `deps.db.get_chat_session`, `deps.db.get_practice_session`, `deps.db.update_practice_session`.
+- `generate_coach_review(deps, bootstrap, uid, session_id) -> dict | None` per §6. Flag gate **before any of the service's reads** (flag-off ⇒ the service does zero reads/LLM; the route additionally gates bootstrap, so a flag-off request runs only the cheap ownership lookup). The whole compute body is `try/except Exception: return None` with `logger.exception`. Reuses `deps.get_openai_client()`, `deps.db.get_chat_session`, `deps.db.get_practice_session`, `deps.db.update_practice_session`.
 - `COACH_REVIEW_MODEL = "gpt-5.4-mini-2026-03-17"`, `reasoning_effort="high"` — per the project text-LLM convention (`reasoning_effort` composes with `response_format={'type':'json_object'}`).
 
 ### 7.3 Depth modulation (no new knob)
@@ -177,7 +177,7 @@ Reuses the teacher's existing `feedbackPolicy.mode`:
 
 ## 9. Fail-open invariants (§0.1)
 
-Every failure path resolves to `None` / empty — never a 500, never a blocked session: flag off · not assignment-linked · no `chat_id` · empty/thin transcript · OpenAI error/timeout/rate-limit · malformed model JSON (`parse_coach_review` raises → caught). The panel always has a graceful empty state. The gate runs **before** any read, so flag-off is truly zero-cost.
+Every failure path resolves to `None` / empty — never a 500, never a blocked session: flag off · not assignment-linked · no `chat_id` · empty/thin transcript · OpenAI error/timeout/rate-limit · malformed model JSON (`parse_coach_review` raises → caught). The panel always has a graceful empty state. When the flag is off the route gate skips bootstrap and the service gate precedes its reads/LLM, so a flag-off request runs only the cheap session-ownership lookup — no bootstrap, transcript, or LLM.
 
 ## 10. Flag & rollout — strangler-fig (same cadence as S1/S2)
 

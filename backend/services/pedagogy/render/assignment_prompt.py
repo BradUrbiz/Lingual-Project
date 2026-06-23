@@ -31,7 +31,7 @@ from backend.services.pedagogy.plan import PromptPlan
 from backend.services.pedagogy.routing import recycling_directive_lines
 
 
-def render_assignment_prompt(plan: PromptPlan, surface: str = "text") -> str:
+def render_assignment_prompt(plan: PromptPlan, surface: str = "text", correction_light: bool = False) -> str:
     """Render ``plan`` to a system-prompt string for ``surface`` ("voice"/"text")."""
     base_prompt = plan.base_prompt
 
@@ -59,6 +59,7 @@ def render_assignment_prompt(plan: PromptPlan, surface: str = "text") -> str:
         plan.scaffold_policy,
         plan.output_policy,
         targets=plan.targets,
+        correction_light=correction_light,
     )
 
     task_directive = build_task_template_prompt(

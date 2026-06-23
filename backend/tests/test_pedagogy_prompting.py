@@ -365,5 +365,31 @@ class AssignmentPromptAssemblyTestCase(unittest.TestCase):
         )
 
 
+class CorrectionLightStanceTestCase(unittest.TestCase):
+    """S3.3: correction_light=False is byte-identical to default; True swaps feedback."""
+
+    def test_correction_light_off_is_byte_identical(self):
+        from backend.services.assignment_resolver import _build_tutor_stance
+
+        fb = {"mode": "balanced"}
+        self.assertEqual(
+            _build_tutor_stance(fb, {}, {}, targets=None),
+            _build_tutor_stance(fb, {}, {}, targets=None, correction_light=False),
+        )
+
+    def test_correction_light_drops_ladder_adds_flow_and_coach_note(self):
+        from backend.services.assignment_resolver import _build_tutor_stance
+
+        normal = _build_tutor_stance({"mode": "balanced"}, {}, {}, targets=None)
+        light = _build_tutor_stance({"mode": "balanced"}, {}, {}, targets=None, correction_light=True)
+        self.assertNotEqual(normal, light)
+        self.assertIn("separate coach", light.lower())
+        self.assertIn("do not interrupt to correct", light.lower())
+        self.assertIn("coach note", light.lower())
+        # still feedback-aware: clarify + acknowledge success
+        self.assertIn("clarify", light.lower())
+        self.assertIn("succeed", light.lower())
+
+
 if __name__ == '__main__':
     unittest.main()

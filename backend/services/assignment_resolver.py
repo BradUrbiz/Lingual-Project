@@ -1306,6 +1306,7 @@ def _build_tutor_stance(
     scaffold_policy: dict[str, Any],
     output_policy: dict[str, Any],
     targets: list[Any] | None = None,
+    correction_light: bool = False,
 ) -> str:
     normalized_feedback = normalize_feedback_policy(feedback_policy)
     normalized_scaffold = normalize_scaffold_policy(scaffold_policy)
@@ -1326,29 +1327,40 @@ def _build_tutor_stance(
     pressure = normalized_output["follow_up_pressure"]
     allow_clarification_requests = normalized_output["allow_clarification_requests"]
 
-    feedback_line = {
-        "fluency_first": "Prioritize flow; keep corrections short and embedded.",
-        "accuracy_first": "Prioritize accurate target production; cue self-correction sooner.",
-    }.get(
-        mode,
-        "Balance flow with timely correction; escalate when the same target keeps slipping.",
-    )
-
-    # Correction directive(s), routed by target type (Pedagogy Engine S1). When
-    # no grammar target is present (incl. the legacy call with targets=None),
-    # this is byte-identical to the historical flat line.
-    repair_block = "".join(
-        f"- {line}\n"
-        for line in repair_directive_lines(
-            has_grammar_target=any(
-                getattr(target, "kind", None) == "grammar_rule"
-                for target in (targets or [])
-            ),
-            feedback_mode=mode,
-            recast_default=recast_default,
-            elicitation_repeat_threshold=threshold,
+    if correction_light:
+        feedback_line = (
+            "A separate coach handles error correction. Your job is to hold a natural, "
+            "flowing conversation; do not interrupt to correct grammar or vocabulary slips."
         )
-    )
+        repair_block = (
+            "- Still clarify when meaning breaks down or you do not understand the learner.\n"
+            "- Give a brief, specific acknowledgment when the learner succeeds (no effusive praise).\n"
+            "- When you receive a COACH NOTE between turns, deliver it naturally in your own words, then continue.\n"
+        )
+    else:
+        feedback_line = {
+            "fluency_first": "Prioritize flow; keep corrections short and embedded.",
+            "accuracy_first": "Prioritize accurate target production; cue self-correction sooner.",
+        }.get(
+            mode,
+            "Balance flow with timely correction; escalate when the same target keeps slipping.",
+        )
+
+        # Correction directive(s), routed by target type (Pedagogy Engine S1). When
+        # no grammar target is present (incl. the legacy call with targets=None),
+        # this is byte-identical to the historical flat line.
+        repair_block = "".join(
+            f"- {line}\n"
+            for line in repair_directive_lines(
+                has_grammar_target=any(
+                    getattr(target, "kind", None) == "grammar_rule"
+                    for target in (targets or [])
+                ),
+                feedback_mode=mode,
+                recast_default=recast_default,
+                elicitation_repeat_threshold=threshold,
+            )
+        )
 
     scaffold_line = (
         f"Allow about {silence_ms}ms of productive silence before stepping in, "

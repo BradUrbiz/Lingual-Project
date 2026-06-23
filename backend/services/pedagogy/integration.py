@@ -64,11 +64,17 @@ def resolve_assignment_system_prompt(
     Always goes through the engine: ``compile_prompt_plan`` -> ``render_assignment_prompt``
     (grammar slips route prompt-first; for voice the tutor stance moves last).
 
+    S3.3: the main tutor goes correction-light only when promote-back AND coach chips
+    are both on, so the coach can actually own correction (no under-correction gap).
+
     ``coverage_state`` (S2) threads cross-session recycling into the render. It is
     ``None``/empty unless the recycling flag is on, and an empty state renders
     identically to no coverage (see ``CoverageState.is_empty``), so callers compute
     it only when ``recycling_enabled()``.
     """
+    correction_light = promote_back_enabled() and coach_chips_enabled()
     return render_assignment_prompt(
-        compile_prompt_plan(bootstrap, coverage_state=coverage_state), surface
+        compile_prompt_plan(bootstrap, coverage_state=coverage_state),
+        surface,
+        correction_light=correction_light,
     )

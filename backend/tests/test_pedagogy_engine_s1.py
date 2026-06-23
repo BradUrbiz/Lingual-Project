@@ -158,6 +158,37 @@ class ResolveSeamTestCase(unittest.TestCase):
         self.assertNotIn("- On a target slip,", out)
 
 
+class CorrectionLightRenderTestCase(unittest.TestCase):
+    """S3.3: render_assignment_prompt(correction_light=False) is byte-identical to default."""
+
+    def _simple_bootstrap(self):
+        # Minimal non-grammar, non-custom fixture: reuse same shape as PlanTestCase.
+        return {
+            "systemPromptPreview": "Base prompt",
+            "assignment": {"title": "Restaurant", "taskType": "information_gap"},
+            "mapping": {
+                "targetExpressions": ["Could I have"],
+                "targetVocabulary": ["receipt"],
+                "feedbackPolicy": {"mode": "balanced"},
+                "scaffoldPolicy": {"silenceToleranceMs": 2000},
+            },
+            "class": {"name": "French 2"},
+            "curriculum": {
+                "objectives": [{"id": "OBJ1", "canDo": {"en": "Order politely."}}],
+                "pedagogy": {"evidence": {"minTurns": 4}},
+            },
+        }
+
+    def test_render_correction_light_off_is_byte_identical(self):
+        plan = compile_prompt_plan(self._simple_bootstrap())
+        for surface in ("text", "voice"):
+            with self.subTest(surface=surface):
+                self.assertEqual(
+                    render_assignment_prompt(plan, surface),
+                    render_assignment_prompt(plan, surface, correction_light=False),
+                )
+
+
 class ImportBoundaryTestCase(unittest.TestCase):
     """Invariant 7a: the compiler/plan layer stays content-source/surface agnostic."""
 

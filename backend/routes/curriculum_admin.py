@@ -738,7 +738,10 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 except Exception:
                     bootstrap = None
                 if bootstrap:
-                    chip = generate_coach_chip(deps, bootstrap, uid, session_id, turn_index)
+                    try:
+                        chip = generate_coach_chip(deps, bootstrap, uid, session_id, turn_index)
+                    except Exception:
+                        chip = None
 
             return jsonify({'success': True, 'coachChip': chip})
         except Exception as exc:

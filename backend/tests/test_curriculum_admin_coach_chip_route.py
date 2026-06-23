@@ -101,6 +101,25 @@ class CoachChipRouteTestCase(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.get_json()['coachChip']['turn_index'], 4)
 
+    def test_promote_fields_pass_through_route(self):
+        # When generate_coach_chip returns a chip with promote fields, the route
+        # passes them through verbatim in coachChip — no route code change needed.
+        chip_with_promote = {
+            'turn_index': 4, 'text': 'Nice work!',
+            'promote': True, 'promote_prompt': 'note', 'promote_reason': 'hard_target',
+        }
+        client = _app(_Db(_OWNER_SESSION)).test_client()
+        _login(client)
+        with mock.patch('backend.routes.curriculum_admin.generate_coach_chip',
+                        return_value=chip_with_promote), \
+             mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_COACH_CHIPS': '1'}):
+            resp = client.post('/api/practice-sessions/sess-1/coach-chip', json={'turn_index': 4})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['coachChip']['promote'])
+        self.assertEqual(body['coachChip']['promote_prompt'], 'note')
+        self.assertEqual(body['coachChip']['promote_reason'], 'hard_target')
+
     def test_generate_coach_chip_raises_returns_null(self):
         # generate_coach_chip raises → route must fail-open: HTTP 200, coachChip null, success true
         client = _app(_Db(_OWNER_SESSION)).test_client()

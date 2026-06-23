@@ -618,5 +618,75 @@ class PromoteBackEnabledTestCase(unittest.TestCase):
             self.assertFalse(promote_back_enabled())
 
 
+_PROMOTE_CHIP_JSON = (
+    '{"chip": {"utterance":"Yo va al tienda","better":"Yo voy a la tienda",'
+    '"why":"ir is irregular","target":"focus_grammar:ir","confidence_caveat":false}}'
+)
+# a learner-turn corrective event so the S3.2 heuristic gate passes (turn_index 0)
+_CORR_EVENTS = [{"turn_index": 0, "event_type": "metric.repeated_error"}]
+
+
+class GenerateCoachChipPromoteTestCase(unittest.TestCase):
+    def _deps(self, session_analysis=None):
+        session = dict(_SESSION)
+        session["analysis_state"] = session_analysis or {}
+        db = _FakeDb(session=session, chat=_CHAT, events=_CORR_EVENTS)
+        return _FakeDeps(db, _FakeOpenAI(content=_PROMOTE_CHIP_JSON)), db
+
+    def test_promote_flag_off_chip_has_no_promote_fields(self):
+        from backend.services.coach_chip_service import generate_coach_chip
+        deps, db = self._deps()
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_COACH_CHIPS": "1",
+                                          "PEDAGOGY_ENGINE_PROMOTE_BACK": "0"}):
+            chip = generate_coach_chip(deps, _BOOTSTRAP, "student-1", "sess-1", 0)
+        self.assertIsNotNone(chip)
+        self.assertNotIn("promote", chip)
+        # no promote_back_state written (only coach_chips)
+        last = db.updates[-1]["analysis_state"]
+        self.assertEqual(last.get("promote_back_state", {}), {})
+        self.assertEqual(last.get("promotions", []), [])
+
+    def test_promote_on_hard_target_promotes_and_logs(self):
+        from backend.services.coach_chip_service import generate_coach_chip
+        deps, db = self._deps()  # focus_grammar:ir -> hard target, balanced threshold 1 -> promotes at count 1
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_COACH_CHIPS": "1",
+                                          "PEDAGOGY_ENGINE_PROMOTE_BACK": "1"}):
+            chip = generate_coach_chip(deps, _BOOTSTRAP, "student-1", "sess-1", 0)
+        self.assertTrue(chip["promote"])
+        self.assertEqual(chip["promote_reason"], "hard_target")
+        self.assertIn("Yo voy a la tienda", chip["promote_prompt"])
+        last = db.updates[-1]["analysis_state"]
+        self.assertEqual(last["promote_back_state"]["promoted_count"], 1)
+        self.assertEqual(len(last["promotions"]), 1)
+        self.assertEqual(last["promotions"][0]["reason"], "hard_target")
+
+    def test_promote_on_below_threshold_chip_without_promote(self):
+        from backend.services.coach_chip_service import generate_coach_chip
+        # regular error (no focus_grammar target), balanced threshold 2 -> count 1, no promote
+        bootstrap = {"mapping": {"targetExpressions": ["expression:ordering"], "targetVocabulary": [],
+                                 "focusGrammar": [], "feedbackPolicy": {"mode": "balanced"}}}
+        session = dict(_SESSION); session["analysis_state"] = {}
+        plain_chip = ('{"chip": {"utterance":"la mesa roja","better":"la mesa roja, por favor",'
+                      '"why":"add politeness","target":null,"confidence_caveat":false}}')
+        db = _FakeDb(session=session, chat=_CHAT, events=_CORR_EVENTS)
+        deps = _FakeDeps(db, _FakeOpenAI(content=plain_chip))
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_COACH_CHIPS": "1",
+                                          "PEDAGOGY_ENGINE_PROMOTE_BACK": "1"}):
+            chip = generate_coach_chip(deps, bootstrap, "student-1", "sess-1", 0)
+        self.assertNotIn("promote", chip)
+        self.assertEqual(db.updates[-1]["analysis_state"]["promote_back_state"]["counts"], {"la mesa roja, por favor": 1})
+
+    def test_promote_decision_failure_is_fail_open(self):
+        from backend.services.coach_chip_service import generate_coach_chip
+        deps, db = self._deps()
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_COACH_CHIPS": "1",
+                                          "PEDAGOGY_ENGINE_PROMOTE_BACK": "1"}), \
+             mock.patch("backend.services.pedagogy.promote_back.decide_promote_back",
+                        side_effect=RuntimeError("boom")):
+            chip = generate_coach_chip(deps, _BOOTSTRAP, "student-1", "sess-1", 0)
+        self.assertIsNotNone(chip)          # chip still returned
+        self.assertNotIn("promote", chip)   # without promotion
+
+
 if __name__ == '__main__':
     unittest.main()

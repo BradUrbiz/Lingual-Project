@@ -134,6 +134,35 @@ def generate_coach_chip(deps: Any, bootstrap: dict, uid: str, session_id: str, t
         chips = list(target_state.get("coach_chips", []))
         if any(isinstance(c, dict) and c.get("turn_index") == turn_index for c in chips):
             return next(c for c in chips if isinstance(c, dict) and c.get("turn_index") == turn_index)
+
+        # S3.3 promote-back: deterministic decision rides this same analysis_state write.
+        # Fail-open: a decision failure keeps the chip, just without promotion.
+        from backend.services.pedagogy.integration import promote_back_enabled
+        if promote_back_enabled():
+            try:
+                from backend.services.pedagogy.promote_back import decide_promote_back, build_promote_prompt
+                decision, new_promote_state = decide_promote_back(
+                    target_state.get("promote_back_state"), serialized, feedback_policy, turn_index,
+                )
+                target_state["promote_back_state"] = new_promote_state
+                if decision.promote:
+                    promote_prompt = build_promote_prompt(serialized, surface)
+                    serialized["promote"] = True
+                    serialized["promote_prompt"] = promote_prompt
+                    serialized["promote_reason"] = decision.reason
+                    promotions = list(target_state.get("promotions", []))
+                    promotions.append({
+                        "turn_index": turn_index,
+                        "signature": decision.signature,
+                        "reason": decision.reason,
+                        "prompt": promote_prompt,
+                        "generated_at": serialized["generated_at"],
+                    })
+                    target_state["promotions"] = promotions
+            except Exception:
+                logger.exception("promote-back decision failed; chip kept without promotion "
+                                 "(session_id=%s, turn=%s)", session_id, turn_index)
+
         chips.append(serialized)
         target_state["coach_chips"] = chips
         deps.db.update_practice_session_analysis_state(session_id, target_state, sql_engine=deps.sql_engine)

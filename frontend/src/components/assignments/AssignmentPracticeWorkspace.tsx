@@ -7,7 +7,7 @@ import {
 } from '@/api/assignments';
 import { createChatSession, getChatSession, saveMessageToChat, sendChatMessage } from '@/api/chat';
 import { ChatInput, ChatMessage, SpeakingSpeedControl } from '@/components/chat';
-import { postCoachChip, type CoachChip } from '@/api/coachChips';
+import { getCoachChips, postCoachChip, type CoachChip } from '@/api/coachChips';
 import { FeedbackSidecar } from '@/components/learning/FeedbackSidecar';
 import { ReviewLauncher } from '@/components/learning/ReviewLauncher';
 import { Alert, AlertDescription, Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui';
@@ -715,6 +715,26 @@ function useAssignmentPracticeWorkspaceController({
   useEffect(() => {
     activePracticeSessionRef.current = activePracticeSession;
   }, [activePracticeSession]);
+
+  useEffect(() => {
+    const sessionId = activePracticeSession?.id;
+    setCoachChips([]);                 // reset for the new/!active session (fixes stale chips across session/thread switch)
+    if (!sessionId) return;
+    let cancelled = false;
+    getCoachChips(sessionId)
+      .then((persisted) => {
+        if (cancelled) return;
+        // merge persisted into current state, dedup by turn_index, so a chip that
+        // was live-appended during the fetch is NOT clobbered by the hydration response
+        setCoachChips((prev) => {
+          const seen = new Set(prev.map((c) => c.turn_index));
+          const merged = [...prev, ...persisted.filter((c) => !seen.has(c.turn_index))];
+          return merged.sort((a, b) => a.turn_index - b.turn_index);
+        });
+      })
+      .catch(() => { /* fail-open: no hydration on error, live chips still work */ });
+    return () => { cancelled = true; };
+  }, [activePracticeSession?.id]);
 
   const getActivePracticeSession = useCallback(() => activePracticeSessionRef.current, []);
   const getSelectedChatId = useCallback(() => selectedChatIdRef.current, []);

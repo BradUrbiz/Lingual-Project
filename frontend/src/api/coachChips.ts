@@ -19,3 +19,10 @@ export const postCoachChip = async (sessionId: string, turnIndex: number): Promi
   );
   return response.data.coachChip;
 };
+
+export const getCoachChips = async (sessionId: string): Promise<CoachChip[]> => {
+  const response = await api.get<{ success: boolean; coachChips: CoachChip[] }>(
+    `/practice-sessions/${sessionId}/coach-chips`,
+  );
+  return response.data.coachChips ?? [];
+};

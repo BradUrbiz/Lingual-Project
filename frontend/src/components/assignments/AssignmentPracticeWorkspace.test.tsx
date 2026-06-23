@@ -3,8 +3,10 @@ import { AssignmentPracticeWorkspace } from '@/components/assignments/Assignment
 import type { AssignmentBootstrapData, AssignmentWorkspaceData, ChatSessionDetail, PracticeSessionDto } from '@/types';
 
 const postCoachChipMock = vi.fn();
+const getCoachChipsMock = vi.fn();
 vi.mock('@/api/coachChips', () => ({
   postCoachChip: (...args: unknown[]) => postCoachChipMock(...args),
+  getCoachChips: (...args: unknown[]) => getCoachChipsMock(...args),
 }));
 
 const getStudentAssignmentWorkspaceMock = vi.fn();
@@ -287,6 +289,8 @@ describe('AssignmentPracticeWorkspace', () => {
     clearMessagesMock.mockReset();
     postCoachChipMock.mockReset();
     postCoachChipMock.mockResolvedValue(null);
+    getCoachChipsMock.mockReset();
+    getCoachChipsMock.mockResolvedValue([]);
     realtimeOnMessage = null;
 
     getStudentAssignmentWorkspaceMock.mockResolvedValue(WORKSPACE);
@@ -640,6 +644,20 @@ describe('AssignmentPracticeWorkspace', () => {
         TEXT_SESSION.id,
         expect.any(Number),
       );
+    });
+  });
+
+  it('hydrates coach chips from the backend on mount for the active practice session', async () => {
+    render(
+      <AssignmentPracticeWorkspace
+        open
+        bootstrap={BOOTSTRAP}
+        onClose={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getCoachChipsMock).toHaveBeenCalledWith(ACTIVE_SESSION.id);
     });
   });
 });

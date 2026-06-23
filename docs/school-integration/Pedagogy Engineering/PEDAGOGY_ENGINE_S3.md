@@ -238,7 +238,7 @@ This is the "live, between-turn side channel" half of §6.2's Feedback mode. It 
 ## S3.2-3. Architecture — pure / impure split (mirrors S3.1)
 
 ```
-PURE   backend/services/pedagogy/coach_review.py        (same module as S3.1 — no changes)
+PURE   backend/services/pedagogy/coach_review.py        (same module as S3.1 — chip functions added)
          • build_coach_chip_prompt / parse_coach_chip / serialize_coach_chip   (new functions in the module)
 
 IMPURE backend/services/coach_chip_service.py           (new impure orchestrator — imports OpenAI/db)

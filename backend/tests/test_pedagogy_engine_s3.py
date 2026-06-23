@@ -202,6 +202,7 @@ class _FakeDb:
         self._raise_on = raise_on or set()
         self._events = events or []
         self.updates = []
+        self._events_calls = 0
 
     def get_practice_session(self, session_id):
         if 'get_practice_session' in self._raise_on:
@@ -222,6 +223,7 @@ class _FakeDb:
             self._session['analysis_state'] = analysis_state
 
     def list_session_learning_events(self, session_id):
+        self._events_calls += 1
         return list(self._events)
 
 
@@ -744,6 +746,57 @@ class AskModeEnabledTestCase(unittest.TestCase):
             self.assertFalse(ask_mode_enabled())
         with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASK_MODE": "0"}):
             self.assertFalse(ask_mode_enabled())
+
+
+_ASK_JSON = '{"answer": "Try \\"hola\\" — your turn.", "kind": "hint"}'
+
+
+class AnswerAskTestCase(unittest.TestCase):
+    def _deps(self, content=_ASK_JSON, raise_on=None):
+        session = dict(_SESSION); session["analysis_state"] = {}
+        db = _FakeDb(session=session, chat=_CHAT, raise_on=raise_on)
+        return _FakeDeps(db, _FakeOpenAI(content=content)), db
+
+    def test_flag_off_returns_none_without_reads(self):
+        from backend.services.ask_service import answer_ask
+        deps, db = self._deps(raise_on={'get_practice_session'})  # would explode if read
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASK_MODE": "0"}):
+            self.assertIsNone(answer_ask(deps, _BOOTSTRAP, "student-1", "sess-1", "how do I say hi?"))
+
+    def test_happy_path_answers_and_logs_to_ask_log_only(self):
+        from backend.services.ask_service import answer_ask
+        deps, db = self._deps()
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASK_MODE": "1"}):
+            out = answer_ask(deps, _BOOTSTRAP, "student-1", "sess-1", "how do I say hi?", turn_index=3)
+        self.assertEqual(out["kind"], "hint")
+        self.assertIn("hola", out["answer"])
+        state = db.updates[-1]["analysis_state"]
+        self.assertEqual(len(state["ask_log"]), 1)
+        self.assertEqual(state["ask_log"][0]["question"], "how do I say hi?")
+        self.assertEqual(state["ask_log"][0]["turn_index"], 3)
+        # help != evidence: the events path is never touched by answer_ask
+        self.assertEqual(db._events_calls, 0)
+
+    def test_empty_question_returns_none(self):
+        from backend.services.ask_service import answer_ask
+        deps, db = self._deps()
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASK_MODE": "1"}):
+            self.assertIsNone(answer_ask(deps, _BOOTSTRAP, "student-1", "sess-1", "   "))
+
+    def test_no_targets_returns_none(self):
+        from backend.services.ask_service import answer_ask
+        deps, db = self._deps()
+        bootstrap = {"mapping": {"targetExpressions": [], "targetVocabulary": [], "focusGrammar": [],
+                                 "feedbackPolicy": {"mode": "balanced"}}}
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASK_MODE": "1"}):
+            self.assertIsNone(answer_ask(deps, bootstrap, "student-1", "sess-1", "q"))
+
+    def test_openai_failure_is_fail_open(self):
+        from backend.services.ask_service import answer_ask
+        deps, db = self._deps()
+        deps._client = _FakeOpenAI(raise_on_create=True)
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASK_MODE": "1"}):
+            self.assertIsNone(answer_ask(deps, _BOOTSTRAP, "student-1", "sess-1", "q"))
 
 
 if __name__ == '__main__':

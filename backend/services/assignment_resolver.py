@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -875,6 +874,9 @@ def _resolve_canvas_generated_bootstrap(
     metadata that power the system prompt and realtime session parameters.
     """
     del deps  # resolver no longer needs deps for this path
+    # Function-local import avoids the circular-import cycle:
+    # assignment_resolver → integration → render.assignment_prompt → assignment_resolver
+    from backend.services.pedagogy.integration import ask_mode_enabled  # noqa: PLC0415
 
     scenario = assignment.get("generated_scenario") or ""
     objectives = _normalize_string_list(assignment.get("objectives"))
@@ -1046,7 +1048,7 @@ def _resolve_canvas_generated_bootstrap(
             "modality": serialize_modality_policy(launch_modality),
             "voiceAllowed": launch_modality.get("mode") in {"voice_only", "hybrid"},
             "textAllowed": launch_modality.get("mode") in {"text_only", "hybrid"},
-            "askModeEnabled": os.environ.get("PEDAGOGY_ENGINE_ASK_MODE", "").strip().lower() in {"1", "true", "yes", "on"},
+            "askModeEnabled": ask_mode_enabled(),
             "fallbackApplied": False,
             "blockedReasons": [],
             "retentionPolicy": None,

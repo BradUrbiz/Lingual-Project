@@ -1019,6 +1019,144 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         self.assertFalse(payload['success'])
         self.assertIn('offerSdp is required', payload['error'])
 
+    def _setup_text_only_assignment_chat(self):
+        """Set up fake_db so that assignment-1 resolves text_only and chat-1 exists."""
+        self.fake_db.assignments['assignment-1']['modality_override'] = {
+            'mode': 'text_only',
+        }
+        self.fake_db.chats['student-1']['chat-1'] = {
+            'id': 'chat-1',
+            'title': 'Assignment chat',
+            'created_at': '2026-04-20T00:00:00Z',
+            'updated_at': '2026-04-20T00:00:00Z',
+            'messages': [],
+            'language_mix_level': 'balanced',
+        }
+
+    def _make_client_with_fake_openai(self):
+        """Return (test_client, captured) where captured['messages'] is set on the first
+        chat.completions.create call (the main turn; title generation call is ignored)."""
+        import unittest.mock as mock
+
+        fake_message = mock.MagicMock()
+        fake_message.content = 'Tutor reply.'
+        fake_choice = mock.MagicMock()
+        fake_choice.message = fake_message
+        fake_response = mock.MagicMock()
+        fake_response.choices = [fake_choice]
+
+        captured = {}
+
+        def fake_create(**kwargs):
+            if 'messages' in kwargs and captured.get('messages') is None:
+                captured['messages'] = list(kwargs['messages'])
+            return fake_response
+
+        fake_completions = mock.MagicMock()
+        fake_completions.create.side_effect = fake_create
+        fake_chat_obj = mock.MagicMock()
+        fake_chat_obj.completions = fake_completions
+        fake_openai = mock.MagicMock()
+        fake_openai.chat = fake_chat_obj
+
+        def get_school_request_context():
+            uid = (session.get('user') or {}).get('uid')
+            preferred = (session.get('user') or {}).get('active_membership_id')
+            return resolve_school_request_context(
+                self.fake_db,
+                uid,
+                preferred_active_membership_id=preferred,
+            )
+
+        def build_system_prompt(context, learning_locale='ko-KR', language_mix_level='balanced'):
+            return f'Generic prompt: {context} ({learning_locale}) [{language_mix_level}]'
+
+        deps = RouteDeps(
+            db=self.fake_db,
+            firebase_auth=None,
+            get_current_user_uid=lambda: (session.get('user') or {}).get('uid'),
+            get_openai_client=lambda: fake_openai,
+            get_assessment=lambda: {},
+            compute_results=lambda *_args, **_kwargs: {},
+            get_proficiency_description=lambda *_args, **_kwargs: {
+                'level': 'Intermediate Mid',
+                'description': 'Test level',
+            },
+            login_required=passthrough_login_required,
+            get_user_proficiency_context=lambda: 'Intermediate Mid',
+            build_system_prompt=build_system_prompt,
+            get_school_request_context=get_school_request_context,
+            set_active_school_membership=lambda _membership_id: None,
+            allowed_learning_locales={'ko-KR', 'es-ES', 'fr-FR'},
+            allowed_minigame_types={'listening_quiz', 'grammar_challenge'},
+            supported_ui_languages={'en', 'ko'},
+        )
+
+        app = Flask(__name__)
+        app.secret_key = 'test-secret'
+        app.register_blueprint(create_chat_blueprint(deps))
+        test_client = app.test_client()
+
+        with test_client.session_transaction() as flask_session:
+            flask_session['user'] = {
+                'uid': 'student-1',
+                'email': 'student@example.com',
+                'name': 'Student User',
+                'active_membership_id': 'mem-student',
+            }
+
+        return test_client, captured
+
+    def test_coach_note_injected_as_system_message_before_user_turn_when_flags_on(self):
+        self._setup_text_only_assignment_chat()
+        test_client, captured = self._make_client_with_fake_openai()
+
+        with patch.dict('os.environ', {
+            'OPENAI_API_KEY': 'test-openai-key',
+            'PEDAGOGY_ENGINE_PROMOTE_BACK': '1',
+            'PEDAGOGY_ENGINE_COACH_CHIPS': '1',
+        }, clear=False):
+            resp = test_client.post('/api/chats/chat-1/messages', json={
+                'message': 'Yo va al tienda otra vez',
+                'assignmentId': 'assignment-1',
+                'practiceSessionId': 'practice-1',
+                'uiLanguage': 'en',
+                'coachNote': "COACH NOTE: invite self-correction toward 'voy'.",
+            })
+
+        self.assertEqual(resp.status_code, 200)
+        sent = captured['messages']
+        self.assertEqual(sent[-1]['role'], 'user')
+        self.assertEqual(sent[-2], {
+            'role': 'system',
+            'content': "COACH NOTE: invite self-correction toward 'voy'.",
+        })
+
+    def test_coach_note_not_injected_when_pedagogy_flags_off(self):
+        self._setup_text_only_assignment_chat()
+        test_client, captured = self._make_client_with_fake_openai()
+
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-openai-key'}, clear=False):
+            # Ensure both flags are absent (off).
+            env_without_flags = {k: v for k, v in __import__('os').environ.items()
+                                 if k not in ('PEDAGOGY_ENGINE_PROMOTE_BACK', 'PEDAGOGY_ENGINE_COACH_CHIPS')}
+            env_without_flags['OPENAI_API_KEY'] = 'test-openai-key'
+            with patch.dict('os.environ', env_without_flags, clear=True):
+                resp = test_client.post('/api/chats/chat-1/messages', json={
+                    'message': 'hola',
+                    'assignmentId': 'assignment-1',
+                    'practiceSessionId': 'practice-1',
+                    'uiLanguage': 'en',
+                    'coachNote': 'should be ignored',
+                })
+
+        self.assertEqual(resp.status_code, 200)
+        sent = captured['messages']
+        self.assertFalse(
+            any(m.get('content') == 'should be ignored' for m in sent),
+            'coachNote should not appear in messages when flags are off',
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -15,7 +15,11 @@ from backend.services.assignment_resolver import (
     resolve_assignment_bootstrap_for_user,
     user_can_access_assignment,
 )
-from backend.services.pedagogy.integration import resolve_assignment_system_prompt
+from backend.services.pedagogy.integration import (
+    resolve_assignment_system_prompt,
+    promote_back_enabled,
+    coach_chips_enabled,
+)
 from backend.services.compliance import create_consent_event, resolve_assignment_launch
 from backend.services.suspended_org_guard import SuspendedOrgError, enforce_org_active
 
@@ -835,6 +839,8 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
         assignment_id = data.get('assignmentId')
         practice_session_id = data.get('practiceSessionId')
         ui_language = data.get('uiLanguage', 'en')
+        coach_note = (data.get('coachNote') or '').strip()
+        coach_note_allowed = False
 
         if not user_message:
             return jsonify({'success': False, 'error': 'Message is required'}), 400
@@ -899,6 +905,7 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 system_prompt = resolve_assignment_system_prompt(
                     bootstrap, surface="text", coverage_state=coverage_state
                 )
+                coach_note_allowed = True
             else:
                 proficiency_context = deps.get_user_proficiency_context()
                 profile_context = deps.db.get_user_profile_context(uid) or {}
@@ -913,6 +920,11 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
             messages = [{'role': 'system', 'content': system_prompt}]
             for msg in chat_messages:
                 messages.append({'role': msg['role'], 'content': msg['content']})
+            # S3.3 promote-back (text surface): a coach note rides this one turn as a
+            # transient system instruction so the tutor weaves the self-repair into its
+            # reply in its own words. Assignment-linked + both flags on only; length-capped.
+            if coach_note and coach_note_allowed and promote_back_enabled() and coach_chips_enabled():
+                messages.append({'role': 'system', 'content': coach_note[:500]})
             messages.append({'role': 'user', 'content': user_message})
 
             client = deps.get_openai_client()

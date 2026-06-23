@@ -848,6 +848,9 @@ def default_analysis_state() -> dict[str, Any]:
         # S3.3 promote-back: durable log of what was promoted into the main channel
         # (for analytics/L7; NEVER re-injected on hydration). Empty until first promotion.
         'promotions': [],
+        # S3.4 Ask mode: learner help-usage log (SEPARATE from student production —
+        # never mirrored into learning_events). Empty until first Ask.
+        'ask_log': [],
     }
 
 
@@ -899,6 +902,10 @@ def normalize_analysis_state(value: Any) -> dict[str, Any]:
     promotions = value.get('promotions')
     if isinstance(promotions, list):
         normalized['promotions'] = promotions
+
+    ask_log = value.get('ask_log', value.get('askLog'))
+    if isinstance(ask_log, list):
+        normalized['ask_log'] = ask_log
 
     return normalized
 

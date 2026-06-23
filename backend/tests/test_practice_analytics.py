@@ -942,5 +942,19 @@ class AnalysisStatePromoteBackTestCase(unittest.TestCase):
         self.assertEqual(out["promotions"], [])
 
 
+class AnalysisStateAskLogTestCase(unittest.TestCase):
+    def test_default_analysis_state_has_ask_log(self):
+        from backend.services.practice_analytics import default_analysis_state
+        self.assertEqual(default_analysis_state()["ask_log"], [])
+
+    def test_normalize_carries_ask_log_list_only(self):
+        from backend.services.practice_analytics import normalize_analysis_state
+        entry = {"question": "q", "answer": "a", "kind": "hint", "turn_index": 1,
+                 "generated_at": "2026-06-24T00:00:00+00:00", "model": "gpt-5.4-mini-2026-03-17"}
+        self.assertEqual(normalize_analysis_state({"ask_log": [entry]})["ask_log"], [entry])
+        self.assertEqual(normalize_analysis_state({"ask_log": "bad"})["ask_log"], [])
+        self.assertEqual(normalize_analysis_state({})["ask_log"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

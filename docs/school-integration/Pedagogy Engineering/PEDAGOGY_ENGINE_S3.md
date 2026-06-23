@@ -9,18 +9,18 @@
 
 `PEDAGOGY_ENGINE.md` §6.2 specifies a **coach track**: a parallel, cheaper correction model that analyzes learner turns and surfaces findings through a learner-facing **Conversation Sidecar** (Feedback + Ask modes), eventually **promoting back** repeated/hard-target errors into the main conversation so the main tutor can go *correction-light* — the structural mitigation for the ~30% voice instruction-adherence ceiling.
 
-That is a **subsystem cluster, not one feature.** It decomposes by **timing × direction** into independently shippable slices. **S3.1 (the post-task review)** is the foundation: it introduces the **correction model, the pedagogy rubric, the false-correction discipline, and the side-channel storage contract** — with no live timing, no two-model coordination, and no split-attention. The later slices reuse S3.1's pure module verbatim.
+That is a **subsystem cluster, not one feature.** It decomposes by **timing × direction** into independently shippable slices. **S3.1 (the post-task review)** is the foundation: it introduces the **correction model, the pedagogy rubric, the false-correction discipline, and the side-channel storage contract** — with no live timing, no two-model coordination, and no split-attention. The later slices share S3.1's pure module (`coach_review.py`), adding chip-specific pure functions that reuse the same ReviewItem dataclass, rubric constants, and anti-sycophancy/locale rules — not a verbatim reuse of the post-task prompt builder.
 
 ## 1. S3 cluster decomposition
 
 | Slice | What | Status | Risk |
 |---|---|---|---|
 | **S3.1** | Post-task correction pass over the finished transcript → read-only **post-task review** panel on both surfaces | ✅ **CUT OVER 2026-06-23** (`PEDAGOGY_ENGINE_COACH_REVIEW=1` live, default `1`) | Low — no live timing, no two-model coordination, no split-attention |
-| **S3.2** | Live, silent between-turn coach chips (side channel only, no promote-back) — invokes the **same** `coach_review.py` schema + model + prompt builder, per-turn instead of once at the end | ⚑ **BUILT behind `PEDAGOGY_ENGINE_COACH_CHIPS` (default off), NOT yet cut over** | Medium — real-time transport |
+| **S3.2** | Live, silent between-turn coach chips (side channel only, no promote-back) — same `coach_review.py` module/model/rubric family as S3.1, with chip-specific pure functions (`build_coach_chip_prompt` / `parse_coach_chip` / `serialize_coach_chip`) that reuse ReviewItem + rubric constants + anti-sycophancy/locale rules, per-turn instead of once at the end | ⚑ **BUILT behind `PEDAGOGY_ENGINE_COACH_CHIPS` (default off), NOT yet cut over** | Medium — real-time transport |
 | **S3.3** | Promote-back into the main channel + main tutor goes correction-light (the structural ~30% voice-adherence mitigation) | Pending | High — two-model coordination, voice injection, under/over-promotion |
 | **S3.4** | Ask mode (learner-initiated quick help) — largely independent of the correction track | Pending | Low–Medium |
 
-S3.2 reuses this slice's `coach_review.py` schema + model + prompt builder verbatim; the pure module is designed to be called with a single-turn transcript slice without change. That design constraint is why S3.1's correction work lives in a pure module rather than inline in the orchestrator.
+S3.2 shares `coach_review.py`'s module, model, and rubric family with chip-specific pure functions (`build_coach_chip_prompt` / `parse_coach_chip` / `serialize_coach_chip`) that reuse the ReviewItem dataclass, rubric constants, and anti-sycophancy/locale rules — not a verbatim reuse of the post-task prompt builder. The pure-module boundary is why S3.1's correction work lives there rather than inline in the orchestrator.
 
 ---
 
@@ -217,7 +217,7 @@ S3.1 ships **single-pass, post-task only, assignment-linked only**; `why` explan
 
 Between-turn "chips": a silent, heuristic-gated per-turn analysis that surfaces a brief correction or encouragement chip to the learner in the conversation sidecar **after each tutor turn**, without modifying the main tutor's behavior. Chips are additive only (no promote-back — that is S3.3); the main tutor is unchanged.
 
-This is the "live, between-turn side channel" half of §6.2's Feedback mode. It reuses S3.1's `coach_review.py` prompt builder, schema, and model verbatim — called with a single-turn transcript slice instead of the full post-task transcript.
+This is the "live, between-turn side channel" half of §6.2's Feedback mode. It shares the same `coach_review.py` module, model, and rubric family as S3.1, using chip-specific pure functions (`build_coach_chip_prompt` / `parse_coach_chip` / `serialize_coach_chip`) that reuse ReviewItem + rubric constants + anti-sycophancy/locale rules — NOT a verbatim reuse of the post-task prompt builder — called with a single-turn transcript slice instead of the full post-task transcript.
 
 **Built behind `PEDAGOGY_ENGINE_COACH_CHIPS` (default off). NOT yet cut over.**
 
@@ -281,7 +281,7 @@ Sits beside S3.1's `analysis_state['coach_review']` and S2's `analysis_state['co
 }
 ```
 
-New chips are appended; the list accumulates across the session. A second chip on a later turn appends; a reload shows persisted chips (verified by cache-persistence re-check on cutover).
+New chips are appended; the list accumulates across the session. Cache persistence to be verified during cutover burn-in (a second chip on a later turn appends; reload shows persisted chips).
 
 ## S3.2-6. Fail-open invariants
 

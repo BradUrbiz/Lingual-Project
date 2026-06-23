@@ -343,8 +343,11 @@ PURE   backend/services/pedagogy/promote_back.py          (stdlib only — impor
              per-session cap (≤3 promotes/session), reset-on-promote (counter resets)
 
 GATE   backend/services/pedagogy/integration.py
-         • promote_back_enabled()  (reads PEDAGOGY_ENGINE_PROMOTE_BACK; two-flag invariant:
-           returns True ONLY when BOTH PEDAGOGY_ENGINE_PROMOTE_BACK=1 AND PEDAGOGY_ENGINE_COACH_CHIPS=1)
+         • promote_back_enabled()  (reads ONLY PEDAGOGY_ENGINE_PROMOTE_BACK. The two-flag safety
+           invariant — correction-light requires BOTH PROMOTE_BACK=1 AND COACH_CHIPS=1 — is applied
+           at the CALL SITES, not in this helper: the render seam resolve_assignment_system_prompt
+           ANDs promote_back_enabled() and coach_chips_enabled(); the chip-service promote path is
+           reachable only when chips are on, gated by coach_chips_enabled() first.)
 
 WIRING rides the existing S3.2 chip round-trip (no new endpoint, no 2nd LLM call):
          • coach_chip_service.py — after generating a chip, calls decide_promote_back;
@@ -356,7 +359,7 @@ WIRING rides the existing S3.2 chip round-trip (no new endpoint, no 2nd LLM call
            learner's next turn message body (next-turn injection)
 ```
 
-**No new endpoint and no second LLM call.** The promote decision is purely algorithmic (`promote_back.py` is stdlib-only) and rides the existing chip POST/GET round-trip. The chip gains three new fields: `promote` (bool), `promote_prompt` (str | null — the in-character inject string), `promote_reason` (str | null — the matched error signature, for logging/debrief).
+**No new endpoint and no second LLM call.** The promote decision is purely algorithmic (`promote_back.py` is stdlib-only) and rides the existing chip POST/GET round-trip. The chip gains three new fields: `promote` (bool), `promote_prompt` (str | null — the in-character inject string), `promote_reason` (str | null — the reason `"repeat"` or `"hard_target"`; the error signature itself is recorded in the `promotions[]` log, not here).
 
 ## S3.3-3. Data contract additions
 
@@ -365,18 +368,19 @@ WIRING rides the existing S3.2 chip round-trip (no new endpoint, no 2nd LLM call
 ```jsonc
 // analysis_state['promote_back_state'] — mutable per-session promote tracker
 {
-  "recurrence_counts": {"<error_signature>": <int>},  // per-error hit counter
-  "last_promote_turn": <int> | null,                   // for cooldown guard
-  "session_promote_count": <int>                       // for per-session cap guard
+  "counts": {"<error_signature>": <int>},   // per-error-signature hit counter
+  "last_promoted_turn": <int> | null,        // for cooldown guard
+  "promoted_count": <int>                    // for per-session cap guard
 }
 
 // analysis_state['promotions'] — flat list, one entry per promote decision
 [
   {
     "turn_index": <int>,
-    "error_signature": "<str>",
-    "promote_prompt": "<str>",
-    "surface": "voice" | "text"
+    "signature": "<str>",                    // the promoted error's error_signature
+    "reason": "repeat" | "hard_target",
+    "prompt": "<str>",                       // the in-character coach note
+    "generated_at": "<iso8601>"
   }
 ]
 ```
@@ -384,11 +388,11 @@ WIRING rides the existing S3.2 chip round-trip (no new endpoint, no 2nd LLM call
 Chip fields added by S3.3 (merged into the `coach_chips` list entry):
 - `promote`: `true` if this chip triggered a promote-back, `false` otherwise
 - `promote_prompt`: the in-character inject string (null when promote=false)
-- `promote_reason`: the matched error signature (null when promote=false)
+- `promote_reason`: the reason — `"repeat"` or `"hard_target"` (null when promote=false; the error signature is recorded in `promotions[]`, not on the chip)
 
 ## S3.3-4. Correction-light stance
 
-When `promote_back_enabled()` is true, `render_assignment_prompt` (and `resolve_assignment_system_prompt` for voice) receives `correction_light=True` and drops the correction-ladder section from the tutor stance. The main tutor is no longer instructed to correct directly — correction authority moves to the coach track's promote-back injection. This is a **two-flag safety invariant**: correction-light only engages when BOTH `PEDAGOGY_ENGINE_PROMOTE_BACK=1` AND `PEDAGOGY_ENGINE_COACH_CHIPS=1` are live (`promote_back_enabled()` enforces this). With the flag off (default `'0'`), the prompt is byte-identical to today — no behavior change whatsoever.
+When `promote_back_enabled()` is true, `render_assignment_prompt` (and `resolve_assignment_system_prompt` for voice) receives `correction_light=True` and drops the correction-ladder section from the tutor stance. The main tutor is no longer instructed to correct directly — correction authority moves to the coach track's promote-back injection. This is a **two-flag safety invariant**: correction-light only engages when BOTH `PEDAGOGY_ENGINE_PROMOTE_BACK=1` AND `PEDAGOGY_ENGINE_COACH_CHIPS=1` are live — the render seam `resolve_assignment_system_prompt` ANDs `promote_back_enabled()` and `coach_chips_enabled()` (the AND lives at the call site, not inside `promote_back_enabled()`). With the flag off (default `'0'`), the prompt is byte-identical to today — no behavior change whatsoever.
 
 ## S3.3-5. Fail-open invariants
 

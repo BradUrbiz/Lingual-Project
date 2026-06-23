@@ -748,6 +748,28 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             print(f'Coach chip error: {exc}')
             return jsonify({'success': True, 'coachChip': None})
 
+    @bp.route('/api/practice-sessions/<session_id>/coach-chips', methods=['GET'])
+    @deps.login_required
+    def api_get_practice_session_coach_chips(session_id):
+        try:
+            uid = deps.get_current_user_uid()
+            session_record = deps.db.get_practice_session(session_id)
+            if not session_record:
+                return jsonify({'success': False, 'error': 'Practice session not found.'}), 404
+            if session_record.get('student_uid') != uid:
+                return jsonify({'success': False, 'error': 'Practice session is not available for this user.'}), 403
+
+            from backend.services.pedagogy.integration import coach_chips_enabled
+            if not coach_chips_enabled():
+                return jsonify({'success': True, 'coachChips': []})
+
+            from backend.services.practice_analytics import normalize_analysis_state
+            chips = normalize_analysis_state(session_record.get('analysis_state')).get('coach_chips', [])
+            return jsonify({'success': True, 'coachChips': chips})
+        except Exception as exc:
+            print(f'Coach chips GET error: {exc}')
+            return jsonify({'success': True, 'coachChips': []})
+
     @bp.route('/api/teacher/assignments/<assignment_id>/analytics', methods=['GET'])
     @deps.login_required
     def api_get_assignment_analytics(assignment_id):

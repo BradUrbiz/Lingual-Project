@@ -132,5 +132,80 @@ class CoachChipRouteTestCase(unittest.TestCase):
         self.assertIsNone(body['coachChip'])
 
 
+class GetCoachChipsRouteTestCase(unittest.TestCase):
+    """Tests for GET /api/practice-sessions/<session_id>/coach-chips (collection hydration)."""
+
+    def test_missing_session_returns_404(self):
+        client = _app(_Db(None)).test_client()
+        _login(client)
+        resp = client.get('/api/practice-sessions/nope/coach-chips')
+        self.assertEqual(resp.status_code, 404)
+
+    def test_not_owner_returns_403(self):
+        client = _app(_Db({'student_uid': 'someone-else', 'assignment_id': 'a1'})).test_client()
+        _login(client)
+        resp = client.get('/api/practice-sessions/sess-1/coach-chips')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_flag_off_returns_empty_list_even_when_session_has_chips(self):
+        # Flag off → [] regardless of what's persisted in analysis_state.
+        session = {
+            **_OWNER_SESSION,
+            'analysis_state': {'coach_chips': [{'turn_index': 2, 'text': 'Good try!'}]},
+        }
+        client = _app(_Db(session)).test_client()
+        _login(client)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('PEDAGOGY_ENGINE_COACH_CHIPS', None)
+            resp = client.get('/api/practice-sessions/sess-1/coach-chips')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertEqual(body['coachChips'], [])
+
+    def test_flag_on_returns_persisted_chips(self):
+        # Flag on + chips in analysis_state → returns those chips.
+        chip = {'turn_index': 2, 'text': 'Good try!'}
+        session = {
+            **_OWNER_SESSION,
+            'analysis_state': {'coach_chips': [chip]},
+        }
+        client = _app(_Db(session)).test_client()
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_COACH_CHIPS': '1'}):
+            resp = client.get('/api/practice-sessions/sess-1/coach-chips')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertEqual(len(body['coachChips']), 1)
+        self.assertEqual(body['coachChips'][0]['turn_index'], 2)
+
+    def test_flag_on_no_chips_returns_empty_list(self):
+        # Flag on, no chips persisted → empty list (not null).
+        client = _app(_Db(_OWNER_SESSION)).test_client()
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_COACH_CHIPS': '1'}):
+            resp = client.get('/api/practice-sessions/sess-1/coach-chips')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertEqual(body['coachChips'], [])
+
+    def test_unexpected_error_in_read_path_fails_open(self):
+        # normalize_analysis_state raising (or any other unexpected error) → HTTP 200, coachChips [].
+        class _RaisingDb:
+            def get_practice_session(self, session_id):
+                raise RuntimeError('db unavailable')
+
+        client = _app(_RaisingDb()).test_client()
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_COACH_CHIPS': '1'}):
+            resp = client.get('/api/practice-sessions/sess-1/coach-chips')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertEqual(body['coachChips'], [])
+
+
 if __name__ == '__main__':
     unittest.main()

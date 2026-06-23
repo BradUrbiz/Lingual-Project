@@ -225,12 +225,18 @@ substitutions:
   # gate skips bootstrap resolution and the service does zero reads/LLM, returning
   # coachReview:null after only the cheap session-ownership lookup; '1' =
   # generate-on-read a post-task review and cache it into analysis_state['coach_review'].
-  # Default HELD '0': code lands inert, flipped live via --update-env-vars after a
-  # health check (strangler-fig, same cadence as S1/S2). Deploy uses
-  # --set-env-vars=REPLACE, so the flag MUST live here or a redeploy drops it; default
-  # '0' matches the current live value (ABSENT → off), so a build is REPLACE-safe.
-  # Rollback is instant: --update-env-vars PEDAGOGY_ENGINE_COACH_REVIEW=0.
-  _PEDAGOGY_ENGINE_COACH_REVIEW: '0'
+  # CUT OVER 2026-06-23 (rev lingual-app-00075-7p7): deployed inert ('0') then flipped
+  # live via --update-env-vars after a prod burn-in (real text session → end → review
+  # rendered wins/work_on/target_coverage; fail-open null on scaffold-free verified).
+  # The burn-in caught a cache bug — the post-task analysis_state write rode
+  # update_practice_session, which self-disables under DUAL_WRITE_ANALYTICS_EVENTS=1, so
+  # the review regenerated on every read; fixed in a509168 (dedicated always-applies
+  # analysis_state write) and the cache verified stable (two reads, identical
+  # generated_at) before this default bump. Deploy uses --set-env-vars=REPLACE, so the
+  # flag MUST live here or a redeploy drops it; default bumped 0->1 for durability so a
+  # rebuild cannot regress the live flip. Rollback is instant:
+  # --update-env-vars PEDAGOGY_ENGINE_COACH_REVIEW=0.
+  _PEDAGOGY_ENGINE_COACH_REVIEW: '1'
 
 # Store images in Artifact Registry
 images:

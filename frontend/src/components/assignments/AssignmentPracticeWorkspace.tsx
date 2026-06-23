@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Hand, History, Loader2, MessageSquareText, Mic } from 'lucide-react';
 import {
   createAssignmentPracticeSession,
@@ -8,7 +8,7 @@ import {
 import { createChatSession, getChatSession, saveMessageToChat, sendChatMessage } from '@/api/chat';
 import { ChatInput, ChatMessage, SpeakingSpeedControl } from '@/components/chat';
 import { getCoachChips, postCoachChip, type CoachChip } from '@/api/coachChips';
-import { FeedbackSidecar } from '@/components/learning/FeedbackSidecar';
+import { ConversationSidecar } from '@/components/learning/ConversationSidecar';
 import { ReviewLauncher } from '@/components/learning/ReviewLauncher';
 import { Alert, AlertDescription, Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -570,6 +570,8 @@ interface AssignmentConversationViewProps {
   reviewSessionId: string | null;
   canReview: boolean;
   coachChips: CoachChip[];
+  askModeEnabled: boolean;
+  currentTurnIndex?: number | null;
   status: AssignmentConversationHeaderProps['status'];
   composerState: AssignmentComposerState;
   holdLabels: HoldButtonLabels;
@@ -590,6 +592,8 @@ function AssignmentConversationView({
   reviewSessionId,
   canReview,
   coachChips,
+  askModeEnabled,
+  currentTurnIndex,
   status,
   composerState,
   holdLabels,
@@ -610,7 +614,12 @@ function AssignmentConversationView({
       />
       <AssignmentMessagesPane loadingChat={loadingChat} messages={messages} />
       <ReviewLauncher sessionId={reviewSessionId} canReview={canReview} label="See coach review" />
-      <FeedbackSidecar chips={coachChips} />
+      <ConversationSidecar
+        chips={coachChips}
+        sessionId={selectedActivePracticeSession?.id ?? null}
+        askModeEnabled={askModeEnabled}
+        currentTurnIndex={currentTurnIndex}
+      />
       {selectedThread ? (
         <AssignmentComposerPanel
           state={composerState}
@@ -640,6 +649,7 @@ interface AssignmentPracticeWorkspaceController {
   reviewSessionId: string | null;
   canReview: boolean;
   coachChips: CoachChip[];
+  lastLearnerTurnIndexRef: RefObject<number | null>;
   displayMessages: ChatMessageType[];
   sidebarExpansion: SidebarExpansionState;
   conversationStatus: AssignmentConversationHeaderProps['status'];
@@ -1260,6 +1270,7 @@ function useAssignmentPracticeWorkspaceController({
     reviewSessionId,
     canReview,
     coachChips,
+    lastLearnerTurnIndexRef,
     displayMessages,
     sidebarExpansion,
     conversationStatus,
@@ -1297,6 +1308,7 @@ export function AssignmentPracticeWorkspace(props: AssignmentPracticeWorkspacePr
     reviewSessionId,
     canReview,
     coachChips,
+    lastLearnerTurnIndexRef,
     displayMessages,
     sidebarExpansion,
     conversationStatus,
@@ -1367,6 +1379,8 @@ export function AssignmentPracticeWorkspace(props: AssignmentPracticeWorkspacePr
               reviewSessionId={reviewSessionId}
               canReview={canReview}
               coachChips={coachChips}
+              askModeEnabled={bootstrap?.launch.askModeEnabled ?? false}
+              currentTurnIndex={lastLearnerTurnIndexRef.current}
               status={conversationStatus}
               composerState={composerState}
               holdLabels={holdLabels}

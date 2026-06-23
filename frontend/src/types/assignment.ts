@@ -253,6 +253,7 @@ export interface AssignmentBootstrapData {
     configuredMode?: ModalityMode | string;
     voiceAllowed: boolean;
     textAllowed: boolean;
+    askModeEnabled: boolean;
     fallbackApplied?: boolean;
     blockedReasons?: string[];
     retentionPolicy?: RetentionPolicySummary | null;

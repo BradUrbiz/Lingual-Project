@@ -921,5 +921,26 @@ class AnalysisStateCoachChipsTestCase(unittest.TestCase):
         self.assertEqual(normalize_analysis_state({'coach_chips': 'nope'})['coach_chips'], [])
 
 
+class AnalysisStatePromoteBackTestCase(unittest.TestCase):
+    def test_default_analysis_state_has_promote_keys(self):
+        state = default_analysis_state()
+        self.assertEqual(state["promote_back_state"], {})
+        self.assertEqual(state["promotions"], [])
+
+    def test_normalize_carries_promote_keys(self):
+        out = normalize_analysis_state({
+            "promote_back_state": {"counts": {"focus_grammar:ir": 2}, "last_promoted_turn": 4, "promoted_count": 1},
+            "promotions": [{"turn_index": 4, "signature": "focus_grammar:ir", "reason": "hard_target",
+                            "prompt": "note", "generated_at": "2026-06-24T00:00:00+00:00"}],
+        })
+        self.assertEqual(out["promote_back_state"]["promoted_count"], 1)
+        self.assertEqual(len(out["promotions"]), 1)
+
+    def test_normalize_promote_keys_default_when_absent_or_wrong_type(self):
+        out = normalize_analysis_state({"promote_back_state": "bad", "promotions": "bad"})
+        self.assertEqual(out["promote_back_state"], {})
+        self.assertEqual(out["promotions"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

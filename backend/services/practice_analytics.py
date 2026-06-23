@@ -842,6 +842,12 @@ def default_analysis_state() -> dict[str, Any]:
         # S3.2 live between-turn coach chips, appended per gated-in turn when
         # PEDAGOGY_ENGINE_COACH_CHIPS is on; empty list until the first chip.
         'coach_chips': [],
+        # S3.3 promote-back: deterministic recurrence counter + guardrail bookkeeping
+        # (per-signature counts, last_promoted_turn, promoted_count); {} until first candidate.
+        'promote_back_state': {},
+        # S3.3 promote-back: durable log of what was promoted into the main channel
+        # (for analytics/L7; NEVER re-injected on hydration). Empty until first promotion.
+        'promotions': [],
     }
 
 
@@ -885,6 +891,14 @@ def normalize_analysis_state(value: Any) -> dict[str, Any]:
     coach_chips = value.get('coach_chips', value.get('coachChips'))
     if isinstance(coach_chips, list):
         normalized['coach_chips'] = coach_chips
+
+    promote_back_state = value.get('promote_back_state', value.get('promoteBackState'))
+    if isinstance(promote_back_state, dict):
+        normalized['promote_back_state'] = promote_back_state
+
+    promotions = value.get('promotions')
+    if isinstance(promotions, list):
+        normalized['promotions'] = promotions
 
     return normalized
 

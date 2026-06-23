@@ -221,9 +221,10 @@ substitutions:
   # the legacy build_assignment_system_prompt builder were retired in this change.
   _PEDAGOGY_ENGINE_RECYCLING: '1'
   # Pedagogy Engine S3.1 post-task coach review (PEDAGOGY_ENGINE.md §14 S3 row,
-  # PEDAGOGY_ENGINE_S3.md). '0' = the coach-review endpoint does zero work (gate
-  # before any read/LLM, returns coachReview:null); '1' = generate-on-read a
-  # model-verified post-task review and cache it into analysis_state['coach_review'].
+  # PEDAGOGY_ENGINE_S3.md). '0' = the endpoint does NO coach-review work — the route
+  # gate skips bootstrap resolution and the service does zero reads/LLM, returning
+  # coachReview:null after only the cheap session-ownership lookup; '1' =
+  # generate-on-read a post-task review and cache it into analysis_state['coach_review'].
   # Default HELD '0': code lands inert, flipped live via --update-env-vars after a
   # health check (strangler-fig, same cadence as S1/S2). Deploy uses
   # --set-env-vars=REPLACE, so the flag MUST live here or a redeploy drops it; default

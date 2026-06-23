@@ -1,5 +1,8 @@
+import os
 import unittest
 from unittest import mock
+
+_FLAG_ON = {'PEDAGOGY_ENGINE_COACH_REVIEW': '1'}
 
 from flask import Flask, session
 
@@ -60,7 +63,8 @@ class CoachReviewRouteTestCase(unittest.TestCase):
         sess = {'student_uid': 'student-1', 'assignment_id': 'a1', 'ui_language': 'en'}
         client = _app(_Db(sess)).test_client()
         _login(client)
-        with mock.patch('backend.routes.curriculum_admin.resolve_assignment_bootstrap_for_user',
+        with mock.patch.dict(os.environ, _FLAG_ON), \
+             mock.patch('backend.routes.curriculum_admin.resolve_assignment_bootstrap_for_user',
                         return_value={'mapping': {}}), \
              mock.patch('backend.routes.curriculum_admin.generate_coach_review',
                         return_value={'model': 'gpt-5.4-mini-2026-03-17', 'wins': [{'text': 'ok'}], 'work_on': []}):
@@ -74,12 +78,29 @@ class CoachReviewRouteTestCase(unittest.TestCase):
         sess = {'student_uid': 'student-1', 'assignment_id': 'a1', 'ui_language': 'en'}
         client = _app(_Db(sess)).test_client()
         _login(client)
-        with mock.patch('backend.routes.curriculum_admin.resolve_assignment_bootstrap_for_user',
+        with mock.patch.dict(os.environ, _FLAG_ON), \
+             mock.patch('backend.routes.curriculum_admin.resolve_assignment_bootstrap_for_user',
                         return_value={'mapping': {}}), \
              mock.patch('backend.routes.curriculum_admin.generate_coach_review', return_value=None):
             body = client.get('/api/practice-sessions/x/coach-review').get_json()
         self.assertTrue(body['success'])
         self.assertIsNone(body['coachReview'])
+
+    def test_flag_off_returns_null_and_skips_generation(self):
+        # Route-level flag gate: with the flag off, the endpoint returns
+        # coachReview:null WITHOUT resolving the bootstrap or calling the service.
+        sess = {'student_uid': 'student-1', 'assignment_id': 'a1', 'ui_language': 'en'}
+        client = _app(_Db(sess)).test_client()
+        _login(client)
+        gen = mock.MagicMock()
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_COACH_REVIEW': '0'}), \
+             mock.patch('backend.routes.curriculum_admin.resolve_assignment_bootstrap_for_user') as boot, \
+             mock.patch('backend.routes.curriculum_admin.generate_coach_review', gen):
+            body = client.get('/api/practice-sessions/x/coach-review').get_json()
+        self.assertTrue(body['success'])
+        self.assertIsNone(body['coachReview'])
+        gen.assert_not_called()
+        boot.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -114,7 +114,7 @@ Sits beside S2's `analysis_state['coverage']`. `default_analysis_state()` / `nor
 ## 6. Data flow — generate-on-read
 
 ```
-Learner ends an assignment practice session (AssignmentPracticeWorkspace -> endActivePracticeSession)
+Learner ends an assignment practice session (AssignmentPracticeWorkspace -> handleEndSession)
   -> workspace captures the ending session id into reviewSessionId; ReviewLauncher shows when !isConnected
   -> learner opens it -> PostTaskReviewPanel mounts -> getCoachReview(sessionId)
      -> GET /api/practice-sessions/<id>/coach-review
@@ -171,7 +171,7 @@ Reuses the teacher's existing `feedbackPolicy.mode`:
 - **`components/learning/PostTaskReviewPanel.tsx`** — read-only. Props `{ sessionId }`. States: `loading` ("Generating your review…"), `review` (wins list + work-on cards: utterance → better + why + optional caveat + target chip + target-coverage strip), `empty` (`null` → "No review available for this session.").
 - **`components/learning/ReviewLauncher.tsx`** — a small, file-agnostic launcher (props `{ sessionId, canReview, label }`) holding open/close state, rendering `PostTaskReviewPanel` on click; renders nothing without a session / when not reviewable.
 - **Mount in `AssignmentPracticeWorkspace.tsx`** (the component owning the assignment practice session — **not** the legacy B2C `AppChatPage.tsx`):
-  - The workspace captures the **ending session id** into a `reviewSessionId` state inside `endActivePracticeSession` (the single funnel for all end paths), and gates the launcher on `!isConnected`.
+  - The workspace captures the **ending session id** into a `reviewSessionId` state inside `handleEndSession` (the explicit "End session" finish path — NOT `endActivePracticeSession`, which is the abandon-to-restart/resume path), and gates the launcher on `!isConnected`.
   - This offers the review **only after an explicit session end** — never mid-session — so generate-on-read cannot cache a partial transcript. (The workspace does not locally flip session `status` to `completed` on end, so an explicit captured id is used rather than a status check.)
 - **Frontend tests (vitest):** `PostTaskReviewPanel` renders all three states; `ReviewLauncher` renders nothing without a session / when not reviewable and opens the panel on click; the `getCoachReview` wrapper.
 

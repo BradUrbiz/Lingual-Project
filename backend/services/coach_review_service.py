@@ -114,8 +114,21 @@ def generate_coach_review(deps: Any, bootstrap: dict, uid: str, session_id: str)
             "model": COACH_REVIEW_MODEL,
             **serialize_coach_review(review),
         }
-        analysis_state["coach_review"] = serialized
-        deps.db.update_practice_session(session_id, {"analysis_state": analysis_state}, sql_engine=deps.sql_engine)
+        # Re-read the session immediately before the write so a concurrent
+        # analysis_state write that landed during the (slow, multi-second) LLM call
+        # is not clobbered by the stale pre-call snapshot — merge coach_review into
+        # the freshest copy. This is not a fully atomic JSONB sub-key merge (that is
+        # a documented follow-up), but it collapses the clobber window from the whole
+        # LLM call to the microseconds between this re-read and the write, preserving
+        # S2 coverage / recent_turns that another path may have updated meanwhile.
+        fresh = deps.db.get_practice_session(session_id)
+        target_state = (
+            normalize_analysis_state(fresh.get("analysis_state"))
+            if isinstance(fresh, dict)
+            else analysis_state
+        )
+        target_state["coach_review"] = serialized
+        deps.db.update_practice_session(session_id, {"analysis_state": target_state}, sql_engine=deps.sql_engine)
         return serialized
     except Exception:
         logger.exception("coach review generation failed; degrading to no review (session_id=%s)", session_id)

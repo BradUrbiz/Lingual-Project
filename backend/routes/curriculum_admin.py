@@ -680,7 +680,12 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
 
             review = None
             assignment_id = session_record.get('assignment_id')
-            if assignment_id:
+            # Flag gate at the route too (not only inside generate_coach_review):
+            # when coach review is off, skip the non-trivial bootstrap resolution
+            # entirely, so flag-off does NO coach-review work beyond the ownership
+            # read above. Keeps the "flag-off = zero work" contract honest.
+            from backend.services.pedagogy.integration import coach_review_enabled
+            if assignment_id and coach_review_enabled():
                 ui_language = _normalize_string(session_record.get('ui_language')) or 'en'
                 try:
                     bootstrap = resolve_assignment_bootstrap_for_user(

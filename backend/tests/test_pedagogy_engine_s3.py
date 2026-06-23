@@ -688,5 +688,48 @@ class GenerateCoachChipPromoteTestCase(unittest.TestCase):
         self.assertNotIn("promote", chip)   # without promotion
 
 
+class AskModuleTestCase(unittest.TestCase):
+    def test_build_prompt_has_anti_answer_dump_and_scope(self):
+        from backend.services.pedagogy.ask import build_ask_prompt
+        msgs = build_ask_prompt("how do I say hello?", [{"role": "user", "content": "hola"}],
+                                ["expression:greetings"], {"mode": "balanced"}, {}, "text", "en")
+        self.assertEqual(msgs[0]["role"], "system")
+        sys = msgs[0]["content"].lower()
+        self.assertIn("never", sys)
+        self.assertIn("refusal", sys)
+        self.assertIn("scope", sys)
+        self.assertIn("expression:greetings", msgs[1]["content"])
+        self.assertIn("how do I say hello?", msgs[1]["content"])
+
+    def test_build_prompt_voice_is_terser_and_threads_ui_language(self):
+        from backend.services.pedagogy.ask import build_ask_prompt
+        voice = build_ask_prompt("q", [], [], {}, {}, "voice", "ko")[0]["content"]
+        text = build_ask_prompt("q", [], [], {}, {}, "text", "ko")[0]["content"]
+        self.assertIn("at most 1 sentence", voice)
+        self.assertIn("at most 2 sentence", text)
+        self.assertIn("ko", voice)
+
+    def test_parse_coerces_kind_and_caps_length(self):
+        from backend.services.pedagogy.ask import parse_ask_answer, ASK_KINDS, MAX_ANSWER_CHARS
+        a = parse_ask_answer({"answer": "Try 'hola'.", "kind": "HINT"})
+        self.assertEqual(a.kind, "hint")
+        unknown = parse_ask_answer({"answer": "x", "kind": "bogus"})
+        self.assertEqual(unknown.kind, "clarification")  # DEFAULT_KIND
+        long = parse_ask_answer({"answer": "z" * (MAX_ANSWER_CHARS + 50), "kind": "hint"})
+        self.assertLessEqual(len(long.answer), MAX_ANSWER_CHARS)
+        self.assertTrue(ASK_KINDS)
+
+    def test_parse_empty_answer_is_none_and_non_dict_raises(self):
+        from backend.services.pedagogy.ask import parse_ask_answer
+        self.assertIsNone(parse_ask_answer({"answer": "   ", "kind": "hint"}))
+        with self.assertRaises(ValueError):
+            parse_ask_answer("not a dict")
+
+    def test_serialize_roundtrip(self):
+        from backend.services.pedagogy.ask import AskAnswer, serialize_ask_answer
+        self.assertEqual(serialize_ask_answer(AskAnswer(answer="hi", kind="hint")),
+                         {"answer": "hi", "kind": "hint"})
+
+
 if __name__ == '__main__':
     unittest.main()

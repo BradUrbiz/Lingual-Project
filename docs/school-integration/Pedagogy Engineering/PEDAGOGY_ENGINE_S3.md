@@ -17,7 +17,7 @@ That is a **subsystem cluster, not one feature.** It decomposes by **timing × d
 |---|---|---|---|
 | **S3.1** | Post-task correction pass over the finished transcript → read-only **post-task review** panel on both surfaces | ✅ **CUT OVER 2026-06-23** (`PEDAGOGY_ENGINE_COACH_REVIEW=1` live, default `1`) | Low — no live timing, no two-model coordination, no split-attention |
 | **S3.2** | Live, silent between-turn coach chips (side channel only, no promote-back) — same `coach_review.py` module/model/rubric family as S3.1, with chip-specific pure functions (`build_coach_chip_prompt` / `parse_coach_chip` / `serialize_coach_chip`) that reuse ReviewItem + rubric constants + anti-sycophancy/locale rules, per-turn instead of once at the end | ✅ **CUT OVER 2026-06-24** (`PEDAGOGY_ENGINE_COACH_CHIPS=1` live, rev `lingual-app-00078-wrc`, cloudbuild default `1`) | Medium — real-time transport |
-| **S3.3** | Promote-back into the main channel + main tutor goes correction-light (the structural ~30% voice-adherence mitigation) | Pending | High — two-model coordination, voice injection, under/over-promotion |
+| **S3.3** | Promote-back into the main channel + main tutor goes correction-light (the structural ~30% voice-adherence mitigation) | **BUILT behind flag (`PEDAGOGY_ENGINE_PROMOTE_BACK=0`), not cut over** | High — two-model coordination, voice injection, under/over-promotion |
 | **S3.4** | Ask mode (learner-initiated quick help) — largely independent of the correction track | Pending | Low–Medium |
 
 S3.2 shares `coach_review.py`'s module, model, and rubric family with chip-specific pure functions (`build_coach_chip_prompt` / `parse_coach_chip` / `serialize_coach_chip`) that reuse the ReviewItem dataclass, rubric constants, and anti-sycophancy/locale rules — not a verbatim reuse of the post-task prompt builder. The pure-module boundary is why S3.1's correction work lives there rather than inline in the orchestrator.
@@ -306,14 +306,94 @@ See `LIMITATIONS.md` #53 sub-items (s)–(v).
 
 ## 13. Relationship to existing docs (doc-sync targets)
 
-- `PEDAGOGY_ENGINE.md` §14 — S3 row: "S3.1 shipped (post-task review, model-verified); S3.2 CUT OVER 2026-06-24 (live chips, `PEDAGOGY_ENGINE_COACH_CHIPS=1`, default `1`); S3.3/S3.4 pending."
-- `docs/school-integration/TASKS.md` — S3.1 build + flag-wiring/doc-sync items (complete) + S3.1 cutover + S3.2 build item (complete) + S3.2 cutover (complete) + S3.3/S3.4 (pending).
-- `docs/school-integration/LIMITATIONS.md` — #53 sub-items (m)–(r) (the S3.1 constraints) + sub-items (s)–(v) (the S3.2 constraints).
-- `backend/CLAUDE.md` — `pedagogy/` line: chip pure functions in `coach_review.py` + `coach_chip_service.py` (impure orchestrator) + `PEDAGOGY_ENGINE_COACH_CHIPS` flag (LIVE, default `'1'`, cut over 2026-06-24).
+- `PEDAGOGY_ENGINE.md` §14 — S3 row: "S3.1 shipped (post-task review, model-verified); S3.2 CUT OVER 2026-06-24 (live chips, `PEDAGOGY_ENGINE_COACH_CHIPS=1`, default `1`); S3.3 BUILT behind flag (`PEDAGOGY_ENGINE_PROMOTE_BACK=0`), not cut over; S3.4 pending."
+- `docs/school-integration/TASKS.md` — S3.1 build + flag-wiring/doc-sync items (complete) + S3.1 cutover + S3.2 build item (complete) + S3.2 cutover (complete) + S3.3 build item (complete, behind flag) + S3.3 cutover (pending) + S3.4 (pending).
+- `docs/school-integration/LIMITATIONS.md` — #53 sub-items (m)–(r) (the S3.1 constraints) + sub-items (s)–(v) (the S3.2 constraints) + sub-items (w)–(aa) (the S3.3 constraints).
+- `backend/CLAUDE.md` — `pedagogy/` line: chip pure functions in `coach_review.py` + `coach_chip_service.py` (impure orchestrator) + `PEDAGOGY_ENGINE_COACH_CHIPS` flag (LIVE, default `'1'`, cut over 2026-06-24) + `promote_back.py` (pure decision module) + `PEDAGOGY_ENGINE_PROMOTE_BACK` flag (BUILT, default `'0'`, not cut over).
 - Design spec: `docs/superpowers/specs/2026-06-23-pedagogy-s3.1-post-task-coach-review-design.md`.
 
 ## 14. Open questions / future hooks
 
 - **S3.2 cutover:** DONE 2026-06-24 (rev `lingual-app-00078-wrc`, cloudbuild default `'1'`). See §S3.2-0 for the full cutover sequence, Spanish catalog, and burn-in status. Post-launch: monitor Spanish-session chip rate and expand feedback catalogs as real tutor phrasings are observed; add native catalogs for ko/ru/he/tl when sufficient tutor-phrase samples exist.
-- **S2 / L7 cross-consumption:** `coach_review` is structured (`target_coverage`, model-verified) so S2 recycling could later prefer it over heuristic coverage, and L7 could present it to teachers. Deferred — not built in S3.1.
+- **S3.3 cutover (pending):** deploy inert (flag `'0'`, verify prompt byte-identical) → `gcloud run services update ... --update-env-vars PEDAGOGY_ENGINE_PROMOTE_BACK=1` → text burn-in (drive a repeated error past threshold → confirm correction-light tutor + in-thread promote-back) → bump cloudbuild default `0→1` for durability → doc-sync the cutover. Voice burn-in limited by the WebRTC-mic constraint (shared with S3.1/S3.2). Rollback: `--update-env-vars PEDAGOGY_ENGINE_PROMOTE_BACK=0`.
+- **S2 / L7 cross-consumption:** `coach_review` is structured (`target_coverage`, model-verified) so S2 recycling could later prefer it over heuristic coverage, and L7 could present it to teachers. Deferred — not built in S3.1. Note: S3.3's `promotions[]` list on `analysis_state` is also structured for future S2/L7 consumption — not wired yet (LIMITATIONS #53(aa)).
 - **`session.ended` pre-warm:** generation could optionally be pre-warmed when a `session.ended` event *does* fire, so the first read is instant. Deferred optimization; the GET endpoint remains the source of truth.
+
+---
+
+# S3.3 — Promote-Back + Correction-Light (as built)
+
+**Status: BUILT behind `PEDAGOGY_ENGINE_PROMOTE_BACK` (default `'0'`). NOT cut over — flag is off in prod. Cutover is a separate post-merge step (see §14 above).**
+
+## S3.3-1. Goal
+
+When the coach chip stream detects a repeated or hard-target error, **promote it back** into the main tutor's context so the main tutor can address it directly — and simultaneously put the main tutor into a **correction-light stance** (dropping the correction ladder for the session) so correction authority moves to the coach track rather than competing. This is the structural mitigation for the ~30% voice instruction-adherence ceiling: the promote-back message is injected in-character (voice: avatar-context pattern; text: a `coachNote` prepended to the learner's next turn) so the main tutor receives it as part of its normal context, not as an out-of-band interrupt.
+
+## S3.3-2. Architecture — pure / impure split
+
+```
+PURE   backend/services/pedagogy/promote_back.py          (stdlib only — import-boundary clean)
+         • PromoteDecision{promote, signature, reason} dataclass
+         • decide_promote_back(promote_state, chip, feedback_policy, turn_index)
+             -> (PromoteDecision, updated_promote_state dict)
+         • build_promote_prompt(chip, surface) -> str   (in-character inject string)
+         • Recurrence counter + mode-modulated thresholds:
+             fluency_first ≥3 · balanced ≥2 · accuracy_first ≥2
+         • Three guards: cooldown (no promote on consecutive turns),
+             per-session cap (≤3 promotes/session), reset-on-promote (counter resets)
+
+GATE   backend/services/pedagogy/integration.py
+         • promote_back_enabled()  (reads PEDAGOGY_ENGINE_PROMOTE_BACK; two-flag invariant:
+           returns True ONLY when BOTH PEDAGOGY_ENGINE_PROMOTE_BACK=1 AND PEDAGOGY_ENGINE_COACH_CHIPS=1)
+
+WIRING rides the existing S3.2 chip round-trip (no new endpoint, no 2nd LLM call):
+         • coach_chip_service.py — after generating a chip, calls decide_promote_back;
+           the PromoteDecision is merged into the chip dict as promote / promote_prompt / promote_reason
+         • Voice surface (AssignmentPracticeWorkspace): if chip.promote=true, injects
+           promote_prompt into the realtime session via injectPromoteBack(prompt) using
+           the avatar-context pattern (in-character, not an out-of-band interrupt)
+         • Text surface (chat.py): if chip.promote=true, prepends a coachNote to the
+           learner's next turn message body (next-turn injection)
+```
+
+**No new endpoint and no second LLM call.** The promote decision is purely algorithmic (`promote_back.py` is stdlib-only) and rides the existing chip POST/GET round-trip. The chip gains three new fields: `promote` (bool), `promote_prompt` (str | null — the in-character inject string), `promote_reason` (str | null — the matched error signature, for logging/debrief).
+
+## S3.3-3. Data contract additions
+
+`analysis_state` gains two new keys alongside `coach_review` and `coach_chips`:
+
+```jsonc
+// analysis_state['promote_back_state'] — mutable per-session promote tracker
+{
+  "recurrence_counts": {"<error_signature>": <int>},  // per-error hit counter
+  "last_promote_turn": <int> | null,                   // for cooldown guard
+  "session_promote_count": <int>                       // for per-session cap guard
+}
+
+// analysis_state['promotions'] — flat list, one entry per promote decision
+[
+  {
+    "turn_index": <int>,
+    "error_signature": "<str>",
+    "promote_prompt": "<str>",
+    "surface": "voice" | "text"
+  }
+]
+```
+
+Chip fields added by S3.3 (merged into the `coach_chips` list entry):
+- `promote`: `true` if this chip triggered a promote-back, `false` otherwise
+- `promote_prompt`: the in-character inject string (null when promote=false)
+- `promote_reason`: the matched error signature (null when promote=false)
+
+## S3.3-4. Correction-light stance
+
+When `promote_back_enabled()` is true, `render_assignment_prompt` (and `resolve_assignment_system_prompt` for voice) receives `correction_light=True` and drops the correction-ladder section from the tutor stance. The main tutor is no longer instructed to correct directly — correction authority moves to the coach track's promote-back injection. This is a **two-flag safety invariant**: correction-light only engages when BOTH `PEDAGOGY_ENGINE_PROMOTE_BACK=1` AND `PEDAGOGY_ENGINE_COACH_CHIPS=1` are live (`promote_back_enabled()` enforces this). With the flag off (default `'0'`), the prompt is byte-identical to today — no behavior change whatsoever.
+
+## S3.3-5. Fail-open invariants
+
+Every failure path resolves to `promote=false` on the chip — never a 500, never a blocked session. `decide_promote_back` is a pure stdlib function (no I/O, no raises on normal input). If the chip generation itself fails, no promote decision runs (fail-open from S3.2). If the promote state write fails, the session continues without updated tracking state (the per-session cap guard will still fire from the last persisted state). The two-flag invariant means correction-light cannot engage without the chip side-channel also being live.
+
+## S3.3-6. As-built narrowing (LIMITATIONS #53 S3.3)
+
+See `LIMITATIONS.md` #53 sub-items (w)–(aa).

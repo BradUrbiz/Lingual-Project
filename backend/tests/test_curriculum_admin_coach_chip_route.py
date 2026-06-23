@@ -236,7 +236,7 @@ class AskRouteTestCase(unittest.TestCase):
 
         self._ask_patcher = mock.patch(
             'backend.routes.curriculum_admin.answer_ask',
-            return_value={'answer': 'Because of conjugation.', 'kind': 'grammar'},
+            return_value={'answer': 'Because of conjugation.', 'kind': 'definition'},
         )
         self._ask_patcher.start()
 
@@ -279,7 +279,7 @@ class AskRouteTestCase(unittest.TestCase):
         body = resp.get_json()
         self.assertTrue(body['success'])
         self.assertEqual(body['ask']['answer'], 'Because of conjugation.')
-        self.assertEqual(body['ask']['kind'], 'grammar')
+        self.assertEqual(body['ask']['kind'], 'definition')
 
     def test_unexpected_error_fails_open_not_500(self):
         # a raising db in the read path -> 200 {'success': True, 'ask': None}; never 500

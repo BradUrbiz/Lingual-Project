@@ -603,5 +603,20 @@ class PromoteBackTestCase(unittest.TestCase):
         self.assertIn("one short sentence", voice.lower())
 
 
+class PromoteBackEnabledTestCase(unittest.TestCase):
+    def test_truthy_values_enable(self):
+        from backend.services.pedagogy.integration import promote_back_enabled
+        for v in ("1", "true", "yes", "on", "TRUE"):
+            with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_PROMOTE_BACK": v}):
+                self.assertTrue(promote_back_enabled())
+
+    def test_absent_or_falsey_disables(self):
+        from backend.services.pedagogy.integration import promote_back_enabled
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(promote_back_enabled())
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_PROMOTE_BACK": "0"}):
+            self.assertFalse(promote_back_enabled())
+
+
 if __name__ == '__main__':
     unittest.main()

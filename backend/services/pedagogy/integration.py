@@ -47,6 +47,15 @@ def coach_chips_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_COACH_CHIPS", "").strip().lower() in _TRUTHY
 
 
+def promote_back_enabled() -> bool:
+    """Whether S3.3 promote-back is on (independent flag). Reads PEDAGOGY_ENGINE_PROMOTE_BACK.
+
+    Promote-back rides the S3.2 chip path, so it is effective only with coach chips
+    also on; correction-light is additionally gated on coach_chips_enabled() at the
+    render seam (resolve_assignment_system_prompt)."""
+    return os.environ.get("PEDAGOGY_ENGINE_PROMOTE_BACK", "").strip().lower() in _TRUTHY
+
+
 def resolve_assignment_system_prompt(
     bootstrap: dict[str, Any], *, surface: str, coverage_state: "CoverageState | None" = None
 ) -> str:

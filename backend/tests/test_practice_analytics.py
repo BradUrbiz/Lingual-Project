@@ -824,5 +824,23 @@ class TestAnalysisStateCoverage(unittest.TestCase):
         self.assertIsNone(normalize_analysis_state({})['coach_review'])
 
 
+class AnalysisStateCoachChipsTestCase(unittest.TestCase):
+    def test_default_has_empty_coach_chips_list(self):
+        from backend.services.practice_analytics import default_analysis_state
+        self.assertEqual(default_analysis_state()['coach_chips'], [])
+
+    def test_normalize_preserves_coach_chips_list(self):
+        from backend.services.practice_analytics import normalize_analysis_state
+        chips = [{'turn_index': 4, 'utterance': 'x', 'better': 'y'}]
+        self.assertEqual(normalize_analysis_state({'coach_chips': chips})['coach_chips'], chips)
+
+    def test_normalize_accepts_camelcase_and_defaults_empty(self):
+        from backend.services.practice_analytics import normalize_analysis_state
+        chips = [{'turn_index': 1}]
+        self.assertEqual(normalize_analysis_state({'coachChips': chips})['coach_chips'], chips)
+        self.assertEqual(normalize_analysis_state({})['coach_chips'], [])
+        self.assertEqual(normalize_analysis_state({'coach_chips': 'nope'})['coach_chips'], [])
+
+
 if __name__ == "__main__":
     unittest.main()

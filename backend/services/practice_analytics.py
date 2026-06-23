@@ -805,6 +805,9 @@ def default_analysis_state() -> dict[str, Any]:
         # S3.1 model-verified post-task coach review (generated lazily on read
         # when PEDAGOGY_ENGINE_COACH_REVIEW is on); None until generated.
         'coach_review': None,
+        # S3.2 live between-turn coach chips, appended per gated-in turn when
+        # PEDAGOGY_ENGINE_COACH_CHIPS is on; empty list until the first chip.
+        'coach_chips': [],
     }
 
 
@@ -844,6 +847,10 @@ def normalize_analysis_state(value: Any) -> dict[str, Any]:
     coach_review = value.get('coach_review', value.get('coachReview'))
     if isinstance(coach_review, dict):
         normalized['coach_review'] = coach_review
+
+    coach_chips = value.get('coach_chips', value.get('coachChips'))
+    if isinstance(coach_chips, list):
+        normalized['coach_chips'] = coach_chips
 
     return normalized
 

@@ -327,6 +327,33 @@ describe('useRealtimeChat directive continuation', () => {
     });
   });
 
+  it('injectPromoteBack queues a system coach note and flushes at the breakpoint', async () => {
+    render(<HookHarness />);
+
+    await act(async () => {
+      await latestHookState?.connect();
+    });
+
+    act(() => {
+      activeDataChannel?.open();
+    });
+
+    await waitFor(() => {
+      expect(latestHookState?.isConnected).toBe(true);
+    });
+
+    // At breakpoint: connected, not listening, not speaking, no active response
+    act(() => {
+      latestHookState?.injectPromoteBack('COACH NOTE: try voy');
+    });
+
+    // Should have sent conversation.item.create with a system message and then response.create
+    const item = sentClientEvents.find((p) => p.type === 'conversation.item.create') as Record<string, unknown> | undefined;
+    const itemContent = (item?.item as Record<string, unknown> | undefined)?.content as Array<Record<string, unknown>> | undefined;
+    expect(itemContent?.[0]?.text).toBe('COACH NOTE: try voy');
+    expect(sentClientEvents.some((p) => p.type === 'response.create')).toBe(true);
+  });
+
   it('holds accepted learner turns until the student releases the tutor hold', async () => {
     render(<HookHarness />);
 

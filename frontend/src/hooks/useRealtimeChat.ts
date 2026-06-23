@@ -60,6 +60,7 @@ interface UseRealtimeChatReturn {
   clearMessages: () => void;
   setTutorHoldActive: (active: boolean) => void;
   queueAvatarHit: (area: string) => Promise<void>;
+  injectPromoteBack: (prompt: string) => void;
 }
 
 type RealtimeContentItem = {
@@ -723,6 +724,15 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     return true;
   }, [createConversationItem, createRealtimeResponseUnlessHeld]);
 
+  const injectPromoteBack = useCallback((prompt: string) => {
+    // S3.3: a promote-back is an avatar-context-style system note delivered in the
+    // tutor's own words. Reuse the proven queue+breakpoint-flush path; if the learner
+    // is mid-speech the note stays queued and flushes at the next response.done.
+    if (!prompt?.trim()) return;
+    queuedAvatarContextsRef.current.push({ systemMessage: prompt });
+    flushQueuedAvatarContexts();
+  }, [flushQueuedAvatarContexts]);
+
   const completeDirectiveToolCall = useCallback((itemId: string, argsString?: string, eventCallId?: string | null, eventName?: string | null) => {
     const directiveCall = directiveCallRef.current;
     const directiveArgumentBuffer = directiveArgumentBufferRef.current;
@@ -1220,5 +1230,6 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     clearMessages,
     setTutorHoldActive,
     queueAvatarHit,
+    injectPromoteBack,
   };
 }

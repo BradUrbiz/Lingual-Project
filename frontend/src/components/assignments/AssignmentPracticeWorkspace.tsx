@@ -692,6 +692,8 @@ function useAssignmentPracticeWorkspaceController({
   const closeWithoutAbandonRef = useRef(false);
   const activePracticeSessionRef = useRef<PracticeSessionDto | null>(null);
   const realtimePersistenceTargetRef = useRef<{ practiceSessionId: string; chatId: string } | null>(null);
+  const pendingPromoteBackRef = useRef<string | null>(null);
+  const injectPromoteBackRef = useRef<((prompt: string) => void) | null>(null);
 
   const selectedThread = useMemo(
     () => workspace?.threads.find((thread) => thread.chatId === selectedChatId) ?? null,
@@ -766,9 +768,17 @@ function useAssignmentPracticeWorkspaceController({
     if (!sessionId || learnerTurnIndex == null) return;
     try {
       const chip = await postCoachChip(sessionId, learnerTurnIndex);
-      if (chip) setCoachChips((prev) => (prev.some((c) => c.turn_index === chip.turn_index) ? prev : [...prev, chip]));
+      if (!chip) return;
+      setCoachChips((prev) => (prev.some((c) => c.turn_index === chip.turn_index) ? prev : [...prev, chip]));
+      if (chip.promote && chip.promote_prompt) {
+        if (chip.surface === 'voice') {
+          injectPromoteBackRef.current?.(chip.promote_prompt);
+        } else {
+          pendingPromoteBackRef.current = chip.promote_prompt;
+        }
+      }
     } catch {
-      // fail-open: a missing/failed chip never disrupts the session
+      // fail-open: a missing/failed chip or injection never disrupts the session
     }
   }, []);
 
@@ -817,12 +827,17 @@ function useAssignmentPracticeWorkspaceController({
     updateSpeakingSpeed,
     clearMessages,
     setTutorHoldActive,
+    injectPromoteBack,
   } = useRealtimeChat({
     onMessage: (role, content) => {
       void persistRealtimeMessage(role, content);
     },
     sessionParams: realtimeSessionParams,
   });
+
+  // Keep injectPromoteBackRef current so triggerCoachChip (defined before useRealtimeChat)
+  // can call it without a forward-reference initialization error.
+  injectPromoteBackRef.current = injectPromoteBack;
 
   const handleSpeakingSpeedChange = useCallback((nextSpeed: number) => {
     setSpeakingSpeed(nextSpeed);

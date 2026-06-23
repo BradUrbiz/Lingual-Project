@@ -10,6 +10,9 @@ export interface CoachChip {
   why: string;
   target: string | null;
   confidence_caveat: boolean;
+  promote?: boolean;
+  promote_prompt?: string;
+  promote_reason?: 'repeat' | 'hard_target';
 }
 
 export const postCoachChip = async (sessionId: string, turnIndex: number): Promise<CoachChip | null> => {

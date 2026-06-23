@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AssignmentPracticeWorkspace } from '@/components/assignments/AssignmentPracticeWorkspace';
 import type { AssignmentBootstrapData, AssignmentWorkspaceData, ChatSessionDetail, PracticeSessionDto } from '@/types';
 
@@ -19,6 +19,7 @@ const saveMessageToChatMock = vi.fn();
 const connectMock = vi.fn();
 const disconnectMock = vi.fn();
 const clearMessagesMock = vi.fn();
+const injectPromoteBackSpy = vi.fn();
 let realtimeOnMessage: ((role: 'user' | 'assistant', content: string) => void) | null = null;
 
 vi.mock('@/api/assignments', () => ({
@@ -46,6 +47,7 @@ vi.mock('@/hooks/useRealtimeChat', () => ({
       connect: connectMock,
       disconnect: disconnectMock,
       clearMessages: clearMessagesMock,
+      injectPromoteBack: injectPromoteBackSpy,
     };
   },
 }));
@@ -291,6 +293,7 @@ describe('AssignmentPracticeWorkspace', () => {
     postCoachChipMock.mockResolvedValue(null);
     getCoachChipsMock.mockReset();
     getCoachChipsMock.mockResolvedValue([]);
+    injectPromoteBackSpy.mockReset();
     realtimeOnMessage = null;
 
     getStudentAssignmentWorkspaceMock.mockResolvedValue(WORKSPACE);
@@ -813,6 +816,59 @@ describe('AssignmentPracticeWorkspace', () => {
     // After the switch, the chip must be gone (no stale-chip leak)
     await waitFor(() => {
       expect(screen.queryByText('UniqueChipTextForLeakTest')).not.toBeInTheDocument();
+    });
+  });
+
+  it('injects a voice promote chip into the main channel via injectPromoteBack', async () => {
+    const PROMOTE_CHIP: import('@/api/coachChips').CoachChip = {
+      turn_index: 0,
+      generated_at: 'now',
+      model: 'm',
+      surface: 'voice',
+      utterance: 'Yo va',
+      better: 'Yo voy',
+      why: 'ir',
+      target: 'focus_grammar:ir',
+      confidence_caveat: false,
+      promote: true,
+      promote_prompt: 'COACH NOTE: try voy',
+      promote_reason: 'hard_target',
+    };
+    postCoachChipMock.mockResolvedValue(PROMOTE_CHIP);
+    saveMessageToChatMock.mockResolvedValue(undefined);
+    reportPracticeSessionEventMock.mockResolvedValue(undefined);
+
+    render(
+      <AssignmentPracticeWorkspace
+        open
+        bootstrap={BOOTSTRAP}
+        onClose={vi.fn()}
+      />
+    );
+
+    // Wait for the workspace to load and voice connect button to appear
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Tap the mic to connect/i })).toBeInTheDocument();
+    });
+
+    // Connect voice (selectedActivePracticeSession is ACTIVE_SESSION from WORKSPACE)
+    fireEvent.click(screen.getByRole('button', { name: /Tap the mic to connect/i }));
+
+    await waitFor(() => {
+      expect(connectMock).toHaveBeenCalled();
+    });
+
+    // Drive a learner turn followed by an assistant turn to trigger triggerCoachChip
+    await act(async () => {
+      realtimeOnMessage?.('user', 'Yo va al tienda');
+    });
+    await act(async () => {
+      realtimeOnMessage?.('assistant', '¿Otra vez?');
+    });
+
+    // The assistant turn should trigger triggerCoachChip, which sees promote:true + voice → injectPromoteBack
+    await waitFor(() => {
+      expect(injectPromoteBackSpy).toHaveBeenCalledWith('COACH NOTE: try voy');
     });
   });
 });

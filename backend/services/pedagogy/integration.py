@@ -56,6 +56,11 @@ def promote_back_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_PROMOTE_BACK", "").strip().lower() in _TRUTHY
 
 
+def ask_mode_enabled() -> bool:
+    """Whether S3.4 Ask mode is on (independent flag). Reads PEDAGOGY_ENGINE_ASK_MODE."""
+    return os.environ.get("PEDAGOGY_ENGINE_ASK_MODE", "").strip().lower() in _TRUTHY
+
+
 def resolve_assignment_system_prompt(
     bootstrap: dict[str, Any], *, surface: str, coverage_state: "CoverageState | None" = None
 ) -> str:

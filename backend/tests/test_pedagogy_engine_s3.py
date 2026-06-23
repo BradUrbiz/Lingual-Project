@@ -731,5 +731,20 @@ class AskModuleTestCase(unittest.TestCase):
                          {"answer": "hi", "kind": "hint"})
 
 
+class AskModeEnabledTestCase(unittest.TestCase):
+    def test_truthy_enables(self):
+        from backend.services.pedagogy.integration import ask_mode_enabled
+        for v in ("1", "true", "yes", "on", "TRUE"):
+            with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASK_MODE": v}):
+                self.assertTrue(ask_mode_enabled())
+
+    def test_absent_or_falsey_disables(self):
+        from backend.services.pedagogy.integration import ask_mode_enabled
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(ask_mode_enabled())
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ASK_MODE": "0"}):
+            self.assertFalse(ask_mode_enabled())
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -2,6 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AssignmentPracticeWorkspace } from '@/components/assignments/AssignmentPracticeWorkspace';
 import type { AssignmentBootstrapData, AssignmentWorkspaceData, ChatSessionDetail, PracticeSessionDto } from '@/types';
 
+const postCoachChipMock = vi.fn();
+vi.mock('@/api/coachChips', () => ({
+  postCoachChip: (...args: unknown[]) => postCoachChipMock(...args),
+}));
+
 const getStudentAssignmentWorkspaceMock = vi.fn();
 const createAssignmentPracticeSessionMock = vi.fn();
 const reportPracticeSessionEventMock = vi.fn();
@@ -280,6 +285,8 @@ describe('AssignmentPracticeWorkspace', () => {
     connectMock.mockReset();
     disconnectMock.mockReset();
     clearMessagesMock.mockReset();
+    postCoachChipMock.mockReset();
+    postCoachChipMock.mockResolvedValue(null);
     realtimeOnMessage = null;
 
     getStudentAssignmentWorkspaceMock.mockResolvedValue(WORKSPACE);
@@ -578,5 +585,61 @@ describe('AssignmentPracticeWorkspace', () => {
     });
 
     expect(screen.queryByPlaceholderText('Type to continue this assignment thread...')).not.toBeInTheDocument();
+  });
+
+  it('fires postCoachChip with the practice session id and learner turn index after a text send', async () => {
+    const TEXT_BOOTSTRAP: AssignmentBootstrapData = {
+      ...BOOTSTRAP,
+      launch: {
+        ...BOOTSTRAP.launch,
+        modality: { mode: 'text_only', voiceMinutesCap: 0, textFallbackEnabled: false },
+        voiceAllowed: false,
+        textAllowed: true,
+      },
+    };
+    const TEXT_SESSION: PracticeSessionDto = {
+      ...ACTIVE_SESSION,
+      modality: 'text_only',
+      voiceEnabled: false,
+      textEnabled: true,
+    };
+    const TEXT_WORKSPACE: AssignmentWorkspaceData = {
+      ...WORKSPACE,
+      bootstrap: TEXT_BOOTSTRAP,
+      threads: [
+        {
+          ...WORKSPACE.threads[0],
+          latestPracticeSession: TEXT_SESSION,
+          attempts: [TEXT_SESSION],
+        },
+      ],
+    };
+
+    getStudentAssignmentWorkspaceMock.mockResolvedValue(TEXT_WORKSPACE);
+    sendChatMessageMock.mockResolvedValue({ response: 'Très bien !' });
+    reportPracticeSessionEventMock.mockResolvedValue(undefined);
+
+    render(
+      <AssignmentPracticeWorkspace
+        open
+        bootstrap={TEXT_BOOTSTRAP}
+        onClose={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Type your assignment response...')).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText('Type your assignment response...');
+    fireEvent.change(input, { target: { value: 'Bonjour, je voudrais commander.' } });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() => {
+      expect(postCoachChipMock).toHaveBeenCalledWith(
+        TEXT_SESSION.id,
+        expect.any(Number),
+      );
+    });
   });
 });

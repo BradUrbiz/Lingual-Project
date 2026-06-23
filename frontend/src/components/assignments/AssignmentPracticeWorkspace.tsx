@@ -7,6 +7,8 @@ import {
 } from '@/api/assignments';
 import { createChatSession, getChatSession, saveMessageToChat, sendChatMessage } from '@/api/chat';
 import { ChatInput, ChatMessage, SpeakingSpeedControl } from '@/components/chat';
+import { postCoachChip, type CoachChip } from '@/api/coachChips';
+import { FeedbackSidecar } from '@/components/learning/FeedbackSidecar';
 import { ReviewLauncher } from '@/components/learning/ReviewLauncher';
 import { Alert, AlertDescription, Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -567,6 +569,7 @@ interface AssignmentConversationViewProps {
   loadingChat: boolean;
   reviewSessionId: string | null;
   canReview: boolean;
+  coachChips: CoachChip[];
   status: AssignmentConversationHeaderProps['status'];
   composerState: AssignmentComposerState;
   holdLabels: HoldButtonLabels;
@@ -586,6 +589,7 @@ function AssignmentConversationView({
   loadingChat,
   reviewSessionId,
   canReview,
+  coachChips,
   status,
   composerState,
   holdLabels,
@@ -606,6 +610,7 @@ function AssignmentConversationView({
       />
       <AssignmentMessagesPane loadingChat={loadingChat} messages={messages} />
       <ReviewLauncher sessionId={reviewSessionId} canReview={canReview} label="See coach review" />
+      <FeedbackSidecar chips={coachChips} />
       {selectedThread ? (
         <AssignmentComposerPanel
           state={composerState}
@@ -634,6 +639,7 @@ interface AssignmentPracticeWorkspaceController {
   error: string | null;
   reviewSessionId: string | null;
   canReview: boolean;
+  coachChips: CoachChip[];
   displayMessages: ChatMessageType[];
   sidebarExpansion: SidebarExpansionState;
   conversationStatus: AssignmentConversationHeaderProps['status'];
@@ -679,6 +685,8 @@ function useAssignmentPracticeWorkspaceController({
   } = state;
   const [speakingSpeed, setSpeakingSpeed] = useRealtimeSpeakingSpeed();
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
+  const [coachChips, setCoachChips] = useState<CoachChip[]>([]);
+  const lastLearnerTurnIndexRef = useRef<number | null>(null);
   const selectedChatIdRef = useRef<string | null>(null);
   const nextMessageOrderRef = useRef(0);
   const closeWithoutAbandonRef = useRef(false);
@@ -733,6 +741,17 @@ function useAssignmentPracticeWorkspaceController({
     };
   };
 
+  const triggerCoachChip = useCallback(async (learnerTurnIndex: number) => {
+    const sessionId = activePracticeSessionRef.current?.id;
+    if (!sessionId || learnerTurnIndex == null) return;
+    try {
+      const chip = await postCoachChip(sessionId, learnerTurnIndex);
+      if (chip) setCoachChips((prev) => (prev.some((c) => c.turn_index === chip.turn_index) ? prev : [...prev, chip]));
+    } catch {
+      // fail-open: a missing/failed chip never disrupts the session
+    }
+  }, []);
+
   const persistRealtimeMessage = async (role: 'user' | 'assistant', content: string) => {
     const persistenceTarget = realtimePersistenceTargetRef.current;
     if (!persistenceTarget || !content.trim()) return;
@@ -753,6 +772,11 @@ function useAssignmentPracticeWorkspaceController({
           source: 'realtime',
         },
       );
+      if (role === 'user') {
+        lastLearnerTurnIndexRef.current = sortOrder;
+      } else if (lastLearnerTurnIndexRef.current != null) {
+        void triggerCoachChip(lastLearnerTurnIndexRef.current);
+      }
     } catch (saveError) {
       dispatch({
         type: 'patch',
@@ -1049,6 +1073,7 @@ function useAssignmentPracticeWorkspaceController({
         content: response.response,
         source: 'text',
       });
+      void triggerCoachChip(userTurnIndex);
     } catch (sendError) {
       dispatch({
         type: 'patch',
@@ -1196,6 +1221,7 @@ function useAssignmentPracticeWorkspaceController({
     error,
     reviewSessionId,
     canReview,
+    coachChips,
     displayMessages,
     sidebarExpansion,
     conversationStatus,
@@ -1232,6 +1258,7 @@ export function AssignmentPracticeWorkspace(props: AssignmentPracticeWorkspacePr
     error,
     reviewSessionId,
     canReview,
+    coachChips,
     displayMessages,
     sidebarExpansion,
     conversationStatus,
@@ -1301,6 +1328,7 @@ export function AssignmentPracticeWorkspace(props: AssignmentPracticeWorkspacePr
               loadingChat={loadingChat}
               reviewSessionId={reviewSessionId}
               canReview={canReview}
+              coachChips={coachChips}
               status={conversationStatus}
               composerState={composerState}
               holdLabels={holdLabels}

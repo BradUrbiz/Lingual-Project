@@ -1,6 +1,6 @@
 # Pedagogy Engine — S3 Conversation Sidecar / Coach Track (detailed design)
 
-**Status:** **S3.1 CUT OVER 2026-06-23** — `PEDAGOGY_ENGINE_COACH_REVIEW=1` live (rev `lingual-app-00075-7p7`, cloudbuild default bumped `0→1`). Prod burn-in verified the review renders end-to-end on the **text** surface (wins / work_on / target_coverage; caught a planted error; fail-open `null` on scaffold-free). The burn-in caught + fixed a cache-persist bug (commit `a509168`; see §"Cache persistence" below). **S3.2 BUILT behind `PEDAGOGY_ENGINE_COACH_CHIPS` (default off), NOT yet cut over** (see §"S3.2 — Live Between-Turn Coach Chips" below). S3.3 / S3.4 pending. Sibling to `PEDAGOGY_ENGINE_S1.md` + `PEDAGOGY_ENGINE_S2.md`; realizes the **S3 row** of `PEDAGOGY_ENGINE.md` §14 and the §6.1 / §6.2 coach-track architecture.
+**Status:** **S3.1 CUT OVER 2026-06-23** — `PEDAGOGY_ENGINE_COACH_REVIEW=1` live (rev `lingual-app-00075-7p7`, cloudbuild default bumped `0→1`). Prod burn-in verified the review renders end-to-end on the **text** surface (wins / work_on / target_coverage; caught a planted error; fail-open `null` on scaffold-free). The burn-in caught + fixed a cache-persist bug (commit `a509168`; see §"Cache persistence" below). **S3.2 CUT OVER 2026-06-24** — `PEDAGOGY_ENGINE_COACH_CHIPS=1` live (rev `lingual-app-00078-wrc`, cloudbuild default bumped `0→1`; see §"S3.2 as-built cutover" below). S3.3 / S3.4 pending. Sibling to `PEDAGOGY_ENGINE_S1.md` + `PEDAGOGY_ENGINE_S2.md`; realizes the **S3 row** of `PEDAGOGY_ENGINE.md` §14 and the §6.1 / §6.2 coach-track architecture.
 **Design spec:** `docs/superpowers/specs/2026-06-23-pedagogy-s3.1-post-task-coach-review-design.md` (approved, pre-implementation). This doc is the as-built record.
 
 ---
@@ -16,7 +16,7 @@ That is a **subsystem cluster, not one feature.** It decomposes by **timing × d
 | Slice | What | Status | Risk |
 |---|---|---|---|
 | **S3.1** | Post-task correction pass over the finished transcript → read-only **post-task review** panel on both surfaces | ✅ **CUT OVER 2026-06-23** (`PEDAGOGY_ENGINE_COACH_REVIEW=1` live, default `1`) | Low — no live timing, no two-model coordination, no split-attention |
-| **S3.2** | Live, silent between-turn coach chips (side channel only, no promote-back) — same `coach_review.py` module/model/rubric family as S3.1, with chip-specific pure functions (`build_coach_chip_prompt` / `parse_coach_chip` / `serialize_coach_chip`) that reuse ReviewItem + rubric constants + anti-sycophancy/locale rules, per-turn instead of once at the end | ⚑ **BUILT behind `PEDAGOGY_ENGINE_COACH_CHIPS` (default off), NOT yet cut over** | Medium — real-time transport |
+| **S3.2** | Live, silent between-turn coach chips (side channel only, no promote-back) — same `coach_review.py` module/model/rubric family as S3.1, with chip-specific pure functions (`build_coach_chip_prompt` / `parse_coach_chip` / `serialize_coach_chip`) that reuse ReviewItem + rubric constants + anti-sycophancy/locale rules, per-turn instead of once at the end | ✅ **CUT OVER 2026-06-24** (`PEDAGOGY_ENGINE_COACH_CHIPS=1` live, rev `lingual-app-00078-wrc`, cloudbuild default `1`) | Medium — real-time transport |
 | **S3.3** | Promote-back into the main channel + main tutor goes correction-light (the structural ~30% voice-adherence mitigation) | Pending | High — two-model coordination, voice injection, under/over-promotion |
 | **S3.4** | Ask mode (learner-initiated quick help) — largely independent of the correction track | Pending | Low–Medium |
 
@@ -213,13 +213,21 @@ S3.1 ships **single-pass, post-task only, assignment-linked only**; `why` explan
 
 # S3.2 — Live Between-Turn Coach Chips (as built)
 
+## S3.2-0. As-built cutover record (2026-06-24)
+
+**Cutover sequence:** deployed inert (rev `lingual-app-00076-xfp`, flag `'0'`) → flipped live `--update-env-vars PEDAGOGY_ENGINE_COACH_CHIPS=1` (rev `00077-d8t`) → during burn-in found the live-chip gate does not fire for Spanish (see Spanish catalog below) → added a Spanish feedback catalog (`practice_analytics._detect_feedback_event_types`) + fixed a bare-"otra vez" false positive → bumped cloudbuild default `0→1` (commit `bc0cbb7`) → rebuilt and deployed (rev `lingual-app-00078-wrc`, image `bc0cbb7`, `PEDAGOGY_ENGINE_COACH_CHIPS=1` durable). All commits pushed to origin/main @ `bc0cbb7`. Rollback instant: `--update-env-vars PEDAGOGY_ENGINE_COACH_CHIPS=0`.
+
+**Spanish feedback catalog (commits `8d44340` + fix `883e8f1`):** `practice_analytics._detect_feedback_event_types` previously carried only generic-English and French pattern catalogs, so Spanish tutor recasts derived no `feedback.*` events → the chip heuristic gate never fired for `es`. Added `SPANISH_ASSISTANT_FEEDBACK_PATTERNS` + `_detect_locale_key` `'es'` + an optional `spanish_catalog` param on `_catalog_patterns`. Now en/fr/es have native feedback catalogs; **ko/ru/he/tl still fall back to generic-English** (no native catalog for those locales) — their live chips rely on generic-English markers or the `metric.repeated_error` path until native catalogs are added. This shared analytics heuristic also feeds S2 coverage + learning_events.
+
+**Burn-in status (honest — do NOT overclaim):** In prod the S3.2 *infrastructure* is confirmed — deploy healthy, the full flow fires in correct order (events → `POST /coach-chip` 200), fail-open holds (no 500s), hydration `GET /coach-chips` returns 200, and the FeedbackSidecar renders its empty state. **A positive chip render was NOT captured in prod:** the live-chip gate depends on the feedback heuristic matching the tutor's (stochastic) correction phrasing; the Spanish test turns drew tutor replies that did not match the finite Spanish recast patterns (e.g. "Casi: … usa quisiera. Di:" vs. patterns like "pequeño ajuste"/"mejor usar"/"se dice"), and the playwright session was then disrupted by a co-resident process. Detection + chip render/merge/hydration are unit-verified (8 Spanish-catalog tests; Task 12 render + race tests). Net: chip generation is heuristic-bounded by design (live heuristic blind spots; S3.1 post-task review is the full-transcript safety net); recommend monitoring real Spanish-session chip rate post-launch and expanding the feedback catalogs as real tutor phrasings are observed.
+
 ## S3.2-1. Goal
 
 Between-turn "chips": a silent, heuristic-gated per-turn analysis that surfaces a brief correction or encouragement chip to the learner in the conversation sidecar **after each tutor turn**, without modifying the main tutor's behavior. Chips are additive only (no promote-back — that is S3.3); the main tutor is unchanged.
 
 This is the "live, between-turn side channel" half of §6.2's Feedback mode. It shares the same `coach_review.py` module, model, and rubric family as S3.1, using chip-specific pure functions (`build_coach_chip_prompt` / `parse_coach_chip` / `serialize_coach_chip`) that reuse ReviewItem + rubric constants + anti-sycophancy/locale rules — NOT a verbatim reuse of the post-task prompt builder — called with a single-turn transcript slice instead of the full post-task transcript.
 
-**Built behind `PEDAGOGY_ENGINE_COACH_CHIPS` (default off). NOT yet cut over.**
+**CUT OVER 2026-06-24 (rev `lingual-app-00078-wrc`, cloudbuild default `'1'`). Rollback: `--update-env-vars PEDAGOGY_ENGINE_COACH_CHIPS=0`.**
 
 ## S3.2-2. Scope & decisions
 
@@ -298,14 +306,14 @@ See `LIMITATIONS.md` #53 sub-items (s)–(v).
 
 ## 13. Relationship to existing docs (doc-sync targets)
 
-- `PEDAGOGY_ENGINE.md` §14 — S3 row: "S3.1 shipped (post-task review, model-verified); S3.2 built behind flag (live chips, not yet cut over); S3.3/S3.4 pending."
-- `docs/school-integration/TASKS.md` — S3.1 build + flag-wiring/doc-sync items (complete) + S3.1 cutover + S3.2 build item (complete) + S3.2 cutover + S3.3/S3.4 (pending).
+- `PEDAGOGY_ENGINE.md` §14 — S3 row: "S3.1 shipped (post-task review, model-verified); S3.2 CUT OVER 2026-06-24 (live chips, `PEDAGOGY_ENGINE_COACH_CHIPS=1`, default `1`); S3.3/S3.4 pending."
+- `docs/school-integration/TASKS.md` — S3.1 build + flag-wiring/doc-sync items (complete) + S3.1 cutover + S3.2 build item (complete) + S3.2 cutover (complete) + S3.3/S3.4 (pending).
 - `docs/school-integration/LIMITATIONS.md` — #53 sub-items (m)–(r) (the S3.1 constraints) + sub-items (s)–(v) (the S3.2 constraints).
-- `backend/CLAUDE.md` — `pedagogy/` line: add chip pure functions in `coach_review.py` + `coach_chip_service.py` (impure orchestrator) + `PEDAGOGY_ENGINE_COACH_CHIPS` flag (default off).
+- `backend/CLAUDE.md` — `pedagogy/` line: chip pure functions in `coach_review.py` + `coach_chip_service.py` (impure orchestrator) + `PEDAGOGY_ENGINE_COACH_CHIPS` flag (LIVE, default `'1'`, cut over 2026-06-24).
 - Design spec: `docs/superpowers/specs/2026-06-23-pedagogy-s3.1-post-task-coach-review-design.md`.
 
 ## 14. Open questions / future hooks
 
-- **S3.2 cutover:** S3.2 is built behind `PEDAGOGY_ENGINE_COACH_CHIPS` (default off). Cutover follows the S3.1 pattern: deploy inert → `--update-env-vars PEDAGOGY_ENGINE_COACH_CHIPS=1` → burn-in (chip appears on both surfaces; second chip appends; reload shows persisted chips; S3.1 review unaffected) → bump cloudbuild default `0→1`.
+- **S3.2 cutover:** DONE 2026-06-24 (rev `lingual-app-00078-wrc`, cloudbuild default `'1'`). See §S3.2-0 for the full cutover sequence, Spanish catalog, and burn-in status. Post-launch: monitor Spanish-session chip rate and expand feedback catalogs as real tutor phrasings are observed; add native catalogs for ko/ru/he/tl when sufficient tutor-phrase samples exist.
 - **S2 / L7 cross-consumption:** `coach_review` is structured (`target_coverage`, model-verified) so S2 recycling could later prefer it over heuristic coverage, and L7 could present it to teachers. Deferred — not built in S3.1.
 - **`session.ended` pre-warm:** generation could optionally be pre-warmed when a `session.ended` event *does* fire, so the first read is instant. Deferred optimization; the GET endpoint remains the source of truth.

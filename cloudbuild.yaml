@@ -247,22 +247,25 @@ substitutions:
   # the live value ('1'). Rollback instant: --update-env-vars PEDAGOGY_ENGINE_COACH_CHIPS=0.
   _PEDAGOGY_ENGINE_COACH_CHIPS: '1'
   # Pedagogy Engine S3.3 promote-back + correction-light main tutor (PEDAGOGY_ENGINE_S3.md).
-  # '0' = the promote decision never runs and the tutor is NOT correction-light — prompt
-  # and behavior byte-identical to today. Deploy uses --set-env-vars=REPLACE, so the flag
-  # MUST live here AND its default MUST match the live value. Currently ABSENT (off) → '0'
-  # is REPLACE-safe. Bump to '1' only AFTER the live flip + burn-in. Rollback instant:
-  # --update-env-vars PEDAGOGY_ENGINE_PROMOTE_BACK=0.
-  _PEDAGOGY_ENGINE_PROMOTE_BACK: '0'
-  # Pedagogy Engine S3.4 Ask mode (learner-initiated quick help) (PEDAGOGY_ENGINE_S3.md).
-  # '0' = the /ask endpoint does NO work (returns null) and the Ask tab is hidden — no behavior
-  # change. Brand-new flag, ABSENT in live → '0' is REPLACE-safe. Deploy uses --set-env-vars=REPLACE,
-  # so the flag MUST live here AND its default MUST match live. Bump to '1' only after the live flip +
-  # burn-in. Rollback instant: --update-env-vars PEDAGOGY_ENGINE_ASK_MODE=0.
-  _PEDAGOGY_ENGINE_ASK_MODE: '0'
-  # S4.1 affect-aware tutoring — BUILT behind flag, NOT cut over. Deploy inert at
-  # '0'; flip live via --update-env-vars PEDAGOGY_ENGINE_AFFECT=1 after burn-in.
-  # Rollback instant: --update-env-vars PEDAGOGY_ENGINE_AFFECT=0.
-  _PEDAGOGY_ENGINE_AFFECT: '0'
+  # S3.3 promote-back + correction-light — CUT OVER 2026-06-25 (rev lingual-app-00084-cbx).
+  # '1' = the promote decision runs (weaves a learner's recurring/hard-target errors back for
+  # self-repair); two-flag safety invariant satisfied (COACH_CHIPS=1 live). Flipped live via
+  # --update-env-vars on rev 00084; default bumped 0->1 for durability (--set-env-vars=REPLACE,
+  # so default MUST match live '1'). Burn-in caveat: rides the feedback heuristic (under-correction
+  # risk until catalogs proven on real traffic). Rollback: --update-env-vars PEDAGOGY_ENGINE_PROMOTE_BACK=0.
+  _PEDAGOGY_ENGINE_PROMOTE_BACK: '1'
+  # Pedagogy Engine S3.4 Ask mode (learner-initiated quick help) — CUT OVER 2026-06-25
+  # (rev lingual-app-00084-cbx). '1' = the /ask endpoint answers (anti-answer-dump scaffold) and the
+  # Ask tab shows. Flipped live on rev 00084; prod runtime-verified with the test student (scaffolded
+  # assignment: "How do I say 'I would like a coffee' politely?" -> scaffolded hint, NOT a full answer;
+  # HELP=/=EVIDENCE caveat rendered; scaffold-free assignment returns null per the no-targets guard).
+  # Default bumped 0->1 for durability. Rollback: --update-env-vars PEDAGOGY_ENGINE_ASK_MODE=0.
+  _PEDAGOGY_ENGINE_ASK_MODE: '1'
+  # S4.1 affect-aware tutoring — CUT OVER 2026-06-25 (rev lingual-app-00084-cbx). '1' = gentler tutor
+  # stance when prior-session signals show strain; byte-identical when neutral/settled (first session =
+  # neutral). Flipped live on rev 00084; default bumped 0->1 for durability. Voice surface NOT headlessly
+  # verifiable -> burn-in only. Rollback instant: --update-env-vars PEDAGOGY_ENGINE_AFFECT=0.
+  _PEDAGOGY_ENGINE_AFFECT: '1'
   # S4.2 teacher debrief (L7) — CUT OVER 2026-06-24 (rev lingual-app-00080-2lh).
   # Deployed inert at '0' on rev 00079 (image 06cad5a), then flipped live via
   # --update-env-vars after a prod runtime-verify with the test teacher account

@@ -174,11 +174,98 @@ SPANISH_ASSISTANT_FEEDBACK_PATTERNS = {
     ),
 }
 
+KOREAN_ASSISTANT_FEEDBACK_PATTERNS = {
+    'feedback.recast': (
+        r'정확히는',
+        r'라고 해요',
+        r'라고 말해요',
+        r'이렇게 말',
+        r'다시 말하면',
+    ),
+    'feedback.elicitation': (
+        r'어떻게 말',
+        r'한 번 더',
+        r'한번 더',
+        r'다시 한번',
+        r'다시 한 번',
+        r'말해 볼래요',
+        r'말해볼래요',
+    ),
+    'feedback.review_item': (
+        r'오늘 배운',
+        r'기억하세요',
+        r'복습',
+    ),
+}
+
+RUSSIAN_ASSISTANT_FEEDBACK_PATTERNS = {
+    'feedback.recast': (
+        r'правильно сказать',
+        r'мы говорим',
+        r'лучше сказать',
+        r'точнее',
+    ),
+    'feedback.elicitation': (
+        r'попробуй ещё раз',
+        r'попробуй еще раз',
+        r'попробуйте ещё раз',
+        r'как сказать',
+        r'повтори',
+    ),
+    'feedback.review_item': (
+        r'помни',
+        r'сегодня мы',
+        r'повторим',
+    ),
+}
+
+HEBREW_ASSISTANT_FEEDBACK_PATTERNS = {
+    'feedback.recast': (
+        r'אומרים',
+        r'נכון יותר',
+        r'עדיף לומר',
+        r'כדאי לומר',
+    ),
+    'feedback.elicitation': (
+        r'נסה שוב',
+        r'נסי שוב',
+        r'איך אומרים',
+        r'עוד פעם',
+    ),
+    'feedback.review_item': (
+        r'זוכר',
+        r'היום למדנו',
+    ),
+}
+
+TAGALOG_ASSISTANT_FEEDBACK_PATTERNS = {
+    'feedback.recast': (
+        r'\bang tama ay\b',
+        r'\bmas mabuti\b',
+        r'\bdapat sabihin\b',
+    ),
+    'feedback.elicitation': (
+        r'\bsubukan ulit\b',
+        r'\bsubukang muli\b',
+        r'\bpaano sabihin\b',
+        r'\bulitin\b',
+    ),
+    'feedback.review_item': (
+        r'\btandaan\b',
+        r'\bngayon natutunan\b',
+        r'\bbalikan natin\b',
+    ),
+}
+
 # Locale-key -> assistant-feedback catalog. ko/ru/he/tl catalogs are added in
 # the locale-complete slice; fr/es preserve the prior special-cased behavior.
 _FEEDBACK_LOCALE_CATALOGS: dict[str, dict[str, tuple[str, ...]]] = {
     'fr': FRENCH_ASSISTANT_FEEDBACK_PATTERNS,
     'es': SPANISH_ASSISTANT_FEEDBACK_PATTERNS,
+    'ko': KOREAN_ASSISTANT_FEEDBACK_PATTERNS,
+    'ru': RUSSIAN_ASSISTANT_FEEDBACK_PATTERNS,
+    'he': HEBREW_ASSISTANT_FEEDBACK_PATTERNS,
+    'tl': TAGALOG_ASSISTANT_FEEDBACK_PATTERNS,
 }
 
 GENERIC_CONTEXT_TAG_PATTERNS = {

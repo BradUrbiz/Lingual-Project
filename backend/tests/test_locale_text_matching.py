@@ -77,5 +77,31 @@ class FeedbackRegressionTests(unittest.TestCase):
                             for e in _detect_feedback_event_types('Pequeño ajuste: se dice así.', locale='es-ES')))
 
 
+class NonLatinFeedbackCatalogTests(unittest.TestCase):
+    def _has(self, content, locale, event_type):
+        return any(e['eventType'] == event_type
+                   for e in _detect_feedback_event_types(content, locale=locale))
+
+    def test_korean_signals(self):
+        self.assertTrue(self._has('정확히는 "갔어요"라고 해요.', 'ko-KR', 'feedback.recast'))
+        self.assertTrue(self._has('어떻게 말할까요? 한 번 더 해볼까요?', 'ko-KR', 'feedback.elicitation'))
+        self.assertTrue(self._has('오늘 배운 표현을 기억하세요.', 'ko-KR', 'feedback.review_item'))
+
+    def test_russian_signals(self):
+        self.assertTrue(self._has('Правильно сказать "пошёл".', 'ru-RU', 'feedback.recast'))
+        self.assertTrue(self._has('Попробуй ещё раз. Как сказать это?', 'ru-RU', 'feedback.elicitation'))
+        self.assertTrue(self._has('Помни это слово. Сегодня мы практиковали.', 'ru-RU', 'feedback.review_item'))
+
+    def test_hebrew_signals(self):
+        self.assertTrue(self._has('נכון יותר לומר ככה. אומרים אחרת.', 'he-IL', 'feedback.recast'))
+        self.assertTrue(self._has('נסה שוב. איך אומרים את זה?', 'he-IL', 'feedback.elicitation'))
+        self.assertTrue(self._has('היום למדנו מילה חדשה.', 'he-IL', 'feedback.review_item'))
+
+    def test_tagalog_signals(self):
+        self.assertTrue(self._has('Ang tama ay ganito. Dapat sabihin nang iba.', 'tl-PH', 'feedback.recast'))
+        self.assertTrue(self._has('Subukan ulit. Paano sabihin ito?', 'tl-PH', 'feedback.elicitation'))
+        self.assertTrue(self._has('Tandaan mo ito. Ngayon natutunan natin.', 'tl-PH', 'feedback.review_item'))
+
+
 if __name__ == '__main__':
     unittest.main()

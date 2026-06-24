@@ -109,8 +109,15 @@ class TestDetectLocaleKey(unittest.TestCase):
     def test_spanish_locale_mx(self):
         self.assertEqual(_detect_locale_key("es-MX"), "es")
 
-    def test_korean_defaults_english(self):
-        self.assertEqual(_detect_locale_key("ko-KR"), "en")
+    def test_non_latin_locales_recognized(self):
+        # Repaired 2026-06-24: ko/ru/he are recognized (previously misclassified
+        # as 'en', which silently disabled non-Latin text matching).
+        self.assertEqual(_detect_locale_key("ko-KR"), "ko")
+        self.assertEqual(_detect_locale_key("ru-RU"), "ru")
+        self.assertEqual(_detect_locale_key("he-IL"), "he")
+
+    def test_tagalog_locale(self):
+        self.assertEqual(_detect_locale_key("tl-PH"), "tl")
 
 
 class TestCountTargetExpressionHits(unittest.TestCase):

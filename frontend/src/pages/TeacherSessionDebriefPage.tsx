@@ -273,6 +273,11 @@ function DirectorReSteersCard({ reSteers }: { reSteers: SessionDebrief['director
     if (kind === 'target_neglect') return `Steered back to “${target}”`;
     return `Re-steered the tutor${target ? ` (${target})` : ''}`;
   };
+  const kindLabel = (kind: string) => {
+    if (kind === 'language_drift') return 'Language';
+    if (kind === 'target_neglect') return 'Target';
+    return 'Re-steer';
+  };
   return (
     <SectionCard title="Coaching interventions" icon={Compass} accent="bg-secondary text-foreground">
       <div className="space-y-3">
@@ -288,7 +293,7 @@ function DirectorReSteersCard({ reSteers }: { reSteers: SessionDebrief['director
                   <span className="ml-1 text-muted-foreground">(turn {r.turnIndex})</span>
                 ) : null}
               </p>
-              <Badge variant="secondary" size="sm">{r.kind}</Badge>
+              <Badge variant="secondary" size="sm">{kindLabel(r.kind)}</Badge>
             </li>
           ))}
         </ul>

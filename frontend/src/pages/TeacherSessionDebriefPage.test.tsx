@@ -100,6 +100,39 @@ describe('TeacherSessionDebriefPage', () => {
     expect(screen.queryByText(/answer/i)).not.toBeInTheDocument();
   });
 
+  it('renders Coaching interventions section when directorReSteers.count > 0', async () => {
+    const debriefWithReSteers: SessionDebrief = {
+      ...FULL_DEBRIEF,
+      directorReSteers: {
+        count: 2,
+        items: [
+          { turnIndex: 4, kind: 'language_drift', target: 'Korean', reason: 'r' },
+          { turnIndex: 7, kind: 'target_neglect', target: 'la cuenta', reason: 'r' },
+        ],
+      },
+    };
+    getSessionDebriefMock.mockResolvedValue(debriefWithReSteers);
+
+    renderPage();
+
+    expect(await screen.findByText('Coaching interventions')).toBeInTheDocument();
+    expect(screen.getByText(/Korean/)).toBeInTheDocument();
+    expect(screen.getByText(/la cuenta/)).toBeInTheDocument();
+  });
+
+  it('omits Coaching interventions section when directorReSteers.count is 0', async () => {
+    const debriefNoReSteers: SessionDebrief = {
+      ...FULL_DEBRIEF,
+      directorReSteers: { count: 0, items: [] },
+    };
+    getSessionDebriefMock.mockResolvedValue(debriefNoReSteers);
+
+    renderPage();
+
+    await screen.findByText('Session debrief');
+    expect(screen.queryByText('Coaching interventions')).not.toBeInTheDocument();
+  });
+
   it('renders not-available state when getSessionDebrief returns null, no crash', async () => {
     getSessionDebriefMock.mockResolvedValue(null);
 

@@ -303,6 +303,10 @@ export interface SessionDebrief {
   repeatedErrors: { label: string; count: number }[];
   coachReview: Record<string, unknown> | null;
   promotions: unknown[];
+  directorReSteers?: {
+    count: number;
+    items: { turnIndex: number | null; kind: string; target: string; reason: string }[];
+  };
   helpUsage: { askCount: number; byKind: Record<string, number> };
   affect: { readiness: string | null; reason: string | null } | null;
   suggestedNext: string[];

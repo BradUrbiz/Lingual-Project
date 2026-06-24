@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   BookOpen,
   CheckCircle2,
+  Compass,
   HelpCircle,
   Loader2,
   MessageSquareText,
@@ -265,6 +266,37 @@ function CoachReviewCard({ coachReview }: { coachReview: SessionDebrief['coachRe
   );
 }
 
+function DirectorReSteersCard({ reSteers }: { reSteers: SessionDebrief['directorReSteers'] }) {
+  if (!reSteers || reSteers.count === 0) return null;
+  const label = (kind: string, target: string) => {
+    if (kind === 'language_drift') return `Kept the tutor speaking ${target || 'the target language'}`;
+    if (kind === 'target_neglect') return `Steered back to “${target}”`;
+    return `Re-steered the tutor${target ? ` (${target})` : ''}`;
+  };
+  return (
+    <SectionCard title="Coaching interventions" icon={Compass} accent="bg-secondary text-foreground">
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Moments the AI coach corrected the tutor mid-conversation.
+        </p>
+        <ul className="space-y-1.5">
+          {reSteers.items.map((r, i) => (
+            <li key={`${r.turnIndex}-${i}`} className="flex items-center gap-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+              <p className="flex-1 text-sm text-foreground">
+                {label(r.kind, r.target)}
+                {r.turnIndex != null ? (
+                  <span className="ml-1 text-muted-foreground">(turn {r.turnIndex})</span>
+                ) : null}
+              </p>
+              <Badge variant="secondary" size="sm">{r.kind}</Badge>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </SectionCard>
+  );
+}
+
 function HelpUsageCard({ helpUsage }: { helpUsage: SessionDebrief['helpUsage'] }) {
   const kindEntries = Object.entries(helpUsage.byKind);
   return (
@@ -431,6 +463,7 @@ export function TeacherSessionDebriefPage() {
       <CoverageCard coverage={debrief.coverage} />
       <UptakeCard uptake={debrief.uptake} />
       <RepeatedErrorsCard repeatedErrors={debrief.repeatedErrors} />
+      <DirectorReSteersCard reSteers={debrief.directorReSteers} />
       {debrief.coachReview ? <CoachReviewCard coachReview={debrief.coachReview} /> : null}
       <HelpUsageCard helpUsage={debrief.helpUsage} />
       {debrief.affect ? <AffectCard affect={debrief.affect} /> : null}

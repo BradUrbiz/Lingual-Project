@@ -307,3 +307,42 @@ class ComputeAssignmentAffectStateTestCase(unittest.TestCase):
         from backend.services.practice_analytics import compute_assignment_affect_state
         with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_AFFECT": "1"}):
             self.assertIsNone(compute_assignment_affect_state(self._RaiseDB(), self._boot(), "u", "a"))
+
+
+class AssignmentAffectSnapshotTestCase(unittest.TestCase):
+    class _Deps:
+        def __init__(self, db):
+            self.db = db
+
+    class _DB:
+        def __init__(self, sessions):
+            self._sessions = sessions
+
+        def list_student_assignment_practice_sessions(self, assignment_id, uid):
+            return self._sessions
+
+    def _session(self, sid, avg, recast, turns):
+        return {
+            "id": sid,
+            "status": "completed",
+            "session_summary": {
+                "average_student_words_per_turn": avg,
+                "student_turn_count": turns,
+                "feedback_counts": {"recast": recast, "elicitation": 0, "review_item": 0},
+                "repeated_error_counts": {},
+            },
+        }
+
+    def test_snapshot_returns_serialized_strained(self):
+        from backend.routes.curriculum_admin import _assignment_affect_snapshot
+        db = self._DB([self._session("s3", 3.0, 0, 5), self._session("s2", 10.0, 0, 5), self._session("s1", 10.0, 0, 5)])
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_AFFECT": "1"}):
+            snap = _assignment_affect_snapshot(self._Deps(db), {"mapping": {"targetExpressions": ["x"]}}, "u", "a")
+        self.assertEqual(snap["readiness"], "strained")
+
+    def test_snapshot_none_when_flag_off(self):
+        from backend.routes.curriculum_admin import _assignment_affect_snapshot
+        db = self._DB([self._session("s1", 8, 1, 5)])
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PEDAGOGY_ENGINE_AFFECT", None)
+            self.assertIsNone(_assignment_affect_snapshot(self._Deps(db), {"mapping": {}}, "u", "a"))

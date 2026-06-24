@@ -43,6 +43,7 @@ from backend.services.practice_analytics import (
     build_learning_event_payload,
     build_practice_session_payload,
     build_student_drill_down_payload,
+    compute_assignment_affect_state,
     compute_assignment_coverage_state,
     serialize_practice_session,
 )
@@ -204,6 +205,31 @@ def _assignment_coverage_snapshot(deps, bootstrap, uid, assignment_id):
         logger.exception(
             'recycling coverage snapshot serialization failed; degrading to no '
             'snapshot (assignment_id=%s)',
+            assignment_id,
+        )
+        return None
+
+
+def _assignment_affect_snapshot(deps, bootstrap, uid, assignment_id):
+    """Serialized S4.1 affect snapshot for a new session's ``analysis_state``.
+
+    ``None`` (zero extra reads) unless PEDAGOGY_ENGINE_AFFECT is on and there is a
+    non-neutral read worth recording. Shares the gated + fail-open +
+    current-session-excluded compute with the chat routes via
+    ``compute_assignment_affect_state``. Runs BEFORE create_practice_session, so
+    there is no in-flight session to exclude (``current_session_id`` left None).
+    Snapshot is OPTIONAL enrichment — it must never 500 the student launch.
+    """
+    affect_state = compute_assignment_affect_state(deps.db, bootstrap, uid, assignment_id)
+    if affect_state is None:
+        return None
+    try:
+        from backend.services.pedagogy.affect import serialize_affect_state
+        return serialize_affect_state(affect_state)
+    except Exception:
+        logger.exception(
+            'affect snapshot serialization failed; degrading to no snapshot '
+            '(assignment_id=%s)',
             assignment_id,
         )
         return None
@@ -528,6 +554,11 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             coverage_snapshot = _assignment_coverage_snapshot(deps, bootstrap, uid, assignment_id)
             if coverage_snapshot and isinstance(session_payload.get('analysis_state'), dict):
                 session_payload['analysis_state']['coverage'] = coverage_snapshot
+            # S4.1: snapshot affect/readiness into the new session's analysis_state
+            # (no-op + zero extra reads when the flag is off).
+            affect_snapshot = _assignment_affect_snapshot(deps, bootstrap, uid, assignment_id)
+            if affect_snapshot and isinstance(session_payload.get('analysis_state'), dict):
+                session_payload['analysis_state']['affect_state'] = affect_snapshot
             # In-flight grace anchor: capture the org status at session
             # creation. Future event POSTs on this session pass through if
             # *this* snapshot is 'active', even after the org is suspended.

@@ -419,6 +419,28 @@ def _compute_assignment_coverage_state(
     )
 
 
+def _compute_assignment_affect_state(
+    deps, bootstrap, uid, assignment_id, *, current_session_id=None
+):
+    """S4.1 cross-session affect state for this student+assignment, or ``None``.
+
+    Thin route-side wrapper over the shared single-source helper in
+    ``practice_analytics`` (gated + fail-open + current-session-excluded), so the
+    chat render and the session-create snapshot share one compute. Returns an
+    ``AffectState`` to thread into the prompt, or ``None`` (zero extra reads) when
+    the flag is off or affect is unavailable.
+    """
+    from backend.services.practice_analytics import compute_assignment_affect_state
+
+    return compute_assignment_affect_state(
+        deps.db,
+        bootstrap,
+        uid,
+        assignment_id,
+        current_session_id=current_session_id,
+    )
+
+
 def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
     bp = Blueprint('chat_routes', __name__)
 
@@ -522,8 +544,12 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     deps, bootstrap, uid, assignment_id,
                     current_session_id=practice_session_id,
                 )
+                affect_state = _compute_assignment_affect_state(
+                    deps, bootstrap, uid, assignment_id,
+                    current_session_id=practice_session_id,
+                )
                 system_instructions = resolve_assignment_system_prompt(
-                    bootstrap, surface="voice", coverage_state=coverage_state
+                    bootstrap, surface="voice", coverage_state=coverage_state, affect_state=affect_state
                 )
                 learning_locale = (
                     (class_record or {}).get('learning_locale')
@@ -902,8 +928,12 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     deps, bootstrap, uid, assignment_id,
                     current_session_id=current_session_id,
                 )
+                affect_state = _compute_assignment_affect_state(
+                    deps, bootstrap, uid, assignment_id,
+                    current_session_id=current_session_id,
+                )
                 system_prompt = resolve_assignment_system_prompt(
-                    bootstrap, surface="text", coverage_state=coverage_state
+                    bootstrap, surface="text", coverage_state=coverage_state, affect_state=affect_state
                 )
                 coach_note_allowed = True
             else:

@@ -243,3 +243,67 @@ class ResolveSeamAffectTestCase(unittest.TestCase):
             resolve_assignment_system_prompt(boot, surface="text"),
             resolve_assignment_system_prompt(boot, surface="text", affect_state=None),
         )
+
+
+class ComputeAssignmentAffectStateTestCase(unittest.TestCase):
+    class _DB:
+        def __init__(self, sessions):
+            self._sessions = sessions
+            self.calls = 0
+
+        def list_student_assignment_practice_sessions(self, assignment_id, uid):
+            self.calls += 1
+            return self._sessions
+
+    class _RaiseDB:
+        def list_student_assignment_practice_sessions(self, assignment_id, uid):
+            raise RuntimeError("boom")
+
+    def _boot(self):
+        return {"mapping": {"targetExpressions": ["x"]}}
+
+    def _session(self, sid, avg, recast, turns, status="completed"):
+        return {
+            "id": sid,
+            "status": status,
+            "session_summary": {
+                "average_student_words_per_turn": avg,
+                "student_turn_count": turns,
+                "feedback_counts": {"recast": recast, "elicitation": 0, "review_item": 0},
+                "repeated_error_counts": {},
+            },
+        }
+
+    def test_flag_off_returns_none_zero_reads(self):
+        from backend.services.practice_analytics import compute_assignment_affect_state
+        db = self._DB([self._session("s1", 8, 1, 5)])
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PEDAGOGY_ENGINE_AFFECT", None)
+            self.assertIsNone(compute_assignment_affect_state(db, self._boot(), "u", "a"))
+        self.assertEqual(db.calls, 0)  # flag-off does ZERO reads
+
+    def test_strained_from_prior_sessions(self):
+        from backend.services.practice_analytics import compute_assignment_affect_state
+        # most-recent-first: latest 3.0 << 10/10 => falling => strained
+        db = self._DB([
+            self._session("s3", 3.0, 0, 5),
+            self._session("s2", 10.0, 0, 5),
+            self._session("s1", 10.0, 0, 5),
+        ])
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_AFFECT": "1"}):
+            state = compute_assignment_affect_state(db, self._boot(), "u", "a")
+        self.assertIsNotNone(state)
+        self.assertEqual(state.readiness, "strained")
+
+    def test_excludes_current_session(self):
+        from backend.services.practice_analytics import compute_assignment_affect_state
+        # If the in-flight session were counted, we'd have 2 sessions; excluding it leaves 1 => neutral.
+        db = self._DB([self._session("cur", 3.0, 0, 5), self._session("s1", 10.0, 0, 5)])
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_AFFECT": "1"}):
+            state = compute_assignment_affect_state(db, self._boot(), "u", "a", current_session_id="cur")
+        self.assertEqual(state.readiness, "neutral")  # only 1 prior session after exclusion
+
+    def test_fail_open_on_reader_error(self):
+        from backend.services.practice_analytics import compute_assignment_affect_state
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_AFFECT": "1"}):
+            self.assertIsNone(compute_assignment_affect_state(self._RaiseDB(), self._boot(), "u", "a"))

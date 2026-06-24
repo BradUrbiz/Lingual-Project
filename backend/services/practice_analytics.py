@@ -2294,6 +2294,99 @@ def compute_assignment_coverage_state(
         return None
 
 
+def _affect_session_signals(prior_sessions: Any) -> list[dict]:
+    """Build most-recent-first affect signal dicts from prior session records.
+
+    ``list_student_assignment_practice_sessions`` orders by ``started_at`` desc, so
+    the input is already most-recent-first; ``compute_affect_state`` windows it.
+
+    ``avg_words`` is read from the raw ``session_summary`` value rather than the
+    ``normalize_session_summary`` output because the normalizer recomputes
+    ``average_student_words_per_turn`` from ``total_student_words / student_turn_count``,
+    losing a pre-computed value stored directly on the record. The raw value is the
+    authoritative source of truth for the affect heuristic.
+    """
+    signals: list[dict] = []
+    for s in prior_sessions if isinstance(prior_sessions, list) else []:
+        if not isinstance(s, dict):
+            continue
+        raw_summary = s.get('session_summary') or {}
+        summary = normalize_session_summary(raw_summary)
+        feedback_counts = summary.get('feedback_counts') or {}
+        repeated = summary.get('repeated_error_counts') or {}
+        repair_count = (
+            _coerce_int(feedback_counts.get('recast'))
+            + _coerce_int(feedback_counts.get('elicitation'))
+            + sum(_coerce_int(v) for v in repeated.values())
+        )
+        status = (s.get('status') or '')
+        ended_reason = summary.get('ended_reason') or ''
+        abandoned = (
+            str(status).strip().lower() == 'abandoned'
+            or (isinstance(ended_reason, str) and 'abandon' in ended_reason.lower())
+        )
+        # Read avg_words from the raw summary: the normalized summary recomputes this
+        # field from total_student_words/student_turn_count which may be absent.
+        raw_avg = raw_summary.get('average_student_words_per_turn', raw_summary.get('averageStudentWordsPerTurn'))
+        try:
+            avg_words = float(raw_avg or 0)
+        except (TypeError, ValueError):
+            avg_words = 0.0
+        signals.append({
+            'avg_words': avg_words,
+            'repair_count': repair_count,
+            'turn_count': _coerce_int(summary.get('student_turn_count')),
+            'abandoned': abandoned,
+        })
+    return signals
+
+
+def compute_assignment_affect_state(
+    db: Any,
+    bootstrap: Any,
+    uid: Any,
+    assignment_id: Any,
+    *,
+    current_session_id: Any = None,
+):
+    """S4.1 cross-session affect/readiness state for one student+assignment, or ``None``.
+
+    Mirror of ``compute_assignment_coverage_state``: the ``affect_enabled()`` gate is
+    OUTSIDE the try (flag-off ⇒ ZERO reads ⇒ ``None``), the in-flight session is
+    excluded from the prior evidence (first session = no-op = neutral), and the whole
+    read+compute is fail-open (any failure degrades to ``None`` so the prompt renders
+    without an affect override and the live route never breaks).
+    """
+    from backend.services.pedagogy.integration import affect_enabled
+
+    if not affect_enabled():
+        return None
+
+    try:
+        if not (bootstrap and uid and assignment_id):
+            return None
+
+        from backend.services.pedagogy.affect import compute_affect_state
+
+        all_sessions = db.list_student_assignment_practice_sessions(assignment_id, uid) or []
+        if current_session_id:
+            prior_sessions = [
+                s
+                for s in all_sessions
+                if not (isinstance(s, dict) and s.get('id') == current_session_id)
+            ]
+        else:
+            prior_sessions = all_sessions
+
+        return compute_affect_state(_affect_session_signals(prior_sessions))
+    except Exception:
+        logger.exception(
+            'affect computation failed; degrading to no affect (assignment_id=%s)',
+            assignment_id,
+        )
+        return None
+
+
 def _rubric_thresholds(curriculum: dict[str, Any]) -> dict[str, float]:
     thresholds: dict[str, float] = {}
     for objective in curriculum.get('objectives', []) if isinstance(curriculum, dict) else []:

@@ -1,6 +1,6 @@
 # Pedagogy Engine — S5 Director (as gated)
 
-**Status:** **S5 DEFERRED — eval instrument built 2026-06-24, not yet run.** The gate is open but the verdict is unknown. Sibling to `PEDAGOGY_ENGINE_S1.md`, `PEDAGOGY_ENGINE_S2.md`, `PEDAGOGY_ENGINE_S3.md`, `PEDAGOGY_ENGINE_S4.md`; realizes (or withholds) the **S5 row** of `PEDAGOGY_ENGINE.md` §14.
+**Status:** **S5 DEFERRED WITH EVIDENCE — gate eval RUN 2026-06-24, verdict NO PLATEAU (3/3 runs).** The gate was run and returned `plateaus=False` on all three runs (see §4) → the static S1–S4 composition holds instruction adherence at/above target, so a between-turns re-steer is not warranted by this evidence. S5 stays built-behind-flag, inert. Sibling to `PEDAGOGY_ENGINE_S1.md`, `PEDAGOGY_ENGINE_S2.md`, `PEDAGOGY_ENGINE_S3.md`, `PEDAGOGY_ENGINE_S4.md`; realizes (or withholds) the **S5 row** of `PEDAGOGY_ENGINE.md` §14.
 
 ---
 
@@ -117,13 +117,27 @@ The opt-in `StaticCompositionDriftEval` class is skipped in CI (`@unittest.skipU
 
 | State | Condition | Action |
 |---|---|---|
-| **BUILT, NOT RUN** ← current | Instrument exists; no run yet | S5 deferred. No additional work until a deliberate run. |
+| **BUILT, NOT RUN** | Instrument exists; no run yet | S5 deferred. No additional work until a deliberate run. |
 | **RUN → plateau** | Run completes; `plateaus == True` | S5 is warranted. Open the S5 brainstorm / design session. |
-| **RUN → no plateau** | Run completes; `plateaus == False` | S5 deferred with evidence. Static composition holds; `session.update` adds cost with no demonstrated benefit. Document the `earlyRate`/`lateRate`/`drift` result in this file and in LIMITATIONS. |
+| **RUN → no plateau** ← current | Run completes; `plateaus == False` | S5 deferred with evidence. Static composition holds; `session.update` adds cost with no demonstrated benefit. Document the `earlyRate`/`lateRate`/`drift` result in this file and in LIMITATIONS. |
 
-**Current state: BUILT, NOT RUN → S5 DEFERRED.**
+**Current state: RUN → NO PLATEAU → S5 DEFERRED WITH EVIDENCE.**
 
-Running the eval requires a deliberate choice to incur the LLM cost (`RUN_PEDAGOGY_EVAL=1 python3 -m unittest backend.tests.eval.test_static_composition_drift_eval`). When run, update this doc and TASKS.md with the verdict.
+### 4.1 Run results — 2026-06-24 (`gpt-5.4-mini-2026-03-17`, `RUN_PEDAGOGY_EVAL=1`, scenario `cafe-info-gap-accuracy`, `N_TURNS=8`)
+
+| Run | earlyRate | lateRate | drift | plateaus |
+|---|---|---|---|---|
+| 1 | 1.00 | 1.00 | 0.00 | False |
+| 2 | 1.00 | 1.00 | 0.00 | False |
+| 3 | 1.00 | 0.80 | 0.20 | False |
+
+**Verdict: 3/3 NO PLATEAU.** The static composition held adherence at/above the `ADHERENCE_TARGET=0.80` floor across all runs. Run 3 is the informative case: the judge detected real late degradation (`drift=0.20 ≥ DRIFT_THRESHOLD`), confirming the eval is *sensitive* — yet `lateRate` held at exactly the target (0.80, not below), so it did not plateau by the gate definition (`lateRate < 0.80 AND drift ≥ 0.15`). → **S5 cutover NOT warranted.** S5 stays built-behind-flag, inert.
+
+**Caveats (this proxy's bounds — a stronger gate would expand on these):**
+1. **Single scenario** (one es-ES `accuracy_first` café role-play). More locales / more drift-prone setups / longer `N_TURNS` would harden the verdict. Run 3 touching the target floor suggests a longer or harder conversation *might* eventually plateau — the current 8-turn / single-scenario proxy is the floor of rigor, not the ceiling.
+2. **Text composition only.** The harness runs the text engine prompt with a reasoning model. §6.2's "~30% voice adherence ceiling" is a *voice/realtime-model* phenomenon this offline harness structurally cannot reproduce. "No plateau" means "no evidence from this proxy to warrant S5," NOT "S5 would never help voice." The voice question requires real post-cutover field adherence data.
+
+Re-running: `RUN_PEDAGOGY_EVAL=1 python3 -m unittest backend.tests.eval.test_static_composition_drift_eval`.
 
 ---
 

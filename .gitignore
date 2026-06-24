@@ -28,6 +28,7 @@ frontend/.omc/
 
 # Local education-session article drafts
 docs/school-integration/PEDAGOGY_HARNESS_EDUCATION.md
+docs/school-integration/Pedagogy Engineering/PEDAGOGY_ENGINE_BUILD_GUIDE_KO.md
 
 # Sales outreach working data — contains real teacher contacts.
 # Schema reference lives in docs/sales/*.example.csv (tracked).

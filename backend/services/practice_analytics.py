@@ -851,6 +851,9 @@ def default_analysis_state() -> dict[str, Any]:
         # S3.4 Ask mode: learner help-usage log (SEPARATE from student production —
         # never mirrored into learning_events). Empty until first Ask.
         'ask_log': [],
+        # S4.1 affect/readiness snapshot (serialized at session create when
+        # PEDAGOGY_ENGINE_AFFECT is on); None when there is nothing/insufficient signal.
+        'affect_state': None,
     }
 
 
@@ -906,6 +909,10 @@ def normalize_analysis_state(value: Any) -> dict[str, Any]:
     ask_log = value.get('ask_log', value.get('askLog'))
     if isinstance(ask_log, list):
         normalized['ask_log'] = ask_log
+
+    affect_state = value.get('affect_state', value.get('affectState'))
+    if isinstance(affect_state, dict):
+        normalized['affect_state'] = affect_state
 
     return normalized
 

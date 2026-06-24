@@ -956,5 +956,30 @@ class AnalysisStateAskLogTestCase(unittest.TestCase):
         self.assertEqual(normalize_analysis_state({})["ask_log"], [])
 
 
+class AffectStateAnalysisStateTestCase(unittest.TestCase):
+    def test_default_carries_affect_state_none(self):
+        from backend.services.practice_analytics import default_analysis_state
+        self.assertIn('affect_state', default_analysis_state())
+        self.assertIsNone(default_analysis_state()['affect_state'])
+
+    def test_normalize_keeps_dict_affect_state(self):
+        from backend.services.practice_analytics import normalize_analysis_state
+        state = {'affect_state': {'readiness': 'strained', 'signals': {}, 'reason': 'r'}}
+        self.assertEqual(normalize_analysis_state(state)['affect_state']['readiness'], 'strained')
+
+    def test_normalize_accepts_camelcase_alias(self):
+        from backend.services.practice_analytics import normalize_analysis_state
+        state = {'affectState': {'readiness': 'settled', 'signals': {}, 'reason': ''}}
+        self.assertEqual(normalize_analysis_state(state)['affect_state']['readiness'], 'settled')
+
+    def test_normalize_absent_affect_state_is_none(self):
+        from backend.services.practice_analytics import normalize_analysis_state
+        self.assertIsNone(normalize_analysis_state({})['affect_state'])
+
+    def test_normalize_non_dict_affect_state_is_none(self):
+        from backend.services.practice_analytics import normalize_analysis_state
+        self.assertIsNone(normalize_analysis_state({'affect_state': 'oops'})['affect_state'])
+
+
 if __name__ == "__main__":
     unittest.main()

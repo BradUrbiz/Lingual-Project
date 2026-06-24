@@ -854,6 +854,12 @@ def default_analysis_state() -> dict[str, Any]:
         # S4.1 affect/readiness snapshot (serialized at session create when
         # PEDAGOGY_ENGINE_AFFECT is on); None when there is nothing/insufficient signal.
         'affect_state': None,
+        # S5 Director: between-turn re-steer guard bookkeeping (cooldown +
+        # per-session cap); {} until the first re-steer fires.
+        'director_state': {},
+        # S5 Director: durable audit log of fired re-steers (NEVER re-injected on
+        # hydration). Empty until the first re-steer.
+        'resteers': [],
     }
 
 
@@ -913,6 +919,14 @@ def normalize_analysis_state(value: Any) -> dict[str, Any]:
     affect_state = value.get('affect_state', value.get('affectState'))
     if isinstance(affect_state, dict):
         normalized['affect_state'] = affect_state
+
+    director_state = value.get('director_state', value.get('directorState'))
+    if isinstance(director_state, dict):
+        normalized['director_state'] = director_state
+
+    resteers = value.get('resteers')
+    if isinstance(resteers, list):
+        normalized['resteers'] = resteers
 
     return normalized
 

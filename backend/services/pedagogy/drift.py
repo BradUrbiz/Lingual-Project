@@ -46,7 +46,8 @@ _ENGLISH_FUNCTION_WORDS = frozenset({
 _LANGUAGE_NAMES = {"ko": "Korean", "ru": "Russian", "he": "Hebrew",
                    "es": "Spanish", "fr": "French", "tl": "Tagalog"}
 _NON_LATIN_DRIFT_KEYS = frozenset({"ko", "ru", "he"})
-_LATIN_DRIFT_KEYS = frozenset({"es", "fr", "tl"})
+# Latin-script targets (es/fr/tl) take the English-function-word tier — reached as the
+# `else` branch in detect_language_drift after en/unknown are filtered by the no-lang guard.
 
 
 def _drift_locale_key(locale: object) -> str:

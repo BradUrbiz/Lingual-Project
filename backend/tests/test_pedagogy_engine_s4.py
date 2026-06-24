@@ -9,6 +9,7 @@ from backend.services.pedagogy.affect import (
     compute_affect_state,
     serialize_affect_state,
 )
+from backend.services.pedagogy.assignment_debrief import build_assignment_debrief
 
 
 def _sig(avg_words, repair_count, turn_count, abandoned=False):
@@ -514,3 +515,150 @@ class DebriefPromotionsTests(unittest.TestCase):
         # the existing BuildSessionDebriefTestCase fixture sets promotions:[{"signature":"ser vs estar","turn_index":4}]
         d = self._debrief({"promotions": [{"signature": "ser vs estar", "turn_index": 4}]})
         self.assertEqual(d["promotions"], {"count": 1, "items": [{"turnIndex": 4, "reason": "", "target": "ser vs estar"}]})
+
+
+class BuildAssignmentDebriefTestCase(unittest.TestCase):
+    def _session(self, *, status="completed", uid="u1", started_at="2026-06-01T10:00:00Z",
+                 analysis_state=None, session_summary=None, assignment_id="a1"):
+        return {
+            "id": "s-" + uid + "-" + str(started_at or ""),
+            "assignment_id": assignment_id,
+            "status": status,
+            "student_firebase_uid": uid,
+            "started_at": started_at,
+            "analysis_state": analysis_state or {},
+            "session_summary": session_summary or {},
+        }
+
+    def test_empty_list_is_total(self):
+        d = build_assignment_debrief([])
+        self.assertEqual(d["assignmentId"], None)
+        self.assertEqual(d["participation"], {
+            "sessionCount": 0, "completedSessionCount": 0, "studentCount": 0,
+            "firstStartedAt": None, "lastStartedAt": None,
+        })
+        self.assertEqual(d["uptake"]["selfCorrectionCount"], 0)
+        self.assertEqual(d["promotions"], {"count": 0, "byTarget": []})
+        self.assertEqual(d["directorReSteers"], {"count": 0, "byKind": {}, "byTarget": []})
+        self.assertEqual(d["helpUsage"], {"askCount": 0, "byKind": {
+            "hint": 0, "translation": 0, "definition": 0, "clarification": 0, "phrase": 0, "refusal": 0,
+        }, "sessionsWithHelp": 0})
+        self.assertEqual(d["affect"], {"byReadiness": {}, "sessionsWithSignal": 0})
+        self.assertEqual(d["coachReview"], {"sessionCount": 0})
+        self.assertEqual(d["suggestedNext"], [])
+        self.assertTrue(any("aggregates 0 session" in c for c in d["caveats"]))
+
+    def test_participation_counts_distinct_students_and_completed(self):
+        sessions = [
+            self._session(uid="u1", status="completed", started_at="2026-06-01T10:00:00Z"),
+            self._session(uid="u1", status="active", started_at="2026-06-02T10:00:00Z"),
+            self._session(uid="u2", status="completed", started_at="2026-06-03T10:00:00Z"),
+            self._session(uid="", status="completed", started_at="2026-06-04T10:00:00Z"),
+        ]
+        d = build_assignment_debrief(sessions)
+        self.assertEqual(d["assignmentId"], "a1")
+        self.assertEqual(d["participation"]["sessionCount"], 4)
+        self.assertEqual(d["participation"]["completedSessionCount"], 3)
+        self.assertEqual(d["participation"]["studentCount"], 2)  # u1, u2; "" not counted
+        self.assertEqual(d["participation"]["firstStartedAt"], "2026-06-01T10:00:00Z")
+        self.assertEqual(d["participation"]["lastStartedAt"], "2026-06-04T10:00:00Z")
+
+    def test_uptake_summed(self):
+        s = {"self_correction_count": 2, "feedback_counts": {"recast": 1, "elicitation": 3, "review_item": 0},
+             "task_completion_count": 1}
+        d = build_assignment_debrief([self._session(session_summary=s), self._session(session_summary=s)])
+        self.assertEqual(d["uptake"], {
+            "selfCorrectionCount": 4,
+            "feedbackCounts": {"recast": 2, "elicitation": 6, "reviewItem": 0},
+            "taskCompletionCount": 2,
+        })
+
+    def test_promotions_pooled_by_target(self):
+        a = {"promotions": [
+            {"turn_index": 1, "reason": "r", "signature": "focus_grammar:ser_vs_estar"},
+            {"turn_index": 4, "reason": "r", "signature": "ser_vs_estar"},
+        ]}
+        b = {"promotions": [{"turn_index": 2, "reason": "r", "signature": "focus_grammar:gender_agreement"}]}
+        d = build_assignment_debrief([self._session(analysis_state=a), self._session(analysis_state=b)])
+        self.assertEqual(d["promotions"]["count"], 3)
+        self.assertEqual(d["promotions"]["byTarget"][0],
+                         {"target": "ser_vs_estar", "count": 2, "sessionCount": 1})
+        self.assertEqual(d["promotions"]["byTarget"][1],
+                         {"target": "gender_agreement", "count": 1, "sessionCount": 1})
+
+    def test_director_resteers_by_kind_and_target(self):
+        a = {"resteers": [
+            {"turn_index": 1, "kind": "language-drift", "target": "english_slip", "reason": "r"},
+            {"turn_index": 3, "kind": "target-neglect", "target": "", "reason": "r"},
+        ]}
+        d = build_assignment_debrief([self._session(analysis_state=a)])
+        self.assertEqual(d["directorReSteers"]["count"], 2)
+        self.assertEqual(d["directorReSteers"]["byKind"],
+                         {"language-drift": 1, "target-neglect": 1})
+        self.assertEqual(d["directorReSteers"]["byTarget"],
+                         [{"target": "english_slip", "count": 1}])  # empty target dropped
+
+    def test_help_usage_summed_and_sessions_with_help(self):
+        a = {"ask_log": [{"kind": "hint"}, {"kind": "translation"}]}
+        b = {"ask_log": [{"kind": "hint"}]}
+        c = {"ask_log": []}
+        d = build_assignment_debrief([self._session(analysis_state=a), self._session(analysis_state=b),
+                                      self._session(analysis_state=c)])
+        self.assertEqual(d["helpUsage"]["askCount"], 3)
+        self.assertEqual(d["helpUsage"]["byKind"]["hint"], 2)
+        self.assertEqual(d["helpUsage"]["byKind"]["translation"], 1)
+        self.assertEqual(d["helpUsage"]["sessionsWithHelp"], 2)
+
+    def test_affect_distribution(self):
+        sessions = [
+            self._session(analysis_state={"affect_state": {"readiness": "strained", "reason": "x"}}),
+            self._session(analysis_state={"affect_state": {"readiness": "strained", "reason": "y"}}),
+            self._session(analysis_state={"affect_state": {"readiness": "neutral", "reason": "z"}}),
+            self._session(analysis_state={}),  # no affect signal
+        ]
+        d = build_assignment_debrief(sessions)
+        self.assertEqual(d["affect"]["byReadiness"], {"strained": 2, "neutral": 1})
+        self.assertEqual(d["affect"]["sessionsWithSignal"], 3)
+
+    def test_coach_review_count(self):
+        sessions = [
+            self._session(analysis_state={"coach_review": {"work_on": []}}),
+            self._session(analysis_state={}),
+        ]
+        d = build_assignment_debrief(sessions)
+        self.assertEqual(d["coachReview"], {"sessionCount": 1})
+
+    def test_suggested_next_promotion_cluster(self):
+        a = {"promotions": [{"turn_index": 1, "reason": "r", "signature": "focus_grammar:subjunctive"}]}
+        b = {"promotions": [{"turn_index": 1, "reason": "r", "signature": "focus_grammar:subjunctive"}]}
+        d = build_assignment_debrief([self._session(analysis_state=a), self._session(analysis_state=b)])
+        self.assertTrue(any("subjunctive" in s and "mini-lesson" in s for s in d["suggestedNext"]))
+
+    def test_suggested_next_strain(self):
+        sessions = [
+            self._session(analysis_state={"affect_state": {"readiness": "strained", "reason": "x"}}),
+            self._session(analysis_state={"affect_state": {"readiness": "strained", "reason": "y"}}),
+        ]
+        d = build_assignment_debrief(sessions)
+        self.assertTrue(any("strain" in s.lower() for s in d["suggestedNext"]))
+
+    def test_suggested_next_handled_well_fallback(self):
+        # completed sessions, no promotions/strain/heavy-help -> positive fallback
+        d = build_assignment_debrief([self._session(status="completed")])
+        self.assertTrue(any("handled" in s.lower() for s in d["suggestedNext"]))
+
+    def test_malformed_records_do_not_raise(self):
+        d = build_assignment_debrief([None, 5, "x", {}, {"analysis_state": "bad", "session_summary": 7}])
+        self.assertEqual(d["participation"]["sessionCount"], 5)
+        self.assertEqual(d["promotions"]["count"], 0)
+
+    def test_started_at_uncomparable_degrades_to_none(self):
+        import datetime
+        sessions = [
+            self._session(started_at="2026-06-01T10:00:00Z"),
+            self._session(started_at=datetime.datetime(2026, 6, 2)),  # mixed type vs str
+        ]
+        d = build_assignment_debrief(sessions)
+        # does not raise; first/last degrade to None on TypeError
+        self.assertIn("firstStartedAt", d["participation"])
+        self.assertIn("lastStartedAt", d["participation"])

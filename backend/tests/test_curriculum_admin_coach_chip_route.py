@@ -296,5 +296,105 @@ class AskRouteTestCase(unittest.TestCase):
         self.assertIsNone(body['ask'])
 
 
+class DebriefRouteTestCase(unittest.TestCase):
+    """Tests for GET /api/teacher/practice-sessions/<session_id>/debrief."""
+
+    _SESSION_ID = 'sess-debrief-1'
+    _ASSIGNMENT_ID = 'asg-debrief-1'
+    _OWNER_SESSION = {
+        'id': _SESSION_ID,
+        'student_uid': 'student-99',
+        'assignment_id': _ASSIGNMENT_ID,
+        'status': 'completed',
+        'analysis_state': {},
+        'session_summary': {},
+    }
+
+    def _client_with_session(self, session_record):
+        return _app(_Db(session_record)).test_client()
+
+    # -----------------------------------------------------------------
+    # 1. Flag-off: {success: false} and get_practice_session NOT called
+    # -----------------------------------------------------------------
+    def test_flag_off_returns_error_and_skips_session_read(self):
+        class _NeverCalledDb:
+            def get_practice_session(self, session_id):
+                raise AssertionError('get_practice_session must not be called when flag is off')
+
+        client = _app(_NeverCalledDb()).test_client()
+        _login(client)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('PEDAGOGY_ENGINE_DEBRIEF', None)
+            resp = client.get(f'/api/teacher/practice-sessions/{self._SESSION_ID}/debrief')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertFalse(body['success'])
+
+    # -----------------------------------------------------------------
+    # 2. Missing session → 404
+    # -----------------------------------------------------------------
+    def test_missing_session_returns_404(self):
+        client = self._client_with_session(None)
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_DEBRIEF': '1'}):
+            resp = client.get(f'/api/teacher/practice-sessions/no-such-id/debrief')
+        self.assertEqual(resp.status_code, 404)
+
+    # -----------------------------------------------------------------
+    # 3. Owner teacher + flag on → 200 with debrief.sessionId
+    # -----------------------------------------------------------------
+    def test_owner_teacher_flag_on_returns_debrief(self):
+        client = self._client_with_session(self._OWNER_SESSION)
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_DEBRIEF': '1'}), \
+             mock.patch(
+                 'backend.routes.curriculum_admin._require_assignment_teacher_access',
+                 return_value={'id': self._ASSIGNMENT_ID, 'class_id': 'cls-1'},
+             ):
+            resp = client.get(f'/api/teacher/practice-sessions/{self._SESSION_ID}/debrief')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertEqual(body['debrief']['sessionId'], self._SESSION_ID)
+
+    # -----------------------------------------------------------------
+    # 4. Non-owner teacher → 403
+    # -----------------------------------------------------------------
+    def test_non_owner_teacher_returns_403(self):
+        from backend.services.membership_context import SchoolContextPermissionError
+        client = self._client_with_session(self._OWNER_SESSION)
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_DEBRIEF': '1'}), \
+             mock.patch(
+                 'backend.routes.curriculum_admin._require_assignment_teacher_access',
+                 side_effect=SchoolContextPermissionError('not your class'),
+             ):
+            resp = client.get(f'/api/teacher/practice-sessions/{self._SESSION_ID}/debrief')
+        self.assertEqual(resp.status_code, 403)
+
+    # -----------------------------------------------------------------
+    # 5. Fail-soft: build_session_debrief raises → 200 with caveats-bearing minimal debrief
+    # -----------------------------------------------------------------
+    def test_build_error_returns_minimal_debrief_not_500(self):
+        client = self._client_with_session(self._OWNER_SESSION)
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_DEBRIEF': '1'}), \
+             mock.patch(
+                 'backend.routes.curriculum_admin._require_assignment_teacher_access',
+                 return_value={'id': self._ASSIGNMENT_ID, 'class_id': 'cls-1'},
+             ), \
+             mock.patch(
+                 'backend.routes.curriculum_admin.build_session_debrief',
+                 side_effect=RuntimeError('assembly failed'),
+             ):
+            resp = client.get(f'/api/teacher/practice-sessions/{self._SESSION_ID}/debrief')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertIn('caveats', body['debrief'])
+        self.assertIsInstance(body['debrief']['caveats'], list)
+        self.assertTrue(len(body['debrief']['caveats']) > 0)
+
+
 if __name__ == '__main__':
     unittest.main()

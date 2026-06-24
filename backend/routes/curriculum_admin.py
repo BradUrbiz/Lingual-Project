@@ -22,6 +22,8 @@ from backend.services.canvas.practice_generator import generate_canvas_practice
 from backend.services.coach_review_service import generate_coach_review
 from backend.services.coach_chip_service import generate_coach_chip
 from backend.services.ask_service import answer_ask
+from backend.services.pedagogy.debrief import build_session_debrief
+from backend.services.pedagogy.integration import debrief_enabled
 from backend.services.compliance import (
     create_consent_event,
     resolve_student_compliance_record,
@@ -958,5 +960,29 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
         except Exception as exc:
             print(f'Student drill-down error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
+
+    @bp.route('/api/teacher/practice-sessions/<session_id>/debrief', methods=['GET'])
+    @deps.login_required
+    def api_get_session_debrief(session_id):
+        # Flag gate first: flag-off does minimal work (no session read).
+        if not debrief_enabled():
+            return jsonify({'success': False, 'error': 'Debrief is not enabled.'}), 200
+        try:
+            session_record = deps.db.get_practice_session(session_id)
+            if not session_record:
+                return jsonify({'success': False, 'error': 'Session not found.'}), 404
+            # session -> assignment -> class -> teacher access (404/403 as usual).
+            _require_assignment_teacher_access(deps, session_record.get('assignment_id'))
+            try:
+                debrief = build_session_debrief(session_record)
+            except Exception:
+                logger.exception('debrief assembly failed; returning minimal debrief (session_id=%s)', session_id)
+                debrief = {'sessionId': session_id, 'status': session_record.get('status'),
+                           'caveats': ['This debrief could not be fully assembled.']}
+            return jsonify({'success': True, 'debrief': debrief})
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except ValueError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 404
 
     return bp

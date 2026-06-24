@@ -60,6 +60,7 @@ def render_assignment_prompt(plan: PromptPlan, surface: str = "text", correction
         plan.output_policy,
         targets=plan.targets,
         correction_light=correction_light,
+        affect=plan.affect,
     )
 
     task_directive = build_task_template_prompt(

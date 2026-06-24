@@ -1311,6 +1311,7 @@ def _build_tutor_stance(
     output_policy: dict[str, Any],
     targets: list[Any] | None = None,
     correction_light: bool = False,
+    affect: Any = None,
 ) -> str:
     normalized_feedback = normalize_feedback_policy(feedback_policy)
     normalized_scaffold = normalize_scaffold_policy(scaffold_policy)
@@ -1405,10 +1406,23 @@ def _build_tutor_stance(
         else "Favor mapped targets; briefly support adjacent language only if it helps task completion."
     )
 
+    # S4.1 affect override: gentler stance lines when the learner is strained.
+    # Function-local import keeps assignment_resolver's module load order safe
+    # (affect.py is pure stdlib; this avoids any import-cycle risk). Empty unless
+    # readiness == "strained", so byte-identical when affect is None/neutral/settled.
+    affect_block = ""
+    if affect is not None and getattr(affect, "readiness", None) == "strained":
+        from backend.services.pedagogy.affect import affect_stance_lines
+        affect_block = "".join(
+            f"- {line}\n"
+            for line in affect_stance_lines(affect, correction_light=correction_light)
+        )
+
     return (
         "TUTOR STANCE:\n"
         f"- {feedback_line}\n"
         f"{repair_block}"
+        f"{affect_block}"
         f"- {scaffold_line}\n"
         f"- {modeling_line}\n"
         f"- {output_line}\n"

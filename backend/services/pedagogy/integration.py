@@ -19,6 +19,7 @@ from backend.services.pedagogy.render.assignment_prompt import render_assignment
 
 if TYPE_CHECKING:  # avoid widening the runtime import surface of this seam
     from backend.services.pedagogy.coverage import CoverageState
+    from backend.services.pedagogy.affect import AffectState
 
 _TRUTHY = {"1", "true", "yes", "on"}
 
@@ -71,7 +72,11 @@ def affect_enabled() -> bool:
 
 
 def resolve_assignment_system_prompt(
-    bootstrap: dict[str, Any], *, surface: str, coverage_state: "CoverageState | None" = None
+    bootstrap: dict[str, Any],
+    *,
+    surface: str,
+    coverage_state: "CoverageState | None" = None,
+    affect_state: "AffectState | None" = None,
 ) -> str:
     """Render the assignment system prompt for ``surface`` ("voice"/"text").
 
@@ -85,10 +90,13 @@ def resolve_assignment_system_prompt(
     ``None``/empty unless the recycling flag is on, and an empty state renders
     identically to no coverage (see ``CoverageState.is_empty``), so callers compute
     it only when ``recycling_enabled()``.
+
+    ``affect_state`` (S4.1) threads affect-aware stance lines into the render. It is
+    ``None`` unless the affect flag is on, and None renders byte-identically to today.
     """
     correction_light = promote_back_enabled() and coach_chips_enabled()
     return render_assignment_prompt(
-        compile_prompt_plan(bootstrap, coverage_state=coverage_state),
+        compile_prompt_plan(bootstrap, coverage_state=coverage_state, affect_state=affect_state),
         surface,
         correction_light=correction_light,
     )

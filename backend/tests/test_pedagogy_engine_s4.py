@@ -150,3 +150,86 @@ class CompilePlanAffectTestCase(unittest.TestCase):
         boot = {"systemPromptPreview": "B", "assignment": {"taskType": "custom_prompt"}}
         # Raw tutor mode ignores affect (engine off).
         self.assertIsNone(compile_prompt_plan(boot, affect_state=affect).affect)
+
+
+class RenderAffectOverrideTestCase(unittest.TestCase):
+    def _bootstrap(self, mode="balanced"):
+        return {
+            "systemPromptPreview": "BASE",
+            "assignment": {"title": "Restaurant", "taskType": "information_gap"},
+            "mapping": {
+                "targetExpressions": ["la cuenta"],
+                "focusGrammar": ["ser vs estar"],
+                "feedbackPolicy": {"mode": mode},
+            },
+            "curriculum": {},
+            "class": {},
+        }
+
+    def test_render_byte_identical_when_affect_none(self):
+        from backend.services.pedagogy.plan import compile_prompt_plan
+        from backend.services.pedagogy.render.assignment_prompt import render_assignment_prompt
+        boot = self._bootstrap()
+        baseline = render_assignment_prompt(compile_prompt_plan(boot), "text")
+        with_none = render_assignment_prompt(compile_prompt_plan(boot, affect_state=None), "text")
+        self.assertEqual(baseline, with_none)
+
+    def test_render_byte_identical_when_neutral(self):
+        from backend.services.pedagogy.affect import AffectState
+        from backend.services.pedagogy.plan import compile_prompt_plan
+        from backend.services.pedagogy.render.assignment_prompt import render_assignment_prompt
+        boot = self._bootstrap()
+        baseline = render_assignment_prompt(compile_prompt_plan(boot), "text")
+        neutral = AffectState(readiness="neutral", signals={}, reason="")
+        with_neutral = render_assignment_prompt(compile_prompt_plan(boot, affect_state=neutral), "text")
+        self.assertEqual(baseline, with_neutral)
+
+    def test_render_adds_affect_lines_when_strained(self):
+        from backend.services.pedagogy.affect import AffectState
+        from backend.services.pedagogy.plan import compile_prompt_plan
+        from backend.services.pedagogy.render.assignment_prompt import render_assignment_prompt
+        boot = self._bootstrap()
+        strained = AffectState(readiness="strained", signals={}, reason="r")
+        out = render_assignment_prompt(compile_prompt_plan(boot, affect_state=strained), "text")
+        self.assertIn("low readiness", out.lower())
+
+    def test_accuracy_first_still_corrects_when_strained(self):
+        # Bounded nudge: an accuracy_first teacher's tutor still gets a correction directive
+        # (the repair block is independent of affect); affect only softens delivery.
+        from backend.services.pedagogy.affect import AffectState
+        from backend.services.pedagogy.plan import compile_prompt_plan
+        from backend.services.pedagogy.render.assignment_prompt import render_assignment_prompt
+        boot = self._bootstrap(mode="accuracy_first")
+        strained = AffectState(readiness="strained", signals={}, reason="r")
+        out = render_assignment_prompt(compile_prompt_plan(boot, affect_state=strained), "text").lower()
+        self.assertIn("self-correct", out)  # accuracy_first feedback_line still present
+
+
+class ResolveSeamAffectTestCase(unittest.TestCase):
+    def test_resolve_threads_affect_state(self):
+        from backend.services.pedagogy.affect import AffectState
+        from backend.services.pedagogy.integration import resolve_assignment_system_prompt
+        boot = {
+            "systemPromptPreview": "BASE",
+            "assignment": {"title": "R", "taskType": "information_gap"},
+            "mapping": {"targetExpressions": ["la cuenta"], "feedbackPolicy": {"mode": "balanced"}},
+            "curriculum": {},
+            "class": {},
+        }
+        strained = AffectState(readiness="strained", signals={}, reason="r")
+        out = resolve_assignment_system_prompt(boot, surface="text", affect_state=strained)
+        self.assertIn("low readiness", out.lower())
+
+    def test_resolve_default_affect_none_is_byte_identical(self):
+        from backend.services.pedagogy.integration import resolve_assignment_system_prompt
+        boot = {
+            "systemPromptPreview": "BASE",
+            "assignment": {"title": "R", "taskType": "information_gap"},
+            "mapping": {"targetExpressions": ["la cuenta"], "feedbackPolicy": {"mode": "balanced"}},
+            "curriculum": {},
+            "class": {},
+        }
+        self.assertEqual(
+            resolve_assignment_system_prompt(boot, surface="text"),
+            resolve_assignment_system_prompt(boot, surface="text", affect_state=None),
+        )

@@ -281,6 +281,40 @@ export const removeStudentFromClass = async (classId: string, studentUid: string
   await api.delete(`/teacher/classes/${classId}/students/${studentUid}`);
 };
 
+// ── Session debrief ───────────────────────────────────────────────────
+
+export interface SessionDebrief {
+  sessionId: string | null;
+  status: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  coverage: {
+    expressionHits: Record<string, number>;
+    vocabularyHits: Record<string, number>;
+    uncovered: string[];
+    recycle: string[];
+  };
+  uptake: {
+    selfCorrectionCount: number;
+    feedbackCounts: { recast: number; elicitation: number; reviewItem: number };
+    taskCompletionCount: number;
+  };
+  repeatedErrors: { label: string; count: number }[];
+  coachReview: Record<string, unknown> | null;
+  promotions: unknown[];
+  helpUsage: { askCount: number; byKind: Record<string, number> };
+  affect: { readiness: string | null; reason: string | null } | null;
+  suggestedNext: string[];
+  caveats: string[];
+}
+
+export const getSessionDebrief = async (sessionId: string): Promise<SessionDebrief | null> => {
+  const response = await api.get<{ success: boolean; debrief?: SessionDebrief }>(
+    `/teacher/practice-sessions/${sessionId}/debrief`,
+  );
+  return response.data.success && response.data.debrief ? response.data.debrief : null;
+};
+
 // ── Canvas roster gap (advisory; does not drive enrollment) ───────────
 
 interface CanvasRosterGapApiResponse {

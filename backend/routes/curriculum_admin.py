@@ -866,6 +866,7 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({
                 'success': True,
                 'analytics': analytics,
+                'debriefEnabled': debrief_enabled(),
             })
         except SuspendedOrgError as exc:
             return jsonify(exc.to_payload()), 403
@@ -918,6 +919,7 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({
                 'success': True,
                 'analytics': analytics,
+                'debriefEnabled': debrief_enabled(),
             })
         except SchoolContextPermissionError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 403
@@ -954,6 +956,7 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({
                 'success': True,
                 'analytics': analytics,
+                'debriefEnabled': debrief_enabled(),
             })
         except SchoolContextPermissionError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 403

@@ -620,6 +620,9 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
         self._set_session_user('teacher-1', 'mem-teacher')
         analytics_response = self.client.get(f'/api/teacher/assignments/{assignment_id}/analytics')
         self.assertEqual(analytics_response.status_code, 200)
+        # S4.2: analytics payload carries the additive debriefEnabled flag (off by default).
+        self.assertIn('debriefEnabled', analytics_response.get_json())
+        self.assertFalse(analytics_response.get_json()['debriefEnabled'])
         analytics = analytics_response.get_json()['analytics']
         self.assertEqual(analytics['summary']['sessionCount'], 1)
         self.assertEqual(analytics['summary']['completedSessionCount'], 1)

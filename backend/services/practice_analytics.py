@@ -98,6 +98,10 @@ FRENCH_DISCOURSE_MOVE_PATTERNS = {
     'self_correction': (r'\bje veux dire\b', r'\bpardon\b', r'\benfin\b', r'\bou plutot\b'),
 }
 
+# Locales whose script is destroyed by ascii-stripping (Hangul/Cyrillic/Hebrew).
+# Tagalog (tl) is Latin-script and is NOT here — it uses the ascii path.
+_NON_LATIN_LOCALE_KEYS = frozenset({'ko', 'ru', 'he'})
+
 GENERIC_ASSISTANT_FEEDBACK_PATTERNS = {
     'feedback.elicitation': (
         r'\btry again\b',
@@ -590,10 +594,15 @@ def _normalize_float_map(value: Any) -> dict[str, float]:
     return normalized
 
 
-def _normalize_search_text(content: str) -> str:
-    ascii_text = unicodedata.normalize('NFKD', content).encode('ascii', 'ignore').decode('ascii')
-    lowered = ascii_text.lower()
-    return re.sub(r'\s+', ' ', lowered).strip()
+def _normalize_search_text(content: str, locale: Any = '') -> str:
+    if _detect_locale_key(locale) in _NON_LATIN_LOCALE_KEYS:
+        # Preserve non-Latin script (Hangul/Cyrillic/Hebrew): NFKC compose +
+        # casefold (lowercases Cyrillic; no-op for caseless scripts). NO ascii-strip.
+        normalized = unicodedata.normalize('NFKC', content).casefold()
+    else:
+        # Latin scripts (en/fr/es/tl) + default: accent-fold via NFKD + ascii-strip.
+        normalized = unicodedata.normalize('NFKD', content).encode('ascii', 'ignore').decode('ascii').lower()
+    return re.sub(r'\s+', ' ', normalized).strip()
 
 
 def _normalize_tag(value: Any) -> str:
@@ -606,6 +615,14 @@ def _detect_locale_key(locale: Any) -> str:
         return 'fr'
     if normalized.startswith('es'):
         return 'es'
+    if normalized.startswith('ko'):
+        return 'ko'
+    if normalized.startswith('ru'):
+        return 'ru'
+    if normalized.startswith('he'):
+        return 'he'
+    if normalized.startswith('tl'):
+        return 'tl'
     return 'en'
 
 

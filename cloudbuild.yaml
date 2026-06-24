@@ -263,19 +263,32 @@ substitutions:
   # '0'; flip live via --update-env-vars PEDAGOGY_ENGINE_AFFECT=1 after burn-in.
   # Rollback instant: --update-env-vars PEDAGOGY_ENGINE_AFFECT=0.
   _PEDAGOGY_ENGINE_AFFECT: '0'
-  # S4.2 teacher debrief (L7) — BUILT behind flag, NOT cut over. Deploy inert at '0';
-  # flip via --update-env-vars PEDAGOGY_ENGINE_DEBRIEF=1. Rollback instant: =0.
-  _PEDAGOGY_ENGINE_DEBRIEF: '0'
+  # S4.2 teacher debrief (L7) — CUT OVER 2026-06-24 (rev lingual-app-00080-2lh).
+  # Deployed inert at '0' on rev 00079 (image 06cad5a), then flipped live via
+  # --update-env-vars after a prod runtime-verify with the test teacher account
+  # (debrief endpoint 200, page rendered Coverage/Uptake/RepeatedErrors/HelpUsage/
+  # SuggestedNext/Caveats; intervention cards self-hide at count 0 as designed; no
+  # 500s in logs). Default bumped 0->1 for durability (--set-env-vars=REPLACE, so the
+  # default MUST match the live '1'). Read-only/teacher-only/no student impact/no
+  # mutation. Rollback instant: --update-env-vars PEDAGOGY_ENGINE_DEBRIEF=0.
+  _PEDAGOGY_ENGINE_DEBRIEF: '1'
   # Pedagogy Engine S5 Director — between-turn drift re-steer (PEDAGOGY_ENGINE_S5.md).
   # '0' = assess_drift returns None, the route returns resteer:null, byte-identical to
   # today. NOT cut over — flip via --update-env-vars PEDAGOGY_ENGINE_DIRECTOR=1 only after
   # the S5-gate eval shows a plateau. Rollback instant: =0.
   _PEDAGOGY_ENGINE_DIRECTOR: '0'
   # L8 Teacher Preview — read-only teacher view of the compiled prompt plan
-  # (l8-teacher-preview design). '0' = endpoint returns teacherPreviewEnabled:false,
-  # builder panel hidden, byte-equivalent to today. Flip via
-  # --update-env-vars PEDAGOGY_ENGINE_TEACHER_PREVIEW=1. Rollback instant: =0.
-  _PEDAGOGY_ENGINE_TEACHER_PREVIEW: '0'
+  # (l8-teacher-preview design). CUT OVER 2026-06-24 (rev lingual-app-00080-2lh).
+  # Deployed inert at '0' on rev 00079, then flipped live via --update-env-vars after
+  # a prod runtime-verify (test teacher account): the "Toggle AI engine preview" panel
+  # rendered BOTH paths — raw-mode notice + guaranteesDisabled for custom_prompt
+  # assignments, and the full engine plan (task type / correction posture / target->
+  # feedback-route table, incl. grammar->prompt_first vs expression->recast_first) for
+  # a scaffolded decision_making assignment; fetched live from GET
+  # /api/teacher/assignments/<id>/plan-preview, expand-gated (no auto-fetch). Default
+  # bumped 0->1 for durability. Read-only/teacher-only/no student impact. Rollback
+  # instant: --update-env-vars PEDAGOGY_ENGINE_TEACHER_PREVIEW=0.
+  _PEDAGOGY_ENGINE_TEACHER_PREVIEW: '1'
 
 # Store images in Artifact Registry
 images:

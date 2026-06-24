@@ -103,5 +103,26 @@ class NonLatinFeedbackCatalogTests(unittest.TestCase):
         self.assertTrue(self._has('Tandaan mo ito. Ngayon natutunan natin.', 'tl-PH', 'feedback.review_item'))
 
 
+from backend.services.practice_analytics import _count_target_expression_hits
+
+
+class TargetExpressionHitLocaleTests(unittest.TestCase):
+    def test_korean_target_counted(self):
+        hits = _count_target_expression_hits('계산서 주세요. 계산서 부탁합니다.', ['계산서'], locale='ko-KR')
+        self.assertEqual(hits.get('계산서'), 2)
+
+    def test_hebrew_target_counted(self):
+        hits = _count_target_expression_hits('אני רוצה חשבון בבקשה', ['חשבון'], locale='he-IL')
+        self.assertEqual(hits.get('חשבון'), 1)
+
+    def test_spanish_target_still_counted_control(self):
+        hits = _count_target_expression_hits('La cuenta, por favor. La cuenta ya.', ['la cuenta'], locale='es-ES')
+        self.assertEqual(hits.get('la cuenta'), 2)
+
+    def test_default_locale_latin_unchanged(self):
+        hits = _count_target_expression_hits('the bill please', ['the bill'])
+        self.assertEqual(hits.get('the bill'), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

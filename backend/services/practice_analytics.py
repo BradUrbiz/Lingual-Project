@@ -745,14 +745,17 @@ def _estimate_speaking_time_seconds(word_count: int) -> int:
     return max(1, round(word_count / 2.3))
 
 
-def _count_target_expression_hits(content: str, expressions: list[str]) -> dict[str, int]:
-    content_lower = _normalize_search_text(content)
+def _count_target_expression_hits(content: str, expressions: list[str], *, locale: Any = '') -> dict[str, int]:
+    content_lower = _normalize_search_text(content, locale)
     hits = {}
     for expression in expressions:
         normalized_expression = _normalize_string(expression)
         if not normalized_expression:
             continue
-        count = content_lower.count(_normalize_search_text(normalized_expression))
+        normalized_search = _normalize_search_text(normalized_expression, locale)
+        if not normalized_search:
+            continue
+        count = content_lower.count(normalized_search)
         if count > 0:
             hits[normalized_expression] = count
     return hits
@@ -1761,13 +1764,13 @@ def apply_learning_event_to_session(
         summary['estimated_speaking_time_seconds'] += speaking_time_seconds
 
         target_expressions = (session_record.get('mapping_snapshot') or {}).get('targetExpressions', [])
-        expression_hits = _count_target_expression_hits(content, target_expressions if isinstance(target_expressions, list) else [])
+        expression_hits = _count_target_expression_hits(content, target_expressions if isinstance(target_expressions, list) else [], locale=locale)
         for expression, count in expression_hits.items():
             summary['target_expression_hits'][expression] = summary['target_expression_hits'].get(expression, 0) + count
             summary['target_expression_total_hits'] += count
 
         target_vocabulary = (session_record.get('mapping_snapshot') or {}).get('targetVocabulary', [])
-        vocabulary_hits = _count_target_expression_hits(content, target_vocabulary if isinstance(target_vocabulary, list) else [])
+        vocabulary_hits = _count_target_expression_hits(content, target_vocabulary if isinstance(target_vocabulary, list) else [], locale=locale)
         for word, count in vocabulary_hits.items():
             summary['target_vocabulary_hits'][word] = summary['target_vocabulary_hits'].get(word, 0) + count
             summary['target_vocabulary_total_hits'] += count
@@ -2032,7 +2035,7 @@ def build_derived_learning_events(
     if event_type == 'student.turn':
         content = _normalize_string(payload.get('content'))
         target_expressions = (session_record.get('mapping_snapshot') or {}).get('targetExpressions', [])
-        for expression, count in _count_target_expression_hits(content, target_expressions if isinstance(target_expressions, list) else []).items():
+        for expression, count in _count_target_expression_hits(content, target_expressions if isinstance(target_expressions, list) else [], locale=locale).items():
             derived_events.append(
                 build_learning_event_payload(
                     session_record,
@@ -2043,7 +2046,7 @@ def build_derived_learning_events(
             )
 
         target_vocabulary = (session_record.get('mapping_snapshot') or {}).get('targetVocabulary', [])
-        for word, count in _count_target_expression_hits(content, target_vocabulary if isinstance(target_vocabulary, list) else []).items():
+        for word, count in _count_target_expression_hits(content, target_vocabulary if isinstance(target_vocabulary, list) else [], locale=locale).items():
             derived_events.append(
                 build_learning_event_payload(
                     session_record,

@@ -103,7 +103,11 @@ def build_assignment_debrief(session_records: list) -> dict:
             assignment_id = rec.get("assignment_id")
         if rec.get("status") == "completed":
             completed += 1
-        uid = rec.get("student_firebase_uid")
+        # Serialized practice_session records use the Firestore key "student_uid"
+        # (analytics_reads._serialize_session renames the PG column
+        # student_firebase_uid -> student_uid; the class-analytics route reads the
+        # same key). Reading the PG column name here yields no UID -> studentCount 0.
+        uid = rec.get("student_uid")
         if isinstance(uid, str) and uid:
             students.add(uid)
 

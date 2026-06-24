@@ -533,7 +533,9 @@ class BuildAssignmentDebriefTestCase(unittest.TestCase):
             "id": "s-" + uid + "-" + str(started_at or ""),
             "assignment_id": assignment_id,
             "status": status,
-            "student_firebase_uid": uid,
+            # Serialized practice_session key — analytics_reads._serialize_session renames
+            # the PG column student_firebase_uid back to the Firestore key student_uid.
+            "student_uid": uid,
             "started_at": started_at,
             "analysis_state": analysis_state or {},
             "session_summary": session_summary or {},

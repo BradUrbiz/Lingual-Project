@@ -289,14 +289,18 @@ substitutions:
   # bumped 0->1 for durability. Read-only/teacher-only/no student impact. Rollback
   # instant: --update-env-vars PEDAGOGY_ENGINE_TEACHER_PREVIEW=0.
   _PEDAGOGY_ENGINE_TEACHER_PREVIEW: '1'
-  # S4.2b assignment-level coaching debrief roll-up — BUILT behind flag, NOT cut over.
+  # S4.2b assignment-level coaching debrief roll-up — CUT OVER 2026-06-25.
   # Read-only teacher endpoint GET /api/teacher/assignments/<id>/debrief aggregating the
   # engine coaching-process signals (uptake, S3.3 promotions, S5 re-steers, Ask help, S4.1
   # affect) across an assignment's sessions; gate = PEDAGOGY_ENGINE_DEBRIEF AND this flag.
-  # Brand-new flag, ABSENT in live → '0' is REPLACE-safe. Deploy uses --set-env-vars=REPLACE,
-  # so the flag MUST live here. Deploy inert at '0'; flip via --update-env-vars
-  # PEDAGOGY_ENGINE_DEBRIEF_ROLLUP=1 after burn-in. Rollback instant: =0.
-  _PEDAGOGY_ENGINE_DEBRIEF_ROLLUP: '0'
+  # Deployed inert at '0' on rev 00081-tk2 (image 840c0a9), flipped live via --update-env-vars
+  # → rev 00082-6dx, prod runtime-verified with the test teacher (analytics "View coaching
+  # debrief" link gated on both flags → roll-up page renders Participation/SuggestedNext/
+  # Caveats, cards self-hide at zero). Runtime-verify caught a studentCount=0 bug (read PG
+  # column student_firebase_uid instead of serialized key student_uid) → fixed; default bumped
+  # 0->1 for durability (--set-env-vars=REPLACE, so default MUST match live '1'). Read-only/
+  # teacher-only/no student impact. Rollback instant: --update-env-vars PEDAGOGY_ENGINE_DEBRIEF_ROLLUP=0.
+  _PEDAGOGY_ENGINE_DEBRIEF_ROLLUP: '1'
 
 # Store images in Artifact Registry
 images:

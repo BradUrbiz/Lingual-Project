@@ -135,7 +135,7 @@ Running the eval requires a deliberate choice to incur the LLM cost (`RUN_PEDAGO
 
 ---
 
-## 7. Director (built behind flag, 2026-06-24)
+## 6. Director (built behind flag, 2026-06-24)
 
 The Director has been fully built and wired behind `PEDAGOGY_ENGINE_DIRECTOR` (cloudbuild default `'0'`). It is **NOT cut over** — the flag is absent/off in the live service. Cutover is gated on the S5-gate eval verdict (§4 above): only if a run of the opt-in harness returns `plateaus == True`.
 
@@ -216,7 +216,7 @@ When off: `assess_drift` returns `None` immediately; the route returns `resteer:
 
 ---
 
-## 6. Running the eval
+## 7. Running the eval
 
 ```bash
 # From the repo root, with OPENAI_API_KEY set:

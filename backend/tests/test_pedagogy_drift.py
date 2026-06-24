@@ -1,7 +1,6 @@
 import unittest
 
 from backend.services.pedagogy.drift import (
-    DRIFT_WINDOW,
     DIRECTOR_COOLDOWN_TURNS,
     DIRECTOR_MAX_RESTEERS,
     DriftVerdict,

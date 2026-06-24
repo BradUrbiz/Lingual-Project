@@ -334,11 +334,39 @@ New flag **`PEDAGOGY_ENGINE_DEBRIEF`** (default `'0'`), independent of all other
 
 **(a) ASR/pronunciation confidence not captured.** The debrief includes a static disclaimer ("Pronunciation and listening accuracy were not separately assessed.") because ASR confidence scores are not persisted into `learning_events` or `session_summary`. There are no per-claim pronunciation caveats — the disclaimer applies globally. Capturing ASR confidence would require the voice client to emit it as a learning event field; deferred.
 
-**(b) `promotions[]` and `ask_log` shown but not aggregated.** The debrief passes through `analysis_state['promotions']` and shows `helpUsage` counts, but does not aggregate them into assignment-level or class-level teacher analytics views. Per-assignment "how often were targets promoted?" and "what expressions did students ask about most?" require a new aggregation layer; deferred.
+**(b) `promotions[]` and `ask_log` aggregation — ADDRESSED at assignment level (S4.2b), class level still deferred.** The per-session debrief passes through `analysis_state['promotions']` and shows `helpUsage` counts. **S4.2b (below) now aggregates these — plus uptake, S5 re-steers, and S4.1 affect — across all of an assignment's sessions** ("how often were targets promoted?" by target; "how much did students lean on help?"). A class-level (cross-assignment) roll-up remains deferred.
 
 **(c) `coachReview` is model-verified; other sections are heuristic.** `coachReview` is a pass-through of the S3.1 correction-model output (provenance: `model` field). All other sections (`coverage`, `uptake`, `repeatedErrors`) are derived from heuristic `session_summary` counts. The debrief does not currently visually distinguish model-verified from heuristic evidence — a future UI enhancement could badge `coachReview` differently.
 
 **(d) Within-session affect not captured.** The `affect` field reflects the session-start snapshot from `analysis_state['affect_state']` (computed from prior-session history). No within-session affect update is performed. This mirrors the S4.1 deferred follow-up (c).
+
+---
+
+# S4.2b — Assignment-Level Coaching Debrief Roll-Up (as built)
+
+**Status:** BUILT 2026-06-25 behind `PEDAGOGY_ENGINE_DEBRIEF_ROLLUP` (default `'0'`, NOT cut over). Spec: `docs/superpowers/specs/2026-06-25-pedagogy-s4.2b-assignment-debrief-rollup-design.md`. Plan: `docs/superpowers/plans/2026-06-25-pedagogy-s4.2b-assignment-debrief-rollup.md`.
+
+## 1. Goal
+
+Give a teacher a class-level view of **how the AI tutor coached across a whole assignment** — the engine-process signals that live only in `analysis_state`/`session_summary` and appear on no other teacher screen. Answers: across this assignment's sessions, what did the tutor correct (S3.3 promotions), how did it re-steer (S5), how much did students lean on help (Ask), how strained were they (S4.1 affect), and did they take up feedback (uptake)?
+
+## 2. Architecture — pure aggregator over per-session presenters
+
+`backend/services/pedagogy/assignment_debrief.py`: `build_assignment_debrief(session_records: list) -> dict`. Pure, stdlib-only (invariant 7a), no DB/LLM/store, total/no-raise. Calls `build_session_debrief(record)` per session for the teacher-safe coaching shapes (DRY — one source of per-session shaping) and reads raw `status`/`student_firebase_uid`/`started_at` for the participation denominator (the per-session debrief intentionally omits the student UID, so the distinct-student count can only come from the raw record). Reuses `debrief.py` helpers `_d`/`_i`/`_l`/`_ASK_KINDS`/`_CAVEATS`.
+
+## 3. Scope decision — coaching-process view, NOT content coverage (DRY)
+
+The existing **assignment analytics** payload already aggregates target-expression hits, repeated errors, rubric scores, and objectives across an assignment. S4.2b deliberately does **not** re-aggregate those (it would create a second, divergent source of truth). It pools only the engine-process signals: participation denominator, feedback uptake (summed), S3.3 promotions (pooled by target, with distinct-session counts), S5 re-steers (by kind + by target), Ask-mode help (summed by kind + sessions-with-help), S4.1 affect (readiness distribution), coach-review present-count, and a deterministic `suggestedNext`. Discoverability is preserved via a gated "View coaching debrief" link from the analytics page.
+
+## 4. Route, gate, frontend
+
+- Route: `GET /api/teacher/assignments/<id>/debrief` (curriculum_admin blueprint). Flag gate FIRST (minimal work when off — no DB read). Auth via `_require_assignment_teacher_access` (403/404 propagate); build wrapped fail-soft → `build_assignment_debrief([])`, never 500.
+- Gate: `debrief_enabled() AND debrief_rollup_enabled()` (`debrief_rollup_enabled()` reads `PEDAGOGY_ENGINE_DEBRIEF_ROLLUP`). Off ⇒ `{success: false}`; the assignment-analytics payload's added `debriefRollupEnabled` flag is false ⇒ no link ⇒ byte-equivalent UI.
+- Frontend: `TeacherAssignmentDebriefPage` (mirrors `TeacherSessionDebriefPage`); each card self-hides at zero, so a roll-up over sessions with intervention flags off honestly renders only Participation + Caveats.
+
+## 5. Non-goals (v1)
+
+No content-coverage/rubric aggregation (analytics owns it); no per-student breakdown table; no class-level (cross-assignment) roll-up; no time-series/CSV; no coach-review content rollup (surfaced as a session count only — the per-session dict shape is opaque to aggregation). Inherits the S4.2 heuristic-not-graded and help≠evidence caveats.
 
 ---
 

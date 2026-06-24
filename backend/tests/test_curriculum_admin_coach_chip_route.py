@@ -522,7 +522,6 @@ class AssignmentDebriefRouteTests(unittest.TestCase):
     # 6. Analytics response carries debriefRollupEnabled
     # ------------------------------------------------------------------
     def test_analytics_payload_includes_rollup_flag(self):
-        from unittest.mock import MagicMock
         db = _DbWithSessions()
         # analytics endpoint needs list_assignment_practice_sessions + list_assignment_learning_events
         db.list_assignment_practice_sessions = lambda aid: []

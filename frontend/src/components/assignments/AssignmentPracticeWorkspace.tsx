@@ -777,18 +777,27 @@ function useAssignmentPracticeWorkspaceController({
     const sessionId = activePracticeSessionRef.current?.id;
     if (!sessionId || learnerTurnIndex == null) return;
     try {
-      const chip = await postCoachChip(sessionId, learnerTurnIndex);
-      if (!chip) return;
-      setCoachChips((prev) => (prev.some((c) => c.turn_index === chip.turn_index) ? prev : [...prev, chip]));
-      if (chip.promote && chip.promote_prompt) {
-        if (chip.surface === 'voice') {
-          injectPromoteBackRef.current?.(chip.promote_prompt);
+      const { chip, resteer } = await postCoachChip(sessionId, learnerTurnIndex);
+      if (chip) {
+        setCoachChips((prev) => (prev.some((c) => c.turn_index === chip.turn_index) ? prev : [...prev, chip]));
+        if (chip.promote && chip.promote_prompt) {
+          if (chip.surface === 'voice') {
+            injectPromoteBackRef.current?.(chip.promote_prompt);
+          } else {
+            pendingPromoteBackRef.current = chip.promote_prompt;
+          }
+        }
+      }
+      // S5 Director: a re-steer rides the SAME channels as a promote.
+      if (resteer && resteer.resteer_prompt) {
+        if (resteer.surface === 'voice') {
+          injectPromoteBackRef.current?.(resteer.resteer_prompt);
         } else {
-          pendingPromoteBackRef.current = chip.promote_prompt;
+          pendingPromoteBackRef.current = resteer.resteer_prompt;
         }
       }
     } catch {
-      // fail-open: a missing/failed chip or injection never disrupts the session
+      // fail-open: a missing/failed chip/resteer or injection never disrupts the session
     }
   }, []);
 

@@ -290,7 +290,7 @@ describe('AssignmentPracticeWorkspace', () => {
     disconnectMock.mockReset();
     clearMessagesMock.mockReset();
     postCoachChipMock.mockReset();
-    postCoachChipMock.mockResolvedValue(null);
+    postCoachChipMock.mockResolvedValue({ chip: null, resteer: null });
     getCoachChipsMock.mockReset();
     getCoachChipsMock.mockResolvedValue([]);
     injectPromoteBackSpy.mockReset();
@@ -743,7 +743,7 @@ describe('AssignmentPracticeWorkspace', () => {
       resolveHydration = resolve;
     }));
 
-    postCoachChipMock.mockResolvedValue(LIVE_CHIP);
+    postCoachChipMock.mockResolvedValue({ chip: LIVE_CHIP, resteer: null });
     sendChatMessageMock.mockResolvedValue({ response: 'Très bien !' });
     reportPracticeSessionEventMock.mockResolvedValue(undefined);
     getStudentAssignmentWorkspaceMock.mockResolvedValue(TEXT_WORKSPACE);
@@ -834,7 +834,7 @@ describe('AssignmentPracticeWorkspace', () => {
       promote_prompt: 'COACH NOTE: try voy',
       promote_reason: 'hard_target',
     };
-    postCoachChipMock.mockResolvedValue(PROMOTE_CHIP);
+    postCoachChipMock.mockResolvedValue({ chip: PROMOTE_CHIP, resteer: null });
     saveMessageToChatMock.mockResolvedValue(undefined);
     reportPracticeSessionEventMock.mockResolvedValue(undefined);
 
@@ -917,7 +917,7 @@ describe('AssignmentPracticeWorkspace', () => {
 
     getStudentAssignmentWorkspaceMock.mockResolvedValue(TEXT_WORKSPACE);
     // First send: postCoachChip returns a text promote chip
-    postCoachChipMock.mockResolvedValue(TEXT_PROMOTE);
+    postCoachChipMock.mockResolvedValue({ chip: TEXT_PROMOTE, resteer: null });
     sendChatMessageMock.mockResolvedValue({ response: 'Bien' });
     reportPracticeSessionEventMock.mockResolvedValue(undefined);
 
@@ -944,7 +944,7 @@ describe('AssignmentPracticeWorkspace', () => {
     });
 
     // Second send — coachNote should be attached from the pending promote
-    postCoachChipMock.mockResolvedValue(null);
+    postCoachChipMock.mockResolvedValue({ chip: null, resteer: null });
     fireEvent.change(input, { target: { value: 'Second message' } });
     fireEvent.click(screen.getByRole('button', { name: /send/i }));
 
@@ -960,6 +960,79 @@ describe('AssignmentPracticeWorkspace', () => {
     await waitFor(() => {
       const lastOpts = sendChatMessageMock.mock.calls.at(-1)?.[2];
       expect(lastOpts?.coachNote).toBeUndefined();
+    });
+  });
+
+  it('routes a director resteer through the coachNote on the next text send', async () => {
+    const TEXT_BOOTSTRAP: AssignmentBootstrapData = {
+      ...BOOTSTRAP,
+      launch: {
+        ...BOOTSTRAP.launch,
+        modality: { mode: 'text_only', voiceMinutesCap: 0, textFallbackEnabled: false },
+        voiceAllowed: false,
+        textAllowed: true,
+      },
+    };
+    const TEXT_SESSION: PracticeSessionDto = {
+      ...ACTIVE_SESSION,
+      modality: 'text_only',
+      voiceEnabled: false,
+      textEnabled: true,
+    };
+    const TEXT_WORKSPACE: AssignmentWorkspaceData = {
+      ...WORKSPACE,
+      bootstrap: TEXT_BOOTSTRAP,
+      threads: [
+        {
+          ...WORKSPACE.threads[0],
+          latestPracticeSession: TEXT_SESSION,
+          attempts: [TEXT_SESSION],
+        },
+      ],
+    };
+
+    getStudentAssignmentWorkspaceMock.mockResolvedValue(TEXT_WORKSPACE);
+    // First send: postCoachChip returns a resteer (chip: null)
+    postCoachChipMock.mockResolvedValue({
+      chip: null,
+      resteer: {
+        surface: 'text', resteer: true, resteer_prompt: 'COACH NOTE: steer to la cuenta',
+        turn_index: 2, kind: 'target_neglect', target: 'la cuenta', reason: 'r', generated_at: 'T',
+      },
+    });
+    sendChatMessageMock.mockResolvedValue({ response: 'Bien' });
+    reportPracticeSessionEventMock.mockResolvedValue(undefined);
+
+    render(
+      <AssignmentPracticeWorkspace
+        open
+        bootstrap={TEXT_BOOTSTRAP}
+        onClose={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Type your assignment response...')).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText('Type your assignment response...');
+
+    // First send — triggerCoachChip fires with resteer, sets pendingPromoteBackRef
+    fireEvent.change(input, { target: { value: 'Yo voy' } });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() => {
+      expect(postCoachChipMock).toHaveBeenCalledWith(TEXT_SESSION.id, expect.any(Number));
+    });
+
+    // Second send — coachNote should carry the resteer_prompt
+    postCoachChipMock.mockResolvedValue({ chip: null, resteer: null });
+    fireEvent.change(input, { target: { value: 'Second message' } });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() => {
+      const lastOpts = sendChatMessageMock.mock.calls.at(-1)?.[2];
+      expect(lastOpts).toMatchObject({ coachNote: 'COACH NOTE: steer to la cuenta' });
     });
   });
 });

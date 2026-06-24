@@ -1,5 +1,7 @@
 """Pedagogy Engine S4.1 — affect-aware tutoring (pure layer)."""
+import os
 import unittest
+from unittest import mock
 
 from backend.services.pedagogy.affect import (
     AffectState,
@@ -103,3 +105,18 @@ class SerializeAffectStateTestCase(unittest.TestCase):
             serialize_affect_state(state),
             {"readiness": "strained", "signals": {"a": 1}, "reason": "r"},
         )
+
+
+class AffectEnabledTestCase(unittest.TestCase):
+    def test_default_off(self):
+        from backend.services.pedagogy.integration import affect_enabled
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PEDAGOGY_ENGINE_AFFECT", None)
+            self.assertFalse(affect_enabled())
+
+    def test_on_when_truthy(self):
+        from backend.services.pedagogy.integration import affect_enabled
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_AFFECT": "1"}):
+            self.assertTrue(affect_enabled())
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_AFFECT": "on"}):
+            self.assertTrue(affect_enabled())

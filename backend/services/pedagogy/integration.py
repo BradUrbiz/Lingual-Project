@@ -61,6 +61,15 @@ def ask_mode_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_ASK_MODE", "").strip().lower() in _TRUTHY
 
 
+def affect_enabled() -> bool:
+    """Whether S4.1 affect-aware tutoring is on (independent flag, default off).
+
+    Reads PEDAGOGY_ENGINE_AFFECT. The route uses this to decide whether to do the
+    extra prior-session reads + affect compute; flag off ⇒ zero extra reads,
+    prompt byte-identical."""
+    return os.environ.get("PEDAGOGY_ENGINE_AFFECT", "").strip().lower() in _TRUTHY
+
+
 def resolve_assignment_system_prompt(
     bootstrap: dict[str, Any], *, surface: str, coverage_state: "CoverageState | None" = None
 ) -> str:

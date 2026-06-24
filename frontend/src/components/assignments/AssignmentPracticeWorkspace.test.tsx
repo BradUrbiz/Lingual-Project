@@ -1035,4 +1035,152 @@ describe('AssignmentPracticeWorkspace', () => {
       expect(lastOpts).toMatchObject({ coachNote: 'COACH NOTE: steer to la cuenta' });
     });
   });
+
+  it('merges a same-turn promote + resteer into ONE text coachNote (no clobber)', async () => {
+    const TEXT_PROMOTE: import('@/api/coachChips').CoachChip = {
+      turn_index: 0,
+      generated_at: 'now',
+      model: 'm',
+      surface: 'text',
+      utterance: 'Yo va',
+      better: 'Yo voy',
+      why: 'ir',
+      target: 'focus_grammar:ir',
+      confidence_caveat: false,
+      promote: true,
+      promote_prompt: 'PROMOTE: try voy',
+      promote_reason: 'hard_target',
+    };
+
+    const TEXT_BOOTSTRAP: AssignmentBootstrapData = {
+      ...BOOTSTRAP,
+      launch: {
+        ...BOOTSTRAP.launch,
+        modality: { mode: 'text_only', voiceMinutesCap: 0, textFallbackEnabled: false },
+        voiceAllowed: false,
+        textAllowed: true,
+      },
+    };
+    const TEXT_SESSION: PracticeSessionDto = {
+      ...ACTIVE_SESSION,
+      modality: 'text_only',
+      voiceEnabled: false,
+      textEnabled: true,
+    };
+    const TEXT_WORKSPACE: AssignmentWorkspaceData = {
+      ...WORKSPACE,
+      bootstrap: TEXT_BOOTSTRAP,
+      threads: [
+        {
+          ...WORKSPACE.threads[0],
+          latestPracticeSession: TEXT_SESSION,
+          attempts: [TEXT_SESSION],
+        },
+      ],
+    };
+
+    getStudentAssignmentWorkspaceMock.mockResolvedValue(TEXT_WORKSPACE);
+    // First send: postCoachChip returns BOTH a text promote chip AND a text resteer
+    postCoachChipMock.mockResolvedValue({
+      chip: TEXT_PROMOTE,
+      resteer: {
+        surface: 'text', resteer: true, resteer_prompt: 'RESTEER: speak Spanish',
+        turn_index: 0, kind: 'target_neglect', target: 'voy', reason: 'r', generated_at: 'T',
+      },
+    });
+    sendChatMessageMock.mockResolvedValue({ response: 'Bien' });
+    reportPracticeSessionEventMock.mockResolvedValue(undefined);
+
+    render(
+      <AssignmentPracticeWorkspace
+        open
+        bootstrap={TEXT_BOOTSTRAP}
+        onClose={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Type your assignment response...')).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText('Type your assignment response...');
+
+    // First send — triggerCoachChip fires with both chip+resteer, should merge into pendingPromoteBackRef
+    fireEvent.change(input, { target: { value: 'Yo voy' } });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() => {
+      expect(postCoachChipMock).toHaveBeenCalledWith(TEXT_SESSION.id, expect.any(Number));
+    });
+
+    // Second send — coachNote should contain BOTH the resteer prompt AND the promote prompt
+    postCoachChipMock.mockResolvedValue({ chip: null, resteer: null });
+    fireEvent.change(input, { target: { value: 'Second message' } });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() => {
+      const lastOpts = sendChatMessageMock.mock.calls.at(-1)?.[2];
+      expect(lastOpts?.coachNote).toContain('RESTEER: speak Spanish');
+      expect(lastOpts?.coachNote).toContain('PROMOTE: try voy');
+    });
+  });
+
+  it('merges a same-turn promote + resteer into ONE voice injectPromoteBack call', async () => {
+    const PROMOTE_CHIP: import('@/api/coachChips').CoachChip = {
+      turn_index: 0,
+      generated_at: 'now',
+      model: 'm',
+      surface: 'voice',
+      utterance: 'Yo va',
+      better: 'Yo voy',
+      why: 'ir',
+      target: 'focus_grammar:ir',
+      confidence_caveat: false,
+      promote: true,
+      promote_prompt: 'PROMOTE: try voy',
+      promote_reason: 'hard_target',
+    };
+    postCoachChipMock.mockResolvedValue({
+      chip: PROMOTE_CHIP,
+      resteer: { surface: 'voice', resteer: true, resteer_prompt: 'RESTEER: speak Spanish' },
+    });
+    saveMessageToChatMock.mockResolvedValue(undefined);
+    reportPracticeSessionEventMock.mockResolvedValue(undefined);
+
+    render(
+      <AssignmentPracticeWorkspace
+        open
+        bootstrap={BOOTSTRAP}
+        onClose={vi.fn()}
+      />
+    );
+
+    // Wait for the workspace to load and voice connect button to appear
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Tap the mic to connect/i })).toBeInTheDocument();
+    });
+
+    // Connect voice
+    fireEvent.click(screen.getByRole('button', { name: /Tap the mic to connect/i }));
+
+    await waitFor(() => {
+      expect(connectMock).toHaveBeenCalled();
+    });
+
+    // Drive a learner turn followed by an assistant turn to trigger triggerCoachChip
+    await act(async () => {
+      realtimeOnMessage?.('user', 'Yo va al tienda');
+    });
+    await act(async () => {
+      realtimeOnMessage?.('assistant', '¿Otra vez?');
+    });
+
+    // triggerCoachChip should call injectPromoteBack EXACTLY ONCE with the merged string
+    await waitFor(() => {
+      expect(injectPromoteBackSpy).toHaveBeenCalledTimes(1);
+    });
+    const arg = injectPromoteBackSpy.mock.calls[0][0];
+    expect(arg).toContain('RESTEER: speak Spanish');
+    expect(arg).toContain('PROMOTE: try voy');
+  });
 });

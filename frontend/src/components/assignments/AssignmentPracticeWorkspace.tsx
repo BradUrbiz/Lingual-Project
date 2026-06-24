@@ -780,20 +780,26 @@ function useAssignmentPracticeWorkspaceController({
       const { chip, resteer } = await postCoachChip(sessionId, learnerTurnIndex);
       if (chip) {
         setCoachChips((prev) => (prev.some((c) => c.turn_index === chip.turn_index) ? prev : [...prev, chip]));
-        if (chip.promote && chip.promote_prompt) {
-          if (chip.surface === 'voice') {
-            injectPromoteBackRef.current?.(chip.promote_prompt);
-          } else {
-            pendingPromoteBackRef.current = chip.promote_prompt;
-          }
-        }
       }
-      // S5 Director: a re-steer rides the SAME channels as a promote.
+      // Merge a same-turn re-steer + promote-back into ONE delivery so neither is
+      // clobbered (text single-slot) or double-injected (voice). Re-steer first
+      // (more fundamental "get back on task/language"), promote-back second.
+      const notes: string[] = [];
+      let surface: 'voice' | 'text' = 'text';
       if (resteer && resteer.resteer_prompt) {
-        if (resteer.surface === 'voice') {
-          injectPromoteBackRef.current?.(resteer.resteer_prompt);
+        notes.push(resteer.resteer_prompt);
+        if (resteer.surface === 'voice') surface = 'voice';
+      }
+      if (chip?.promote && chip.promote_prompt) {
+        notes.push(chip.promote_prompt);
+        if (chip.surface === 'voice') surface = 'voice';
+      }
+      if (notes.length > 0) {
+        const merged = notes.join(' ');
+        if (surface === 'voice') {
+          injectPromoteBackRef.current?.(merged);
         } else {
-          pendingPromoteBackRef.current = resteer.resteer_prompt;
+          pendingPromoteBackRef.current = merged;
         }
       }
     } catch {

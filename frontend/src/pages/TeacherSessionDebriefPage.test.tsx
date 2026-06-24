@@ -149,8 +149,10 @@ describe('TeacherSessionDebriefPage', () => {
     renderPage();
 
     expect(await screen.findByText('Targeted corrections')).toBeInTheDocument();
-    expect(screen.getAllByText(/subjunctive/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/ser vs estar/).length).toBeGreaterThan(0);
+    // Assert on the card's UNIQUE row labels (these phrasings exist only in PromotionsCard),
+    // not the bare targets — "subjunctive"/"ser vs estar" also appear in suggestedNext/repeatedErrors.
+    expect(screen.getByText(/Drilled.*subjunctive.*focus grammar/)).toBeInTheDocument();
+    expect(screen.getByText(/Drilled.*ser vs estar.*recurring error/)).toBeInTheDocument();
   });
 
   it('omits Targeted corrections section when promotions.count is 0', async () => {

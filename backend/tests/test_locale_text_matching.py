@@ -1,8 +1,13 @@
 import unittest
 
 from backend.services.practice_analytics import (
+    _catalog_patterns,
+    _detect_feedback_event_types,
     _detect_locale_key,
     _normalize_search_text,
+    GENERIC_ASSISTANT_FEEDBACK_PATTERNS,
+    FRENCH_ASSISTANT_FEEDBACK_PATTERNS,
+    SPANISH_ASSISTANT_FEEDBACK_PATTERNS,
 )
 
 
@@ -40,6 +45,36 @@ class NormalizeSearchTextTests(unittest.TestCase):
 
     def test_non_latin_whitespace_collapsed(self):
         self.assertEqual(_normalize_search_text('  계산서   주세요  ', 'ko-KR'), '계산서 주세요')
+
+
+class CatalogPatternsRefactorTests(unittest.TestCase):
+    def test_fr_merges_generic_plus_french(self):
+        got = _catalog_patterns(
+            locale='fr-FR', signal_id='feedback.recast',
+            generic_catalog=GENERIC_ASSISTANT_FEEDBACK_PATTERNS,
+            locale_catalogs={'fr': FRENCH_ASSISTANT_FEEDBACK_PATTERNS, 'es': SPANISH_ASSISTANT_FEEDBACK_PATTERNS},
+        )
+        expected = (*GENERIC_ASSISTANT_FEEDBACK_PATTERNS['feedback.recast'],
+                    *FRENCH_ASSISTANT_FEEDBACK_PATTERNS['feedback.recast'])
+        self.assertEqual(got, expected)
+
+    def test_en_is_generic_only(self):
+        got = _catalog_patterns(
+            locale='en-US', signal_id='feedback.recast',
+            generic_catalog=GENERIC_ASSISTANT_FEEDBACK_PATTERNS,
+            locale_catalogs={'fr': FRENCH_ASSISTANT_FEEDBACK_PATTERNS},
+        )
+        self.assertEqual(got, GENERIC_ASSISTANT_FEEDBACK_PATTERNS['feedback.recast'])
+
+
+class FeedbackRegressionTests(unittest.TestCase):
+    def test_existing_locales_still_detected(self):
+        # English generic recast
+        self.assertTrue(any(e['eventType'] == 'feedback.recast'
+                            for e in _detect_feedback_event_types('Did you mean to go?', locale='en-US')))
+        # Spanish recast
+        self.assertTrue(any(e['eventType'] == 'feedback.recast'
+                            for e in _detect_feedback_event_types('Pequeño ajuste: se dice así.', locale='es-ES')))
 
 
 if __name__ == '__main__':

@@ -174,6 +174,13 @@ SPANISH_ASSISTANT_FEEDBACK_PATTERNS = {
     ),
 }
 
+# Locale-key -> assistant-feedback catalog. ko/ru/he/tl catalogs are added in
+# the locale-complete slice; fr/es preserve the prior special-cased behavior.
+_FEEDBACK_LOCALE_CATALOGS: dict[str, dict[str, tuple[str, ...]]] = {
+    'fr': FRENCH_ASSISTANT_FEEDBACK_PATTERNS,
+    'es': SPANISH_ASSISTANT_FEEDBACK_PATTERNS,
+}
+
 GENERIC_CONTEXT_TAG_PATTERNS = {
     'beliefs_values': (
         r'\bvalue\b',
@@ -681,17 +688,14 @@ def _contains_any_pattern(search_text: str, patterns: tuple[str, ...]) -> bool:
 def _catalog_patterns(
     *,
     locale: str,
-    generic_catalog: dict[str, tuple[str, ...]],
-    french_catalog: dict[str, tuple[str, ...]],
     signal_id: str,
-    spanish_catalog: dict[str, tuple[str, ...]] | None = None,
+    generic_catalog: dict[str, tuple[str, ...]],
+    locale_catalogs: dict[str, dict[str, tuple[str, ...]]],
 ) -> tuple[str, ...]:
     patterns = list(generic_catalog.get(signal_id, ()))
-    locale_key = _detect_locale_key(locale)
-    if locale_key == 'fr':
-        patterns.extend(french_catalog.get(signal_id, ()))
-    elif locale_key == 'es' and spanish_catalog is not None:
-        patterns.extend(spanish_catalog.get(signal_id, ()))
+    locale_catalog = locale_catalogs.get(_detect_locale_key(locale))
+    if locale_catalog is not None:
+        patterns.extend(locale_catalog.get(signal_id, ()))
     return tuple(patterns)
 
 
@@ -704,14 +708,15 @@ def _detect_signal_matches(
     french_catalog: dict[str, tuple[str, ...]],
     payload_key: str,
 ) -> list[dict[str, Any]]:
-    search_text = _normalize_search_text(content)
+    search_text = _normalize_search_text(content, locale)
+    locale_catalogs = {'fr': french_catalog}
     signals: list[dict[str, Any]] = []
     for allowed_id in allowed_ids:
         patterns = _catalog_patterns(
             locale=locale,
-            generic_catalog=generic_catalog,
-            french_catalog=french_catalog,
             signal_id=allowed_id,
+            generic_catalog=generic_catalog,
+            locale_catalogs=locale_catalogs,
         )
         matches = _find_pattern_matches(search_text, patterns)
         if matches:
@@ -748,14 +753,13 @@ def _detect_discourse_move_signals(content: str, allowed_moves: list[str], *, lo
 
 def _detect_feedback_event_types(content: str, *, locale: str) -> list[dict[str, Any]]:
     detected = []
-    search_text = _normalize_search_text(content)
+    search_text = _normalize_search_text(content, locale)
     for event_type in GENERIC_ASSISTANT_FEEDBACK_PATTERNS:
         patterns = _catalog_patterns(
             locale=locale,
-            generic_catalog=GENERIC_ASSISTANT_FEEDBACK_PATTERNS,
-            french_catalog=FRENCH_ASSISTANT_FEEDBACK_PATTERNS,
             signal_id=event_type,
-            spanish_catalog=SPANISH_ASSISTANT_FEEDBACK_PATTERNS,
+            generic_catalog=GENERIC_ASSISTANT_FEEDBACK_PATTERNS,
+            locale_catalogs=_FEEDBACK_LOCALE_CATALOGS,
         )
         matches = _find_pattern_matches(search_text, patterns)
         if matches:

@@ -1,6 +1,6 @@
 # Pedagogy Engine — S4 Affect + Debrief (detailed design)
 
-**Status:** **S4.1 BUILT behind `PEDAGOGY_ENGINE_AFFECT` (default `'0'`), NOT yet cut over** — flag absent/off in live service. Cutover is a separate post-merge step. **S4.2 (evidence-backed teacher debrief) still pending.** Sibling to `PEDAGOGY_ENGINE_S1.md`, `PEDAGOGY_ENGINE_S2.md`, `PEDAGOGY_ENGINE_S3.md`; realizes the **S4 row** of `PEDAGOGY_ENGINE.md` §14.
+**Status:** **S4.1 BUILT behind `PEDAGOGY_ENGINE_AFFECT` (default `'0'`), NOT yet cut over** — flag absent/off in live service. Cutover is a separate post-merge step. **S4.2 BUILT behind `PEDAGOGY_ENGINE_DEBRIEF` (default `'0'`), NOT cut over** — flag absent/off in live service. Sibling to `PEDAGOGY_ENGINE_S1.md`, `PEDAGOGY_ENGINE_S2.md`, `PEDAGOGY_ENGINE_S3.md`; realizes the **S4 row** of `PEDAGOGY_ENGINE.md` §14.
 
 ---
 
@@ -8,7 +8,7 @@
 
 S4.1 closes the L3 learner-model gap by deriving a coarse **readiness tier** from a student's recent prior-session signals (turn-length trend, repair density, recent abandonment) and modulating the L5 tutor stance when the learner appears strained. The heuristic is explicitly NOT model-verified affect or WTC measurement — it mirrors the S2 coverage-tier caveat. With the flag off the prompt is **byte-identical** to today; with the flag on and readiness = neutral/settled it is also byte-identical. Only `readiness == "strained"` produces any visible prompt change, and that change is a bounded nudge within the teacher's existing policy — it never silences correction the teacher explicitly requested.
 
-S4.2 (the evidence-backed L7 teacher debrief) is the next slice; this doc leads with the S4.1 section and leaves room for it below.
+S4.2 (the evidence-backed L7 teacher debrief) is built behind `PEDAGOGY_ENGINE_DEBRIEF` (default `'0'`); this doc leads with the S4.1 section and documents S4.2 as built below.
 
 ---
 
@@ -179,21 +179,172 @@ Every failure path degrades to `affect_state=None` (prompt byte-identical to tod
 
 ---
 
-# S4.2 — Evidence-Backed Teacher Debrief (pending)
+# S4.2 — Evidence-Backed Teacher Debrief (as built)
 
-**Status: PENDING — not yet designed or built.** Placeholder for the L7 teacher analytics surface that packages the evidence accumulated through S1–S4.1 into a structured, post-session teacher debrief.
+**Status: BUILT behind `PEDAGOGY_ENGINE_DEBRIEF` (default `'0'`), NOT cut over** — flag absent/off in live service. Cutover is a separate post-merge step.
 
-Key design questions to resolve before building:
-- Which `analysis_state` keys surface to the teacher? (coverage tiers, coach_review target_coverage, affect readiness, promotions, ask_log summary)
-- What is the teacher-facing URL / UX surface? (a separate `/teacher/sessions/<id>/debrief` panel? part of the existing analytics dashboard?)
-- What caveats does the debrief carry? (heuristic coverage ≠ verified mastery; affect is a behavioral proxy; model-verified `coach_review` is the one evidence-backed component)
-- Does `serialize_plan_preview` (L8) data wire into the debrief, or is L8 a separate teacher-preview-only surface?
+## 1. Goal
+
+Package the evidence accumulated in `analysis_state` through S1–S4.1 into a structured, read-only post-session teacher debrief. No new data collection, no LLM call, no new store. The presenter projects an already-fetched `practice_session` record into the debrief shape, degrading gracefully on missing sub-objects.
+
+This is the L7 teacher analytics / debrief item from `PEDAGOGY_ENGINE.md` §14 (S4 row) — the surface that addresses LIMITATIONS #53 §p ("Not yet feeding S2 recycling or the L7 teacher debrief") and §aa ("promotions[] not yet consumed by the L7 teacher debrief").
+
+## 2. Architecture — pure presenter (no impure orchestration needed)
+
+```
+PURE   backend/services/pedagogy/debrief.py                 (stdlib only, no LLM/DB/Canvas)
+         • build_session_debrief(session_record: Any) -> dict
+             Total / no-raise: malformed sub-objects degrade to empty sections.
+             caveats list is ALWAYS present.
+         • MAX_SUGGESTIONS = 4
+         • _ASK_KINDS = ("hint","translation","definition","clarification","phrase","refusal")
+         • _CAVEATS = [three static honesty strings]
+
+GATE   backend/services/pedagogy/integration.py
+         • debrief_enabled()                                  reads PEDAGOGY_ENGINE_DEBRIEF
+
+ROUTE  backend/routes/curriculum_admin.py
+         • GET /api/teacher/practice-sessions/<session_id>/debrief
+             Flag gate first (debrief_enabled() off → {success:false} + 200, no session read).
+             session → assignment → class → teacher access via _require_assignment_teacher_access.
+             Calls build_session_debrief(session_record); on unexpected exception returns a
+             minimal debrief {sessionId, status, caveats: ['This debrief could not be fully assembled.']}.
+         • debriefEnabled: debrief_enabled() field on three analytics payloads:
+             GET /api/teacher/assignments/<id>/analytics
+             GET /api/teacher/classes/<class_id>/analytics
+             GET /api/teacher/classes/<class_id>/students/<uid>/analytics
+             Frontend uses this flag to show/hide the debrief click-through link.
+```
+
+**Why pure-only:** unlike S3.1/S3.2/S4.1, the debrief presenter makes no external calls — it projects existing `analysis_state` + `session_summary` fields that are already materialized on the session record. No impure orchestrator layer is needed. The DB read is done by the route handler (one `get_practice_session` call); the presenter receives the record dict.
+
+**Import boundary (invariant 7a):** `debrief.py` imports stdlib only — verified by `test_pedagogy_engine_s1.ImportBoundaryTestCase` (extended to cover `debrief.py`).
+
+## 3. Debrief view shape
+
+`build_session_debrief(session_record)` returns:
+
+```jsonc
+{
+  "sessionId": "<str|null>",
+  "status": "<str|null>",
+  "startedAt": "<str|null>",
+  "endedAt": "<str|null>",
+  "coverage": {
+    "expressionHits": {},               // target_expression_hits from session_summary
+    "vocabularyHits": {},               // target_vocabulary_hits from session_summary
+    "uncovered": ["<str>", ...],        // analysis_state.coverage.uncovered
+    "recycle": ["<str>", ...]           // analysis_state.coverage.recycle
+  },
+  "uptake": {
+    "selfCorrectionCount": <int>,
+    "feedbackCounts": {
+      "recast": <int>,
+      "elicitation": <int>,
+      "reviewItem": <int>
+    },
+    "taskCompletionCount": <int>
+  },
+  "repeatedErrors": [
+    {"label": "<str>", "count": <int>}  // sorted descending by count, count > 0 only
+  ],
+  "coachReview": <dict|null>,           // analysis_state.coach_review (pass-through)
+  "promotions": [<dict>, ...],          // analysis_state.promotions (pass-through)
+  "helpUsage": {
+    "askCount": <int>,                  // len(analysis_state.ask_log)
+    "byKind": {                         // counts per ASK kind (all 6 keys always present)
+      "hint": <int>, "translation": <int>, "definition": <int>,
+      "clarification": <int>, "phrase": <int>, "refusal": <int>
+    }
+  },
+  "affect": {                           // null if analysis_state.affect_state absent/malformed
+    "readiness": "<str|null>",
+    "reason": "<str|null>"
+  },
+  "suggestedNext": ["<str>", ...],      // up to MAX_SUGGESTIONS (4) non-dedup'd suggestions
+  "caveats": ["<str>", ...]             // always present; 3 static honesty strings
+}
+```
+
+### Honesty caveats (always present)
+
+The three static `_CAVEATS` strings:
+1. "This debrief summarizes the practice transcript. Target and error detection is heuristic, not graded scoring."
+2. "Pronunciation and listening accuracy were not separately assessed."
+3. "Help requests are shown as usage counts, not as evidence the learner produced the form."
+
+### Suggested-next derivation
+
+`_suggested_next(coverage, repeated_errors, coach_review)` builds up to `MAX_SUGGESTIONS` (4) actionable suggestions, in priority order:
+1. Uncovered targets (first 3 listed).
+2. Recurring errors from `repeatedErrors` (first 2).
+3. `work_on` items from `coach_review` (first 2; reads `.target` then falls back to `.why`).
+4. Emerging (recycle) targets (first 3 listed).
+
+De-duplicates by exact string match; caps at `MAX_SUGGESTIONS`.
+
+## 4. Read-only / no-LLM / no-store invariants
+
+- **No LLM call.** `debrief.py` is stdlib-only and calls no model. The `coachReview` field is a pass-through of the already-cached `analysis_state['coach_review']` (generated by S3.1).
+- **No write.** `build_session_debrief` reads from the record dict only; the route handler does not write to `analysis_state` or any collection.
+- **Total / no-raise.** Every sub-object access uses defensive helpers (`_d`, `_l`, `_i`). A completely empty or malformed session record yields a valid debrief dict with empty sections and the full `caveats` list.
+- **Fail-soft at the route.** If `build_session_debrief` raises unexpectedly, the route catches the exception, logs it, and returns a minimal debrief (`sessionId`, `status`, one-item `caveats`), rather than a 500.
+
+## 5. Help ≠ evidence caveat
+
+`helpUsage.byKind` shows how many times each Ask kind was requested during the session. This is usage data ONLY. An `askCount > 0` or a `byKind["translation"] > 0` does not indicate the learner produced the target form — it indicates they requested scaffolding. The third static caveat string makes this explicit. Do not surface help counts as learning evidence.
+
+## 6. Auth chain
+
+`GET /api/teacher/practice-sessions/<session_id>/debrief`:
+
+1. `debrief_enabled()` → if off, returns `{success: false, error: "Debrief is not enabled."}` (200, no session read).
+2. `deps.db.get_practice_session(session_id)` → 404 if not found.
+3. `_require_assignment_teacher_access(deps, session_record.get('assignment_id'))` — resolves `session → assignment → class → teacher membership`. Raises `SchoolContextPermissionError` (403) if the authenticated user is not a teacher on the class; raises `ValueError` (404) if the assignment is not found. This is the same auth helper used by other curriculum-admin teacher routes.
+
+## 7. `debriefEnabled` analytics-payload flag + frontend click-through
+
+Three analytics response payloads include a top-level `debriefEnabled: debrief_enabled()` field:
+- `GET /api/teacher/assignments/<assignment_id>/analytics`
+- `GET /api/teacher/classes/<class_id>/analytics`
+- `GET /api/teacher/classes/<class_id>/students/<student_uid>/analytics`
+
+The frontend uses this flag to conditionally render the "View session debrief" click-through link on session rows in the teacher analytics pages. When `debriefEnabled` is `false`, the link is hidden (no dead link). When `true`, clicking navigates to the session debrief route, which calls `GET /api/teacher/practice-sessions/<session_id>/debrief` and renders `SessionDebriefPage`.
+
+## 8. Flag & rollout (REPLACE-safe)
+
+New flag **`PEDAGOGY_ENGINE_DEBRIEF`** (default `'0'`), independent of all other pedagogy flags.
+
+- **REPLACE-safe:** the deploy uses `--set-env-vars=REPLACE`. The flag is now wired in `cloudbuild.yaml` (`--set-env-vars` + `_PEDAGOGY_ENGINE_DEBRIEF: '0'` substitution). Currently **ABSENT (off) in live service**, so default `'0'` is REPLACE-safe.
+- **Cutover:** `gcloud run services update lingual-app --project=lingu-480600 --region us-central1 --update-env-vars PEDAGOGY_ENGINE_DEBRIEF=1` → verify the debrief link appears on a session row in teacher analytics → click through and confirm the debrief view loads → bump cloudbuild default `'0'→'1'` for durability.
+- **Rollback:** instant via `--update-env-vars PEDAGOGY_ENGINE_DEBRIEF=0` (link disappears, endpoint returns flag-off response, no behavior change).
+
+`debrief_enabled()` in `backend/services/pedagogy/integration.py` reads `PEDAGOGY_ENGINE_DEBRIEF`, mirroring all prior flag helpers.
+
+## 9. Testing
+
+**Deterministic units (gate `make test-backend`)** — `backend/tests/test_pedagogy_engine_s4.py`:
+- `build_session_debrief`: full record → all sections populated; empty record → all sections empty + caveats present; malformed sub-objects degrade gracefully; `suggestedNext` capped at `MAX_SUGGESTIONS`; `helpUsage.byKind` always has all 6 keys.
+- `_suggested_next`: priority ordering (uncovered first, then errors, then coach_review, then recycle); dedup by exact string; cap.
+- `debrief_enabled()`: flag-off returns `False`; `PEDAGOGY_ENGINE_DEBRIEF=1` returns `True`.
+- Route: flag-off → `{success: false}` no session read; session not found → 404; non-teacher → 403; valid teacher → `{success: true, debrief: {...}}`.
+- **Extended `ImportBoundaryTestCase`** asserts `debrief.py` imports no OpenAI/Canvas/resolver/compliance.
+
+## 10. Deferred follow-ups
+
+**(a) ASR/pronunciation confidence not captured.** The debrief includes a static disclaimer ("Pronunciation and listening accuracy were not separately assessed.") because ASR confidence scores are not persisted into `learning_events` or `session_summary`. There are no per-claim pronunciation caveats — the disclaimer applies globally. Capturing ASR confidence would require the voice client to emit it as a learning event field; deferred.
+
+**(b) `promotions[]` and `ask_log` shown but not aggregated.** The debrief passes through `analysis_state['promotions']` and shows `helpUsage` counts, but does not aggregate them into assignment-level or class-level teacher analytics views. Per-assignment "how often were targets promoted?" and "what expressions did students ask about most?" require a new aggregation layer; deferred.
+
+**(c) `coachReview` is model-verified; other sections are heuristic.** `coachReview` is a pass-through of the S3.1 correction-model output (provenance: `model` field). All other sections (`coverage`, `uptake`, `repeatedErrors`) are derived from heuristic `session_summary` counts. The debrief does not currently visually distinguish model-verified from heuristic evidence — a future UI enhancement could badge `coachReview` differently.
+
+**(d) Within-session affect not captured.** The `affect` field reflects the session-start snapshot from `analysis_state['affect_state']` (computed from prior-session history). No within-session affect update is performed. This mirrors the S4.1 deferred follow-up (c).
 
 ---
 
 ## Relationship to existing docs
 
-- `PEDAGOGY_ENGINE.md` §14 S4 row — updated to mark **S4.1 BUILT behind `PEDAGOGY_ENGINE_AFFECT` (default `'0'`, NOT cut over)**; S4.2 debrief still pending.
-- `docs/school-integration/TASKS.md` — S4.1 `[x]` BUILT + `[ ]` cutover added; S4 debrief item updated.
-- `docs/school-integration/LIMITATIONS.md` — #53 S4.1 sub-items added (heuristic, silence-length not captured, within-teacher-policy-only modulation).
-- `backend/CLAUDE.md` — pedagogy line updated with `affect.py`, `affect_enabled()`, `compute_assignment_affect_state`, `PEDAGOGY_ENGINE_AFFECT` flag state.
+- `PEDAGOGY_ENGINE.md` §14 S4 row — updated to mark **S4.2 BUILT behind `PEDAGOGY_ENGINE_DEBRIEF` (default `'0'`, NOT cut over)**; S4 is now fully built behind flags (affect + debrief).
+- `docs/school-integration/TASKS.md` — S4.2 `[x]` BUILT + `[ ]` cutover added.
+- `docs/school-integration/LIMITATIONS.md` — #53 S4.2 sub-items added (debrief is a read-only presenter of heuristic evidence; ASR/pronunciation confidence not captured → static disclaimer; help-usage shown as counts only).
+- `backend/CLAUDE.md` — pedagogy line updated with `debrief.py`, `debrief_enabled()`, the route endpoint, and `PEDAGOGY_ENGINE_DEBRIEF` flag state.

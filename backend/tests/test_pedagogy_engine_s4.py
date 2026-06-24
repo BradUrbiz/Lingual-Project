@@ -184,6 +184,16 @@ class RenderAffectOverrideTestCase(unittest.TestCase):
         with_neutral = render_assignment_prompt(compile_prompt_plan(boot, affect_state=neutral), "text")
         self.assertEqual(baseline, with_neutral)
 
+    def test_render_byte_identical_when_settled(self):
+        from backend.services.pedagogy.affect import AffectState
+        from backend.services.pedagogy.plan import compile_prompt_plan
+        from backend.services.pedagogy.render.assignment_prompt import render_assignment_prompt
+        boot = self._bootstrap()
+        baseline = render_assignment_prompt(compile_prompt_plan(boot), "text")
+        settled = AffectState(readiness="settled", signals={}, reason="")
+        with_settled = render_assignment_prompt(compile_prompt_plan(boot, affect_state=settled), "text")
+        self.assertEqual(baseline, with_settled)
+
     def test_render_adds_affect_lines_when_strained(self):
         from backend.services.pedagogy.affect import AffectState
         from backend.services.pedagogy.plan import compile_prompt_plan

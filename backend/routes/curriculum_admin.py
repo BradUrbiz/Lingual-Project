@@ -199,8 +199,6 @@ def _assignment_coverage_snapshot(deps, bootstrap, uid, assignment_id):
     # contract too: a snapshot is OPTIONAL enrichment of analysis_state and must
     # never 500 the student launch (create_practice_session).
     try:
-        from backend.services.pedagogy.plan import compile_prompt_plan, serialize_plan_preview
-
         preview = serialize_plan_preview(
             compile_prompt_plan(bootstrap, coverage_state=coverage_state)
         )

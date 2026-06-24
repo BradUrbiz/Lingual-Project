@@ -44,7 +44,8 @@ def assess_drift(deps: Any, bootstrap: dict, uid: str, session_id: str, turn_ind
 
         from backend.services.practice_analytics import normalize_analysis_state
         from backend.services.pedagogy.drift import (
-            build_resteer_prompt, decide_resteer, detect_target_neglect, serialize_resteer,
+            build_resteer_prompt, decide_resteer, detect_language_drift,
+            detect_target_neglect, serialize_resteer,
         )
 
         session = deps.db.get_practice_session(session_id)
@@ -55,12 +56,12 @@ def assess_drift(deps: Any, bootstrap: dict, uid: str, session_id: str, turn_ind
         if not isinstance(mapping, dict):
             return None
         # Concrete (substring-matchable) targets only — grammar labels excluded.
+        # May be empty: language-drift needs no targets, so we do NOT early-return here.
         concrete_targets = [
             *_string_list(mapping.get("targetExpressions")),
             *_string_list(mapping.get("targetVocabulary")),
         ]
-        if not concrete_targets:
-            return None
+        learning_locale = _s((bootstrap.get("class") or {}).get("learningLocale"))
 
         analysis_state = normalize_analysis_state(session.get("analysis_state"))
         # Dedup: one assessment outcome per learner turn.
@@ -83,7 +84,12 @@ def assess_drift(deps: Any, bootstrap: dict, uid: str, session_id: str, turn_ind
         ]
         recent_tutor_turns = [t for t in recent_tutor_turns if t]
 
-        verdict = detect_target_neglect(recent_tutor_turns, concrete_targets)
+        # Language-drift takes precedence (the tutor isn't even speaking the target
+        # language) and needs no assignment targets.
+        latest = recent_tutor_turns[-1] if recent_tutor_turns else ""
+        verdict = detect_language_drift(latest, learning_locale)
+        if not verdict.drift and concrete_targets:
+            verdict = detect_target_neglect(recent_tutor_turns, concrete_targets)
         if not verdict.drift:
             return None
 

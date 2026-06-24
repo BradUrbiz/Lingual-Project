@@ -100,5 +100,45 @@ class AssessDriftTests(unittest.TestCase):
             self.assertIsNone(assess_drift(_Deps(db), _BOOTSTRAP, "u1", "s1", 4))
 
 
+# A bootstrap carrying the learning locale (assess_drift reads bootstrap['class']['learningLocale']).
+_KO_BOOTSTRAP = {
+    "class": {"learningLocale": "ko-KR"},
+    "mapping": {"targetExpressions": ["계산서"], "targetVocabulary": []},
+}
+_KO_GRAMMAR_ONLY = {  # no concrete targets — only language-drift can fire
+    "class": {"learningLocale": "ko-KR"},
+    "mapping": {"focusGrammar": ["honorifics"]},
+}
+
+
+class AssessLanguageDriftTests(unittest.TestCase):
+    def _on(self):
+        return mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_DIRECTOR": "1"})
+
+    def test_language_drift_fires_and_returns_payload(self):
+        # latest tutor turn is English in a Korean assignment
+        db = _Db(_session(), _chat(["안녕하세요 반갑습니다 오늘", "Okay so what would you like to order today my friend?"]))
+        with self._on():
+            out = assess_drift(_Deps(db), _KO_BOOTSTRAP, "u1", "s1", 4)
+        self.assertIsNotNone(out)
+        self.assertEqual(out["kind"], "language_drift")
+        self.assertEqual(out["target"], "Korean")
+        self.assertIn("Korean", out["resteer_prompt"])
+
+    def test_grammar_only_assignment_still_language_checked(self):
+        db = _Db(_session(), _chat(["안녕하세요 반갑습니다 오늘", "What can I get for you today, friend?"]))
+        with self._on():
+            out = assess_drift(_Deps(db), _KO_GRAMMAR_ONLY, "u1", "s1", 4)
+        self.assertIsNotNone(out)
+        self.assertEqual(out["kind"], "language_drift")
+
+    def test_clean_korean_no_language_drift_falls_back(self):
+        # all-Korean turns, target referenced → no language drift; target-neglect also clean
+        db = _Db(_session(), _chat(["계산서 드릴까요", "네 계산서 여기 있습니다 감사합니다", "또 오세요 안녕히 가세요"]))
+        with self._on():
+            out = assess_drift(_Deps(db), _KO_BOOTSTRAP, "u1", "s1", 4)
+        self.assertIsNone(out)
+
+
 if __name__ == "__main__":
     unittest.main()

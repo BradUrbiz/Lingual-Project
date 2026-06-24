@@ -9,6 +9,7 @@ from backend.services.pedagogy.drift import (
     ResteerDecision,
     build_resteer_prompt,
     decide_resteer,
+    detect_language_drift,
     detect_target_neglect,
     serialize_resteer,
 )
@@ -103,6 +104,57 @@ class DirectorFlagTests(unittest.TestCase):
         for val in ("1", "true", "YES", "on"):
             with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_DIRECTOR": val}):
                 self.assertTrue(director_enabled())
+
+
+class DetectLanguageDriftTests(unittest.TestCase):
+    def test_korean_in_korean_no_drift(self):
+        v = detect_language_drift('안녕하세요 오늘 무엇을 도와드릴까요', 'ko-KR')
+        self.assertFalse(v.drift)
+
+    def test_korean_in_english_is_drift(self):
+        v = detect_language_drift('Okay, so what would you like to order today?', 'ko-KR')
+        self.assertTrue(v.drift)
+        self.assertEqual(v.kind, 'language_drift')
+        self.assertEqual(v.target, 'Korean')
+
+    def test_russian_in_russian_no_drift(self):
+        self.assertFalse(detect_language_drift('Здравствуйте, что вы хотите заказать сегодня', 'ru-RU').drift)
+
+    def test_russian_in_english_is_drift(self):
+        self.assertTrue(detect_language_drift('What would you like to order, my friend?', 'ru-RU').drift)
+
+    def test_hebrew_in_hebrew_no_drift(self):
+        self.assertFalse(detect_language_drift('שלום מה תרצה להזמין היום בבקשה', 'he-IL').drift)
+
+    def test_spanish_clean_no_drift(self):
+        self.assertFalse(detect_language_drift('¿Qué te gustaría pedir hoy?', 'es-ES').drift)
+
+    def test_spanish_english_dense_is_drift(self):
+        v = detect_language_drift('Okay so what do you want to say with this?', 'es-ES')
+        self.assertTrue(v.drift)
+        self.assertEqual(v.target, 'Spanish')
+
+    def test_short_turn_no_drift(self):
+        self.assertFalse(detect_language_drift('OK!', 'ko-KR').drift)
+
+    def test_brief_codeswitch_no_drift(self):
+        # one English content word in an otherwise-Korean turn keeps the ratio high
+        self.assertFalse(detect_language_drift('네, sandwich 주문하시겠어요 오늘은', 'ko-KR').drift)
+
+    def test_unknown_locale_no_drift(self):
+        self.assertFalse(detect_language_drift('this is clearly english text here', 'xx-XX').drift)
+
+
+class BuildResteerPromptKindTests(unittest.TestCase):
+    def test_language_drift_copy_names_language(self):
+        from backend.services.pedagogy.drift import DriftVerdict, build_resteer_prompt
+        v = DriftVerdict(drift=True, kind='language_drift', target='Korean', reason='r')
+        text = build_resteer_prompt(v, surface='text')
+        self.assertIn('Korean', text)
+        # distinct from target-neglect copy
+        tn = build_resteer_prompt(DriftVerdict(True, 'target_neglect', 'la cuenta', 'r'), surface='text')
+        self.assertNotEqual(text, tn)
+        self.assertIn('la cuenta', tn)
 
 
 if __name__ == "__main__":

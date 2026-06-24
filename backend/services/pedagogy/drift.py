@@ -16,6 +16,7 @@ They share no code.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 # A target is "neglected" when this many consecutive recent tutor turns reference
 # no concrete target. A window (not a single turn) so a brief on-task digression
@@ -25,11 +26,53 @@ DRIFT_WINDOW = 3
 DIRECTOR_COOLDOWN_TURNS = 4
 DIRECTOR_MAX_RESTEERS = 3
 
+# Language-drift: the tutor should speak the target language but slipped into the L1
+# (English). Non-Latin targets are judged by target-script ratio (robust); Latin-script
+# targets by distinctly-English function-word density (conservative heuristic).
+LANGUAGE_DRIFT_MIN_CHARS = 12   # ignore very short turns (greetings, names) — too little signal
+TARGET_SCRIPT_MIN_RATIO = 0.5   # non-Latin: < this fraction of letters in target script → drift
+ENGLISH_MARKER_MIN_HITS = 3     # Latin: >= this many distinct English function words → drift
+
+# Distinctly-English grammatical function words that are NOT common es/fr/tl words.
+# Function (not content) words keep the false-positive rate low: a Spanish turn does not
+# contain "the/is/you/what"; an English loanword like "sandwich" is a content word, absent here.
+_ENGLISH_FUNCTION_WORDS = frozenset({
+    "the", "is", "are", "was", "were", "you", "your", "what", "which", "with",
+    "this", "that", "they", "would", "should", "could", "have", "does",
+    "okay", "let", "want", "need", "about", "because", "really",
+})
+
+# Target-language display names (used in the language-drift re-steer copy).
+_LANGUAGE_NAMES = {"ko": "Korean", "ru": "Russian", "he": "Hebrew",
+                   "es": "Spanish", "fr": "French", "tl": "Tagalog"}
+_NON_LATIN_DRIFT_KEYS = frozenset({"ko", "ru", "he"})
+_LATIN_DRIFT_KEYS = frozenset({"es", "fr", "tl"})
+
+
+def _drift_locale_key(locale: object) -> str:
+    """Local pure prefix matcher (drift.py cannot import practice_analytics)."""
+    n = _s(locale).lower()
+    for key in ("ko", "ru", "he", "es", "fr", "tl"):
+        if n.startswith(key):
+            return key
+    return "en"
+
+
+def _is_target_script_char(ch: str, locale_key: str) -> bool:
+    o = ord(ch)
+    if locale_key == "ko":
+        return 0xAC00 <= o <= 0xD7A3 or 0x1100 <= o <= 0x11FF or 0x3130 <= o <= 0x318F
+    if locale_key == "ru":
+        return 0x0400 <= o <= 0x04FF
+    if locale_key == "he":
+        return 0x0590 <= o <= 0x05FF
+    return False
+
 
 @dataclass(frozen=True)
 class DriftVerdict:
     drift: bool
-    kind: str  # "target_neglect" | "none"
+    kind: str  # "target_neglect" | "language_drift" | "none"
     target: str  # the target to steer back toward ("" when no drift)
     reason: str
 
@@ -86,6 +129,41 @@ def detect_target_neglect(
     )
 
 
+def detect_language_drift(latest_tutor_turn: str, learning_locale: str) -> DriftVerdict:
+    """Pure. The tutor should speak the target language but drifted into English.
+
+    Non-Latin targets (ko/ru/he): target-script ratio. Latin targets (es/fr/tl):
+    distinctly-English function-word density. Returns kind 'language_drift' with
+    target = the target-language display name. Conservative (min-length + ratio /
+    distinct-marker thresholds) so a brief code-switch is not flagged.
+    """
+    turn = _s(latest_tutor_turn)
+    key = _drift_locale_key(learning_locale)
+    lang = _LANGUAGE_NAMES.get(key, "")
+    if not turn or not lang:
+        return DriftVerdict(drift=False, kind="none", target="", reason="no language signal")
+
+    letters = [c for c in turn if c.isalpha()]
+    if len(letters) < LANGUAGE_DRIFT_MIN_CHARS:
+        return DriftVerdict(drift=False, kind="none", target="", reason="turn too short to judge language")
+
+    if key in _NON_LATIN_DRIFT_KEYS:
+        target_chars = sum(1 for c in letters if _is_target_script_char(c, key))
+        ratio = target_chars / len(letters)
+        if ratio < TARGET_SCRIPT_MIN_RATIO:
+            return DriftVerdict(drift=True, kind="language_drift", target=lang,
+                                reason=f"only {round(ratio * 100)}% of letters were {lang} script")
+        return DriftVerdict(drift=False, kind="none", target="", reason="predominantly target script")
+
+    # Latin target (es/fr/tl): distinctly-English function-word density.
+    words = set(re.findall(r"[a-z']+", turn.lower()))
+    hits = words & _ENGLISH_FUNCTION_WORDS
+    if len(hits) >= ENGLISH_MARKER_MIN_HITS:
+        return DriftVerdict(drift=True, kind="language_drift", target=lang,
+                            reason=f"{len(hits)} English function words in a {lang} turn")
+    return DriftVerdict(drift=False, kind="none", target="", reason="no English-drift markers")
+
+
 def _normalize_state(state: object) -> dict:
     src = state if isinstance(state, dict) else {}
     last = src.get("last_resteer_turn")
@@ -132,14 +210,18 @@ def build_resteer_prompt(verdict: DriftVerdict, *, surface: str) -> str:
     """In-character coach note handed to the main tutor so it weaves the correction
     into its next turn in its own words. Terser on voice."""
     target = _s(verdict.target)
-    lead = (
-        "COACH NOTE (act in your own words, in character — do not read this aloud): "
-        "the last few exchanges drifted off the lesson. "
-    )
-    body = (
-        f'In your next turn, naturally create a reason for the learner to use "{target}" — '
-        "weave it into the scene; don't announce it or lecture."
-    )
+    lead = "COACH NOTE (act in your own words, in character — do not read this aloud): "
+    if verdict.kind == "language_drift":
+        body = (
+            f"your last turn drifted into English. Respond in {target} from here — "
+            f"continue the scene in {target} so the learner stays immersed."
+        )
+    else:
+        body = (
+            "the last few exchanges drifted off the lesson. "
+            f'In your next turn, naturally create a reason for the learner to use "{target}" — '
+            "weave it into the scene; don't announce it or lecture."
+        )
     tail = " Keep it to one short sentence." if surface == "voice" else ""
     return lead + body + tail
 

@@ -120,3 +120,33 @@ class AffectEnabledTestCase(unittest.TestCase):
             self.assertTrue(affect_enabled())
         with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_AFFECT": "on"}):
             self.assertTrue(affect_enabled())
+
+
+class CompilePlanAffectTestCase(unittest.TestCase):
+    def _bootstrap(self):
+        return {
+            "systemPromptPreview": "BASE",
+            "assignment": {"title": "Restaurant", "taskType": "information_gap"},
+            "mapping": {"targetExpressions": ["la cuenta"], "feedbackPolicy": {"mode": "balanced"}},
+            "curriculum": {},
+            "class": {},
+        }
+
+    def test_plan_defaults_affect_none(self):
+        from backend.services.pedagogy.plan import compile_prompt_plan
+        self.assertIsNone(compile_prompt_plan(self._bootstrap()).affect)
+
+    def test_plan_carries_affect_state(self):
+        from backend.services.pedagogy.affect import AffectState
+        from backend.services.pedagogy.plan import compile_prompt_plan
+        affect = AffectState(readiness="strained", signals={}, reason="r")
+        plan = compile_prompt_plan(self._bootstrap(), affect_state=affect)
+        self.assertIs(plan.affect, affect)
+
+    def test_custom_prompt_plan_has_no_affect(self):
+        from backend.services.pedagogy.affect import AffectState
+        from backend.services.pedagogy.plan import compile_prompt_plan
+        affect = AffectState(readiness="strained", signals={}, reason="r")
+        boot = {"systemPromptPreview": "B", "assignment": {"taskType": "custom_prompt"}}
+        # Raw tutor mode ignores affect (engine off).
+        self.assertIsNone(compile_prompt_plan(boot, affect_state=affect).affect)

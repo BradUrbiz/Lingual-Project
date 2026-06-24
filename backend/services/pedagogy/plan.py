@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from backend.services.pedagogy.coverage import CoverageState
+from backend.services.pedagogy.affect import AffectState
 from backend.services.pedagogy.policies import (
     normalize_feedback_policy,
     normalize_output_policy,
@@ -62,6 +63,7 @@ class PromptPlan:
     task_context: dict[str, Any]  # raw assignment/classroom/mapping/curriculum/pedagogy
     render_notes: dict[str, Any] = field(default_factory=dict)  # reserved (S3 surface hints)
     coverage_state: CoverageState | None = None  # S2 cross-session recycling (None in raw mode)
+    affect: AffectState | None = None  # S4.1 readiness override (None in raw mode / when off)
 
 
 def _clean_string_list(value: Any) -> list[str]:
@@ -94,7 +96,9 @@ def _typed(surfaces: list[str], kind: str) -> list[Target]:
 
 
 def compile_prompt_plan(
-    bootstrap: dict[str, Any], coverage_state: CoverageState | None = None
+    bootstrap: dict[str, Any],
+    coverage_state: CoverageState | None = None,
+    affect_state: AffectState | None = None,
 ) -> PromptPlan:
     """Compile a resolved assignment ``bootstrap`` into a :class:`PromptPlan`.
 
@@ -162,6 +166,7 @@ def compile_prompt_plan(
         task_context=task_context,
         render_notes={},
         coverage_state=coverage_state,
+        affect=affect_state,
     )
 
 

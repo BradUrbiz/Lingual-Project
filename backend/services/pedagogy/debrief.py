@@ -80,6 +80,25 @@ def _help_usage(analysis_state: dict) -> dict:
     return {"askCount": len(log), "byKind": by_kind}
 
 
+def _promotions(analysis_state: dict) -> dict:
+    """S3.3 promote-backs surfaced for the teacher: count + shaped items.
+    The engine wove a learner's recurring/hard-target error back into the
+    conversation for self-repair. Omits the internal prompt/generated_at —
+    the teacher sees what was drilled (reason + target), not the coach-note."""
+    items = []
+    for p in _l(analysis_state.get("promotions")):
+        if not isinstance(p, dict):
+            continue
+        sig = str(p.get("signature") or "")
+        target = sig.split(":", 1)[1] if sig.startswith("focus_grammar:") else sig
+        items.append({
+            "turnIndex": _i(p.get("turn_index")),
+            "reason": str(p.get("reason") or ""),
+            "target": target,
+        })
+    return {"count": len(items), "items": items}
+
+
 def _director_resteers(analysis_state: dict) -> dict:
     """S5 Director interventions surfaced for the teacher: count + shaped items.
     Omits the internal prompt/surface/generated_at — the teacher sees what the
@@ -155,7 +174,7 @@ def build_session_debrief(session_record: Any) -> dict:
         "uptake": _uptake(summary),
         "repeatedErrors": repeated_errors,
         "coachReview": coach_review,
-        "promotions": _l(analysis_state.get("promotions")),
+        "promotions": _promotions(analysis_state),
         "directorReSteers": _director_resteers(analysis_state),
         "helpUsage": _help_usage(analysis_state),
         "affect": _affect(analysis_state),

@@ -478,3 +478,39 @@ class DebriefEnabledTestCase(unittest.TestCase):
         from backend.services.pedagogy.integration import debrief_enabled
         with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_DEBRIEF": "1"}):
             self.assertTrue(debrief_enabled())
+
+
+class DebriefPromotionsTests(unittest.TestCase):
+    def _debrief(self, analysis_state):
+        from backend.services.pedagogy.debrief import build_session_debrief
+        return build_session_debrief({"id": "s1", "status": "ended", "analysis_state": analysis_state,
+                                      "session_summary": {}})
+
+    def test_promotions_shaped_strips_grammar_prefix_and_omits_internal(self):
+        d = self._debrief({"promotions": [
+            {"turn_index": 5, "signature": "focus_grammar:subjunctive", "reason": "hard_target",
+             "prompt": "Work the subjunctive back in ...", "generated_at": "T"},
+            {"turn_index": 8, "signature": "ser vs estar", "reason": "repeat",
+             "prompt": "Bring ser/estar back ...", "generated_at": "T"},
+        ]})
+        p = d["promotions"]
+        self.assertEqual(p["count"], 2)
+        self.assertEqual(p["items"][0], {"turnIndex": 5, "reason": "hard_target", "target": "subjunctive"})
+        self.assertEqual(p["items"][1], {"turnIndex": 8, "reason": "repeat", "target": "ser vs estar"})
+        # internal fields must NOT leak
+        self.assertNotIn("prompt", p["items"][0])
+        self.assertNotIn("generated_at", p["items"][0])
+        self.assertNotIn("signature", p["items"][0])
+
+    def test_no_promotions_is_empty(self):
+        self.assertEqual(self._debrief({})["promotions"], {"count": 0, "items": []})
+
+    def test_malformed_promotions_skipped(self):
+        d = self._debrief({"promotions": ["nope", {"turn_index": 2, "signature": "la cuenta", "reason": "repeat"}, 7]})
+        self.assertEqual(d["promotions"]["count"], 1)
+        self.assertEqual(d["promotions"]["items"][0]["target"], "la cuenta")
+
+    def test_full_record_fixture_now_shaped(self):
+        # the existing BuildSessionDebriefTestCase fixture sets promotions:[{"signature":"ser vs estar","turn_index":4}]
+        d = self._debrief({"promotions": [{"signature": "ser vs estar", "turn_index": 4}]})
+        self.assertEqual(d["promotions"], {"count": 1, "items": [{"turnIndex": 4, "reason": "", "target": "ser vs estar"}]})

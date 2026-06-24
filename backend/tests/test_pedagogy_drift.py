@@ -1,4 +1,6 @@
+import os
 import unittest
+from unittest import mock
 
 from backend.services.pedagogy.drift import (
     DIRECTOR_COOLDOWN_TURNS,
@@ -10,6 +12,7 @@ from backend.services.pedagogy.drift import (
     detect_target_neglect,
     serialize_resteer,
 )
+from backend.services.pedagogy.integration import director_enabled
 
 
 class DetectTargetNeglectTests(unittest.TestCase):
@@ -88,6 +91,18 @@ class BuildAndSerializeTests(unittest.TestCase):
             "turn_index": 6, "kind": "target_neglect", "target": "la cuenta",
             "reason": "r", "prompt": "P", "surface": "text", "generated_at": "T",
         })
+
+
+class DirectorFlagTests(unittest.TestCase):
+    def test_default_off(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PEDAGOGY_ENGINE_DIRECTOR", None)
+            self.assertFalse(director_enabled())
+
+    def test_truthy_values_on(self):
+        for val in ("1", "true", "YES", "on"):
+            with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_DIRECTOR": val}):
+                self.assertTrue(director_enabled())
 
 
 if __name__ == "__main__":

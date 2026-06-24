@@ -80,6 +80,12 @@ def debrief_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_DEBRIEF", "").strip().lower() in _TRUTHY
 
 
+def director_enabled() -> bool:
+    """S5 — the Director (between-turn drift re-steer). Default off; cutover gated
+    on the S5-gate eval verdict (PEDAGOGY_ENGINE.md §14 S5 row)."""
+    return os.environ.get("PEDAGOGY_ENGINE_DIRECTOR", "").strip().lower() in _TRUTHY
+
+
 def resolve_assignment_system_prompt(
     bootstrap: dict[str, Any],
     *,

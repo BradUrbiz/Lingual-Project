@@ -466,6 +466,8 @@ export interface AssignmentAnalyticsData {
   };
   recentSessions: PracticeSessionDto[];
   limitations: string[];
+  debriefEnabled?: boolean;
+  debriefRollupEnabled?: boolean;
 }
 
 export interface CreateAssignmentPayload {

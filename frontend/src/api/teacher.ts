@@ -323,6 +323,38 @@ export const getSessionDebrief = async (sessionId: string): Promise<SessionDebri
   return response.data.success && response.data.debrief ? response.data.debrief : null;
 };
 
+// ── Assignment debrief (pedagogy S4.2b) ──────────────────────────────
+
+export interface AssignmentDebrief {
+  assignmentId: string | null;
+  participation: {
+    sessionCount: number;
+    completedSessionCount: number;
+    studentCount: number;
+    firstStartedAt: string | null;
+    lastStartedAt: string | null;
+  };
+  uptake: {
+    selfCorrectionCount: number;
+    feedbackCounts: { recast: number; elicitation: number; reviewItem: number };
+    taskCompletionCount: number;
+  };
+  promotions: { count: number; byTarget: { target: string; count: number; sessionCount: number }[] };
+  directorReSteers: { count: number; byKind: Record<string, number>; byTarget: { target: string; count: number }[] };
+  helpUsage: { askCount: number; byKind: Record<string, number>; sessionsWithHelp: number };
+  affect: { byReadiness: Record<string, number>; sessionsWithSignal: number };
+  coachReview: { sessionCount: number };
+  suggestedNext: string[];
+  caveats: string[];
+}
+
+export const getAssignmentDebrief = async (assignmentId: string): Promise<AssignmentDebrief | null> => {
+  const response = await api.get<{ success: boolean; debrief?: AssignmentDebrief }>(
+    `/teacher/assignments/${assignmentId}/debrief`,
+  );
+  return response.data.success && response.data.debrief ? response.data.debrief : null;
+};
+
 // ── Assignment plan preview (pedagogy L8) ─────────────────────────────
 
 export interface PlanPreviewTarget {

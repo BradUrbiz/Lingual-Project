@@ -39,6 +39,8 @@ interface PracticeSessionResponse {
 interface AssignmentAnalyticsResponse {
   success: boolean;
   analytics: AssignmentAnalyticsData;
+  debriefEnabled?: boolean;
+  debriefRollupEnabled?: boolean;
 }
 
 interface AssignmentDraftGenerateResponse {
@@ -124,5 +126,9 @@ export const reportPracticeSessionEvent = async (
 
 export const getAssignmentAnalytics = async (assignmentId: string): Promise<AssignmentAnalyticsData> => {
   const response = await api.get<AssignmentAnalyticsResponse>(`/teacher/assignments/${assignmentId}/analytics`);
-  return response.data.analytics;
+  return {
+    ...response.data.analytics,
+    debriefEnabled: response.data.debriefEnabled,
+    debriefRollupEnabled: response.data.debriefRollupEnabled,
+  };
 };

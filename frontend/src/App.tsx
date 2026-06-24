@@ -43,6 +43,7 @@ const TeacherClassAnalyticsPage = lazy(() => import('./pages/TeacherClassAnalyti
 const TeacherClassCompliancePage = lazy(() => import('./pages/TeacherClassCompliancePage').then((module) => ({ default: module.TeacherClassCompliancePage })));
 const TeacherStudentDrillDownPage = lazy(() => import('./pages/TeacherStudentDrillDownPage').then((module) => ({ default: module.TeacherStudentDrillDownPage })));
 const TeacherSessionDebriefPage = lazy(() => import('./pages/TeacherSessionDebriefPage').then((module) => ({ default: module.TeacherSessionDebriefPage })));
+const TeacherAssignmentDebriefPage = lazy(() => import('./pages/TeacherAssignmentDebriefPage').then((module) => ({ default: module.TeacherAssignmentDebriefPage })));
 const CanvasConnectPage = lazy(() => import('./pages/CanvasConnectPage').then((module) => ({ default: module.CanvasConnectPage })));
 const StudentJoinClassPage = lazy(() => import('./pages/StudentJoinClassPage').then((module) => ({ default: module.StudentJoinClassPage })));
 const AssignmentLaunchPage = lazy(() => import('./pages/AssignmentLaunchPage').then((module) => ({ default: module.AssignmentLaunchPage })));
@@ -210,6 +211,14 @@ function AnimatedRoutes() {
             element={withRouteSuspense(
               <TeacherRoute>
                 <TeacherSessionDebriefPage />
+              </TeacherRoute>
+            )}
+          />
+          <Route
+            path="teacher/assignments/:assignmentId/debrief"
+            element={withRouteSuspense(
+              <TeacherRoute>
+                <TeacherAssignmentDebriefPage />
               </TeacherRoute>
             )}
           />

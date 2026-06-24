@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -412,6 +412,15 @@ export function TeacherAssignmentAnalyticsPage() {
           </p>
         </div>
       </div>
+
+      {analytics.debriefEnabled && analytics.debriefRollupEnabled && assignmentId ? (
+        <Link
+          to={`/app/teacher/assignments/${assignmentId}/debrief`}
+          className="inline-block text-sm font-medium text-primary underline-offset-4 hover:underline"
+        >
+          View coaching debrief
+        </Link>
+      ) : null}
 
       {error && (
         <Alert variant="destructive">

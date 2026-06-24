@@ -346,3 +346,90 @@ class AssignmentAffectSnapshotTestCase(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("PEDAGOGY_ENGINE_AFFECT", None)
             self.assertIsNone(_assignment_affect_snapshot(self._Deps(db), {"mapping": {}}, "u", "a"))
+
+
+class BuildSessionDebriefTestCase(unittest.TestCase):
+    def _full_record(self):
+        return {
+            "id": "s1",
+            "status": "completed",
+            "started_at": "2026-06-24T10:00:00Z",
+            "ended_at": "2026-06-24T10:12:00Z",
+            "session_summary": {
+                "target_expression_hits": {"la cuenta": 2},
+                "target_vocabulary_hits": {"mesa": 1},
+                "self_correction_count": 3,
+                "task_completion_count": 1,
+                "feedback_counts": {"recast": 4, "elicitation": 1, "review_item": 2},
+                "repeated_error_counts": {"ser vs estar": 3, "gender agreement": 1},
+            },
+            "analysis_state": {
+                "coverage": {"uncovered": ["pedir la cuenta"], "recycle": ["mesa"],
+                             "solid": ["hola"], "repeatedErrors": [{"label": "ser vs estar", "count": 3}],
+                             "priorSessionCount": 2},
+                "coach_review": {"surface": "text", "wins": [{"text": "Good greeting"}],
+                                 "work_on": [{"utterance": "yo es", "better": "yo soy", "why": "ser",
+                                              "target": "ser vs estar", "confidence_caveat": ""}],
+                                 "target_coverage": [{"surface": "la cuenta", "status": "covered"}]},
+                "promotions": [{"signature": "ser vs estar", "turn_index": 4}],
+                "ask_log": [
+                    {"question": "how do I say table?", "answer": "Think of a hint...", "kind": "hint",
+                     "turn_index": 2, "generated_at": "x", "model": "m"},
+                    {"question": "what is la cuenta?", "answer": "...", "kind": "translation",
+                     "turn_index": 5, "generated_at": "x", "model": "m"},
+                ],
+                "affect_state": {"readiness": "strained", "signals": {}, "reason": "falling turn length"},
+            },
+        }
+
+    def test_full_record_populates_all_sections(self):
+        from backend.services.pedagogy.debrief import build_session_debrief
+        d = build_session_debrief(self._full_record())
+        self.assertEqual(d["sessionId"], "s1")
+        self.assertEqual(d["status"], "completed")
+        self.assertEqual(d["coverage"]["expressionHits"], {"la cuenta": 2})
+        self.assertEqual(d["coverage"]["uncovered"], ["pedir la cuenta"])
+        self.assertEqual(d["uptake"]["selfCorrectionCount"], 3)
+        self.assertEqual(d["uptake"]["feedbackCounts"]["reviewItem"], 2)
+        self.assertEqual(d["repeatedErrors"][0]["label"], "ser vs estar")
+        self.assertIsNotNone(d["coachReview"])
+        self.assertEqual(d["affect"]["readiness"], "strained")
+
+    def test_help_usage_counts_only_no_content(self):
+        from backend.services.pedagogy.debrief import build_session_debrief
+        d = build_session_debrief(self._full_record())
+        self.assertEqual(d["helpUsage"]["askCount"], 2)
+        self.assertEqual(d["helpUsage"]["byKind"]["hint"], 1)
+        self.assertEqual(d["helpUsage"]["byKind"]["translation"], 1)
+        # help != evidence: NO question/answer text anywhere in the debrief
+        blob = repr(d)
+        self.assertNotIn("how do I say table?", blob)
+        self.assertNotIn("Think of a hint", blob)
+
+    def test_caveats_always_present(self):
+        from backend.services.pedagogy.debrief import build_session_debrief
+        self.assertTrue(build_session_debrief({}).get("caveats"))
+        self.assertTrue(build_session_debrief(self._full_record())["caveats"])
+
+    def test_missing_analysis_state_degrades_to_empty_sections(self):
+        from backend.services.pedagogy.debrief import build_session_debrief
+        d = build_session_debrief({"id": "s2", "status": "active", "session_summary": {}})
+        self.assertIsNone(d["coachReview"])
+        self.assertEqual(d["helpUsage"]["askCount"], 0)
+        self.assertIsNone(d["affect"])
+        self.assertEqual(d["repeatedErrors"], [])
+        self.assertTrue(d["caveats"])
+
+    def test_suggested_next_from_uncovered_and_repeated_errors(self):
+        from backend.services.pedagogy.debrief import build_session_debrief
+        d = build_session_debrief(self._full_record())
+        joined = " ".join(d["suggestedNext"]).lower()
+        self.assertIn("pedir la cuenta", joined)   # uncovered target
+        self.assertIn("ser vs estar", joined)       # top repeated error
+        self.assertLessEqual(len(d["suggestedNext"]), 4)  # MAX_SUGGESTIONS
+
+    def test_malformed_input_does_not_raise(self):
+        from backend.services.pedagogy.debrief import build_session_debrief
+        for bad in [None, [], "x", {"analysis_state": "oops", "session_summary": 7}]:
+            d = build_session_debrief(bad)
+            self.assertTrue(d["caveats"])

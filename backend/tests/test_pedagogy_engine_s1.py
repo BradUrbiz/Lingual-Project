@@ -204,6 +204,7 @@ class ImportBoundaryTestCase(unittest.TestCase):
             "import backend.services.pedagogy.promote_back\n"
             "import backend.services.pedagogy.ask\n"
             "import backend.services.pedagogy.affect\n"
+            "import backend.services.pedagogy.debrief\n"
             "forbidden = sorted(\n"
             "    m for m in sys.modules\n"
             "    if 'openai' in m.lower()\n"
@@ -223,7 +224,7 @@ class ImportBoundaryTestCase(unittest.TestCase):
         self.assertEqual(
             result.stdout.strip(),
             "",
-            f"plan/routing/coverage/coach_review/promote_back/ask/affect pulled forbidden modules: {result.stdout.strip()}",
+            f"plan/routing/coverage/coach_review/promote_back/ask/affect/debrief pulled forbidden modules: {result.stdout.strip()}",
         )
 
     def test_coach_review_imports_no_forbidden_modules_in_isolation(self):

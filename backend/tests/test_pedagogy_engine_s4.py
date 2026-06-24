@@ -481,6 +481,15 @@ class DebriefEnabledTestCase(unittest.TestCase):
             self.assertTrue(debrief_enabled())
 
 
+class DebriefRollupEnabledTestCase(unittest.TestCase):
+    def test_reads_env_truthy(self):
+        from backend.services.pedagogy.integration import debrief_rollup_enabled
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_DEBRIEF_ROLLUP": "1"}):
+            self.assertTrue(debrief_rollup_enabled())
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_DEBRIEF_ROLLUP": ""}):
+            self.assertFalse(debrief_rollup_enabled())
+
+
 class DebriefPromotionsTests(unittest.TestCase):
     def _debrief(self, analysis_state):
         from backend.services.pedagogy.debrief import build_session_debrief

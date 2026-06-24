@@ -23,8 +23,9 @@ from backend.services.coach_review_service import generate_coach_review
 from backend.services.coach_chip_service import generate_coach_chip
 from backend.services.director_service import assess_drift
 from backend.services.ask_service import answer_ask
+from backend.services.pedagogy.assignment_debrief import build_assignment_debrief
 from backend.services.pedagogy.debrief import build_session_debrief
-from backend.services.pedagogy.integration import debrief_enabled, teacher_preview_enabled
+from backend.services.pedagogy.integration import debrief_enabled, debrief_rollup_enabled, teacher_preview_enabled
 from backend.services.pedagogy.plan import compile_prompt_plan, serialize_plan_preview
 from backend.services.compliance import (
     create_consent_event,
@@ -875,6 +876,7 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 'success': True,
                 'analytics': analytics,
                 'debriefEnabled': debrief_enabled(),
+                'debriefRollupEnabled': debrief_rollup_enabled(),
             })
         except SuspendedOrgError as exc:
             return jsonify(exc.to_payload()), 403
@@ -995,6 +997,28 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({'success': False, 'error': str(exc)}), 403
         except ValueError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 404
+
+    @bp.route('/api/teacher/assignments/<assignment_id>/debrief', methods=['GET'])
+    @deps.login_required
+    def api_get_assignment_debrief(assignment_id):
+        # Flag gate first: flag-off does minimal work (no session read).
+        if not (debrief_enabled() and debrief_rollup_enabled()):
+            return jsonify({'success': False, 'error': 'Assignment debrief is not enabled.'}), 200
+        try:
+            _require_assignment_teacher_access(deps, assignment_id)
+        except SuspendedOrgError as exc:
+            return jsonify(exc.to_payload()), 403
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except ValueError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 404
+        try:
+            sessions = deps.db.list_assignment_practice_sessions(assignment_id)
+            debrief = build_assignment_debrief(sessions)
+        except Exception:
+            logger.exception('assignment debrief assembly failed (assignment_id=%s)', assignment_id)
+            debrief = build_assignment_debrief([])  # fail-soft: minimal, caveats present
+        return jsonify({'success': True, 'debrief': debrief})
 
     @bp.route('/api/teacher/assignments/<assignment_id>/plan-preview', methods=['GET'])
     @deps.login_required

@@ -396,6 +396,171 @@ class DebriefRouteTestCase(unittest.TestCase):
         self.assertTrue(len(body['debrief']['caveats']) > 0)
 
 
+class _DbWithSessions:
+    """Minimal db stub that supports list_assignment_practice_sessions."""
+
+    def __init__(self, sessions=None, raise_on_list=False):
+        self._sessions = sessions or []
+        self._raise_on_list = raise_on_list
+        self.list_calls = 0
+
+    def get_practice_session(self, session_id):
+        return None
+
+    def list_assignment_practice_sessions(self, assignment_id):
+        self.list_calls += 1
+        if self._raise_on_list:
+            raise RuntimeError('db list failed')
+        return self._sessions
+
+
+class AssignmentDebriefRouteTests(unittest.TestCase):
+    """Tests for GET /api/teacher/assignments/<assignment_id>/debrief (S4.2b)."""
+
+    _ASSIGNMENT_ID = 'asg-debrief-2'
+
+    def _client(self, db):
+        return _app(db).test_client()
+
+    # ------------------------------------------------------------------
+    # 1. Both flags on, owner teacher → 200 {success: True, debrief: {...}}
+    # ------------------------------------------------------------------
+    def test_both_flags_on_returns_rollup(self):
+        fake_sessions = [
+            {'id': 's1', 'assignment_id': self._ASSIGNMENT_ID, 'status': 'completed',
+             'student_firebase_uid': 'u1', 'started_at': '2026-06-01T10:00:00Z',
+             'analysis_state': {}, 'session_summary': {}},
+            {'id': 's2', 'assignment_id': self._ASSIGNMENT_ID, 'status': 'active',
+             'student_firebase_uid': 'u2', 'started_at': '2026-06-02T10:00:00Z',
+             'analysis_state': {}, 'session_summary': {}},
+        ]
+        db = _DbWithSessions(fake_sessions)
+        client = self._client(db)
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_DEBRIEF': '1',
+                                          'PEDAGOGY_ENGINE_DEBRIEF_ROLLUP': '1'}), \
+             mock.patch(
+                 'backend.routes.curriculum_admin._require_assignment_teacher_access',
+                 return_value={'id': self._ASSIGNMENT_ID, 'class_id': 'cls-1'},
+             ):
+            resp = client.get(f'/api/teacher/assignments/{self._ASSIGNMENT_ID}/debrief')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertEqual(body['debrief']['participation']['sessionCount'], 2)
+
+    # ------------------------------------------------------------------
+    # 2. Rollup flag off → {success: False} AND list NOT called
+    # ------------------------------------------------------------------
+    def test_rollup_flag_off_returns_disabled_minimal(self):
+        db = _DbWithSessions([{'id': 's1'}])
+        client = self._client(db)
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_DEBRIEF': '1'}, clear=False):
+            os.environ.pop('PEDAGOGY_ENGINE_DEBRIEF_ROLLUP', None)
+            resp = client.get(f'/api/teacher/assignments/{self._ASSIGNMENT_ID}/debrief')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertFalse(body['success'])
+        self.assertEqual(db.list_calls, 0)  # must NOT call list when gated off
+
+    # ------------------------------------------------------------------
+    # 3. Non-teacher → 403
+    # ------------------------------------------------------------------
+    def test_non_teacher_forbidden(self):
+        from backend.services.membership_context import SchoolContextPermissionError
+        db = _DbWithSessions()
+        client = self._client(db)
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_DEBRIEF': '1',
+                                          'PEDAGOGY_ENGINE_DEBRIEF_ROLLUP': '1'}), \
+             mock.patch(
+                 'backend.routes.curriculum_admin._require_assignment_teacher_access',
+                 side_effect=SchoolContextPermissionError('not your class'),
+             ):
+            resp = client.get(f'/api/teacher/assignments/{self._ASSIGNMENT_ID}/debrief')
+        self.assertEqual(resp.status_code, 403)
+
+    # ------------------------------------------------------------------
+    # 4. Unknown assignment → 404
+    # ------------------------------------------------------------------
+    def test_unknown_assignment_404(self):
+        db = _DbWithSessions()
+        client = self._client(db)
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_DEBRIEF': '1',
+                                          'PEDAGOGY_ENGINE_DEBRIEF_ROLLUP': '1'}), \
+             mock.patch(
+                 'backend.routes.curriculum_admin._require_assignment_teacher_access',
+                 side_effect=ValueError('Assignment not found.'),
+             ):
+            resp = client.get(f'/api/teacher/assignments/{self._ASSIGNMENT_ID}/debrief')
+        self.assertEqual(resp.status_code, 404)
+
+    # ------------------------------------------------------------------
+    # 5. list raises → fail-soft minimal debrief, success True, not 500
+    # ------------------------------------------------------------------
+    def test_build_error_returns_minimal_not_500(self):
+        db = _DbWithSessions(raise_on_list=True)
+        client = self._client(db)
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_DEBRIEF': '1',
+                                          'PEDAGOGY_ENGINE_DEBRIEF_ROLLUP': '1'}), \
+             mock.patch(
+                 'backend.routes.curriculum_admin._require_assignment_teacher_access',
+                 return_value={'id': self._ASSIGNMENT_ID, 'class_id': 'cls-1'},
+             ):
+            resp = client.get(f'/api/teacher/assignments/{self._ASSIGNMENT_ID}/debrief')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertIn('caveats', body['debrief'])
+        self.assertIsInstance(body['debrief']['caveats'], list)
+        self.assertTrue(len(body['debrief']['caveats']) > 0)
+
+    # ------------------------------------------------------------------
+    # 6. Analytics response carries debriefRollupEnabled
+    # ------------------------------------------------------------------
+    def test_analytics_payload_includes_rollup_flag(self):
+        from unittest.mock import MagicMock
+        db = _DbWithSessions()
+        # analytics endpoint needs list_assignment_practice_sessions + list_assignment_learning_events
+        db.list_assignment_practice_sessions = lambda aid: []
+        db.list_assignment_learning_events = lambda aid: []
+        client = self._client(db)
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_DEBRIEF': '1',
+                                          'PEDAGOGY_ENGINE_DEBRIEF_ROLLUP': '1'}), \
+             mock.patch(
+                 'backend.routes.curriculum_admin._require_assignment_teacher_access',
+                 return_value={'id': self._ASSIGNMENT_ID, 'class_id': 'cls-1',
+                               'title': 'Test', 'task_type': 'information_gap',
+                               'status': 'published'},
+             ), \
+             mock.patch(
+                 'backend.routes.curriculum_admin.load_assignment_bundle',
+                 return_value=(
+                     {'id': self._ASSIGNMENT_ID, 'task_type': 'information_gap', 'title': 'T'},
+                     {},
+                     {'id': 'cls-1', 'name': 'Spanish 101'},
+                 ),
+             ), \
+             mock.patch(
+                 'backend.routes.curriculum_admin.resolve_assignment_bootstrap',
+                 return_value={'mapping': {}, 'assignment': {}, 'class': {}},
+             ), \
+             mock.patch(
+                 'backend.routes.curriculum_admin.build_assignment_analytics_payload',
+                 return_value={},
+             ):
+            resp = client.get(f'/api/teacher/assignments/{self._ASSIGNMENT_ID}/analytics')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body['success'])
+        self.assertIn('debriefRollupEnabled', body)
+        self.assertTrue(body['debriefRollupEnabled'])
+
+
 class DirectorResteerRouteTestCase(unittest.TestCase):
     def setUp(self):
         self._bootstrap_patcher = mock.patch(

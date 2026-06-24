@@ -80,6 +80,16 @@ def debrief_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_DEBRIEF", "").strip().lower() in _TRUTHY
 
 
+def debrief_rollup_enabled() -> bool:
+    """S4.2b assignment-level debrief roll-up (independent flag, default off).
+
+    Reads PEDAGOGY_ENGINE_DEBRIEF_ROLLUP. The route requires this AND
+    debrief_enabled() — the roll-up reuses the session-debrief shapes and is
+    meaningless without the per-session debrief. Off ⇒ route returns
+    {success: false} doing minimal work; the analytics link is hidden."""
+    return os.environ.get("PEDAGOGY_ENGINE_DEBRIEF_ROLLUP", "").strip().lower() in _TRUTHY
+
+
 def director_enabled() -> bool:
     """S5 — the Director (between-turn drift re-steer). Default off; cutover gated
     on the S5-gate eval verdict (PEDAGOGY_ENGINE.md §14 S5 row)."""

@@ -396,5 +396,44 @@ class DebriefRouteTestCase(unittest.TestCase):
         self.assertTrue(len(body['debrief']['caveats']) > 0)
 
 
+class DirectorResteerRouteTestCase(unittest.TestCase):
+    def setUp(self):
+        self._bootstrap_patcher = mock.patch(
+            'backend.routes.curriculum_admin.resolve_assignment_bootstrap_for_user',
+            return_value={'mapping': {'targetExpressions': ['la cuenta']}},
+        )
+        self._bootstrap_patcher.start()
+        self._chip_patcher = mock.patch(
+            'backend.routes.curriculum_admin.generate_coach_chip', return_value=None,
+        )
+        self._chip_patcher.start()
+
+    def tearDown(self):
+        self._bootstrap_patcher.stop()
+        self._chip_patcher.stop()
+
+    def test_director_on_returns_resteer(self):
+        resteer = {'turn_index': 4, 'surface': 'text', 'resteer': True,
+                   'resteer_prompt': 'COACH NOTE ...', 'kind': 'target_neglect',
+                   'target': 'la cuenta', 'reason': 'r', 'generated_at': 'T'}
+        client = _app(_Db(_OWNER_SESSION)).test_client()
+        _login(client)
+        with mock.patch.dict(os.environ, {'PEDAGOGY_ENGINE_DIRECTOR': '1'}), \
+             mock.patch('backend.routes.curriculum_admin.assess_drift', return_value=resteer):
+            resp = client.post('/api/practice-sessions/sess-1/coach-chip', json={'turnIndex': 4})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json()['resteer'], resteer)
+
+    def test_director_off_resteer_null(self):
+        client = _app(_Db(_OWNER_SESSION)).test_client()
+        _login(client)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('PEDAGOGY_ENGINE_DIRECTOR', None)
+            os.environ.pop('PEDAGOGY_ENGINE_COACH_CHIPS', None)
+            resp = client.post('/api/practice-sessions/sess-1/coach-chip', json={'turnIndex': 4})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.get_json()['resteer'])
+
+
 if __name__ == '__main__':
     unittest.main()

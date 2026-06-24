@@ -21,6 +21,7 @@ from backend.services.assignment_workspace import build_student_assignment_works
 from backend.services.canvas.practice_generator import generate_canvas_practice
 from backend.services.coach_review_service import generate_coach_review
 from backend.services.coach_chip_service import generate_coach_chip
+from backend.services.director_service import assess_drift
 from backend.services.ask_service import answer_ask
 from backend.services.pedagogy.debrief import build_session_debrief
 from backend.services.pedagogy.integration import debrief_enabled
@@ -755,11 +756,13 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             turn_index = _coerce_optional_int(data.get('turnIndex', data.get('turn_index')))
 
             chip = None
+            resteer = None
             assignment_id = session_record.get('assignment_id')
-            # Flag gate at the route too: when chips are off, skip the bootstrap
-            # resolution entirely so flag-off does NO bootstrap work beyond the ownership read.
-            from backend.services.pedagogy.integration import coach_chips_enabled
-            if assignment_id and turn_index is not None and coach_chips_enabled():
+            # Flag gate at the route too: when both features are off, skip the
+            # bootstrap resolution entirely so flag-off does NO bootstrap work
+            # beyond the ownership read.
+            from backend.services.pedagogy.integration import coach_chips_enabled, director_enabled
+            if assignment_id and turn_index is not None and (coach_chips_enabled() or director_enabled()):
                 ui_language = _normalize_string(session_record.get('ui_language')) or 'en'
                 try:
                     bootstrap = resolve_assignment_bootstrap_for_user(
@@ -772,15 +775,21 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 except Exception:
                     bootstrap = None
                 if bootstrap:
-                    try:
-                        chip = generate_coach_chip(deps, bootstrap, uid, session_id, turn_index)
-                    except Exception:
-                        chip = None
+                    if coach_chips_enabled():
+                        try:
+                            chip = generate_coach_chip(deps, bootstrap, uid, session_id, turn_index)
+                        except Exception:
+                            chip = None
+                    if director_enabled():
+                        try:
+                            resteer = assess_drift(deps, bootstrap, uid, session_id, turn_index)
+                        except Exception:
+                            resteer = None
 
-            return jsonify({'success': True, 'coachChip': chip})
+            return jsonify({'success': True, 'coachChip': chip, 'resteer': resteer})
         except Exception as exc:
             print(f'Coach chip error: {exc}')
-            return jsonify({'success': True, 'coachChip': None})
+            return jsonify({'success': True, 'coachChip': None, 'resteer': None})
 
     @bp.route('/api/practice-sessions/<session_id>/coach-chips', methods=['GET'])
     @deps.login_required

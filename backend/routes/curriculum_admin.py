@@ -24,7 +24,8 @@ from backend.services.coach_chip_service import generate_coach_chip
 from backend.services.director_service import assess_drift
 from backend.services.ask_service import answer_ask
 from backend.services.pedagogy.debrief import build_session_debrief
-from backend.services.pedagogy.integration import debrief_enabled
+from backend.services.pedagogy.integration import debrief_enabled, teacher_preview_enabled
+from backend.services.pedagogy.plan import compile_prompt_plan, serialize_plan_preview
 from backend.services.compliance import (
     create_consent_event,
     resolve_student_compliance_record,
@@ -992,6 +993,37 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 debrief = {'sessionId': session_id, 'status': session_record.get('status'),
                            'caveats': ['This debrief could not be fully assembled.']}
             return jsonify({'success': True, 'debrief': debrief})
+        except SchoolContextPermissionError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 403
+        except ValueError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 404
+
+    @bp.route('/api/teacher/assignments/<assignment_id>/plan-preview', methods=['GET'])
+    @deps.login_required
+    def api_get_assignment_plan_preview(assignment_id):
+        # Flag gate first: flag-off does minimal work (no bootstrap resolve / compile).
+        if not teacher_preview_enabled():
+            return jsonify({'success': False, 'teacherPreviewEnabled': False, 'planPreview': None}), 200
+        try:
+            # assignment -> class -> teacher access (403/404 as usual).
+            _require_assignment_teacher_access(deps, assignment_id)
+            try:
+                uid = deps.get_current_user_uid()
+                bootstrap = resolve_assignment_bootstrap_for_user(
+                    deps,
+                    uid=uid,
+                    context=deps.get_school_request_context(),
+                    assignment_id=assignment_id,
+                    ui_language='en',
+                )
+                # Base plan: NO coverage/affect — the student-independent
+                # "compiler's first inference" the teacher sees at authoring time.
+                preview = serialize_plan_preview(compile_prompt_plan(bootstrap))
+            except Exception:
+                logger.exception('plan-preview assembly failed; returning null preview '
+                                 '(assignment_id=%s)', assignment_id)
+                preview = None
+            return jsonify({'success': True, 'teacherPreviewEnabled': True, 'planPreview': preview})
         except SchoolContextPermissionError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 403
         except ValueError as exc:

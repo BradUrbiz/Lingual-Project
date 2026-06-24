@@ -433,3 +433,16 @@ class BuildSessionDebriefTestCase(unittest.TestCase):
         for bad in [None, [], "x", {"analysis_state": "oops", "session_summary": 7}]:
             d = build_session_debrief(bad)
             self.assertTrue(d["caveats"])
+
+
+class DebriefEnabledTestCase(unittest.TestCase):
+    def test_default_off(self):
+        from backend.services.pedagogy.integration import debrief_enabled
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PEDAGOGY_ENGINE_DEBRIEF", None)
+            self.assertFalse(debrief_enabled())
+
+    def test_on_when_truthy(self):
+        from backend.services.pedagogy.integration import debrief_enabled
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_DEBRIEF": "1"}):
+            self.assertTrue(debrief_enabled())

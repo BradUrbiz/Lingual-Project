@@ -71,6 +71,15 @@ def affect_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_AFFECT", "").strip().lower() in _TRUTHY
 
 
+def debrief_enabled() -> bool:
+    """Whether the S4.2 teacher debrief is on (independent flag, default off).
+
+    Reads PEDAGOGY_ENGINE_DEBRIEF. Gates the read-only debrief endpoint + the
+    teacher-side click-through. Flag off ⇒ endpoint returns {success: false}
+    doing minimal work, and the frontend hides the debrief link."""
+    return os.environ.get("PEDAGOGY_ENGINE_DEBRIEF", "").strip().lower() in _TRUTHY
+
+
 def resolve_assignment_system_prompt(
     bootstrap: dict[str, Any],
     *,

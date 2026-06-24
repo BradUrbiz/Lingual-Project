@@ -19,6 +19,7 @@ from backend.services.pedagogy.integration import (
     resolve_assignment_system_prompt,
     promote_back_enabled,
     coach_chips_enabled,
+    director_enabled,
 )
 from backend.services.compliance import create_consent_event, resolve_assignment_launch
 from backend.services.suspended_org_guard import SuspendedOrgError, enforce_org_active
@@ -953,7 +954,9 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
             # S3.3 promote-back (text surface): a coach note rides this one turn as a
             # transient system instruction so the tutor weaves the self-repair into its
             # reply in its own words. Assignment-linked + both flags on only; length-capped.
-            if coach_note and coach_note_allowed and promote_back_enabled() and coach_chips_enabled():
+            if coach_note and coach_note_allowed and (
+                (promote_back_enabled() and coach_chips_enabled()) or director_enabled()
+            ):
                 messages.append({'role': 'system', 'content': coach_note[:500]})
             messages.append({'role': 'user', 'content': user_message})
 

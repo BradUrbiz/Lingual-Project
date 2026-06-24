@@ -1132,6 +1132,34 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
             'content': "COACH NOTE: invite self-correction toward 'voy'.",
         })
 
+    def test_coach_note_injected_when_only_director_flag_on(self):
+        # Mirror the existing flags-on test, but set ONLY PEDAGOGY_ENGINE_DIRECTOR=1
+        # (promote-back + chips OFF). The Director's text re-steer rides the same
+        # coachNote transport, so it must be honored.
+        self._setup_text_only_assignment_chat()
+        test_client, captured = self._make_client_with_fake_openai()
+
+        env_director_only = {k: v for k, v in __import__('os').environ.items()
+                             if k not in ('PEDAGOGY_ENGINE_PROMOTE_BACK', 'PEDAGOGY_ENGINE_COACH_CHIPS')}
+        env_director_only['OPENAI_API_KEY'] = 'test-openai-key'
+        env_director_only['PEDAGOGY_ENGINE_DIRECTOR'] = '1'
+        with patch.dict('os.environ', env_director_only, clear=True):
+            resp = test_client.post('/api/chats/chat-1/messages', json={
+                'message': 'Yo va al tienda otra vez',
+                'assignmentId': 'assignment-1',
+                'practiceSessionId': 'practice-1',
+                'uiLanguage': 'en',
+                'coachNote': "COACH NOTE: steer toward 'la cuenta'.",
+            })
+
+        self.assertEqual(resp.status_code, 200)
+        sent = captured['messages']
+        self.assertEqual(sent[-1]['role'], 'user')
+        self.assertEqual(sent[-2], {
+            'role': 'system',
+            'content': "COACH NOTE: steer toward 'la cuenta'.",
+        })
+
     def test_coach_note_not_injected_when_pedagogy_flags_off(self):
         self._setup_text_only_assignment_chat()
         test_client, captured = self._make_client_with_fake_openai()

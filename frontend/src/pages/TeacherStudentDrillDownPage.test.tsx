@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { TeacherStudentDrillDownPage } from '@/pages/TeacherStudentDrillDownPage';
-import type { StudentComplianceRecord, StudentDrillDownData } from '@/types';
+import type { PracticeSessionDto, StudentComplianceRecord, StudentDrillDownData } from '@/types';
 
 const getStudentDrillDownMock = vi.fn();
 const getStudentComplianceMock = vi.fn();
@@ -12,6 +12,33 @@ vi.mock('@/api/teacher', () => ({
   getStudentCompliance: (...args: unknown[]) => getStudentComplianceMock(...args),
   updateStudentCompliance: (...args: unknown[]) => updateStudentComplianceMock(...args),
 }));
+
+const MOCK_SESSION: PracticeSessionDto = {
+  id: 'session-abc',
+  orgId: 'org-1',
+  classId: 'class-1',
+  assignmentId: 'assignment-1',
+  studentUid: 'student-1',
+  status: 'completed',
+  modality: 'text',
+  voiceEnabled: false,
+  textEnabled: true,
+  promptVersion: '1',
+  sessionSummary: {
+    totalTurns: 10,
+    studentTurnCount: 5,
+    assistantTurnCount: 5,
+    totalStudentWords: 40,
+    averageStudentWordsPerTurn: 8,
+    estimatedSpeakingTimeSeconds: 0,
+    targetExpressionHits: {},
+    targetExpressionTotalHits: 0,
+    selfCorrectionCount: 1,
+    taskCompletionCount: 1,
+    feedbackCounts: { recast: 0, elicitation: 0, reviewItem: 0 },
+  },
+  costSummary: { estimatedUsd: 0, estimatedVoiceSeconds: 0, estimatedTextTurns: 5 },
+};
 
 const ANALYTICS: StudentDrillDownData = {
   student: {
@@ -114,5 +141,75 @@ describe('TeacherStudentDrillDownPage', () => {
         voiceConsentStatus: 'granted',
       }));
     });
+  });
+
+  it('shows "View debrief" links per session row when debriefEnabled is true', async () => {
+    getStudentDrillDownMock.mockResolvedValue({
+      ...ANALYTICS,
+      recentSessions: [MOCK_SESSION],
+      debriefEnabled: true,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/app/teacher/classes/class-1/students/student-1/analytics']}>
+        <Routes>
+          <Route
+            path="/app/teacher/classes/:classId/students/:studentUid/analytics"
+            element={<TeacherStudentDrillDownPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Student One');
+
+    const debriefLink = screen.getByRole('link', { name: 'View debrief' });
+    expect(debriefLink).toBeInTheDocument();
+    expect(debriefLink).toHaveAttribute('href', expect.stringContaining('practice-sessions/session-abc/debrief'));
+  });
+
+  it('does not show "View debrief" links when debriefEnabled is false', async () => {
+    getStudentDrillDownMock.mockResolvedValue({
+      ...ANALYTICS,
+      recentSessions: [MOCK_SESSION],
+      debriefEnabled: false,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/app/teacher/classes/class-1/students/student-1/analytics']}>
+        <Routes>
+          <Route
+            path="/app/teacher/classes/:classId/students/:studentUid/analytics"
+            element={<TeacherStudentDrillDownPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Student One');
+
+    expect(screen.queryByRole('link', { name: 'View debrief' })).not.toBeInTheDocument();
+  });
+
+  it('does not show "View debrief" links when debriefEnabled is absent', async () => {
+    getStudentDrillDownMock.mockResolvedValue({
+      ...ANALYTICS,
+      recentSessions: [MOCK_SESSION],
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/app/teacher/classes/class-1/students/student-1/analytics']}>
+        <Routes>
+          <Route
+            path="/app/teacher/classes/:classId/students/:studentUid/analytics"
+            element={<TeacherStudentDrillDownPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Student One');
+
+    expect(screen.queryByRole('link', { name: 'View debrief' })).not.toBeInTheDocument();
   });
 });

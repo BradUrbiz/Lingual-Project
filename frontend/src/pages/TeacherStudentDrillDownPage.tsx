@@ -1,5 +1,5 @@
 import { useEffect, useReducer, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -382,7 +382,13 @@ function RepeatedErrorsCard({ repeatedErrors }: { repeatedErrors: StudentDrillDo
   );
 }
 
-function RecentSessionsCard({ recentSessions }: { recentSessions: StudentDrillDownData['recentSessions'] }) {
+function RecentSessionsCard({
+  recentSessions,
+  debriefEnabled,
+}: {
+  recentSessions: StudentDrillDownData['recentSessions'];
+  debriefEnabled?: boolean;
+}) {
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
       <h2 className="text-xl font-display font-bold text-foreground">Recent sessions</h2>
@@ -397,6 +403,14 @@ function RecentSessionsCard({ recentSessions }: { recentSessions: StudentDrillDo
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" size="sm">{session.status}</Badge>
                 <Badge variant="secondary" size="sm">Turns {session.sessionSummary.studentTurnCount}</Badge>
+                {debriefEnabled ? (
+                  <Link
+                    to={`/app/teacher/practice-sessions/${session.id}/debrief`}
+                    className="ml-auto text-sm font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    View debrief
+                  </Link>
+                ) : null}
               </div>
               <p className="mt-3 text-sm text-foreground">
                 Speaking {session.sessionSummary.estimatedSpeakingTimeSeconds}s · Self-corrections{' '}
@@ -559,7 +573,7 @@ export function TeacherStudentDrillDownPage() {
             onSave={() => void handleComplianceSave()}
           />
           <RepeatedErrorsCard repeatedErrors={analytics.repeatedErrors} />
-          <RecentSessionsCard recentSessions={analytics.recentSessions} />
+          <RecentSessionsCard recentSessions={analytics.recentSessions} debriefEnabled={analytics.debriefEnabled} />
         </div>
       </div>
     </div>

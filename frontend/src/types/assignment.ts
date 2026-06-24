@@ -663,4 +663,5 @@ export interface StudentDrillDownData {
   repeatedErrors: StudentDrillDownRepeatedError[];
   recentSessions: PracticeSessionDto[];
   limitations: string[];
+  debriefEnabled?: boolean;
 }

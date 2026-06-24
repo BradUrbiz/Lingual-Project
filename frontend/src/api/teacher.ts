@@ -44,6 +44,7 @@ interface ClassAnalyticsResponse {
 interface StudentDrillDownResponse {
   success: boolean;
   analytics: StudentDrillDownData;
+  debriefEnabled?: boolean;
 }
 
 interface StudentComplianceResponse {
@@ -115,7 +116,7 @@ export const getStudentDrillDown = async (
   const response = await api.get<StudentDrillDownResponse>(
     `/teacher/classes/${classId}/students/${studentUid}/analytics`,
   );
-  return response.data.analytics;
+  return { ...response.data.analytics, debriefEnabled: response.data.debriefEnabled ?? false };
 };
 
 export const getStudentCompliance = async (

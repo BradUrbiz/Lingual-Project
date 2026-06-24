@@ -2,12 +2,15 @@ import { useCallback, useEffect, useReducer, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   GraduationCap,
   Loader2,
   Plus,
   Sparkles,
   Trash2,
 } from 'lucide-react';
+import { AssignmentPlanPreview } from '@/components/assignments/AssignmentPlanPreview';
 import { createAssignment, generateAssignmentDraft, getTeacherAssignments } from '@/api/assignments';
 import { getCanvasContentForClass } from '@/api/canvas';
 import { createCanvasPractice, generateCanvasPractice } from '@/api/canvasPractice';
@@ -1237,66 +1240,118 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
       </Card>
 
       {/* Assignments list */}
-      <Card className="border-3 border-foreground p-6 shadow-stamp">
-          <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
-              <GraduationCap size={22} strokeWidth={2.5} />
-            </div>
-            <div>
-              <h2 className="text-xl font-display font-bold text-foreground">Your assignments</h2>
-              <p className="text-sm text-muted-foreground">
-                Published assignments are live on your students' dashboards.
-              </p>
-            </div>
-          </div>
-          <div className="mt-5 space-y-3">
-            {assignments.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
-                No assignments yet. Pick a Canvas item above and publish your first one!
-              </div>
-            ) : (
-              assignments.map((assignment) => (
-                <div key={assignment.id} className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={formatStatusVariant(assignment.status)} size="sm">
-                          {assignment.status}
-                        </Badge>
-                      </div>
-                      <h3 className="mt-2 text-lg font-display font-bold text-foreground">{assignment.title}</h3>
-                      {assignment.description && (
-                        <p className="mt-1 text-sm text-muted-foreground">{assignment.description}</p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate(`/app/teacher/classes/${classId}/assignments/${assignment.id}/analytics`)}
-                      >
-                        View analytics
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate(`/app/assignments/${assignment.id}`)}
-                      >
-                        Preview
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
+      <AssignmentListCard
+        assignments={assignments}
+        classId={classId}
+        navigate={navigate}
+      />
     </div>
   );
 }
 
 export function TeacherAssignmentBuilderPage() {
   return renderTeacherAssignmentBuilderPage(useTeacherAssignmentBuilderController());
+}
+
+// ── Assignment list card with per-card collapsible plan preview ────────
+
+function AssignmentListCard({
+  assignments,
+  classId,
+  navigate,
+}: {
+  assignments: StudentAssignmentSummary[];
+  classId: string | undefined;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const [expandedPreviews, setExpandedPreviews] = useState<Set<string>>(new Set());
+
+  const togglePreview = (id: string) => {
+    setExpandedPreviews((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <Card className="border-3 border-foreground p-6 shadow-stamp">
+      <div className="flex items-center gap-3">
+        <div className="flex size-11 items-center justify-center rounded-2xl border-2 border-foreground bg-primary text-primary-foreground">
+          <GraduationCap size={22} strokeWidth={2.5} />
+        </div>
+        <div>
+          <h2 className="text-xl font-display font-bold text-foreground">Your assignments</h2>
+          <p className="text-sm text-muted-foreground">
+            Published assignments are live on your students' dashboards.
+          </p>
+        </div>
+      </div>
+      <div className="mt-5 space-y-3">
+        {assignments.length === 0 ? (
+          <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
+            No assignments yet. Pick a Canvas item above and publish your first one!
+          </div>
+        ) : (
+          assignments.map((assignment) => {
+            const isExpanded = expandedPreviews.has(assignment.id);
+            return (
+              <div key={assignment.id} className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={formatStatusVariant(assignment.status)} size="sm">
+                        {assignment.status}
+                      </Badge>
+                    </div>
+                    <h3 className="mt-2 text-lg font-display font-bold text-foreground">{assignment.title}</h3>
+                    {assignment.description && (
+                      <p className="mt-1 text-sm text-muted-foreground">{assignment.description}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/app/teacher/classes/${classId}/assignments/${assignment.id}/analytics`)}
+                    >
+                      View analytics
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/app/assignments/${assignment.id}`)}
+                    >
+                      Preview
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => togglePreview(assignment.id)}
+                      aria-expanded={isExpanded}
+                      aria-label="Toggle AI engine preview"
+                    >
+                      {isExpanded ? <ChevronUp size={14} className="mr-1" /> : <ChevronDown size={14} className="mr-1" />}
+                      AI plan
+                    </Button>
+                  </div>
+                </div>
+                {isExpanded && (
+                  <div className="mt-3">
+                    <AssignmentPlanPreview assignmentId={assignment.id} />
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </Card>
+  );
 }
 
 // ── Local helpers for Canvas Quick Assign ──────────────────────────────

@@ -316,6 +316,31 @@ export const getSessionDebrief = async (sessionId: string): Promise<SessionDebri
   return response.data.success && response.data.debrief ? response.data.debrief : null;
 };
 
+// ── Assignment plan preview (pedagogy L8) ─────────────────────────────
+
+export interface PlanPreviewTarget {
+  surface: string;
+  kind: string;
+  feedbackRoute: string;
+}
+
+export interface PlanPreview {
+  engineEnabled: boolean;
+  rawTutorMode: boolean;
+  taskType?: string;
+  correctionPosture?: { mode: string; recastDefault: boolean; elicitationRepeatThreshold: number };
+  targets?: PlanPreviewTarget[];
+  recycling?: unknown;
+  guaranteesDisabled?: string[];
+}
+
+export const getAssignmentPlanPreview = async (assignmentId: string): Promise<PlanPreview | null> => {
+  const response = await api.get<{ success: boolean; teacherPreviewEnabled: boolean; planPreview?: PlanPreview | null }>(
+    `/teacher/assignments/${assignmentId}/plan-preview`,
+  );
+  return response.data.success && response.data.teacherPreviewEnabled ? (response.data.planPreview ?? null) : null;
+};
+
 // ── Canvas roster gap (advisory; does not drive enrollment) ───────────
 
 interface CanvasRosterGapApiResponse {

@@ -8,6 +8,7 @@ import {
   HelpCircle,
   Loader2,
   MessageSquareText,
+  Repeat,
   Star,
   Target,
   TrendingUp,
@@ -302,6 +303,42 @@ function DirectorReSteersCard({ reSteers }: { reSteers: SessionDebrief['director
   );
 }
 
+function PromotionsCard({ promotions }: { promotions: SessionDebrief['promotions'] }) {
+  if (!promotions || promotions.count === 0) return null;
+  const label = (reason: string, target: string) => {
+    if (reason === 'hard_target') return `Drilled "${target}" (focus grammar)`;
+    if (reason === 'repeat') return `Drilled "${target}" (recurring error)`;
+    return `Drilled "${target}"`;
+  };
+  const reasonLabel = (reason: string) => {
+    if (reason === 'hard_target') return 'Grammar';
+    if (reason === 'repeat') return 'Recurring';
+    return 'Promoted';
+  };
+  return (
+    <SectionCard title="Targeted corrections" icon={Repeat} accent="bg-accent/20 text-accent-foreground">
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Recurring errors the engine wove back into the conversation for self-repair.
+        </p>
+        <ul className="space-y-1.5">
+          {promotions.items.map((p, i) => (
+            <li key={`${p.turnIndex}-${i}`} className="flex items-center gap-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
+              <p className="flex-1 text-sm text-foreground">
+                {label(p.reason, p.target)}
+                {p.turnIndex != null ? (
+                  <span className="ml-1 text-muted-foreground">(turn {p.turnIndex})</span>
+                ) : null}
+              </p>
+              <Badge variant="secondary" size="sm">{reasonLabel(p.reason)}</Badge>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </SectionCard>
+  );
+}
+
 function HelpUsageCard({ helpUsage }: { helpUsage: SessionDebrief['helpUsage'] }) {
   const kindEntries = Object.entries(helpUsage.byKind);
   return (
@@ -469,6 +506,7 @@ export function TeacherSessionDebriefPage() {
       <UptakeCard uptake={debrief.uptake} />
       <RepeatedErrorsCard repeatedErrors={debrief.repeatedErrors} />
       <DirectorReSteersCard reSteers={debrief.directorReSteers} />
+      <PromotionsCard promotions={debrief.promotions} />
       {debrief.coachReview ? <CoachReviewCard coachReview={debrief.coachReview} /> : null}
       <HelpUsageCard helpUsage={debrief.helpUsage} />
       {debrief.affect ? <AffectCard affect={debrief.affect} /> : null}

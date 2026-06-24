@@ -302,7 +302,10 @@ export interface SessionDebrief {
   };
   repeatedErrors: { label: string; count: number }[];
   coachReview: Record<string, unknown> | null;
-  promotions: unknown[];
+  promotions?: {
+    count: number;
+    items: { turnIndex: number | null; reason: string; target: string }[];
+  };
   directorReSteers?: {
     count: number;
     items: { turnIndex: number | null; kind: string; target: string; reason: string }[];

@@ -37,7 +37,7 @@ const FULL_DEBRIEF: SessionDebrief = {
     ],
     target_coverage: [{ surface: 'la cuenta', status: 'covered' }],
   },
-  promotions: [],
+  promotions: { count: 0, items: [] },
   helpUsage: {
     askCount: 5,
     byKind: { hint: 2, translation: 1, definition: 1, clarification: 1 },
@@ -131,6 +131,39 @@ describe('TeacherSessionDebriefPage', () => {
 
     await screen.findByText('Session debrief');
     expect(screen.queryByText('Coaching interventions')).not.toBeInTheDocument();
+  });
+
+  it('renders Targeted corrections section when promotions.count > 0', async () => {
+    const debriefWithPromotions: SessionDebrief = {
+      ...FULL_DEBRIEF,
+      promotions: {
+        count: 2,
+        items: [
+          { turnIndex: 5, reason: 'hard_target', target: 'subjunctive' },
+          { turnIndex: 8, reason: 'repeat', target: 'ser vs estar' },
+        ],
+      },
+    };
+    getSessionDebriefMock.mockResolvedValue(debriefWithPromotions);
+
+    renderPage();
+
+    expect(await screen.findByText('Targeted corrections')).toBeInTheDocument();
+    expect(screen.getAllByText(/subjunctive/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/ser vs estar/).length).toBeGreaterThan(0);
+  });
+
+  it('omits Targeted corrections section when promotions.count is 0', async () => {
+    const debriefNoPromotions: SessionDebrief = {
+      ...FULL_DEBRIEF,
+      promotions: { count: 0, items: [] },
+    };
+    getSessionDebriefMock.mockResolvedValue(debriefNoPromotions);
+
+    renderPage();
+
+    await screen.findByText('Session debrief');
+    expect(screen.queryByText('Targeted corrections')).not.toBeInTheDocument();
   });
 
   it('renders not-available state when getSessionDebrief returns null, no crash', async () => {

@@ -135,6 +135,87 @@ Running the eval requires a deliberate choice to incur the LLM cost (`RUN_PEDAGO
 
 ---
 
+## 7. Director (built behind flag, 2026-06-24)
+
+The Director has been fully built and wired behind `PEDAGOGY_ENGINE_DIRECTOR` (cloudbuild default `'0'`). It is **NOT cut over** — the flag is absent/off in the live service. Cutover is gated on the S5-gate eval verdict (§4 above): only if a run of the opt-in harness returns `plateaus == True`.
+
+### 7.1 What was built
+
+**v1 = target-neglect heuristic.** The Director v1 covers one robust, locale-agnostic signal: TARGET-NEGLECT — the tutor spending a window of consecutive turns without working toward any concrete assignment target (expressions + vocabulary; grammar labels excluded from substring matching).
+
+**Pure layer — `backend/services/pedagogy/drift.py`:**
+
+| Symbol | Kind | Description |
+|---|---|---|
+| `DRIFT_WINDOW` | constant | `3` — number of consecutive tutor turns that must all miss any target to qualify as neglect |
+| `DIRECTOR_COOLDOWN_TURNS` | constant | `4` — minimum turns between two re-steers (prevents nagging) |
+| `DIRECTOR_MAX_RESTEERS` | constant | `3` — per-session cap on re-steer injections |
+| `detect_target_neglect(recent_tutor_turns, concrete_targets, *, window)` | pure fn | Returns `DriftVerdict(drift, kind, target, reason)`; "insufficient evidence" when window not filled |
+| `decide_resteer(director_state, verdict, turn_index)` | pure fn | Returns `(ResteerDecision, new_state)`; enforces cooldown + cap; never mutates input |
+| `build_resteer_prompt(verdict, *, surface)` | pure fn | In-character COACH NOTE for the main tutor; terser on voice |
+| `serialize_resteer(decision, *, turn_index, surface, prompt, generated_at)` | pure fn | Durable audit record for `analysis_state['resteers']` |
+
+No OpenAI/Canvas/resolver imports — import boundary invariant (7a) holds; verified by `ImportBoundaryTestCase`.
+
+**Impure orchestrator — `backend/services/director_service.py`:**
+
+`assess_drift(deps, bootstrap, uid, session_id, turn_index) -> dict | None`
+
+- Flag gate first: `director_enabled()` → returns `None` immediately when off (byte-identical to today).
+- Reads the practice session, extracts `concrete_targets` from `bootstrap.mapping.targetExpressions + targetVocabulary`; returns `None` if no concrete targets.
+- Reads recent tutor turns from the chat transcript (`TRANSCRIPT_WINDOW=6` messages; the synchronous source of truth — `analysis_state['recent_turns']` lags on the async event-rollup path).
+- Runs the pure `detect_target_neglect` → `decide_resteer` pipeline.
+- **Re-read before write** (S3.1 lesson): re-fetches `analysis_state` before appending to avoid clobbering a concurrent write.
+- **Dedup**: if a `resteers[]` entry already exists for `turn_index`, returns it without a new write.
+- Fail-open: any exception degrades to `None`; the live conversation is never blocked.
+- No LLM call; pure heuristic.
+- Persists `director_state` (cooldown/count tracking) + `resteers[]` (audit log) into `analysis_state` via `update_practice_session_analysis_state`.
+
+On a re-steer, returns:
+```python
+{
+    "turn_index": int,
+    "surface": "voice" | "text",
+    "resteer": True,
+    "resteer_prompt": str,   # the COACH NOTE to inject
+    "kind": "target_neglect",
+    "target": str,
+    "reason": str,
+    "generated_at": str,     # ISO UTC
+}
+```
+
+**Flag helper — `backend/services/pedagogy/integration.py`:**
+
+`director_enabled()` reads `PEDAGOGY_ENGINE_DIRECTOR`; same `_TRUTHY = {"1", "true", "yes", "on"}` pattern as the other pedagogy flags.
+
+**Route wiring — `POST /api/practice-sessions/<id>/coach-chip`:**
+
+The route bootstraps `director_enabled()` alongside `coach_chips_enabled()`. If either flag is on, the route runs the corresponding assessment. The response carries both fields:
+```json
+{ "success": true, "coachChip": <chip or null>, "resteer": <resteer dict or null> }
+```
+The Director rides the existing coach-chip round-trip with no new endpoint.
+
+**Delivery channels:**
+
+- **Voice:** the frontend receives `resteer.resteer_prompt` and injects it into the realtime session via `injectPromoteBackRef` (the same `conversation.item.create` channel used by S3.3 promote-back).
+- **Text:** the frontend merges `resteer.resteer_prompt` into `coachNote` so the main text tutor receives the directive on its next turn.
+
+**Deviation from the original S5 spec:** the spec described `session.update` as the re-steer channel (mid-session system-prompt patch). The implementation instead uses `conversation.item.create` (the same channel as promote-back). This avoids the model-context disruption of a mid-session `session.update` and reuses the proven voice injection path. The behavioral outcome is equivalent for a one-sentence directive; a dedicated `session.update` Director is deferred.
+
+### 7.2 Flag state
+
+| Flag | cloudbuild default | Live state | Cutover gate |
+|---|---|---|---|
+| `PEDAGOGY_ENGINE_DIRECTOR` | `'0'` | absent/off | S5-gate eval `plateaus == True` |
+
+Flip via `--update-env-vars PEDAGOGY_ENGINE_DIRECTOR=1` after the eval verdict warrants it. Rollback instant: `=0`.
+
+When off: `assess_drift` returns `None` immediately; the route returns `resteer: null`; behavior is byte-identical to today.
+
+---
+
 ## 6. Running the eval
 
 ```bash

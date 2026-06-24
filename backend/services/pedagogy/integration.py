@@ -86,6 +86,12 @@ def director_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_DIRECTOR", "").strip().lower() in _TRUTHY
 
 
+def teacher_preview_enabled() -> bool:
+    """L8 Teacher Preview — read-only teacher view of the compiled prompt plan.
+    Default off; read-only/additive (no live-path effect)."""
+    return os.environ.get("PEDAGOGY_ENGINE_TEACHER_PREVIEW", "").strip().lower() in _TRUTHY
+
+
 def resolve_assignment_system_prompt(
     bootstrap: dict[str, Any],
     *,

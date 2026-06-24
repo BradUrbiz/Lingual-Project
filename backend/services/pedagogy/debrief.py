@@ -80,6 +80,23 @@ def _help_usage(analysis_state: dict) -> dict:
     return {"askCount": len(log), "byKind": by_kind}
 
 
+def _director_resteers(analysis_state: dict) -> dict:
+    """S5 Director interventions surfaced for the teacher: count + shaped items.
+    Omits the internal prompt/surface/generated_at — the teacher sees what the
+    engine did (kind + target), not the raw coach-note."""
+    items = []
+    for r in _l(analysis_state.get("resteers")):
+        if not isinstance(r, dict):
+            continue
+        items.append({
+            "turnIndex": _i(r.get("turn_index")),
+            "kind": str(r.get("kind") or ""),
+            "target": str(r.get("target") or ""),
+            "reason": str(r.get("reason") or ""),
+        })
+    return {"count": len(items), "items": items}
+
+
 def _affect(analysis_state: dict) -> dict | None:
     affect = analysis_state.get("affect_state")
     if not isinstance(affect, dict):
@@ -139,6 +156,7 @@ def build_session_debrief(session_record: Any) -> dict:
         "repeatedErrors": repeated_errors,
         "coachReview": coach_review,
         "promotions": _l(analysis_state.get("promotions")),
+        "directorReSteers": _director_resteers(analysis_state),
         "helpUsage": _help_usage(analysis_state),
         "affect": _affect(analysis_state),
         "suggestedNext": _suggested_next(coverage, repeated_errors, coach_review),

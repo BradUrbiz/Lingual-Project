@@ -435,6 +435,38 @@ class BuildSessionDebriefTestCase(unittest.TestCase):
             self.assertTrue(d["caveats"])
 
 
+class DebriefDirectorReSteersTests(unittest.TestCase):
+    def _debrief(self, analysis_state):
+        from backend.services.pedagogy.debrief import build_session_debrief
+        return build_session_debrief({"id": "s1", "status": "ended", "analysis_state": analysis_state,
+                                      "session_summary": {}})
+
+    def test_resteers_shaped_and_internal_fields_omitted(self):
+        d = self._debrief({"resteers": [
+            {"turn_index": 4, "kind": "language_drift", "target": "Korean", "reason": "mostly english",
+             "prompt": "COACH NOTE ...", "surface": "voice", "generated_at": "T"},
+            {"turn_index": 7, "kind": "target_neglect", "target": "la cuenta", "reason": "no target in window",
+             "prompt": "COACH NOTE ...", "surface": "text", "generated_at": "T"},
+        ]})
+        rs = d["directorReSteers"]
+        self.assertEqual(rs["count"], 2)
+        self.assertEqual(rs["items"][0], {"turnIndex": 4, "kind": "language_drift", "target": "Korean", "reason": "mostly english"})
+        self.assertEqual(rs["items"][1]["kind"], "target_neglect")
+        # internal fields must NOT leak
+        self.assertNotIn("prompt", rs["items"][0])
+        self.assertNotIn("surface", rs["items"][0])
+        self.assertNotIn("generated_at", rs["items"][0])
+
+    def test_no_resteers_is_empty(self):
+        d = self._debrief({})
+        self.assertEqual(d["directorReSteers"], {"count": 0, "items": []})
+
+    def test_malformed_resteers_skipped(self):
+        d = self._debrief({"resteers": ["nope", {"turn_index": 2, "kind": "language_drift", "target": "Spanish", "reason": "r"}, 5]})
+        self.assertEqual(d["directorReSteers"]["count"], 1)
+        self.assertEqual(d["directorReSteers"]["items"][0]["target"], "Spanish")
+
+
 class DebriefEnabledTestCase(unittest.TestCase):
     def test_default_off(self):
         from backend.services.pedagogy.integration import debrief_enabled

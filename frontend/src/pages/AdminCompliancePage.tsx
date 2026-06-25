@@ -29,23 +29,12 @@ import type {
   UpdateStudentCompliancePayload,
 } from '@/types';
 import { useMembership } from '@/contexts/MembershipContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 type TabId = 'overview' | 'roster' | 'packets';
 type ComplianceFilterParams = { consentStatus?: string; search?: string; classId?: string };
 
-const ADMIN_COMPLIANCE_TABS: { id: TabId; label: string; icon: ElementType }[] = [
-  { id: 'overview', label: 'Overview', icon: ShieldCheck },
-  { id: 'roster', label: 'Student Roster', icon: Users },
-  { id: 'packets', label: 'Guardian Packets', icon: Mail },
-];
-
-const CONSENT_FILTER_OPTIONS = [
-  { value: '', label: 'All students' },
-  { value: 'voice_allowed', label: 'Voice allowed' },
-  { value: 'voice_blocked', label: 'Voice blocked' },
-  { value: 'guardian_action_required', label: 'Guardian action required' },
-  { value: 'unknown_consent', label: 'Unknown consent' },
-];
+const SELECT_STYLE = 'rounded-md border border-gray-300 bg-white px-3 py-2 text-sm';
 
 type BulkConsentValue = 'unchanged' | ConsentStatus;
 type BulkTextAllowedValue = 'unchanged' | 'allowed' | 'blocked';
@@ -65,8 +54,6 @@ const DEFAULT_BULK_FORM: BulkFormState = {
   reason: '',
 };
 
-const SELECT_STYLE = 'rounded-md border border-gray-300 bg-white px-3 py-2 text-sm';
-
 function buildBulkUpdates(form: BulkFormState): UpdateStudentCompliancePayload {
   const updates: UpdateStudentCompliancePayload = {};
   if (form.voiceConsentStatus !== 'unchanged')
@@ -77,16 +64,6 @@ function buildBulkUpdates(form: BulkFormState): UpdateStudentCompliancePayload {
     updates.retentionPolicyId = form.retentionPolicyId;
   return updates;
 }
-
-const PACKET_STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  draft: { label: 'Draft', color: 'bg-gray-100 text-gray-800' },
-  issued: { label: 'Issued', color: 'bg-blue-100 text-blue-800' },
-  viewed: { label: 'Viewed', color: 'bg-indigo-100 text-indigo-800' },
-  granted: { label: 'Granted', color: 'bg-green-100 text-green-800' },
-  revoked: { label: 'Revoked', color: 'bg-red-100 text-red-800' },
-  expired: { label: 'Expired', color: 'bg-amber-100 text-amber-800' },
-  canceled: { label: 'Canceled', color: 'bg-gray-100 text-gray-600' },
-};
 
 function formatTimestamp(value?: string | null) {
   if (!value) return '-';
@@ -120,23 +97,24 @@ function MetricCard({
 }
 
 function SummarySection({ summary }: { summary: OrgComplianceSummary }) {
+  const { t } = useLanguage();
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <MetricCard label="Total students" value={summary.studentCount} icon={Users} />
+      <MetricCard label={t('admin.compliance.metric.totalStudents')} value={summary.studentCount} icon={Users} />
       <MetricCard
-        label="Voice allowed"
+        label={t('admin.compliance.filter.voiceAllowed')}
         value={summary.voiceAllowedCount}
         icon={Eye}
         color="text-green-600"
       />
       <MetricCard
-        label="Voice blocked"
+        label={t('admin.compliance.filter.voiceBlocked')}
         value={summary.voiceBlockedCount}
         icon={EyeOff}
         color="text-red-600"
       />
       <MetricCard
-        label="Guardian action needed"
+        label={t('admin.compliance.metric.guardianActionNeeded')}
         value={summary.guardianActionRequiredCount}
         icon={AlertTriangle}
         color="text-amber-600"
@@ -238,6 +216,7 @@ function RosterSection({
   roster: OrgComplianceRosterData;
   onReload: (params?: ComplianceFilterParams) => void;
 }) {
+  const { t } = useLanguage();
   const [state, dispatch] = useReducer(rosterReducer, INITIAL_ROSTER_STATE);
   const bulkUpdates = buildBulkUpdates(state.bulkForm);
   const hasBulkChanges = Object.keys(bulkUpdates).length > 0;
@@ -273,7 +252,7 @@ function RosterSection({
       });
       dispatch({
         type: 'bulkSave:succeeded',
-        message: `Updated ${result.updatedCount} student records.`,
+        message: t('admin.compliance.updateSuccess').replace('{count}', String(result.updatedCount)),
       });
       onReload();
     } catch (err) {
@@ -284,12 +263,21 @@ function RosterSection({
     }
   };
 
+  const consentFilterOptions = [
+    { value: '', label: t('admin.compliance.filter.allStudents') },
+    { value: 'voice_allowed', label: t('admin.compliance.filter.voiceAllowed') },
+    { value: 'voice_blocked', label: t('admin.compliance.filter.voiceBlocked') },
+    { value: 'guardian_action_required', label: t('admin.compliance.filter.guardianActionRequired') },
+    { value: 'unknown_consent', label: t('admin.compliance.filter.unknownConsent') },
+  ];
+
   return (
     <div className="space-y-4">
       <RosterFilters
         classFilter={state.classFilter}
         classOptions={classOptions}
         consentFilter={state.consentFilter}
+        consentFilterOptions={consentFilterOptions}
         searchQuery={state.searchQuery}
         onApplyFilters={applyFilters}
         onClassFilterChange={(value) => {
@@ -337,6 +325,7 @@ type RosterFiltersProps = {
   classFilter: string;
   classOptions: Array<[string, string]>;
   consentFilter: string;
+  consentFilterOptions: Array<{ value: string; label: string }>;
   searchQuery: string;
   onApplyFilters: (overrides?: ComplianceFilterParams) => void;
   onClassFilterChange: (value: string) => void;
@@ -348,18 +337,20 @@ function RosterFilters({
   classFilter,
   classOptions,
   consentFilter,
+  consentFilterOptions,
   searchQuery,
   onApplyFilters,
   onClassFilterChange,
   onConsentFilterChange,
   onSearchQueryChange,
 }: RosterFiltersProps) {
+  const { t } = useLanguage();
   return (
     <div className="flex flex-wrap gap-3">
       <div className="relative flex-1 min-w-[200px]">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
         <Input
-          placeholder="Search by name or UID..."
+          placeholder={t('admin.compliance.filter.searchPlaceholder')}
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
           onKeyDown={(event) => event.key === 'Enter' && onApplyFilters()}
@@ -367,12 +358,12 @@ function RosterFilters({
         />
       </div>
       <select
-        aria-label="Filter by consent status"
+        aria-label={t('admin.compliance.filter.consentStatusAriaLabel')}
         value={consentFilter}
         onChange={(event) => onConsentFilterChange(event.target.value)}
         className={SELECT_STYLE}
       >
-        {CONSENT_FILTER_OPTIONS.map((option) => (
+        {consentFilterOptions.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
@@ -380,12 +371,12 @@ function RosterFilters({
       </select>
       {classOptions.length > 1 ? (
         <select
-          aria-label="Filter by class"
+          aria-label={t('admin.compliance.filter.classAriaLabel')}
           value={classFilter}
           onChange={(event) => onClassFilterChange(event.target.value)}
           className={SELECT_STYLE}
         >
-          <option value="">All classes</option>
+          <option value="">{t('admin.compliance.filter.allClasses')}</option>
           {classOptions.map(([id, name]) => (
             <option key={id} value={id}>
               {name}
@@ -420,61 +411,65 @@ function BulkUpdatePanel({
   onClearSelection,
   onSave,
 }: BulkUpdatePanelProps) {
+  const { t } = useLanguage();
+  const pluralSuffix = selectedCount !== 1 ? 's' : '';
   return (
     <Card className="border-blue-200 bg-blue-50/50 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-medium text-gray-800">
-          Bulk update - {selectedCount} student{selectedCount !== 1 ? 's' : ''} selected
+          {t('admin.compliance.bulk.header')
+            .replace('{count}', String(selectedCount))
+            .replace('{s}', pluralSuffix)}
         </h3>
         <button type="button" onClick={onClearSelection} className="text-xs text-gray-500 hover:text-gray-700">
-          Clear selection
+          {t('admin.compliance.bulk.clearSelection')}
         </button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label className="space-y-1 text-xs font-medium text-gray-600">
-          <span>Voice consent</span>
+          <span>{t('teacher.compliance.bulkUpdates.voiceConsentLabel')}</span>
           <select
             value={bulkForm.voiceConsentStatus}
             onChange={(event) => onBulkFormChange({ voiceConsentStatus: event.target.value as BulkConsentValue })}
             className={`${SELECT_STYLE} w-full`}
           >
-            <option value="unchanged">Leave unchanged</option>
-            <option value="unknown">Unknown</option>
-            <option value="granted">Granted</option>
-            <option value="revoked">Revoked</option>
+            <option value="unchanged">{t('teacher.compliance.bulkUpdates.leaveUnchanged')}</option>
+            <option value="unknown">{t('teacher.compliance.bulkUpdates.optionUnknown')}</option>
+            <option value="granted">{t('teacher.compliance.bulkUpdates.optionGranted')}</option>
+            <option value="revoked">{t('teacher.compliance.bulkUpdates.optionRevoked')}</option>
           </select>
         </label>
         <label className="space-y-1 text-xs font-medium text-gray-600">
-          <span>Text launch</span>
+          <span>{t('teacher.compliance.bulkUpdates.textLaunchLabel')}</span>
           <select
             value={bulkForm.textAllowed}
             onChange={(event) => onBulkFormChange({ textAllowed: event.target.value as BulkTextAllowedValue })}
             className={`${SELECT_STYLE} w-full`}
           >
-            <option value="unchanged">Leave unchanged</option>
-            <option value="allowed">Allow text</option>
-            <option value="blocked">Block text</option>
+            <option value="unchanged">{t('teacher.compliance.bulkUpdates.leaveUnchanged')}</option>
+            <option value="allowed">{t('teacher.compliance.bulkUpdates.optionAllowText')}</option>
+            <option value="blocked">{t('teacher.compliance.bulkUpdates.optionBlockText')}</option>
           </select>
         </label>
         <label className="space-y-1 text-xs font-medium text-gray-600">
-          <span>Retention policy</span>
+          <span>{t('teacher.compliance.bulkUpdates.retentionLabel')}</span>
           <select
             value={bulkForm.retentionPolicyId}
             onChange={(event) => onBulkFormChange({ retentionPolicyId: event.target.value as BulkRetentionValue })}
             className={`${SELECT_STYLE} w-full`}
           >
-            <option value="unchanged">Leave unchanged</option>
-            <option value="standard_school">Standard school retention</option>
-            <option value="no_raw_audio">No raw audio retention</option>
+            <option value="unchanged">{t('teacher.compliance.bulkUpdates.leaveUnchanged')}</option>
+            <option value="standard_school">{t('teacher.compliance.bulkUpdates.optionStandard')}</option>
+            <option value="no_raw_audio">{t('teacher.compliance.bulkUpdates.optionNoRawAudio')}</option>
           </select>
         </label>
         <div className="space-y-1 text-xs font-medium text-gray-600">
-          <span>Reason (optional)</span>
+          <span>{t('teacher.compliance.bulkUpdates.reasonLabel')}</span>
           <Input
-            aria-label="Bulk update reason"
+            aria-label={t('teacher.compliance.bulkUpdates.reasonAriaLabel')}
             value={bulkForm.reason}
             onChange={(event) => onBulkFormChange({ reason: event.target.value })}
-            placeholder="e.g. pilot cleanup"
+            placeholder={t('admin.compliance.bulk.reasonPlaceholder')}
             className="text-sm"
           />
         </div>
@@ -488,10 +483,12 @@ function BulkUpdatePanel({
           disabled={!hasBulkChanges || saving}
         >
           {saving ? <Loader2 className="mr-2 size-3 animate-spin" /> : null}
-          Apply to {selectedCount} student{selectedCount !== 1 ? 's' : ''}
+          {t('admin.compliance.bulk.applyButton')
+            .replace('{count}', String(selectedCount))
+            .replace('{s}', pluralSuffix)}
         </Button>
         <p className="text-xs text-gray-500">
-          Creates audit events per student with scope &quot;org&quot;.
+          {t('admin.compliance.bulk.auditNote')}
         </p>
       </div>
     </Card>
@@ -513,10 +510,13 @@ function StudentRosterList({
   onToggleAll,
   onToggleStudent,
 }: StudentRosterListProps) {
+  const { t } = useLanguage();
   return (
     <>
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">{roster.students.length} students</p>
+        <p className="text-sm text-gray-500">
+          {t('admin.compliance.roster.studentCount').replace('{count}', String(roster.students.length))}
+        </p>
         {roster.students.length > 0 ? (
           <label className="flex items-center gap-2 text-sm text-gray-600">
             <input
@@ -525,14 +525,14 @@ function StudentRosterList({
               onChange={onToggleAll}
               className="size-4 rounded border-gray-300"
             />
-            Select all
+            {t('teacher.compliance.roster.selectAll')}
           </label>
         ) : null}
       </div>
 
       {roster.students.length === 0 ? (
         <Card className="p-8 text-center text-gray-500">
-          No students match the current filters.
+          {t('admin.compliance.roster.empty')}
         </Card>
       ) : (
         <div className="space-y-2">
@@ -557,6 +557,7 @@ type StudentRosterCardProps = {
 };
 
 function StudentRosterCard({ selected, student, onToggle }: StudentRosterCardProps) {
+  const { t } = useLanguage();
   return (
     <Card
       className={`p-4 transition ${
@@ -566,8 +567,8 @@ function StudentRosterCard({ selected, student, onToggle }: StudentRosterCardPro
       <div className="flex items-start gap-3">
         <input
           type="checkbox"
-          aria-label={`Select ${student.displayName}`}
-          title={`Select ${student.displayName}`}
+          aria-label={t('teacher.compliance.roster.selectStudent').replace('{name}', student.displayName)}
+          title={t('teacher.compliance.roster.selectStudent').replace('{name}', student.displayName)}
           checked={selected}
           onChange={onToggle}
           className="mt-1 size-4 rounded border-gray-300"
@@ -592,9 +593,9 @@ function StudentRosterCard({ selected, student, onToggle }: StudentRosterCardPro
             </div>
             <div className="flex flex-wrap items-center gap-2 text-right">
               {student.compliance.voiceAllowed ? (
-                <Badge className="bg-green-100 text-green-800">Voice OK</Badge>
+                <Badge className="bg-green-100 text-green-800">{t('admin.compliance.roster.voiceOk')}</Badge>
               ) : (
-                <Badge className="bg-red-100 text-red-800">Voice Blocked</Badge>
+                <Badge className="bg-red-100 text-red-800">{t('teacher.compliance.roster.voiceBlocked')}</Badge>
               )}
             </div>
           </div>
@@ -607,13 +608,18 @@ function StudentRosterCard({ selected, student, onToggle }: StudentRosterCardPro
           ) : null}
           <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-500 sm:grid-cols-3">
             <span>
-              Voice: <strong>{student.compliance.voiceConsentStatus}</strong>
+              {t('admin.compliance.roster.voiceLabel')} <strong>{student.compliance.voiceConsentStatus}</strong>
             </span>
             <span>
-              Text: <strong>{student.compliance.textAllowed ? 'allowed' : 'blocked'}</strong>
+              {t('admin.compliance.roster.textLabel')}{' '}
+              <strong>
+                {student.compliance.textAllowed
+                  ? t('admin.compliance.roster.textAllowedValue')
+                  : t('admin.compliance.roster.textBlockedValue')}
+              </strong>
             </span>
             <span>
-              Retention: <strong>{student.compliance.retentionPolicyId}</strong>
+              {t('admin.compliance.roster.retentionLabel')} <strong>{student.compliance.retentionPolicyId}</strong>
             </span>
           </div>
         </div>
@@ -629,7 +635,18 @@ function GuardianPacketsSection({
   packetsData: OrgGuardianPacketsData;
   onFilterChange: (status?: string) => void;
 }) {
+  const { t } = useLanguage();
   const [statusFilter, setStatusFilter] = useState('');
+
+  const packetStatusLabels: Record<string, { label: string; color: string }> = {
+    draft: { label: t('admin.compliance.packets.status.draft'), color: 'bg-gray-100 text-gray-800' },
+    issued: { label: t('admin.compliance.packets.status.issued'), color: 'bg-blue-100 text-blue-800' },
+    viewed: { label: t('admin.compliance.packets.status.viewed'), color: 'bg-indigo-100 text-indigo-800' },
+    granted: { label: t('admin.compliance.packets.status.granted'), color: 'bg-green-100 text-green-800' },
+    revoked: { label: t('admin.compliance.packets.status.revoked'), color: 'bg-red-100 text-red-800' },
+    expired: { label: t('admin.compliance.packets.status.expired'), color: 'bg-amber-100 text-amber-800' },
+    canceled: { label: t('admin.compliance.packets.status.canceled'), color: 'bg-gray-100 text-gray-600' },
+  };
 
   return (
     <div className="space-y-4">
@@ -644,10 +661,10 @@ function GuardianPacketsSection({
             !statusFilter ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
-          All ({packetsData.totalCount})
+          {t('admin.compliance.packets.all').replace('{count}', String(packetsData.totalCount))}
         </button>
         {Object.entries(packetsData.statusCounts).map(([status, count]) => {
-          const config = PACKET_STATUS_LABELS[status] || {
+          const config = packetStatusLabels[status] || {
             label: status,
             color: 'bg-gray-100 text-gray-800',
           };
@@ -673,12 +690,12 @@ function GuardianPacketsSection({
 
       {packetsData.packets.length === 0 ? (
         <Card className="p-8 text-center text-gray-500">
-          No guardian consent packets found.
+          {t('admin.compliance.packets.empty')}
         </Card>
       ) : (
         <div className="space-y-2">
           {packetsData.packets.map((packet) => {
-            const statusConfig = PACKET_STATUS_LABELS[packet.status] || {
+            const statusConfig = packetStatusLabels[packet.status] || {
               label: packet.status,
               color: 'bg-gray-100 text-gray-800',
             };
@@ -693,25 +710,36 @@ function GuardianPacketsSection({
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-gray-500">
-                      Student: {packet.studentUid} · Class: {packet.classId}
+                      {t('admin.compliance.packets.studentClass')
+                        .replace('{studentUid}', packet.studentUid)
+                        .replace('{classId}', packet.classId)}
                     </p>
                     <p className="text-xs text-gray-400">
-                      Delivery: {packet.deliveryMethod} · Notice v{packet.noticeVersion}
+                      {t('admin.compliance.packets.delivery')
+                        .replace('{method}', packet.deliveryMethod)
+                        .replace('{version}', String(packet.noticeVersion))}
                     </p>
                   </div>
                   <div className="text-right">
                     <Badge className={statusConfig.color}>{statusConfig.label}</Badge>
                     {packet.reminderCount > 0 ? (
                       <p className="mt-1 text-xs text-gray-500">
-                        {packet.reminderCount} reminder{packet.reminderCount !== 1 ? 's' : ''}
+                        {(packet.reminderCount !== 1
+                          ? t('admin.compliance.packets.reminders.plural')
+                          : t('admin.compliance.packets.reminders.singular')
+                        ).replace('{count}', String(packet.reminderCount))}
                       </p>
                     ) : null}
                   </div>
                 </div>
                 <div className="mt-2 flex gap-4 text-xs text-gray-500">
-                  <span>Issued: {formatTimestamp(packet.issuedAt)}</span>
-                  {packet.expiresAt ? <span>Expires: {formatTimestamp(packet.expiresAt)}</span> : null}
-                  {packet.actedAt ? <span>Responded: {formatTimestamp(packet.actedAt)}</span> : null}
+                  <span>{t('admin.compliance.packets.issuedAt').replace('{date}', formatTimestamp(packet.issuedAt))}</span>
+                  {packet.expiresAt ? (
+                    <span>{t('admin.compliance.packets.expiresAt').replace('{date}', formatTimestamp(packet.expiresAt))}</span>
+                  ) : null}
+                  {packet.actedAt ? (
+                    <span>{t('admin.compliance.packets.actedAt').replace('{date}', formatTimestamp(packet.actedAt))}</span>
+                  ) : null}
                 </div>
               </Card>
             );
@@ -785,6 +813,7 @@ function adminComplianceReducer(
 export function AdminCompliancePage() {
   const navigate = useNavigate();
   const { activeMembership } = useMembership();
+  const { t } = useLanguage();
   const [state, dispatch] = useReducer(
     adminComplianceReducer,
     INITIAL_ADMIN_COMPLIANCE_STATE,
@@ -843,7 +872,7 @@ export function AdminCompliancePage() {
       dispatch({ type: 'export:finished' });
     } catch (err) {
       console.error('Failed to export audit:', err);
-      dispatch({ type: 'export:failed', message: 'Failed to export audit data.' });
+      dispatch({ type: 'export:failed', message: t('admin.compliance.exportFailed') });
     }
   };
 
@@ -852,12 +881,18 @@ export function AdminCompliancePage() {
       <div className="mx-auto max-w-4xl p-6">
         <Alert>
           <AlertDescription>
-            You must be a school administrator to access this page.
+            {t('admin.compliance.accessDenied')}
           </AlertDescription>
         </Alert>
       </div>
     );
   }
+
+  const adminComplianceTabs: { id: TabId; label: string; icon: ElementType }[] = [
+    { id: 'overview', label: t('admin.compliance.tab.overview'), icon: ShieldCheck },
+    { id: 'roster', label: t('admin.compliance.tab.roster'), icon: Users },
+    { id: 'packets', label: t('admin.compliance.tab.packets'), icon: Mail },
+  ];
 
   return (
     <div className="mx-auto max-w-5xl p-6">
@@ -870,6 +905,7 @@ export function AdminCompliancePage() {
 
       <AdminComplianceTabs
         activeTab={state.activeTab}
+        tabs={adminComplianceTabs}
         onTabChange={(activeTab) => dispatch({ type: 'tab:set', activeTab })}
       />
 
@@ -905,6 +941,7 @@ function AdminComplianceHeader({
   onExportAudit,
   onOpenDeletionRequests,
 }: AdminComplianceHeaderProps) {
+  const { t } = useLanguage();
   return (
     <div className="mb-6 flex items-center justify-between">
       <div className="flex items-center gap-3">
@@ -912,9 +949,9 @@ function AdminComplianceHeader({
           <ArrowLeft className="size-4" />
         </Button>
         <div>
-          <h1 className="text-xl font-semibold">School Compliance</h1>
+          <h1 className="text-xl font-semibold">{t('admin.compliance.pageTitle')}</h1>
           <p className="text-sm text-gray-500">
-            Organization-wide consent, privacy, and guardian packet management
+            {t('admin.compliance.pageSubtitle')}
           </p>
         </div>
       </div>
@@ -925,11 +962,11 @@ function AdminComplianceHeader({
           ) : (
             <Download className="mr-2 size-4" />
           )}
-          Export Audit
+          {t('admin.compliance.exportAudit')}
         </Button>
         <Button variant="outline" size="sm" onClick={onOpenDeletionRequests}>
           <FileCheck2 className="mr-2 size-4" />
-          Deletion Requests
+          {t('admin.compliance.deletionRequests')}
         </Button>
       </div>
     </div>
@@ -938,13 +975,14 @@ function AdminComplianceHeader({
 
 type AdminComplianceTabsProps = {
   activeTab: TabId;
+  tabs: { id: TabId; label: string; icon: ElementType }[];
   onTabChange: (activeTab: TabId) => void;
 };
 
-function AdminComplianceTabs({ activeTab, onTabChange }: AdminComplianceTabsProps) {
+function AdminComplianceTabs({ activeTab, tabs, onTabChange }: AdminComplianceTabsProps) {
   return (
     <div className="mb-6 flex gap-1 rounded-lg bg-gray-100 p-1">
-      {ADMIN_COMPLIANCE_TABS.map(({ id, label, icon: Icon }) => (
+      {tabs.map(({ id, label, icon: Icon }) => (
         <button
           type="button"
           key={id}
@@ -1024,17 +1062,19 @@ function OverviewSection({
 }
 
 function QuickInsightsCard({ summary }: { summary: OrgComplianceSummary }) {
+  const { t } = useLanguage();
   return (
     <Card className="p-4">
-      <h3 className="mb-3 text-sm font-medium text-gray-700">Quick insights</h3>
+      <h3 className="mb-3 text-sm font-medium text-gray-700">{t('admin.compliance.insights.title')}</h3>
       <div className="space-y-2 text-sm">
         {summary.guardianActionRequiredCount > 0 ? (
           <div className="flex items-center gap-2 text-amber-700">
             <AlertTriangle className="size-4" />
             <span>
-              {summary.guardianActionRequiredCount} student
-              {summary.guardianActionRequiredCount !== 1 ? 's' : ''} need guardian consent
-              before using voice features.
+              {(summary.guardianActionRequiredCount !== 1
+                ? t('admin.compliance.insights.guardianActionNeeded')
+                : t('admin.compliance.insights.guardianActionNeeded.singular')
+              ).replace('{count}', String(summary.guardianActionRequiredCount)).replace('{s}', summary.guardianActionRequiredCount !== 1 ? 's' : '')}
             </span>
           </div>
         ) : null}
@@ -1042,9 +1082,10 @@ function QuickInsightsCard({ summary }: { summary: OrgComplianceSummary }) {
           <div className="flex items-center gap-2 text-gray-600">
             <AlertTriangle className="size-4" />
             <span>
-              {summary.unknownConsentCount} student
-              {summary.unknownConsentCount !== 1 ? 's have' : ' has'} unknown consent status -
-              review recommended.
+              {(summary.unknownConsentCount !== 1
+                ? t('admin.compliance.insights.unknownConsentPlural')
+                : t('admin.compliance.insights.unknownConsentSingular')
+              ).replace('{count}', String(summary.unknownConsentCount))}
             </span>
           </div>
         ) : null}
@@ -1052,9 +1093,10 @@ function QuickInsightsCard({ summary }: { summary: OrgComplianceSummary }) {
           <div className="flex items-center gap-2 text-gray-600">
             <ShieldCheck className="size-4" />
             <span>
-              {summary.rawAudioRestrictedCount} student
-              {summary.rawAudioRestrictedCount !== 1 ? 's have' : ' has'} raw audio storage
-              restricted.
+              {(summary.rawAudioRestrictedCount !== 1
+                ? t('admin.compliance.insights.rawAudioRestrictedPlural')
+                : t('admin.compliance.insights.rawAudioRestrictedSingular')
+              ).replace('{count}', String(summary.rawAudioRestrictedCount))}
             </span>
           </div>
         ) : null}
@@ -1063,13 +1105,12 @@ function QuickInsightsCard({ summary }: { summary: OrgComplianceSummary }) {
         summary.unknownConsentCount === 0 ? (
           <div className="flex items-center gap-2 text-green-700">
             <ShieldCheck className="size-4" />
-            <span>All students have resolved consent status. No action required.</span>
+            <span>{t('admin.compliance.insights.allResolved')}</span>
           </div>
         ) : null}
         {summary.studentCount === 0 ? (
           <p className="text-gray-500">
-            No student compliance records found. Records are created when students are enrolled and
-            consent settings are configured.
+            {t('admin.compliance.insights.noRecords')}
           </p>
         ) : null}
       </div>
@@ -1078,14 +1119,26 @@ function QuickInsightsCard({ summary }: { summary: OrgComplianceSummary }) {
 }
 
 function GuardianPacketsOverview({ packetsData }: { packetsData: OrgGuardianPacketsData }) {
+  const { t } = useLanguage();
+
+  const packetStatusLabels: Record<string, { label: string; color: string }> = {
+    draft: { label: t('admin.compliance.packets.status.draft'), color: 'bg-gray-100 text-gray-800' },
+    issued: { label: t('admin.compliance.packets.status.issued'), color: 'bg-blue-100 text-blue-800' },
+    viewed: { label: t('admin.compliance.packets.status.viewed'), color: 'bg-indigo-100 text-indigo-800' },
+    granted: { label: t('admin.compliance.packets.status.granted'), color: 'bg-green-100 text-green-800' },
+    revoked: { label: t('admin.compliance.packets.status.revoked'), color: 'bg-red-100 text-red-800' },
+    expired: { label: t('admin.compliance.packets.status.expired'), color: 'bg-amber-100 text-amber-800' },
+    canceled: { label: t('admin.compliance.packets.status.canceled'), color: 'bg-gray-100 text-gray-600' },
+  };
+
   return (
     <Card className="p-4">
       <h3 className="mb-3 text-sm font-medium text-gray-700">
-        Guardian packets overview
+        {t('admin.compliance.packets.overview')}
       </h3>
       <div className="flex flex-wrap gap-3">
         {Object.entries(packetsData.statusCounts).map(([status, count]) => {
-          const config = PACKET_STATUS_LABELS[status] || {
+          const config = packetStatusLabels[status] || {
             label: status,
             color: 'bg-gray-100 text-gray-800',
           };

@@ -32,6 +32,10 @@ vi.mock('@/contexts/MembershipContext', () => ({
   }),
 }));
 
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({ t: (key: string) => key }),
+}));
+
 const rosterFixture: OrgComplianceRosterData = {
   summary: {
     studentCount: 1,
@@ -95,7 +99,7 @@ describe('AdminCompliancePage', () => {
     );
 
     expect(
-      screen.getByText('You must be a school administrator to access this page.'),
+      screen.getByText('admin.compliance.accessDenied'),
     ).toBeInTheDocument();
 
     await waitFor(() => {
@@ -120,11 +124,11 @@ describe('AdminCompliancePage', () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText('Total students');
-    fireEvent.click(screen.getByRole('button', { name: /student roster/i }));
+    await screen.findByText('admin.compliance.metric.totalStudents');
+    fireEvent.click(screen.getByRole('button', { name: 'admin.compliance.tab.roster' }));
     await screen.findByText('Student One');
 
-    expect(screen.getByRole('combobox', { name: 'Filter by consent status' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Filter by class' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'admin.compliance.filter.consentStatusAriaLabel' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'admin.compliance.filter.classAriaLabel' })).toBeInTheDocument();
   });
 });

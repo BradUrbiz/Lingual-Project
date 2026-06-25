@@ -13,6 +13,7 @@ import { LingualAdminRoute } from './components/layout/LingualAdminRoute';
 import { LoadingSpinner } from './components/common/LoadingSpinner';
 import { useAuth } from './hooks/useAuth';
 import { getOnboardingDestination } from './lib/homeRoutes';
+import { detectLocale } from './lib/localeRouting';
 
 const LandingPage = lazy(() => import('./pages/LandingPage').then((module) => ({ default: module.LandingPage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
@@ -293,7 +294,9 @@ function AnimatedRoutes() {
 
 function App() {
   // Use /app as base path in production (when built with base: '/app/')
-  const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || '';
+  const existingBase = import.meta.env.BASE_URL.replace(/\/$/, '') || '';
+  const { localePrefix, lang } = detectLocale(window.location.pathname, existingBase);
+  const basename = `${existingBase}${localePrefix}`;
 
   return (
     <MotionConfig reducedMotion="user">
@@ -301,7 +304,7 @@ function App() {
         <BrowserRouter basename={basename}>
           <AuthProvider>
             <MembershipProvider>
-              <LanguageProvider>
+              <LanguageProvider initialLang={lang}>
                 <LearningLocaleProvider>
                   <AnimatedRoutes />
                 </LearningLocaleProvider>

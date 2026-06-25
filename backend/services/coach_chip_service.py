@@ -160,9 +160,10 @@ def generate_coach_chip(deps: Any, bootstrap: dict, uid: str, session_id: str, t
         )
 
         if item is None:
-            # Flag-OFF path: return early without touching state (byte-identical).
-            # Fast-gate path: LLM eval ran but produced no chip — advance last_eval_turn
-            # so the floor stays bounded (a no-chip eval still counts as an eval).
+            # Flag-OFF (fast=False): return early without touching state — byte-identical
+            # to pre-fast-gate behavior. Fast-gate (fast=True): the LLM eval ran but
+            # produced no chip — advance last_eval_turn so the floor stays bounded
+            # (a no-chip eval still counts as an eval).
             if fast:
                 target_state["coach_chip_last_eval_turn"] = turn_index
                 deps.db.update_practice_session_analysis_state(

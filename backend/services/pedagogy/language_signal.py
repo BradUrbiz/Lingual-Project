@@ -54,7 +54,10 @@ def _english_marker_hits(text: str) -> int:
 
 def _too_short(content: str) -> bool:
     # Use total stripped length so single CJK syllables (which are alpha)
-    # are not under-counted relative to multi-byte Latin words.
+    # are not under-counted relative to multi-byte Latin words. INTENTIONAL
+    # divergence from drift.py's floor (which counts alpha letters): this
+    # judges a learner turn (possibly messy), drift judges a tutor turn. Do
+    # not "unify" them onto alpha-count — it would gate out short dense CJK.
     return len(_s(content)) < SHORTFALL_MIN_CHARS
 
 

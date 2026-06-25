@@ -9,6 +9,7 @@ import {
     searchOrganizations,
 } from '@/api/teacherRequests';
 import type { OrgSearchResult } from '@/types/teacherJoin';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 type Pane = 'entry' | 'code' | 'search';
 
@@ -67,6 +68,7 @@ function teacherJoinReducer(state: TeacherJoinState, action: TeacherJoinAction):
 
 export function TeacherJoinOrgPage() {
     const navigate = useNavigate();
+    const { t } = useLanguage();
     const [state, dispatch] = useReducer(teacherJoinReducer, initialTeacherJoinState);
     const { pane, error, submitting, code, query, results, confirmTarget } = state;
 
@@ -95,7 +97,7 @@ export function TeacherJoinOrgPage() {
     async function submitCode() {
         const upper = code.trim().toUpperCase();
         if (upper.length !== 6) {
-            dispatch({ type: 'set-error', error: 'Please enter a 6-character invite code.' });
+            dispatch({ type: 'set-error', error: t('teacher.joinOrg.code.invalidError') });
             return;
         }
         dispatch({ type: 'set-submitting', submitting: true });
@@ -139,7 +141,7 @@ export function TeacherJoinOrgPage() {
                                 className="flex items-center text-sm text-muted-foreground"
                                 onClick={() => { reset(); dispatch({ type: 'set-pane', pane: 'entry' }); }}
                             >
-                                <ArrowLeft className="size-4 mr-1" /> Change role
+                                <ArrowLeft className="size-4 mr-1" /> {t('teacher.joinOrg.changeRole')}
                             </button>
                         )}
 
@@ -152,19 +154,19 @@ export function TeacherJoinOrgPage() {
                         {pane === 'entry' && (
                             <>
                                 <div className="text-center space-y-1">
-                                    <h1 className="text-2xl font-bold">Find your school</h1>
+                                    <h1 className="text-2xl font-bold">{t('teacher.joinOrg.entry.title')}</h1>
                                     <p className="text-muted-foreground text-sm">
-                                        Do you have an invite code from your school?
+                                        {t('teacher.joinOrg.entry.subtitle')}
                                     </p>
                                 </div>
                                 <div className="flex flex-col gap-3">
                                     <Button onClick={() => { reset(); dispatch({ type: 'set-pane', pane: 'code' }); }}>
                                         <Ticket className="mr-2 size-4" />
-                                        Yes, I have an invite code
+                                        {t('teacher.joinOrg.entry.hasCode')}
                                     </Button>
                                     <Button variant="outline" onClick={() => { reset(); dispatch({ type: 'set-pane', pane: 'search' }); }}>
                                         <Search className="mr-2 size-4" />
-                                        No, find my school
+                                        {t('teacher.joinOrg.entry.noCode')}
                                     </Button>
                                 </div>
                             </>
@@ -173,9 +175,9 @@ export function TeacherJoinOrgPage() {
                         {pane === 'code' && (
                             <>
                                 <div className="space-y-1">
-                                    <h2 className="text-xl font-semibold">Enter your invite code</h2>
+                                    <h2 className="text-xl font-semibold">{t('teacher.joinOrg.code.title')}</h2>
                                     <p className="text-sm text-muted-foreground">
-                                        Six characters, shared by your school admin.
+                                        {t('teacher.joinOrg.code.subtitle')}
                                     </p>
                                 </div>
                                 <Input
@@ -192,7 +194,7 @@ export function TeacherJoinOrgPage() {
                                 />
                                 <Button onClick={submitCode} disabled={submitting || code.length !== 6} className="w-full">
                                     {submitting ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
-                                    Submit code
+                                    {t('teacher.joinOrg.code.submit')}
                                 </Button>
                             </>
                         )}
@@ -200,13 +202,13 @@ export function TeacherJoinOrgPage() {
                         {pane === 'search' && (
                             <>
                                 <div className="space-y-1">
-                                    <h2 className="text-xl font-semibold">Find your school</h2>
+                                    <h2 className="text-xl font-semibold">{t('teacher.joinOrg.search.title')}</h2>
                                     <p className="text-sm text-muted-foreground">
-                                        Type your school's name.
+                                        {t('teacher.joinOrg.search.subtitle')}
                                     </p>
                                 </div>
                                 <Input
-                                    placeholder="School name"
+                                    placeholder={t('teacher.joinOrg.search.placeholder')}
                                     value={query}
                                     onChange={(e) => dispatch({ type: 'set-query', query: e.target.value })}
                                     autoFocus
@@ -229,35 +231,35 @@ export function TeacherJoinOrgPage() {
                                 {confirmTarget && (
                                     <Card className="p-4 space-y-3">
                                         <p className="text-sm">
-                                            Request to join <strong>{confirmTarget.name}</strong>?
+                                            {t('teacher.joinOrg.search.confirmRequest').replace('{name}', confirmTarget.name)}
                                         </p>
                                         <div className="flex gap-2">
                                             <Button onClick={() => submitOrg(confirmTarget.id)} disabled={submitting}>
                                                 {submitting ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
-                                                Confirm
+                                                {t('teacher.joinOrg.search.confirm')}
                                             </Button>
                                             <Button variant="ghost" onClick={() => dispatch({ type: 'set-confirm-target', target: null })}>
-                                                Cancel
+                                                {t('teacher.joinOrg.search.cancel')}
                                             </Button>
                                         </div>
                                     </Card>
                                 )}
                                 <details className="text-xs text-muted-foreground">
-                                    <summary className="cursor-pointer">Can't find my school?</summary>
+                                    <summary className="cursor-pointer">{t('teacher.joinOrg.search.cantFind')}</summary>
                                     <div className="mt-2 space-y-2">
                                         <button
                                             type="button"
                                             className="text-primary underline"
                                             onClick={() => navigate('/signup/admin/org-wizard')}
                                         >
-                                            I'm actually an administrator - register my school
+                                            {t('teacher.joinOrg.search.adminPivot')}
                                         </button>
-                                        <p>Or try a different spelling above.</p>
+                                        <p>{t('teacher.joinOrg.search.trySpelling')}</p>
                                     </div>
                                 </details>
                                 <p className="text-right text-sm">
                                     <a href="mailto:support@lingual.app" className="text-primary underline">
-                                        Contact support
+                                        {t('teacher.joinOrg.search.contactSupport')}
                                     </a>
                                 </p>
                             </>

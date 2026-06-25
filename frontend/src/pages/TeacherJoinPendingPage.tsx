@@ -10,12 +10,14 @@ import {
 } from '@/api/teacherRequests';
 import type { TeacherJoinRequest } from '@/types/teacherJoin';
 import { useAuth } from '@/hooks/useAuth';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const POLL_INTERVAL_MS = 30_000;
 
 export function TeacherJoinPendingPage() {
     const navigate = useNavigate();
     const { refreshUser } = useAuth();
+    const { t } = useLanguage();
     const [req, setReq] = useState<TeacherJoinRequest | null | undefined>(undefined);
     const [cancelling, setCancelling] = useState(false);
     const navigatedRef = useRef(false);
@@ -80,12 +82,12 @@ export function TeacherJoinPendingPage() {
             <AnimatedPage>
                 <div className="min-h-screen flex items-center justify-center p-4">
                     <Card className="p-8 max-w-md w-full text-center space-y-4">
-                        <h1 className="text-xl font-bold">Your request was not approved</h1>
+                        <h1 className="text-xl font-bold">{t('teacher.joinPending.declined.title')}</h1>
                         {req.declineReason && (
                             <p className="text-sm text-muted-foreground">{req.declineReason}</p>
                         )}
                         <Button onClick={() => navigate('/signup/teacher/join-org', { replace: true })}>
-                            Try a different school
+                            {t('teacher.joinPending.declined.tryAnother')}
                         </Button>
                     </Card>
                 </div>
@@ -107,10 +109,9 @@ export function TeacherJoinPendingPage() {
                             <Clock className="size-8" />
                         </div>
                         <div className="space-y-2">
-                            <h1 className="text-2xl font-bold">Awaiting approval</h1>
+                            <h1 className="text-2xl font-bold">{t('teacher.joinPending.pending.title')}</h1>
                             <p className="text-muted-foreground">
-                                Your request to join <strong>{req.orgName}</strong> is with the school admin.
-                                We'll email you the moment they decide.
+                                {t('teacher.joinPending.pending.subtitle').replace('{name}', req.orgName)}
                             </p>
                         </div>
                         <Button
@@ -119,7 +120,7 @@ export function TeacherJoinPendingPage() {
                             disabled={cancelling}
                         >
                             {cancelling ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
-                            Cancel request
+                            {t('teacher.joinPending.pending.cancelRequest')}
                         </Button>
                     </Card>
                 </m.div>

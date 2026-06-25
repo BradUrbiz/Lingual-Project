@@ -1,6 +1,14 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TeacherClassCompliancePage } from '@/pages/TeacherClassCompliancePage';
 import type { ClassComplianceRosterData } from '@/types';
+
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({
+    language: 'en',
+    t: (key: string) => key,
+  }),
+}));
 
 const navigateMock = vi.fn();
 const getClassComplianceRosterMock = vi.fn();
@@ -151,13 +159,14 @@ describe('TeacherClassCompliancePage', () => {
     expect(await screen.findByText('French 2 - Period 3')).toBeInTheDocument();
     expect(screen.getByText('Student One')).toBeInTheDocument();
     expect(screen.getByText('Student Two')).toBeInTheDocument();
-    expect(screen.getByText('Packet issued')).toBeInTheDocument();
+    // With i18n mock (t: key => key), badge text is the key (appears once per student row).
+    expect(screen.getAllByText('teacher.compliance.roster.packetStatus').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getAllByRole('checkbox')[1]);
-    fireEvent.change(screen.getByLabelText('Voice consent'), {
+    fireEvent.change(screen.getByLabelText('teacher.compliance.bulkUpdates.voiceConsentLabel'), {
       target: { value: 'granted' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Apply to selected students' }));
+    fireEvent.click(screen.getByRole('button', { name: 'teacher.compliance.bulkUpdates.applyButton' }));
 
     await waitFor(() => {
       expect(bulkUpdateClassComplianceMock).toHaveBeenCalledWith('class-1', {
@@ -168,14 +177,14 @@ describe('TeacherClassCompliancePage', () => {
     });
 
     expect(getClassComplianceRosterMock).toHaveBeenCalledTimes(2);
-    expect(await screen.findByText('Updated 1 student records.')).toBeInTheDocument();
+    expect(await screen.findByText('teacher.compliance.saveSuccess')).toBeInTheDocument();
   });
 
   it('downloads the audit export from the class page', async () => {
     render(<TeacherClassCompliancePage />);
 
-    expect(await screen.findByText('Class compliance roster')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Export audit CSV' }));
+    expect(await screen.findByText('teacher.compliance.roster.title')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'teacher.compliance.exportCsv' }));
 
     await waitFor(() => {
       expect(downloadClassComplianceAuditExportMock).toHaveBeenCalledWith('class-1');

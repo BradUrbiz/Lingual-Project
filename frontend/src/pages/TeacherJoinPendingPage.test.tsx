@@ -3,6 +3,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TeacherJoinPendingPage } from './TeacherJoinPendingPage';
 
+vi.mock('@/contexts/LanguageContext', () => ({
+    useLanguage: () => ({
+        language: 'en',
+        t: (key: string) => key,
+    }),
+}));
+
 const navigate = vi.fn();
 vi.mock('react-router-dom', async () => {
     const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -50,8 +57,9 @@ describe('TeacherJoinPendingPage', () => {
         });
         renderPage();
         await waitFor(() => expect(getMyMock).toHaveBeenCalled());
-        expect(await screen.findByText(/awaiting/i)).toBeInTheDocument();
-        expect(screen.getByText(/SF Friends/)).toBeInTheDocument();
+        // With i18n mock (t: key => key), heading and subtitle text are keys.
+        expect(await screen.findByText('teacher.joinPending.pending.title')).toBeInTheDocument();
+        expect(screen.getByText('teacher.joinPending.pending.subtitle')).toBeInTheDocument();
     });
 
     it('polls every 30 seconds', async () => {
@@ -120,7 +128,8 @@ describe('TeacherJoinPendingPage', () => {
         });
         cancelMyMock.mockResolvedValue(undefined);
         renderPage();
-        const cancelBtn = await screen.findByRole('button', { name: /cancel request/i });
+        // With i18n mock (t: key => key), button text is the key.
+        const cancelBtn = await screen.findByRole('button', { name: 'teacher.joinPending.pending.cancelRequest' });
         fireEvent.click(cancelBtn);
         await waitFor(() => expect(cancelMyMock).toHaveBeenCalled());
         expect(navigate).toHaveBeenCalledWith('/signup/teacher/join-org', { replace: true });

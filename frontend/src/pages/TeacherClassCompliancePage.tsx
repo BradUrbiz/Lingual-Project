@@ -19,6 +19,7 @@ import {
 import { Alert, AlertDescription, Badge, Button, Card, Input } from '@/components/ui';
 import { OnboardingHint } from '@/components/ui/OnboardingHint';
 import type { ClassComplianceRosterData, ConsentStatus, UpdateStudentCompliancePayload } from '@/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 type BulkConsentValue = 'unchanged' | ConsentStatus;
 type BulkTextAllowedValue = 'unchanged' | 'allowed' | 'blocked';
@@ -165,68 +166,69 @@ function BulkConsentUpdatesCard({
   onBulkFormChange,
   onSave,
 }: BulkConsentUpdatesCardProps) {
+  const { t } = useLanguage();
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">Bulk consent updates</h2>
+          <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.compliance.bulkUpdates.title')}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Apply one consent or retention change to the selected students in this class.
+            {t('teacher.compliance.bulkUpdates.subtitle')}
           </p>
         </div>
         <Badge variant="outline" size="sm">
-          {selectedCount} selected
+          {t('teacher.compliance.bulkUpdates.selectedBadge').replace('{count}', String(selectedCount))}
         </Badge>
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <label className="space-y-2 text-sm font-medium text-foreground">
-          <span>Voice consent</span>
+          <span>{t('teacher.compliance.bulkUpdates.voiceConsentLabel')}</span>
           <select
             value={bulkForm.voiceConsentStatus}
             onChange={(event) => onBulkFormChange({ voiceConsentStatus: event.target.value as BulkConsentValue })}
             className="w-full rounded-2xl border-2 border-border bg-background px-4 py-3 text-sm text-foreground focus:border-foreground focus:outline-none"
           >
-            <option value="unchanged">Leave unchanged</option>
-            <option value="unknown">Unknown</option>
-            <option value="granted">Granted</option>
-            <option value="revoked">Revoked</option>
+            <option value="unchanged">{t('teacher.compliance.bulkUpdates.leaveUnchanged')}</option>
+            <option value="unknown">{t('teacher.compliance.bulkUpdates.optionUnknown')}</option>
+            <option value="granted">{t('teacher.compliance.bulkUpdates.optionGranted')}</option>
+            <option value="revoked">{t('teacher.compliance.bulkUpdates.optionRevoked')}</option>
           </select>
         </label>
 
         <label className="space-y-2 text-sm font-medium text-foreground">
-          <span>Text launch</span>
+          <span>{t('teacher.compliance.bulkUpdates.textLaunchLabel')}</span>
           <select
             value={bulkForm.textAllowed}
             onChange={(event) => onBulkFormChange({ textAllowed: event.target.value as BulkTextAllowedValue })}
             className="w-full rounded-2xl border-2 border-border bg-background px-4 py-3 text-sm text-foreground focus:border-foreground focus:outline-none"
           >
-            <option value="unchanged">Leave unchanged</option>
-            <option value="allowed">Allow text</option>
-            <option value="blocked">Block text</option>
+            <option value="unchanged">{t('teacher.compliance.bulkUpdates.leaveUnchanged')}</option>
+            <option value="allowed">{t('teacher.compliance.bulkUpdates.optionAllowText')}</option>
+            <option value="blocked">{t('teacher.compliance.bulkUpdates.optionBlockText')}</option>
           </select>
         </label>
 
         <label className="space-y-2 text-sm font-medium text-foreground sm:col-span-2">
-          <span>Retention policy</span>
+          <span>{t('teacher.compliance.bulkUpdates.retentionLabel')}</span>
           <select
             value={bulkForm.retentionPolicyId}
             onChange={(event) => onBulkFormChange({ retentionPolicyId: event.target.value as BulkRetentionValue })}
             className="w-full rounded-2xl border-2 border-border bg-background px-4 py-3 text-sm text-foreground focus:border-foreground focus:outline-none"
           >
-            <option value="unchanged">Leave unchanged</option>
-            <option value="standard_school">Standard school retention</option>
-            <option value="no_raw_audio">No raw audio retention</option>
+            <option value="unchanged">{t('teacher.compliance.bulkUpdates.leaveUnchanged')}</option>
+            <option value="standard_school">{t('teacher.compliance.bulkUpdates.optionStandard')}</option>
+            <option value="no_raw_audio">{t('teacher.compliance.bulkUpdates.optionNoRawAudio')}</option>
           </select>
         </label>
 
         <div className="space-y-2 text-sm font-medium text-foreground sm:col-span-2">
-          <span>Reason (optional)</span>
+          <span>{t('teacher.compliance.bulkUpdates.reasonLabel')}</span>
           <Input
-            aria-label="Bulk update reason"
+            aria-label={t('teacher.compliance.bulkUpdates.reasonAriaLabel')}
             value={bulkForm.reason}
             onChange={(event) => onBulkFormChange({ reason: event.target.value })}
-            placeholder="Pilot cleanup, counselor request, notice reconciliation..."
+            placeholder={t('teacher.compliance.bulkUpdates.reasonPlaceholder')}
           />
         </div>
       </div>
@@ -237,10 +239,10 @@ function BulkConsentUpdatesCard({
           loading={saving}
           disabled={selectedCount === 0 || !hasBulkChanges}
         >
-          Apply to selected students
+          {t('teacher.compliance.bulkUpdates.applyButton')}
         </Button>
         <p className="text-sm text-muted-foreground">
-          Bulk updates are limited to active students in this class and create audit events per student.
+          {t('teacher.compliance.bulkUpdates.auditNote')}
         </p>
       </div>
     </Card>
@@ -266,13 +268,14 @@ function ComplianceRosterCard({
   onToggleStudent,
   onOpenStudent,
 }: ComplianceRosterCardProps) {
+  const { t } = useLanguage();
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">Class compliance roster</h2>
+          <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.compliance.roster.title')}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Review who is voice-eligible, who needs guardian action, and who is under restricted retention.
+            {t('teacher.compliance.roster.subtitle')}
           </p>
         </div>
         <label className="flex items-center gap-3 rounded-2xl border-2 border-border bg-secondary/40 px-4 py-3 text-sm font-medium text-foreground">
@@ -282,14 +285,14 @@ function ComplianceRosterCard({
             onChange={onToggleAllStudents}
             className="size-4 rounded border-border"
           />
-          Select all
+          {t('teacher.compliance.roster.selectAll')}
         </label>
       </div>
 
       <div className="mt-6 space-y-3">
         {roster.students.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
-            No active students are enrolled in this class.
+            {t('teacher.compliance.roster.empty')}
           </div>
         ) : (
           roster.students.map((student) => (
@@ -298,7 +301,7 @@ function ComplianceRosterCard({
                 <div className="flex gap-3">
                   <input
                     type="checkbox"
-                    aria-label={`Select ${student.displayName}`}
+                    aria-label={t('teacher.compliance.roster.selectStudent').replace('{name}', student.displayName)}
                     checked={selectedStudentUids.has(student.uid)}
                     onChange={() => onToggleStudent(student.uid)}
                     className="mt-1 size-4 rounded border-border"
@@ -313,29 +316,29 @@ function ComplianceRosterCard({
                       ) : null}
                       {student.guardianContactRequired ? (
                         <Badge variant="outline" size="sm">
-                          Guardian contact required
+                          {t('teacher.compliance.roster.guardianContactRequired')}
                         </Badge>
                       ) : null}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Badge variant={student.compliance.voiceAllowed ? 'success' : 'outline'} size="sm">
-                        Voice {student.compliance.voiceAllowed ? 'allowed' : 'blocked'}
+                        {student.compliance.voiceAllowed ? t('teacher.compliance.roster.voiceAllowed') : t('teacher.compliance.roster.voiceBlocked')}
                       </Badge>
                       <Badge variant={student.compliance.textAllowed ? 'accent' : 'outline'} size="sm">
-                        Text {student.compliance.textAllowed ? 'allowed' : 'blocked'}
+                        {student.compliance.textAllowed ? t('teacher.compliance.roster.textAllowed') : t('teacher.compliance.roster.textBlocked')}
                       </Badge>
                       <Badge variant="secondary" size="sm">
-                        Voice {student.compliance.voiceConsentStatus}
+                        {t('teacher.compliance.roster.voiceConsentStatus').replace('{status}', student.compliance.voiceConsentStatus)}
                       </Badge>
                       <Badge variant="outline" size="sm">
                         {student.compliance.retentionPolicy.label}
                       </Badge>
                       <Badge variant={student.guardianPacket ? 'outline' : 'secondary'} size="sm">
-                        Packet {student.guardianPacket?.status || 'none'}
+                        {t('teacher.compliance.roster.packetStatus').replace('{status}', student.guardianPacket?.status || 'none')}
                       </Badge>
                       {student.guardianPacket?.expiresAt ? (
                         <Badge variant="secondary" size="sm">
-                          expires {formatGuardianPacketTimestamp(student.guardianPacket.expiresAt)}
+                          {t('teacher.compliance.roster.packetExpires').replace('{date}', formatGuardianPacketTimestamp(student.guardianPacket.expiresAt) ?? '')}
                         </Badge>
                       ) : null}
                     </div>
@@ -353,7 +356,7 @@ function ComplianceRosterCard({
                     onClick={() => onOpenStudent(student.uid)}
                     disabled={!classId}
                   >
-                    Open detail
+                    {t('teacher.compliance.roster.openDetail')}
                   </Button>
                 </div>
               </div>
@@ -391,6 +394,7 @@ function buildBulkUpdates(form: typeof DEFAULT_BULK_FORM): UpdateStudentComplian
 export function TeacherClassCompliancePage() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [state, dispatch] = useReducer(classComplianceReducer, initialClassComplianceState);
   const {
     loading,
@@ -472,7 +476,7 @@ export function TeacherClassCompliancePage() {
         updates: bulkUpdates,
         reason: bulkForm.reason.trim() || undefined,
       });
-      dispatch({ type: 'save-success', message: `Updated ${result.updatedCount} student records.` });
+      dispatch({ type: 'save-success', message: t('teacher.compliance.saveSuccess').replace('{count}', String(result.updatedCount)) });
       await reloadRoster();
     } catch (err) {
       dispatch({
@@ -487,7 +491,7 @@ export function TeacherClassCompliancePage() {
     dispatch({ type: 'export-start' });
     try {
       await downloadClassComplianceAuditExport(classId);
-      dispatch({ type: 'export-success', message: 'Audit export downloaded.' });
+      dispatch({ type: 'export-success', message: t('teacher.compliance.exportSuccess') });
     } catch (err) {
       dispatch({
         type: 'export-error',
@@ -508,22 +512,22 @@ export function TeacherClassCompliancePage() {
     return (
       <div className="space-y-4">
         <Alert variant="destructive">
-          <AlertDescription>{error || 'Class compliance is unavailable.'}</AlertDescription>
+          <AlertDescription>{error || t('teacher.compliance.unavailable')}</AlertDescription>
         </Alert>
         <Button variant="outline" onClick={() => navigate('/app/teacher')}>
-          Back to dashboard
+          {t('teacher.compliance.backToDashboard')}
         </Button>
       </div>
     );
   }
 
   const stats = [
-    { label: 'Students', value: roster.summary.studentCount, icon: Users, accent: 'bg-primary/10 text-primary' },
-    { label: 'Voice allowed', value: roster.summary.voiceAllowedCount, icon: ShieldCheck, accent: 'bg-success/15 text-success' },
-    { label: 'Voice blocked', value: roster.summary.voiceBlockedCount, icon: AlertTriangle, accent: 'bg-destructive/10 text-destructive' },
-    { label: 'Guardian action', value: roster.summary.guardianActionRequiredCount, icon: UserCheck, accent: 'bg-accent/20 text-accent-foreground' },
-    { label: 'Unknown consent', value: roster.summary.unknownConsentCount, icon: FileCheck2, accent: 'bg-secondary text-foreground' },
-    { label: 'No raw audio', value: roster.summary.rawAudioRestrictedCount, icon: Download, accent: 'bg-primary/5 text-foreground' },
+    { label: t('teacher.compliance.stat.students'), value: roster.summary.studentCount, icon: Users, accent: 'bg-primary/10 text-primary' },
+    { label: t('teacher.compliance.stat.voiceAllowed'), value: roster.summary.voiceAllowedCount, icon: ShieldCheck, accent: 'bg-success/15 text-success' },
+    { label: t('teacher.compliance.stat.voiceBlocked'), value: roster.summary.voiceBlockedCount, icon: AlertTriangle, accent: 'bg-destructive/10 text-destructive' },
+    { label: t('teacher.compliance.stat.guardianAction'), value: roster.summary.guardianActionRequiredCount, icon: UserCheck, accent: 'bg-accent/20 text-accent-foreground' },
+    { label: t('teacher.compliance.stat.unknownConsent'), value: roster.summary.unknownConsentCount, icon: FileCheck2, accent: 'bg-secondary text-foreground' },
+    { label: t('teacher.compliance.stat.noRawAudio'), value: roster.summary.rawAudioRestrictedCount, icon: Download, accent: 'bg-primary/5 text-foreground' },
   ];
 
   return (
@@ -537,17 +541,17 @@ export function TeacherClassCompliancePage() {
             onClick={() => navigate(`/app/teacher/classes/${classId}/analytics`)}
           >
             <ArrowLeft size={16} className="mr-2" />
-            Back to class analytics
+            {t('teacher.compliance.backToAnalytics')}
           </Button>
           <h1 className="text-3xl font-display font-bold text-foreground">{roster.class.name}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Class-scoped consent operations and audit export for beta pilot support.
+            {t('teacher.compliance.pageSubtitle')}
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button variant="outline" onClick={() => void handleExport()} loading={exporting}>
             <Download size={16} className="mr-2" />
-            Export audit CSV
+            {t('teacher.compliance.exportCsv')}
           </Button>
         </div>
       </div>
@@ -583,7 +587,7 @@ export function TeacherClassCompliancePage() {
       {roster && (
         <OnboardingHint
           show={roster.summary.unknownConsentCount > 0 || roster.summary.guardianActionRequiredCount > 0}
-          message="Review consent status for students before enabling voice practice."
+          message={t('teacher.compliance.onboardingHint')}
         />
       )}
 

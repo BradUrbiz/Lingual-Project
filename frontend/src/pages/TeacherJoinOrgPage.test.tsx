@@ -4,6 +4,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { TeacherJoinOrgPage } from './TeacherJoinOrgPage';
 
+vi.mock('@/contexts/LanguageContext', () => ({
+    useLanguage: () => ({
+        language: 'en',
+        t: (key: string) => key,
+    }),
+}));
+
 const navigate = vi.fn();
 vi.mock('react-router-dom', async () => {
     const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -39,8 +46,9 @@ beforeEach(() => {
 describe('Pane A - entry', () => {
     it('shows two options', () => {
         renderPage();
-        expect(screen.getByRole('button', { name: /invite code/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /find my school/i })).toBeInTheDocument();
+        // With i18n mock (t: key => key), button text is the key string.
+        expect(screen.getByRole('button', { name: 'teacher.joinOrg.entry.hasCode' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'teacher.joinOrg.entry.noCode' })).toBeInTheDocument();
     });
 });
 
@@ -51,10 +59,10 @@ describe('Pane B - invite code', () => {
             status: 'pending', source: 'invite_code',
         });
         renderPage();
-        fireEvent.click(screen.getByRole('button', { name: /invite code/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'teacher.joinOrg.entry.hasCode' }));
         const input = screen.getByPlaceholderText(/ABC123/);
         fireEvent.change(input, { target: { value: 'abc123' } });
-        fireEvent.click(screen.getByRole('button', { name: /submit code/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'teacher.joinOrg.code.submit' }));
         await waitFor(() => {
             expect(submitMock).toHaveBeenCalledWith({ inviteCode: 'ABC123' });
         });
@@ -64,10 +72,11 @@ describe('Pane B - invite code', () => {
     it('shows error on invalid code', async () => {
         submitMock.mockRejectedValue(new Error('Invalid or expired invite code.'));
         renderPage();
-        fireEvent.click(screen.getByRole('button', { name: /invite code/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'teacher.joinOrg.entry.hasCode' }));
         fireEvent.change(screen.getByPlaceholderText(/ABC123/), { target: { value: 'XXXXXX' } });
-        fireEvent.click(screen.getByRole('button', { name: /submit code/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'teacher.joinOrg.code.submit' }));
         await waitFor(() => {
+            // Error message comes from the API mock's Error.message, not translated.
             expect(screen.getByText(/invalid or expired/i)).toBeInTheDocument();
         });
     });
@@ -79,8 +88,8 @@ describe('Pane C - search', () => {
             { id: 'org-1', name: 'SF Friends', city: 'SF', state: 'CA', school_type: 'k12' },
         ]);
         renderPage();
-        fireEvent.click(screen.getByRole('button', { name: /find my school/i }));
-        const input = screen.getByPlaceholderText(/school name/i);
+        fireEvent.click(screen.getByRole('button', { name: 'teacher.joinOrg.entry.noCode' }));
+        const input = screen.getByPlaceholderText('teacher.joinOrg.search.placeholder');
         fireEvent.change(input, { target: { value: 'SF' } });
         await waitFor(() => {
             expect(searchMock).toHaveBeenCalledWith('SF');
@@ -97,12 +106,12 @@ describe('Pane C - search', () => {
             status: 'pending', source: 'search',
         });
         renderPage();
-        fireEvent.click(screen.getByRole('button', { name: /find my school/i }));
-        fireEvent.change(screen.getByPlaceholderText(/school name/i), { target: { value: 'SF' } });
+        fireEvent.click(screen.getByRole('button', { name: 'teacher.joinOrg.entry.noCode' }));
+        fireEvent.change(screen.getByPlaceholderText('teacher.joinOrg.search.placeholder'), { target: { value: 'SF' } });
         const result = await screen.findByText('SF Friends');
         fireEvent.click(result);
-        // Confirm dialog
-        const confirm = await screen.findByRole('button', { name: /confirm/i });
+        // Confirm dialog — key contains 'confirm'
+        const confirm = await screen.findByRole('button', { name: 'teacher.joinOrg.search.confirm' });
         fireEvent.click(confirm);
         await waitFor(() => {
             expect(submitMock).toHaveBeenCalledWith({ orgId: 'org-1' });
@@ -112,8 +121,8 @@ describe('Pane C - search', () => {
 
     it('offers admin-wizard pivot for "Can\'t find my school"', () => {
         renderPage();
-        fireEvent.click(screen.getByRole('button', { name: /find my school/i }));
-        const pivot = screen.getByText(/i'm actually an administrator/i);
+        fireEvent.click(screen.getByRole('button', { name: 'teacher.joinOrg.entry.noCode' }));
+        const pivot = screen.getByText('teacher.joinOrg.search.adminPivot');
         fireEvent.click(pivot);
         expect(navigate).toHaveBeenCalledWith('/signup/admin/org-wizard');
     });

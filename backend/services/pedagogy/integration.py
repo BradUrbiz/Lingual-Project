@@ -96,6 +96,15 @@ def director_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_DIRECTOR", "").strip().lower() in _TRUTHY
 
 
+def chip_fast_gate_enabled() -> bool:
+    """Whether the S3.2 chip fast gate is on (default off).
+
+    When on, the chip service also fires on L1-fallback (learner-side shortfall)
+    and on a bounded periodic floor, making turn-1 chips locale-agnostic.
+    Reads PEDAGOGY_ENGINE_CHIP_FAST_GATE."""
+    return os.environ.get("PEDAGOGY_ENGINE_CHIP_FAST_GATE", "").strip().lower() in _TRUTHY
+
+
 def teacher_preview_enabled() -> bool:
     """L8 Teacher Preview — read-only teacher view of the compiled prompt plan.
     Default off; read-only/additive (no live-path effect)."""

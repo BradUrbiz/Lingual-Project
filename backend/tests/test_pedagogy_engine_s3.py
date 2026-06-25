@@ -361,6 +361,17 @@ class CoachChipsEnabledTestCase(unittest.TestCase):
             self.assertFalse(coach_chips_enabled())
 
 
+class ChipFastGateEnabledTestCase(unittest.TestCase):
+    def test_chip_fast_gate_flag(self):
+        from backend.services.pedagogy.integration import chip_fast_gate_enabled
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_CHIP_FAST_GATE": "1"}):
+            self.assertTrue(chip_fast_gate_enabled())
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_CHIP_FAST_GATE": "0"}):
+            self.assertFalse(chip_fast_gate_enabled())
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(chip_fast_gate_enabled())
+
+
 class BuildCoachChipPromptTestCase(unittest.TestCase):
     def _msgs(self, surface='text'):
         from backend.services.pedagogy.coach_review import build_coach_chip_prompt

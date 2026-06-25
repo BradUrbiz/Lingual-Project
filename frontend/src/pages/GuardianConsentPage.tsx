@@ -3,10 +3,11 @@ import { Link, useParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, MailCheck, ShieldAlert } from 'lucide-react';
 import { getGuardianConsentPacket, submitGuardianConsentDecision } from '@/api/guardian';
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
+import { useLanguage } from '@/contexts/LanguageContext';
 import type { GuardianConsentDecisionResult, GuardianConsentPublicView } from '@/types';
 
-function formatDecisionTimestamp(value?: string | null) {
-  if (!value) return 'Not recorded';
+function formatDecisionTimestamp(value: string | null | undefined, notRecorded: string) {
+  if (!value) return notRecorded;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString();
@@ -46,7 +47,7 @@ function guardianConsentReducer(
 ): GuardianConsentState {
   switch (action.type) {
     case 'invalid-token':
-      return { ...state, loading: false, error: 'This guardian consent link is invalid.' };
+      return { ...state, loading: false, error: 'guardian.consent.invalidToken' };
     case 'load-start':
       return { ...state, loading: true };
     case 'load-success':
@@ -81,6 +82,7 @@ export function GuardianConsentPage() {
   const { token } = useParams<{ token: string }>();
   const [state, dispatch] = useReducer(guardianConsentReducer, initialGuardianConsentState);
   const { loading, submittingDecision, guardianConsent, decisionResult, acknowledged, error } = state;
+  const { t } = useLanguage();
 
   useEffect(() => {
     let isActive = true;
@@ -100,7 +102,7 @@ export function GuardianConsentPage() {
         if (!isActive) return;
         dispatch({
           type: 'load-error',
-          error: err instanceof Error ? err.message : 'Failed to load guardian consent notice.',
+          error: err instanceof Error ? err.message : t('guardian.consent.loadError'),
         });
       }
     };
@@ -120,7 +122,7 @@ export function GuardianConsentPage() {
     } catch (err) {
       dispatch({
         type: 'decision-error',
-        error: err instanceof Error ? err.message : 'Failed to record your decision.',
+        error: err instanceof Error ? err.message : t('guardian.consent.decisionError'),
       });
     }
   };
@@ -139,8 +141,8 @@ export function GuardianConsentPage() {
         <div className="mx-auto max-w-3xl">
           <Alert variant="destructive">
             <ShieldAlert className="size-4" />
-            <AlertTitle>Guardian consent unavailable</AlertTitle>
-            <AlertDescription>{error || 'This consent packet is no longer available.'}</AlertDescription>
+            <AlertTitle>{t('guardian.consent.unavailableTitle')}</AlertTitle>
+            <AlertDescription>{error ? t(error) : t('guardian.consent.unavailableDefault')}</AlertDescription>
           </Alert>
         </div>
       </div>
@@ -149,6 +151,7 @@ export function GuardianConsentPage() {
 
   const activePacket = decisionResult?.guardianPacket || guardianConsent.packet;
   const currentDecision = decisionResult?.guardianPacket.status;
+  const notRecorded = t('guardian.consent.notRecorded');
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#fff8df,transparent_50%),linear-gradient(180deg,#fffaf0_0%,#f7f4ed_100%)] px-4 py-10">
@@ -158,8 +161,8 @@ export function GuardianConsentPage() {
             <MailCheck size={20} strokeWidth={2.5} />
           </div>
           <div>
-            <p className="font-semibold text-foreground">Lingual school voice consent</p>
-            <p>{guardianConsent.class.name || 'School class'} · {guardianConsent.class.subject || 'Language practice'}</p>
+            <p className="font-semibold text-foreground">{t('guardian.consent.header.title')}</p>
+            <p>{guardianConsent.class.name || t('guardian.consent.header.classDefault')} · {guardianConsent.class.subject || t('guardian.consent.header.subjectDefault')}</p>
           </div>
         </div>
 
@@ -172,10 +175,11 @@ export function GuardianConsentPage() {
         {currentDecision ? (
           <Alert>
             <CheckCircle2 className="size-4" />
-            <AlertTitle>Decision recorded</AlertTitle>
+            <AlertTitle>{t('guardian.consent.decisionRecorded.title')}</AlertTitle>
             <AlertDescription>
-              Guardian consent was marked as <span className="font-semibold text-foreground">{currentDecision}</span> on{' '}
-              {formatDecisionTimestamp(decisionResult?.guardianPacket.actedAt)}.
+              {t('guardian.consent.decisionRecorded.desc')
+                .replace('{status}', currentDecision)
+                .replace('{date}', formatDecisionTimestamp(decisionResult?.guardianPacket.actedAt, notRecorded))}
             </AlertDescription>
           </Alert>
         ) : null}
@@ -197,7 +201,7 @@ export function GuardianConsentPage() {
               {guardianConsent.notice.title}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              This notice applies to <span className="font-semibold text-foreground">{guardianConsent.student.displayName}</span>.
+              {t('guardian.consent.notice.appliesTo').replace('{name}', guardianConsent.student.displayName)}
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -215,16 +219,16 @@ export function GuardianConsentPage() {
 
             <div className="grid gap-3 rounded-2xl border-2 border-border bg-secondary/30 p-4 text-sm text-muted-foreground sm:grid-cols-2">
               <p>
-                Contact channel: <span className="font-medium text-foreground">{activePacket.contactChannel}</span>
+                {t('guardian.consent.meta.contactChannel')} <span className="font-medium text-foreground">{activePacket.contactChannel}</span>
               </p>
               <p>
-                Expires: <span className="font-medium text-foreground">{formatDecisionTimestamp(activePacket.expiresAt)}</span>
+                {t('guardian.consent.meta.expires')} <span className="font-medium text-foreground">{formatDecisionTimestamp(activePacket.expiresAt, notRecorded)}</span>
               </p>
               <p>
-                Last sent: <span className="font-medium text-foreground">{formatDecisionTimestamp(activePacket.lastSentAt)}</span>
+                {t('guardian.consent.meta.lastSent')} <span className="font-medium text-foreground">{formatDecisionTimestamp(activePacket.lastSentAt, notRecorded)}</span>
               </p>
               <p>
-                Contact hint: <span className="font-medium text-foreground">{activePacket.contactDestinationHint || 'Not provided'}</span>
+                {t('guardian.consent.meta.contactHint')} <span className="font-medium text-foreground">{activePacket.contactDestinationHint || t('guardian.consent.meta.notProvided')}</span>
               </p>
             </div>
 
@@ -238,7 +242,7 @@ export function GuardianConsentPage() {
                     className="mt-1 size-4 rounded border-border"
                   />
                   <span>
-                    I have reviewed this notice and I am authorized to respond for this student.
+                    {t('guardian.consent.ack.label')}
                   </span>
                 </label>
 
@@ -248,7 +252,7 @@ export function GuardianConsentPage() {
                     loading={submittingDecision === 'granted'}
                     disabled={!acknowledged || submittingDecision !== null}
                   >
-                    Grant voice consent
+                    {t('guardian.consent.action.grant')}
                   </Button>
                   <Button
                     variant="outline"
@@ -256,22 +260,22 @@ export function GuardianConsentPage() {
                     loading={submittingDecision === 'revoked'}
                     disabled={!acknowledged || submittingDecision !== null}
                   >
-                    Do not grant voice consent
+                    {t('guardian.consent.action.deny')}
                   </Button>
                 </div>
               </div>
             ) : (
               <div className="rounded-2xl border-2 border-border bg-background p-4 text-sm text-muted-foreground">
-                The school can now review this updated consent status in the student compliance tools.
+                {t('guardian.consent.afterDecision')}
               </div>
             )}
           </CardContent>
         </Card>
 
         <p className="text-center text-sm text-muted-foreground">
-          Need to contact the school directly instead? Return this notice to the teacher or school administrator managing the class.
+          {t('guardian.consent.footer.text')}
           <Link to="/" className="ml-1 underline decoration-foreground/40 underline-offset-4">
-            Lingual home
+            {t('guardian.consent.footer.home')}
           </Link>
         </p>
       </div>

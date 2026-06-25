@@ -1,7 +1,12 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { GuardianConsentPage } from '@/pages/GuardianConsentPage';
 import type { GuardianConsentDecisionResult, GuardianConsentPublicView } from '@/types';
+
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({ t: (key: string) => key }),
+}));
 
 const getGuardianConsentPacketMock = vi.fn();
 const submitGuardianConsentDecisionMock = vi.fn();
@@ -114,10 +119,10 @@ describe('GuardianConsentPage', () => {
     );
 
     expect(await screen.findByText('Guardian consent for Lingual school voice practice')).toBeInTheDocument();
-    expect(screen.getByText('Student One')).toBeInTheDocument();
+    expect(screen.getByText('guardian.consent.notice.appliesTo')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(screen.getByRole('button', { name: 'Grant voice consent' }));
+    fireEvent.click(screen.getByRole('button', { name: 'guardian.consent.action.grant' }));
 
     await waitFor(() => {
       expect(submitGuardianConsentDecisionMock).toHaveBeenCalledWith('token-abc', {
@@ -126,7 +131,7 @@ describe('GuardianConsentPage', () => {
       });
     });
 
-    expect(await screen.findByText('Decision recorded')).toBeInTheDocument();
-    expect(screen.getByText(/marked as/i)).toHaveTextContent('granted');
+    expect(await screen.findByText('guardian.consent.decisionRecorded.title')).toBeInTheDocument();
+    expect(screen.getByText('guardian.consent.decisionRecorded.desc')).toBeInTheDocument();
   });
 });

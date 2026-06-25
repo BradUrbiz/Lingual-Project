@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Shield, Database, Users, Clock, Trash2, Scale, Cloud } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 function Section({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
   return (
@@ -14,120 +15,108 @@ function Section({ icon: Icon, title, children }: { icon: React.ElementType; tit
 }
 
 export default function CompliancePage() {
+  const { t } = useLanguage();
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Lingual - Data & Compliance Overview</h1>
+        <h1 className="text-3xl font-bold">{t('compliance.page.title')}</h1>
         <p className="mt-2 text-gray-600 dark:text-gray-400">
-          Information for school administrators and coordinators evaluating Lingual for pilot use.
+          {t('compliance.page.subtitle')}
         </p>
       </div>
 
       <div className="space-y-8">
-        <Section icon={Database} title="What data we collect">
+        <Section icon={Database} title={t('compliance.page.whatWeCollect.title')}>
           <ul className="list-disc pl-5 space-y-1">
-            <li>Student text transcripts from practice sessions</li>
-            <li>Voice transcripts when voice mode is enabled and consented</li>
-            <li>Session metadata: duration, turn counts, modality used</li>
-            <li>Learning events: target expression usage, feedback events, self-corrections</li>
-            <li>Consent records and audit trails for compliance tracking</li>
+            <li>{t('compliance.page.whatWeCollect.item1')}</li>
+            <li>{t('compliance.page.whatWeCollect.item2')}</li>
+            <li>{t('compliance.page.whatWeCollect.item3')}</li>
+            <li>{t('compliance.page.whatWeCollect.item4')}</li>
+            <li>{t('compliance.page.whatWeCollect.item5')}</li>
           </ul>
-          <p>We do not collect biometric identifiers, voiceprints, or speaker recognition data.</p>
+          <p>{t('compliance.page.whatWeCollect.noBiometric')}</p>
         </Section>
 
-        <Section icon={Shield} title="How consent works">
+        <Section icon={Shield} title={t('compliance.page.howConsent.title')}>
           <ul className="list-disc pl-5 space-y-1">
-            <li>Voice-enabled practice requires explicit student consent before any session can start.</li>
-            <li>Students self-consent on their own profile - teachers and admins can also grant or revoke consent on their behalf.</li>
-            <li>If voice consent is not granted, sessions are downgraded to text-only practice (typing with the AI tutor) where the assignment allows it.</li>
-            <li>Consent status is tracked per student per organization with a full audit trail.</li>
-            <li>Schools can issue secure-link guardian notices as supplementary parent communication.</li>
+            <li>{t('compliance.page.howConsent.item1')}</li>
+            <li>{t('compliance.page.howConsent.item2')}</li>
+            <li>{t('compliance.page.howConsent.item3')}</li>
+            <li>{t('compliance.page.howConsent.item4')}</li>
+            <li>{t('compliance.page.howConsent.item5')}</li>
           </ul>
         </Section>
 
-        <Section icon={Cloud} title="Third-party AI processing">
+        <Section icon={Cloud} title={t('compliance.page.thirdPartyAI.title')}>
           <p>
-            Voice and text conversations are processed by{' '}
-            <strong>OpenAI's GPT and Realtime APIs</strong> so the AI tutor can understand the
-            student's response and generate the next turn in the target language. What leaves
-            Lingual and what doesn't:
+            {t('compliance.page.thirdPartyAI.intro')}
           </p>
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              <strong>Sent to OpenAI:</strong> student audio (voice mode), typed text, prior turns
-              in the current session, and a system prompt that carries assignment context -
-              scenario, target expressions, focus grammar, and learning locale.
+              <strong>{t('compliance.page.thirdPartyAI.sentLabel')}</strong>{' '}
+              {t('compliance.page.thirdPartyAI.sentDetail')}
             </li>
             <li>
-              <strong>Not sent:</strong> student email, account identifiers, Firebase auth data,
-              transcripts from past sessions, or any aggregated analytics.
+              <strong>{t('compliance.page.thirdPartyAI.notSentLabel')}</strong>{' '}
+              {t('compliance.page.thirdPartyAI.notSentDetail')}
             </li>
           </ul>
           <p>
-            OpenAI does not use data sent through its API to train its models. Under OpenAI's
-            default API terms, payloads may be retained for up to 30 days for abuse monitoring
-            and then deleted - that window is controlled by OpenAI, not Lingual. Transcripts that
-            Lingual itself retains in Firestore are separate from OpenAI's processing and follow
-            the retention defaults below.
+            {t('compliance.page.thirdPartyAI.retention')}
           </p>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Reference:{' '}
+            {t('compliance.page.thirdPartyAI.reference')}{' '}
             <a
               href="https://openai.com/policies/api-data-usage-policies"
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-600 hover:underline"
             >
-              OpenAI API Data Usage Policies
+              {t('compliance.page.thirdPartyAI.referenceLink')}
             </a>
             .
           </p>
         </Section>
 
-        <Section icon={Users} title="Who can access what">
+        <Section icon={Users} title={t('compliance.page.whoCanAccess.title')}>
           <ul className="list-disc pl-5 space-y-1">
-            <li><strong>Students</strong> can view their own profile, practice history, and compliance state.</li>
-            <li><strong>Teachers</strong> can view data for students in their own classes only.</li>
-            <li><strong>School administrators</strong> can view organization-wide data, manage consent, and initiate deletion requests.</li>
+            <li><strong>{t('compliance.page.whoCanAccess.studentsLabel')}</strong> {t('compliance.page.whoCanAccess.studentsDetail')}</li>
+            <li><strong>{t('compliance.page.whoCanAccess.teachersLabel')}</strong> {t('compliance.page.whoCanAccess.teachersDetail')}</li>
+            <li><strong>{t('compliance.page.whoCanAccess.adminsLabel')}</strong> {t('compliance.page.whoCanAccess.adminsDetail')}</li>
           </ul>
-          <p>All access follows role-based scoping enforced at both the API and database rule level.</p>
+          <p>{t('compliance.page.whoCanAccess.roleScoping')}</p>
         </Section>
 
-        <Section icon={Clock} title="Data retention defaults">
+        <Section icon={Clock} title={t('compliance.page.retention.title')}>
           <ul className="list-disc pl-5 space-y-1">
-            <li><strong>Raw audio:</strong> 30 days (when stored under the standard school policy; can be set to zero via the <em>no-raw-audio</em> policy)</li>
-            <li><strong>Transcripts and session summaries:</strong> 365 days</li>
-            <li><strong>Aggregated analytics:</strong> 730 days (2 years)</li>
+            <li><strong>{t('compliance.page.retention.rawAudioLabel')}</strong> {t('compliance.page.retention.rawAudioDetail')}</li>
+            <li><strong>{t('compliance.page.retention.transcriptsLabel')}</strong> {t('compliance.page.retention.transcriptsDetail')}</li>
+            <li><strong>{t('compliance.page.retention.analyticsLabel')}</strong> {t('compliance.page.retention.analyticsDetail')}</li>
           </ul>
-          <p>Retention policies are configurable per organization. These are conservative defaults.</p>
+          <p>{t('compliance.page.retention.configurable')}</p>
         </Section>
 
-        <Section icon={Trash2} title="Deletion process">
+        <Section icon={Trash2} title={t('compliance.page.deletion.title')}>
           <ul className="list-disc pl-5 space-y-1">
-            <li>School administrators can submit deletion requests for student, class, or organization scope.</li>
-            <li>Requests go through an approval gate before execution.</li>
-            <li>Execution is auditable with detailed summaries of what was deleted.</li>
+            <li>{t('compliance.page.deletion.item1')}</li>
+            <li>{t('compliance.page.deletion.item2')}</li>
+            <li>{t('compliance.page.deletion.item3')}</li>
           </ul>
         </Section>
 
-        <Section icon={Scale} title="Compliance posture">
+        <Section icon={Scale} title={t('compliance.page.posture.title')}>
           <p>
-            Lingual's school integration is designed with awareness of COPPA, FERPA, and state
-            biometric privacy laws including Illinois BIPA. The architecture enforces consent-gated
-            voice access, role-scoped data visibility, auditable consent trails, and configurable
-            retention policies.
+            {t('compliance.page.posture.para1')}
           </p>
           <p>
-            This is not a certification claim. Formal counsel review is part of our production
-            readiness process. Schools should evaluate Lingual's controls against their own
-            compliance requirements.
+            {t('compliance.page.posture.para2')}
           </p>
         </Section>
       </div>
 
       <div className="mt-12 border-t pt-6 text-sm text-gray-500 dark:text-gray-400">
         <p>
-          <Link to="/" className="text-blue-600 hover:underline">&larr; Back to Lingual</Link>
+          <Link to="/" className="text-blue-600 hover:underline">{t('compliance.page.backToLingual')}</Link>
         </p>
       </div>
     </div>

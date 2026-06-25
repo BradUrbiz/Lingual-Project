@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from backend.services.compliance import resolve_assignment_launch
+from backend.services.native_language import resolve_native_language
 from backend.services.suspended_org_guard import enforce_org_active
 
 # Policy normalization helpers now live in backend/services/pedagogy/policies.py
@@ -932,38 +933,39 @@ def _resolve_canvas_generated_bootstrap(
         prompt_parts.append(f"\n## Success Criteria\n" + "\n".join(f"- {c}" for c in success_criteria))
 
     intensity = _normalize_language_intensity(assignment.get("target_language_intensity"))
+    native_language = resolve_native_language(ui_language)
     language_name = subject or locale_label
     if intensity == "target_only":
         language_policy = (
             f"Respond ONLY in {language_name}. Stay in {language_name} for every turn, including "
-            f"clarifications and corrections. Use English only if the learner explicitly asks for a "
+            f"clarifications and corrections. Use {native_language} only if the learner explicitly asks for a "
             f"translation, then return to {language_name} immediately."
         )
     elif intensity == "target_led":
         language_policy = (
-            f"Speak primarily in {language_name}. Brief English scaffolding (a single word or short clause) "
+            f"Speak primarily in {language_name}. Brief {native_language} scaffolding (a single word or short clause) "
             f"is fine when the learner clearly stalls, asks for a translation, or otherwise can't move forward — "
             f"then return to {language_name} immediately. Never switch to a different target language."
         )
     elif intensity == "balanced":
         language_policy = (
-            f"Alternate naturally between English and {language_name}. Run scenario openers and the "
-            f"assignment's target-expression practice in {language_name}; use English for clarifications, "
+            f"Alternate naturally between {native_language} and {language_name}. Run scenario openers and the "
+            f"assignment's target-expression practice in {language_name}; use {native_language} for clarifications, "
             f"metalinguistic hints, or when the learner asks for a translation. Match the learner's language "
             f"when they reply, then nudge them back into {language_name} before the next target expression."
         )
     elif intensity == "english_led":
         language_policy = (
-            f"English leads the conversation, but {language_name} carries the assignment's target expressions, "
-            f"target vocabulary, and key scenario moves. When the learner replies in English, recast their "
+            f"{native_language} leads the conversation, but {language_name} carries the assignment's target expressions, "
+            f"target vocabulary, and key scenario moves. When the learner replies in {native_language}, recast their "
             f"meaning into {language_name} as a brief model before continuing. The learner should hear "
-            f"{language_name} on every turn but feel safe to reply mostly in English."
+            f"{language_name} on every turn but feel safe to reply mostly in {native_language}."
         )
     else:  # english_first
         language_policy = (
-            f"Lead each turn in English and keep the scenario accessible for a novice. Introduce any "
-            f"{language_name} phrase or vocabulary with its English meaning first, then model the "
-            f"{language_name} form. Accept learner replies in English as valid understanding; invite them "
+            f"Lead each turn in {native_language} and keep the scenario accessible for a novice. Introduce any "
+            f"{language_name} phrase or vocabulary with its {native_language} meaning first, then model the "
+            f"{language_name} form. Accept learner replies in {native_language} as valid understanding; invite them "
             f"to try the {language_name} version before moving on, but don't block progress if they can't."
         )
     prompt_parts.append(f"\n## Language Mix\n{language_policy}")

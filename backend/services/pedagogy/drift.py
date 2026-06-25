@@ -18,6 +18,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
+from backend.services.pedagogy.language_signal import (
+    ENGLISH_FUNCTION_WORDS as _ENGLISH_FUNCTION_WORDS,
+    is_target_script_char as _is_target_script_char,
+    language_locale_key as _drift_locale_key,
+)
+
 # A target is "neglected" when this many consecutive recent tutor turns reference
 # no concrete target. A window (not a single turn) so a brief on-task digression
 # (rapport, a clarifying question) is not mistaken for drift.
@@ -33,41 +39,12 @@ LANGUAGE_DRIFT_MIN_CHARS = 12   # ignore very short turns (greetings, names) —
 TARGET_SCRIPT_MIN_RATIO = 0.5   # non-Latin: < this fraction of letters in target script → drift
 ENGLISH_MARKER_MIN_HITS = 3     # Latin: >= this many distinct English function words → drift
 
-# Distinctly-English grammatical function words that are NOT common es/fr/tl words.
-# Function (not content) words keep the false-positive rate low: a Spanish turn does not
-# contain "the/is/you/what"; an English loanword like "sandwich" is a content word, absent here.
-_ENGLISH_FUNCTION_WORDS = frozenset({
-    "the", "is", "are", "was", "were", "you", "your", "what", "which", "with",
-    "this", "that", "they", "would", "should", "could", "have", "does",
-    "okay", "let", "want", "need", "about", "because", "really",
-})
-
 # Target-language display names (used in the language-drift re-steer copy).
 _LANGUAGE_NAMES = {"ko": "Korean", "ru": "Russian", "he": "Hebrew",
                    "es": "Spanish", "fr": "French", "tl": "Tagalog"}
 _NON_LATIN_DRIFT_KEYS = frozenset({"ko", "ru", "he"})
 # Latin-script targets (es/fr/tl) take the English-function-word tier — reached as the
 # `else` branch in detect_language_drift after en/unknown are filtered by the no-lang guard.
-
-
-def _drift_locale_key(locale: object) -> str:
-    """Local pure prefix matcher (drift.py cannot import practice_analytics)."""
-    n = _s(locale).lower()
-    for key in ("ko", "ru", "he", "es", "fr", "tl"):
-        if n.startswith(key):
-            return key
-    return "en"
-
-
-def _is_target_script_char(ch: str, locale_key: str) -> bool:
-    o = ord(ch)
-    if locale_key == "ko":
-        return 0xAC00 <= o <= 0xD7A3 or 0x1100 <= o <= 0x11FF or 0x3130 <= o <= 0x318F
-    if locale_key == "ru":
-        return 0x0400 <= o <= 0x04FF
-    if locale_key == "he":
-        return 0x0590 <= o <= 0x05FF
-    return False
 
 
 @dataclass(frozen=True)

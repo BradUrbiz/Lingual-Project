@@ -1,3 +1,4 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { TeacherAssignmentDebriefPage } from '@/pages/TeacherAssignmentDebriefPage';
@@ -7,6 +8,13 @@ const getAssignmentDebriefMock = vi.fn();
 
 vi.mock('@/api/teacher', () => ({
   getAssignmentDebrief: (...args: unknown[]) => getAssignmentDebriefMock(...args),
+}));
+
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({
+    lang: 'en',
+    t: (key: string) => key,
+  }),
 }));
 
 const FULL_DEBRIEF: AssignmentDebrief = {
@@ -106,18 +114,18 @@ describe('TeacherAssignmentDebriefPage', () => {
     renderPage();
 
     // Header
-    expect(await screen.findByText('Assignment coaching debrief')).toBeInTheDocument();
+    expect(await screen.findByText('teacher.debrief.pageTitle')).toBeInTheDocument();
 
     // Section headings — all should be present with full data
-    expect(screen.getByText('Participation')).toBeInTheDocument();
-    expect(screen.getByText('Feedback uptake')).toBeInTheDocument();
-    expect(screen.getByText('Targeted corrections')).toBeInTheDocument();
-    expect(screen.getByText('Coaching interventions')).toBeInTheDocument();
-    expect(screen.getByText('Help usage')).toBeInTheDocument();
-    expect(screen.getByText('Affect readiness')).toBeInTheDocument();
-    expect(screen.getByText('Coach reviews')).toBeInTheDocument();
-    expect(screen.getByText('Suggested next practice')).toBeInTheDocument();
-    expect(screen.getByText('Caveats')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.participation.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.uptake.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.corrections.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.coaching.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.help.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.affect.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.coachReview.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.suggestedNext.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.caveats.title')).toBeInTheDocument();
 
     // Participation values (use getAllByText since numbers may appear in multiple contexts)
     expect(screen.getAllByText('12').length).toBeGreaterThan(0); // sessionCount
@@ -139,17 +147,17 @@ describe('TeacherAssignmentDebriefPage', () => {
     renderPage();
 
     // Always-present cards
-    expect(await screen.findByText('Participation')).toBeInTheDocument();
-    expect(screen.getByText('Caveats')).toBeInTheDocument();
+    expect(await screen.findByText('teacher.debrief.participation.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.caveats.title')).toBeInTheDocument();
 
     // Intervention cards must self-hide (count 0)
-    expect(screen.queryByText('Targeted corrections')).not.toBeInTheDocument();
-    expect(screen.queryByText('Coaching interventions')).not.toBeInTheDocument();
-    expect(screen.queryByText('Help usage')).not.toBeInTheDocument();
-    expect(screen.queryByText('Affect readiness')).not.toBeInTheDocument();
-    expect(screen.queryByText('Coach reviews')).not.toBeInTheDocument();
-    expect(screen.queryByText('Feedback uptake')).not.toBeInTheDocument();
-    expect(screen.queryByText('Suggested next practice')).not.toBeInTheDocument();
+    expect(screen.queryByText('teacher.debrief.corrections.title')).not.toBeInTheDocument();
+    expect(screen.queryByText('teacher.debrief.coaching.title')).not.toBeInTheDocument();
+    expect(screen.queryByText('teacher.debrief.help.title')).not.toBeInTheDocument();
+    expect(screen.queryByText('teacher.debrief.affect.title')).not.toBeInTheDocument();
+    expect(screen.queryByText('teacher.debrief.coachReview.title')).not.toBeInTheDocument();
+    expect(screen.queryByText('teacher.debrief.uptake.title')).not.toBeInTheDocument();
+    expect(screen.queryByText('teacher.debrief.suggestedNext.title')).not.toBeInTheDocument();
   });
 
   it('renders not-available state when getAssignmentDebrief returns null', async () => {
@@ -157,10 +165,10 @@ describe('TeacherAssignmentDebriefPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('Assignment coaching debrief is not available.')).toBeInTheDocument();
+    expect(await screen.findByText('teacher.debrief.notAvailable')).toBeInTheDocument();
 
     // No section headings should be present
-    expect(screen.queryByText('Participation')).not.toBeInTheDocument();
-    expect(screen.queryByText('Caveats')).not.toBeInTheDocument();
+    expect(screen.queryByText('teacher.debrief.participation.title')).not.toBeInTheDocument();
+    expect(screen.queryByText('teacher.debrief.caveats.title')).not.toBeInTheDocument();
   });
 });

@@ -3,18 +3,13 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { m, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Loader2, Languages, CheckCircle, Sparkles } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Button, Input, Card, Alert, AlertDescription } from '@/components/ui';
 import { AnimatedPage } from '@/components/layout/AnimatedPage';
 import { staggerContainer, staggerItem } from '@/lib/animations';
 import { getOnboardingDestination } from '@/lib/homeRoutes';
 
 type Mode = 'signin' | 'reset';
-
-const LOGIN_FEATURES = [
-  'Practice with AI scenario partners',
-  'Hear feedback on pronunciation in real time',
-  'Track progress your teacher can see',
-];
 
 type LoginState = {
   mode: Mode;
@@ -73,6 +68,7 @@ function loginReducer(state: LoginState, action: LoginAction): LoginState {
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useLanguage();
   const {
     user,
     loading,
@@ -178,15 +174,16 @@ export function LoginPage() {
         type="button"
         onClick={() => navigate('/')}
         className="absolute left-6 top-6 z-10 inline-flex items-center gap-2 rounded-lg border-2 border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
-        aria-label="Back to landing page"
+        aria-label={t('auth.backAriaLabel')}
       >
         <ArrowLeft size={16} strokeWidth={2.5} />
-        <span>Back</span>
+        <span>{t('auth.back')}</span>
       </button>
 
       <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-8 items-center">
-        <LoginPromoCard />
+        <LoginPromoCard t={t} />
         <LoginAuthCard
+          t={t}
           mode={mode}
           email={email}
           password={password}
@@ -213,7 +210,13 @@ export function LoginPage() {
   );
 }
 
-function LoginPromoCard() {
+function LoginPromoCard({ t }: { t: (key: string) => string }) {
+  const features = [
+    t('auth.feature.aiScenarios'),
+    t('auth.feature.pronunciation'),
+    t('auth.feature.progress'),
+  ];
+
   return (
     <m.div
       initial={{ opacity: 0, x: -30 }}
@@ -233,14 +236,14 @@ function LoginPromoCard() {
               <p className="text-sm uppercase tracking-wider text-background/70 font-semibold">
                 Lingual
               </p>
-              <p className="text-2xl font-display font-bold">Welcome back</p>
+              <p className="text-2xl font-display font-bold">{t('auth.signInTitle')}</p>
             </div>
           </div>
           <p className="text-xl text-background/90 mb-10 leading-relaxed">
-            Pick up where you left off.
+            {t('auth.pickUpWhereLeftOff')}
           </p>
           <div className="space-y-5">
-            {LOGIN_FEATURES.map((item) => (
+            {features.map((item) => (
               <div key={item} className="flex items-center gap-4">
                 <div className="size-8 rounded-lg bg-background/20 flex items-center justify-center flex-shrink-0">
                   <CheckCircle size={18} strokeWidth={2.5} />
@@ -256,6 +259,7 @@ function LoginPromoCard() {
 }
 
 type LoginAuthCardProps = LoginState & {
+  t: (key: string) => string;
   authError: string | null;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
@@ -267,6 +271,7 @@ type LoginAuthCardProps = LoginState & {
 };
 
 function LoginAuthCard({
+  t,
   mode,
   email,
   password,
@@ -297,16 +302,16 @@ function LoginAuthCard({
             <div className="flex items-center gap-2 mb-1">
               <Sparkles size={14} className="text-accent" />
               <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                Welcome
+                {t('auth.welcomeLabel')}
               </p>
             </div>
             <p className="text-xl font-display font-bold">
-              {mode === 'reset' ? 'Reset your password' : 'Sign in'}
+              {mode === 'reset' ? t('auth.resetTitle') : t('auth.signIn')}
             </p>
             <p className="text-sm text-muted-foreground">
               {mode === 'reset'
-                ? 'Enter your account email and we will send a reset link.'
-                : 'Use your existing Lingual account.'}
+                ? t('auth.resetSubtitle')
+                : t('auth.signInSubtitle')}
             </p>
           </div>
         </div>
@@ -328,6 +333,7 @@ function LoginAuthCard({
 
         {mode === 'reset' ? (
           <PasswordResetForm
+            t={t}
             email={email}
             submitting={submitting}
             resetSent={resetSent}
@@ -337,6 +343,7 @@ function LoginAuthCard({
           />
         ) : (
           <SignInForm
+            t={t}
             email={email}
             password={password}
             submitting={submitting}
@@ -351,7 +358,7 @@ function LoginAuthCard({
           <>
             <div className="my-8 flex items-center gap-4">
               <div className="flex-1 border-t-2 border-border" />
-              <span className="text-muted-foreground text-sm font-medium">or</span>
+              <span className="text-muted-foreground text-sm font-medium">{t('auth.or')}</span>
               <div className="flex-1 border-t-2 border-border" />
             </div>
             <Button
@@ -361,15 +368,15 @@ function LoginAuthCard({
               disabled={submitting}
               className="w-full"
             >
-              Continue with Google
+              {t('auth.continueWithGoogle')}
             </Button>
             <p className="mt-8 text-center text-muted-foreground">
-              Don't have an account?{' '}
+              {t('auth.noAccount')}{' '}
               <Link
                 to="/signup"
                 className="text-primary hover:text-primary/80 font-semibold underline underline-offset-4"
               >
-                Sign up
+                {t('auth.signUp')}
               </Link>
             </p>
           </>
@@ -380,6 +387,7 @@ function LoginAuthCard({
 }
 
 type PasswordResetFormProps = {
+  t: (key: string) => string;
   email: string;
   submitting: boolean;
   resetSent: boolean;
@@ -389,6 +397,7 @@ type PasswordResetFormProps = {
 };
 
 function PasswordResetForm({
+  t,
   email,
   submitting,
   resetSent,
@@ -407,10 +416,10 @@ function PasswordResetForm({
       <m.div variants={staggerItem}>
         <Input
           type="email"
-          label="Email"
+          label={t('auth.email')}
           value={email}
           onChange={(e) => onEmailChange(e.target.value)}
-          placeholder="email@example.com"
+          placeholder={t('auth.emailPlaceholder')}
           required
           autoComplete="email"
         />
@@ -419,14 +428,14 @@ function PasswordResetForm({
         <m.div variants={staggerItem}>
           <Alert variant="success">
             <AlertDescription>
-              If that email is registered, a password reset link has been sent.
+              {t('auth.resetSent')}
             </AlertDescription>
           </Alert>
         </m.div>
       )}
       <m.div variants={staggerItem}>
         <Button type="submit" loading={submitting} className="w-full">
-          Send reset link
+          {t('auth.resetSend')}
         </Button>
       </m.div>
       <m.div variants={staggerItem}>
@@ -437,7 +446,7 @@ function PasswordResetForm({
           disabled={submitting}
           className="w-full"
         >
-          Back to sign in
+          {t('auth.resetBack')}
         </Button>
       </m.div>
     </m.form>
@@ -445,6 +454,7 @@ function PasswordResetForm({
 }
 
 type SignInFormProps = {
+  t: (key: string) => string;
   email: string;
   password: string;
   submitting: boolean;
@@ -455,6 +465,7 @@ type SignInFormProps = {
 };
 
 function SignInForm({
+  t,
   email,
   password,
   submitting,
@@ -474,10 +485,10 @@ function SignInForm({
       <m.div variants={staggerItem}>
         <Input
           type="email"
-          label="Email"
+          label={t('auth.email')}
           value={email}
           onChange={(e) => onEmailChange(e.target.value)}
-          placeholder="email@example.com"
+          placeholder={t('auth.emailPlaceholder')}
           required
           autoComplete="email"
         />
@@ -485,10 +496,10 @@ function SignInForm({
       <m.div variants={staggerItem}>
         <Input
           type="password"
-          label="Password"
+          label={t('auth.password')}
           value={password}
           onChange={(e) => onPasswordChange(e.target.value)}
-          placeholder="••••••••"
+          placeholder={t('auth.passwordPlaceholder')}
           required
           minLength={6}
           autoComplete="current-password"
@@ -500,12 +511,12 @@ function SignInForm({
           onClick={onStartReset}
           className="text-sm font-semibold text-primary underline underline-offset-4 transition-colors hover:text-primary/80"
         >
-          Forgot password?
+          {t('auth.forgotPassword')}
         </button>
       </m.div>
       <m.div variants={staggerItem}>
         <Button type="submit" loading={submitting} className="w-full">
-          Sign in
+          {t('auth.signIn')}
         </Button>
       </m.div>
     </m.form>

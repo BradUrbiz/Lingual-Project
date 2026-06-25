@@ -42,6 +42,12 @@ vi.mock('@/contexts/LanguageContext', () => ({
       ({
         'landing.nav.features': 'Features',
         'landing.nav.getStarted': 'Get Started',
+        'landing.nav.how': 'How it Works',
+        'landing.nav.schools': 'For Schools',
+        'landing.nav.login': 'Log In',
+        'landing.hero.roleStudent': "I'm a Student",
+        'landing.hero.roleTeacher': "I'm a Teacher",
+        'landing.hero.roleAdmin': "I'm a School Admin",
       })[key] || key,
   }),
 }));
@@ -102,7 +108,7 @@ describe('LandingPage', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'landing.nav.login' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Log In' }));
 
     expect(navigateMock).toHaveBeenCalledWith('/login');
   });
@@ -128,7 +134,7 @@ describe('LandingPage', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'landing.nav.login' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Log In' }));
 
     expect(navigateMock).toHaveBeenCalledWith('/app/teacher');
   });

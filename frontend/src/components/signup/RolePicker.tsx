@@ -1,33 +1,34 @@
 import { GraduationCap, Briefcase, Building2 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export type SignupRole = 'student' | 'teacher' | 'admin';
 
 interface RoleOption {
   value: SignupRole;
-  title: string;
-  subtitle: string;
+  titleKey: string;
+  subtitleKey: string;
   Icon: typeof GraduationCap;
 }
 
 const ROLE_OPTIONS: RoleOption[] = [
   {
     value: 'student',
-    title: 'Student',
-    subtitle: "Practice speaking. Join your teacher's class.",
+    titleKey: 'auth.signup.role.studentTitle',
+    subtitleKey: 'auth.signup.role.studentSubtitle',
     Icon: GraduationCap,
   },
   {
     value: 'teacher',
-    title: 'Teacher',
-    subtitle: 'Manage classes and assignments. Join your school.',
+    titleKey: 'auth.signup.role.teacherTitle',
+    subtitleKey: 'auth.signup.role.teacherSubtitle',
     Icon: Briefcase,
   },
   {
     value: 'admin',
-    title: 'School Administrator',
-    subtitle: 'Register your school. Manage teachers and compliance.',
+    titleKey: 'auth.signup.role.adminTitle',
+    subtitleKey: 'auth.signup.role.adminSubtitle',
     Icon: Building2,
   },
 ];
@@ -39,10 +40,13 @@ export interface RolePickerProps {
 }
 
 export function RolePicker({ value, onChange, disabled }: RolePickerProps) {
+  const { t } = useLanguage();
+
   return (
-    <div role="radiogroup" aria-label="Choose your role" className="grid gap-4 md:grid-cols-3">
-      {ROLE_OPTIONS.map(({ value: optionValue, title, subtitle, Icon }) => {
+    <div role="radiogroup" aria-label={t('auth.signup.role.radioGroupLabel')} className="grid gap-4 md:grid-cols-3">
+      {ROLE_OPTIONS.map(({ value: optionValue, titleKey, subtitleKey, Icon }) => {
         const checked = value === optionValue;
+        const title = t(titleKey);
         return (
           <label
             key={optionValue}
@@ -70,7 +74,7 @@ export function RolePicker({ value, onChange, disabled }: RolePickerProps) {
                 <Icon size={24} strokeWidth={2} />
               </div>
               <p className="font-display text-lg font-bold">{title}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{t(subtitleKey)}</p>
             </Card>
           </label>
         );

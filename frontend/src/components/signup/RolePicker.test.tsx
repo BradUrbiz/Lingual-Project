@@ -1,5 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { RolePicker } from './RolePicker';
+import en from '@/i18n/en.json';
+
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({
+    lang: 'en',
+    setLang: vi.fn(),
+    t: (key: string) => (en as Record<string, string>)[key] ?? key,
+  }),
+}));
 
 describe('RolePicker', () => {
   it('renders all three role cards', () => {

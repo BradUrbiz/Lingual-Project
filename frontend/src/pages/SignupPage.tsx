@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { m } from 'framer-motion';
 import { ArrowLeft, Loader2, Languages, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Button, Card } from '@/components/ui';
 import { AnimatedPage } from '@/components/layout/AnimatedPage';
 import { RolePicker, AccountCreator, type SignupRole } from '@/components/signup';
@@ -18,6 +19,7 @@ export function SignupPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, loading } = useAuth();
+  const { t } = useLanguage();
 
   const initialRole = useMemo(() => parseRoleParam(searchParams.get('role')), [searchParams]);
   const [role, setRole] = useState<SignupRole | null>(initialRole);
@@ -54,7 +56,7 @@ export function SignupPage() {
         className="absolute left-6 top-6 z-10 inline-flex items-center gap-2 rounded-lg border-2 border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
       >
         <ArrowLeft size={16} strokeWidth={2.5} />
-        <span>Back</span>
+        <span>{t('auth.back')}</span>
       </button>
 
       <Card className="p-8 w-full max-w-3xl">
@@ -66,16 +68,16 @@ export function SignupPage() {
             <div className="flex items-center gap-2 mb-1">
               <Sparkles size={14} className="text-accent" />
               <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                Step {step} of 2
+                {t('auth.stepOf2').replace('{step}', String(step))}
               </p>
             </div>
             <p className="text-xl font-display font-bold">
-              {step === 1 ? 'How are you using Lingual?' : 'Create your account'}
+              {step === 1 ? t('auth.howAreYouUsing') : t('auth.signUpStep2Title')}
             </p>
             <p className="text-sm text-muted-foreground">
               {step === 1
-                ? 'Pick the option that matches you best.'
-                : 'Use Google or sign up with your email.'}
+                ? t('auth.pickOptionBest')
+                : t('auth.signUpStep2Subtitle')}
             </p>
           </div>
         </div>
@@ -89,16 +91,16 @@ export function SignupPage() {
                 onClick={() => setStep(2)}
                 disabled={!role}
               >
-                Continue to account setup
+                {t('auth.continueToAccountSetup')}
               </Button>
             </div>
             <p className="text-center text-muted-foreground">
-              Already have an account?{' '}
+              {t('auth.hasAccount')}{' '}
               <Link
                 to="/login"
                 className="text-primary hover:text-primary/80 font-semibold underline underline-offset-4"
               >
-                Log in
+                {t('auth.logIn')}
               </Link>
             </p>
           </div>
@@ -121,7 +123,7 @@ export function SignupPage() {
               onClick={() => setStep(1)}
               className="block w-full text-center text-sm font-semibold text-primary underline underline-offset-4 hover:text-primary/80"
             >
-              ← Change role
+              {t('auth.changeRole')}
             </button>
           </div>
         )}

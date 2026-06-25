@@ -1,5 +1,14 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AccountCreator } from './AccountCreator';
+import en from '@/i18n/en.json';
+
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({
+    lang: 'en',
+    setLang: vi.fn(),
+    t: (key: string) => (en as Record<string, string>)[key] ?? key,
+  }),
+}));
 
 const signUpMock = vi.fn();
 const googleMock = vi.fn();

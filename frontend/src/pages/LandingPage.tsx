@@ -74,7 +74,7 @@ export function LandingPage() {
         onCloseMobileMenu={() => setIsMobileMenuOpen(false)}
       />
       <LandingHero t={t} onStartAsRole={handleStartAsRole} />
-      <OneStopShopSection />
+      <OneStopShopSection t={t} />
       <FeaturesSection t={t} />
       <HowItWorksSection t={t} />
       <SchoolsSection t={t} onStartAsRole={handleStartAsRole} />
@@ -284,13 +284,13 @@ function LandingHero({
 
             <m.div variants={staggerItem} className="grid gap-3 sm:grid-cols-3">
               <Button onClick={() => onStartAsRole('student')} className="w-full justify-center">
-                I'm a Student
+                {t('landing.hero.roleStudent')}
               </Button>
               <Button onClick={() => onStartAsRole('teacher')} variant="secondary" className="w-full justify-center">
-                I'm a Teacher
+                {t('landing.hero.roleTeacher')}
               </Button>
               <Button onClick={() => onStartAsRole('admin')} variant="outline" className="w-full justify-center">
-                I'm a School Admin
+                {t('landing.hero.roleAdmin')}
               </Button>
             </m.div>
 
@@ -314,7 +314,7 @@ function AvatarTrustBar({ t }: { t: TranslationFn }) {
             className="size-10 rounded-full border-3 border-background bg-secondary overflow-hidden"
             style={{ zIndex: AVATAR_IMAGES.length - index }}
           >
-            <img src={src} alt={`User avatar ${index + 1}`} className="w-full h-full object-cover" />
+            <img src={src} alt={t('landing.hero.avatarAlt').replace('{n}', String(index + 1))} className="w-full h-full object-cover" />
           </div>
         ))}
       </div>
@@ -329,7 +329,7 @@ function HeroImageCard({ t }: { t: TranslationFn }) {
       <div className="absolute -inset-3 bg-accent/30 rounded-2xl transform rotate-3"></div>
       <div className="absolute -inset-3 bg-primary/20 rounded-2xl transform -rotate-2"></div>
       <div className="relative rounded-2xl overflow-hidden border-4 border-foreground shadow-stamp bg-card">
-        <img src={HERO_IMAGE} alt="Student learning" className="w-full h-auto object-cover" />
+        <img src={HERO_IMAGE} alt={t('landing.hero.imgAlt')} className="w-full h-auto object-cover" />
         <m.div
           initial={{ y: 30, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -352,7 +352,7 @@ function HeroImageCard({ t }: { t: TranslationFn }) {
   );
 }
 
-function OneStopShopSection() {
+function OneStopShopSection({ t }: { t: TranslationFn }) {
   return (
     <section className="bg-ink text-cream min-h-[25vh] py-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -378,13 +378,13 @@ function OneStopShopSection() {
             <div className="w-px self-stretch bg-cream/30 flex-shrink-0" />
             <div className="flex flex-col gap-2">
               <span className="font-display font-bold text-cream" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
-                platform trusted by schools
+                {t('landing.oneStop.trusted')}
               </span>
               <span className="font-display font-bold text-cream" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
-                AI tutor for every student
+                {t('landing.oneStop.aiTutor')}
               </span>
               <span className="font-display font-bold text-cream whitespace-nowrap" style={{ fontSize: 'clamp(1rem, 1.5vw, 1.35rem)' }}>
-                one-stop shop for language learning
+                {t('landing.oneStop.shop')}
               </span>
             </div>
           </div>
@@ -502,14 +502,14 @@ function HowItWorksSection({ t }: { t: TranslationFn }) {
             </div>
           </m.div>
 
-          <ChatMockup />
+          <ChatMockup t={t} />
         </div>
       </div>
     </section>
   );
 }
 
-function ChatMockup() {
+function ChatMockup({ t }: { t: TranslationFn }) {
   return (
     <m.div
       initial={{ opacity: 0, x: 30 }}
@@ -523,10 +523,10 @@ function ChatMockup() {
             🤖
           </div>
           <div>
-            <div className="font-display font-bold text-lg">AI Tutor</div>
+            <div className="font-display font-bold text-lg">{t('landing.mockup.aiTutor')}</div>
             <div className="text-sm text-success font-medium flex items-center gap-1">
               <div className="size-2 rounded-full bg-success"></div>
-              Online
+              {t('landing.mockup.online')}
             </div>
           </div>
         </div>

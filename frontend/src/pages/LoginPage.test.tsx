@@ -1,6 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { LoginPage } from './LoginPage';
 import type { User } from '@/types';
+import en from '@/i18n/en.json';
+
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({
+    lang: 'en',
+    setLang: vi.fn(),
+    t: (key: string) => (en as Record<string, string>)[key] ?? key,
+  }),
+}));
 
 const navigateMock = vi.fn();
 const signInWithEmailMock = vi.fn();

@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { Button, Input, Alert, AlertDescription } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
+import { useLanguage } from '@/contexts/LanguageContext';
 import type { SignupRole } from './RolePicker';
 
 export interface AccountCreatorProps {
@@ -10,6 +11,7 @@ export interface AccountCreatorProps {
 
 export function AccountCreator({ intendedRole, onSuccess }: AccountCreatorProps) {
   const { signUpWithEmail, signInWithGoogle, error, clearError } = useAuth();
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -52,31 +54,31 @@ export function AccountCreator({ intendedRole, onSuccess }: AccountCreatorProps)
       <form onSubmit={handleEmailSubmit} className="space-y-5">
         <Input
           type="email"
-          label="Email"
+          label={t('auth.email')}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@school.edu"
+          placeholder={t('auth.signup.emailPlaceholder')}
           required
           autoComplete="email"
         />
         <Input
           type="password"
-          label="Password"
+          label={t('auth.password')}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="At least 6 characters"
+          placeholder={t('auth.signup.passwordPlaceholder')}
           required
           minLength={6}
           autoComplete="new-password"
         />
         <Button type="submit" loading={submitting} className="w-full">
-          Create account
+          {t('auth.signup.createAccount')}
         </Button>
       </form>
 
       <div className="my-6 flex items-center gap-4">
         <div className="flex-1 border-t-2 border-border" />
-        <span className="text-sm font-medium text-muted-foreground">or</span>
+        <span className="text-sm font-medium text-muted-foreground">{t('auth.signup.or')}</span>
         <div className="flex-1 border-t-2 border-border" />
       </div>
 
@@ -87,7 +89,7 @@ export function AccountCreator({ intendedRole, onSuccess }: AccountCreatorProps)
         disabled={submitting}
         className="w-full"
       >
-        Continue with Google
+        {t('auth.continueWithGoogle')}
       </Button>
     </div>
   );

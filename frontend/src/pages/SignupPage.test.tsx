@@ -1,6 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { SignupPage } from './SignupPage';
+import en from '@/i18n/en.json';
+
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({
+    lang: 'en',
+    setLang: vi.fn(),
+    t: (key: string) => (en as Record<string, string>)[key] ?? key,
+  }),
+}));
 
 const navigateMock = vi.fn();
 const signUpMock = vi.fn();

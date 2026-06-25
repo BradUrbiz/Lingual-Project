@@ -7,6 +7,10 @@ vi.mock('@/api/teacher', () => ({
   getAssignmentPlanPreview: (...a: unknown[]) => getAssignmentPlanPreviewMock(...a),
 }));
 
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({ lang: 'en', t: (key: string) => key }),
+}));
+
 describe('AssignmentPlanPreview', () => {
   beforeEach(() => getAssignmentPlanPreviewMock.mockReset());
 

@@ -23,6 +23,7 @@ import type {
   TargetLanguageIntensity,
   TeacherClassSummary,
 } from '@/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 type CanvasPracticePhase = 'idle' | 'generating' | 'reviewing' | 'saving' | 'error';
 type BuilderMode = 'quick' | 'advanced';
@@ -157,6 +158,7 @@ function teacherAssignmentBuilderReducer(
 function useTeacherAssignmentBuilderController() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [state, dispatch] = useReducer(
     teacherAssignmentBuilderReducer,
     initialTeacherAssignmentBuilderState,
@@ -461,9 +463,9 @@ function useTeacherAssignmentBuilderController() {
         });
       }
       await loadClassData(classId);
-      const publishedLabel = canvasStatus === 'published' ? 'published' : 'saved as draft';
+      const publishedLabel = canvasStatus === 'published' ? t('teacher.builder.publish.published') : t('teacher.builder.publish.savedDraft');
       setSuccessMessage(
-        `"${canvasTitle.trim()}" has been ${publishedLabel}. Students will see it on their learning dashboard once published.`
+        `"${canvasTitle.trim()}" ${t('teacher.builder.publish.successPrefix')} ${publishedLabel}${t('teacher.builder.publish.successSuffix')}`
       );
       resetCanvasPracticeState();
     } catch (saveError) {
@@ -483,9 +485,7 @@ function useTeacherAssignmentBuilderController() {
     // Regenerate overwrites every review-form field with a new AI draft, so
     // guard against silent edit loss when the teacher is mid-review.
     if (canvasPhase === 'reviewing') {
-      const confirmed = window.confirm(
-        'Regenerating will replace your current title, scenario, and other edits with a new AI draft. Continue?'
-      );
+      const confirmed = window.confirm(t('teacher.builder.regenerate.confirm'));
       if (!confirmed) return;
     }
     void handleCanvasGenerate(selectedCanvasItemId);
@@ -559,7 +559,8 @@ function useTeacherAssignmentBuilderController() {
 
 type TeacherAssignmentBuilderController = ReturnType<typeof useTeacherAssignmentBuilderController>;
 
-function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilderController) {
+function TeacherAssignmentBuilderView({ controller }: { controller: TeacherAssignmentBuilderController }) {
+  const { t } = useLanguage();
   const {
     classId,
     navigate,
@@ -628,10 +629,10 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
     return (
       <div className="space-y-4">
         <Alert variant="destructive">
-          <AlertDescription>{error || 'Teacher class was not found.'}</AlertDescription>
+          <AlertDescription>{error || t('teacher.builder.classNotFound')}</AlertDescription>
         </Alert>
         <Button variant="outline" onClick={() => navigate('/app/teacher')}>
-          Back to teacher dashboard
+          {t('teacher.builder.backToDashboard')}
         </Button>
       </div>
     );
@@ -644,24 +645,24 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border-2 border-border bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               <Sparkles size={14} />
-              Teacher-designed practice
+              {t('teacher.builder.badge')}
             </div>
             <h1 className="text-3xl font-display font-bold text-foreground">{activeClass.name}</h1>
             <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-              Choose what your students will practice, customize the AI tutor's behavior, then publish an assignment.
+              {t('teacher.builder.subtitle')}
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-3">
             <div className="rounded-2xl border-2 border-border bg-secondary/50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Students</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('teacher.builder.stat.students')}</p>
               <p className="mt-1 text-xl font-bold text-foreground">{activeClass.studentCount}</p>
             </div>
             <div className="rounded-2xl border-2 border-border bg-secondary/50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Assignments</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('teacher.builder.stat.assignments')}</p>
               <p className="mt-1 text-xl font-bold text-foreground">{assignments.length}</p>
             </div>
             <div className="rounded-2xl border-2 border-border bg-secondary/50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Locale</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('teacher.builder.stat.locale')}</p>
               <p className="mt-1 text-xl font-bold text-foreground">{activeClass.learningLocale}</p>
             </div>
           </div>
@@ -687,57 +688,57 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
             <Sparkles size={22} strokeWidth={2.5} />
           </div>
           <div>
-            <h2 className="text-xl font-display font-bold text-foreground">Create an assignment</h2>
+            <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.builder.create.title')}</h2>
             <p className="text-sm text-muted-foreground">
               {builderMode === 'quick'
-                ? 'Pick a Canvas page or assignment and let Lingual design a speaking practice tailored to it.'
-                : 'Use Advanced mode to build from Canvas, a pasted source packet, a manual scaffold draft, or a scaffold-free custom system prompt.'}
+                ? t('teacher.builder.create.subtitleQuick')
+                : t('teacher.builder.create.subtitleAdvanced')}
             </p>
           </div>
         </div>
 
         <div className="mb-6 space-y-4">
-          <div className="flex gap-2" role="tablist" aria-label="Assignment builder mode">
+          <div className="flex gap-2" role="tablist" aria-label={t('teacher.builder.mode.ariaLabel')}>
             <Button
               type="button"
               variant={builderMode === 'quick' ? 'default' : 'outline'}
               onClick={() => handleSelectBuilderMode('quick')}
             >
-              Quick Assign
+              {t('teacher.builder.mode.quick')}
             </Button>
             <Button
               type="button"
               variant={builderMode === 'advanced' ? 'default' : 'outline'}
               onClick={() => handleSelectBuilderMode('advanced')}
             >
-              Advanced
+              {t('teacher.builder.mode.advanced')}
             </Button>
           </div>
 
           {builderMode === 'advanced' && (
             <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-              <p className="text-sm font-semibold text-foreground">Advanced entry mode</p>
-              <div role="radiogroup" aria-label="Advanced entry mode" className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <p className="text-sm font-semibold text-foreground">{t('teacher.builder.advanced.entryModeLabel')}</p>
+              <div role="radiogroup" aria-label={t('teacher.builder.advanced.entryModeAriaLabel')} className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {[
                   {
                     value: 'canvas' as const,
-                    label: 'Canvas item',
-                    description: 'Create from synced Canvas content.',
+                    label: t('teacher.builder.advanced.canvasLabel'),
+                    description: t('teacher.builder.advanced.canvasDesc'),
                   },
                   {
                     value: 'source' as const,
-                    label: 'Custom Instruction',
-                    description: 'Paste vocabulary, rubric notes, or lesson context.',
+                    label: t('teacher.builder.advanced.sourceLabel'),
+                    description: t('teacher.builder.advanced.sourceDesc'),
                   },
                   {
                     value: 'manual' as const,
-                    label: 'Manual authoring',
-                    description: 'Write the assignment directly on the scaffold.',
+                    label: t('teacher.builder.advanced.manualLabel'),
+                    description: t('teacher.builder.advanced.manualDesc'),
                   },
                   {
                     value: 'custom_prompt' as const,
-                    label: 'Scaffold-free',
-                    description: 'Write full custom instruction for the AI tutor. Scenario, grammar, whatever you want.',
+                    label: t('teacher.builder.advanced.customPromptLabel'),
+                    description: t('teacher.builder.advanced.customPromptDesc'),
                   },
                 ].map((option) => (
                   <button
@@ -769,15 +770,15 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
 
           {usesCanvasWorkflow && canvasContent.length === 0 && (
             <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-6 text-center">
-              <p className="text-sm font-semibold text-foreground">Connect a Canvas course first</p>
+              <p className="text-sm font-semibold text-foreground">{t('teacher.builder.canvas.connectFirst')}</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Lingual generates speaking practice from your Canvas pages, assignments, and discussions.
+                {t('teacher.builder.canvas.connectFirstSubtitle')}
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-3">
                 <Button
                   onClick={() => navigate(`/app/teacher/classes/${classId}/canvas/connect`)}
                 >
-                  Connect Canvas
+                  {t('teacher.builder.canvas.connect')}
                 </Button>
               </div>
             </div>
@@ -787,7 +788,7 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
             <div className="space-y-5">
               <div className="space-y-2">
                 <label htmlFor="canvas-item-picker" className="text-sm font-semibold text-foreground">
-                  Canvas item
+                  {t('teacher.builder.canvas.pickerLabel')}
                 </label>
                 <select
                   id="canvas-item-picker"
@@ -798,7 +799,7 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                   }}
                   className="h-11 w-full rounded-xl border-2 border-border bg-card px-4 text-sm text-foreground focus:border-primary focus:outline-none"
                 >
-                  <option value="">Select a Canvas page or assignment…</option>
+                  <option value="">{t('teacher.builder.canvas.pickerPlaceholder')}</option>
                   {groupCanvasItemsByModule(canvasContent).map((group) => (
                     <optgroup key={group.moduleName} label={group.moduleName}>
                       {group.items.map((item) => (
@@ -827,14 +828,14 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
 
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground">
-                  Lingual analyzes the Canvas item and drafts a scenario, target expressions, and success criteria.
+                  {t('teacher.builder.canvas.analyzeHint')}
                 </p>
                 <Button
                   onClick={() => handleCanvasGenerate()}
                   disabled={!selectedCanvasItemId}
                 >
                   <Sparkles size={16} className="mr-2" />
-                  Generate practice from this item
+                  {t('teacher.builder.canvas.generate')}
                 </Button>
               </div>
             </div>
@@ -843,24 +844,24 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
           {builderMode === 'advanced' && advancedEntryMode === 'source' && canvasPhase === 'idle' && (
             <div className="space-y-5">
               <Textarea
-                label="Source packet"
+                label={t('teacher.builder.source.label')}
                 value={sourcePacketText}
                 onChange={(event) => {
                   setSourcePacketText(event.target.value);
                   setCanvasError(null);
                 }}
-                placeholder="Paste key vocabulary, rubric notes, lesson context, or a custom teacher prompt."
+                placeholder={t('teacher.builder.source.placeholder')}
               />
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground">
-                  Lingual will turn the pasted packet into a draft scenario, target expressions, grammar focus, and success criteria.
+                  {t('teacher.builder.source.hint')}
                 </p>
                 <Button
                   onClick={() => void handleSourceDraftGenerate()}
                   disabled={!sourcePacketText.trim()}
                 >
                   <Sparkles size={16} className="mr-2" />
-                  Generate draft from source
+                  {t('teacher.builder.source.generate')}
                 </Button>
               </div>
             </div>
@@ -869,11 +870,11 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
           {canvasPhase === 'generating' && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Loader2 size={40} className="mb-4 animate-spin text-primary" />
-              <p className="text-base font-semibold text-foreground">AI is designing your speaking practice…</p>
+              <p className="text-base font-semibold text-foreground">{t('teacher.builder.generating.title')}</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {usesCanvasWorkflow
-                  ? `Analyzing ${canvasItemContext?.title || 'the selected Canvas item'} and generating a tailored scenario.`
-                  : 'Analyzing your pasted source packet and generating a tailored scenario.'}
+                  ? t('teacher.builder.generating.subtitleCanvas').replace('{item}', canvasItemContext?.title || t('teacher.builder.generating.subtitleCanvasFallback'))
+                  : t('teacher.builder.generating.subtitleSource')}
               </p>
             </div>
           )}
@@ -884,11 +885,11 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                 <AlertDescription>{canvasError || 'Generation failed.'}</AlertDescription>
               </Alert>
               <div className="flex flex-wrap gap-3">
-                <Button onClick={handleCanvasRegenerate}>Try again</Button>
+                <Button onClick={handleCanvasRegenerate}>{t('teacher.builder.error.tryAgain')}</Button>
                 <Button variant="outline" onClick={handleCanvasPickDifferent}>
                   {builderMode === 'advanced' && advancedEntryMode === 'source'
-                    ? 'Back to source input'
-                    : 'Pick a different item'}
+                    ? t('teacher.builder.error.backToSource')
+                    : t('teacher.builder.error.pickDifferent')}
                 </Button>
               </div>
             </div>
@@ -901,7 +902,7 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary" size="sm">{canvasItemContext.moduleName || 'Canvas'}</Badge>
                     <Badge variant="outline" size="sm">{formatItemTypeBadge(canvasItemContext.type)}</Badge>
-                    <Badge variant="accent" size="sm">AI draft</Badge>
+                    <Badge variant="accent" size="sm">{t('teacher.builder.form.aiDraft')}</Badge>
                   </div>
                   <p className="mt-2 text-sm font-semibold text-foreground">{canvasItemContext.title}</p>
                 </div>
@@ -910,8 +911,8 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
               {builderMode === 'advanced' && advancedEntryMode === 'source' && !canvasItemContext && (
                 <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="accent" size="sm">Pasted source</Badge>
-                    <Badge variant="outline" size="sm">AI draft</Badge>
+                    <Badge variant="accent" size="sm">{t('teacher.builder.form.pastedSource')}</Badge>
+                    <Badge variant="outline" size="sm">{t('teacher.builder.form.aiDraft')}</Badge>
                   </div>
                   <p className="mt-2 text-sm text-foreground/80 line-clamp-4">{sourcePacketText || draftInstructions}</p>
                 </div>
@@ -920,16 +921,16 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
               <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
                 <div className="space-y-4">
                   <Input
-                    label="Assignment title"
+                    label={t('teacher.builder.form.assignmentTitle')}
                     value={canvasTitle}
                     onChange={(event) => setCanvasTitle(event.target.value)}
-                    placeholder="What students will see"
+                    placeholder={t('teacher.builder.form.assignmentTitlePlaceholder')}
                   />
                   <Textarea
-                    label="Description"
+                    label={t('teacher.builder.form.description')}
                     value={canvasDescription}
                     onChange={(event) => setCanvasDescription(event.target.value)}
-                    placeholder="Brief description shown on the student dashboard"
+                    placeholder={t('teacher.builder.form.descriptionPlaceholder')}
                   />
 
                   {builderMode === 'advanced' && advancedEntryMode === 'custom_prompt' && (
@@ -937,49 +938,49 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <label htmlFor="custom-student-instructions" className="text-base font-semibold text-foreground">
-                            Student instructions
+                            {t('teacher.builder.form.studentInstructions')}
                           </label>
-                          <Badge variant="outline" size="sm">Optional · shown to students</Badge>
+                          <Badge variant="outline" size="sm">{t('teacher.builder.form.studentInstructionsBadge')}</Badge>
                         </div>
                         <textarea
                           id="custom-student-instructions"
                           value={customStudentInstructions}
                           onChange={(event) => setCustomStudentInstructions(event.target.value)}
                           rows={6}
-                          placeholder="What students should know before they start this practice. Shown on the student assignment page in place of the scope and practice-overlay cards."
+                          placeholder={t('teacher.builder.form.studentInstructionsPlaceholder')}
                           className="w-full rounded-xl border-3 border-border bg-card px-4 py-3 text-base text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                         />
                         <p className="text-xs text-muted-foreground">
-                          If left blank, students see a neutral placeholder.
+                          {t('teacher.builder.form.studentInstructionsHint')}
                         </p>
                       </div>
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <label htmlFor="custom-system-prompt" className="text-base font-semibold text-foreground">
-                            System prompt
+                            {t('teacher.builder.form.systemPrompt')}
                           </label>
-                          <Badge variant="outline" size="sm">Raw · no scaffold</Badge>
+                          <Badge variant="outline" size="sm">{t('teacher.builder.form.systemPromptBadge')}</Badge>
                         </div>
                         <textarea
                           id="custom-system-prompt"
                           value={draftInstructions}
                           onChange={(event) => setDraftInstructions(event.target.value)}
                           rows={16}
-                          placeholder="Write the complete system prompt the AI tutor will follow. No scenario, target expressions, grammar, or language-mix scaffolding will be added."
+                          placeholder={t('teacher.builder.form.systemPromptPlaceholder')}
                           className="w-full rounded-xl border-3 border-border bg-card px-4 py-3 text-base text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                         />
                         <p className="text-xs text-muted-foreground">
-                          Analytics that depend on target expressions, grammar, or rubric dimensions will show N/A for this assignment.
+                          {t('teacher.builder.form.systemPromptHint')}
                         </p>
                       </div>
                     </>
                   )}
                   {builderMode === 'advanced' && advancedEntryMode !== 'custom_prompt' && (
                     <Textarea
-                      label="Instructions"
+                      label={t('teacher.builder.form.instructions')}
                       value={draftInstructions}
                       onChange={(event) => setDraftInstructions(event.target.value)}
-                      placeholder="Teacher instructions, pasted source packet, or guidance for the assignment."
+                      placeholder={t('teacher.builder.form.instructionsPlaceholder')}
                     />
                   )}
 
@@ -988,10 +989,10 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <label htmlFor="canvas-scenario" className="text-base font-semibold text-foreground">
-                            Conversation scenario
+                            {t('teacher.builder.form.scenario')}
                           </label>
                           {advancedEntryMode !== 'manual' && (
-                            <Badge variant="accent" size="sm">AI-generated</Badge>
+                            <Badge variant="accent" size="sm">{t('teacher.builder.form.aiGenerated')}</Badge>
                           )}
                         </div>
                         <textarea
@@ -999,83 +1000,83 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                           value={canvasScenario}
                           onChange={(event) => setCanvasScenario(event.target.value)}
                           rows={5}
-                          placeholder="Describe the speaking scenario the tutor will run."
+                          placeholder={t('teacher.builder.form.scenarioPlaceholder')}
                           className="w-full rounded-xl border-3 border-border bg-card px-4 py-3 text-base text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                         />
                       </div>
 
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
-                          <p className="text-base font-semibold text-foreground">Target expressions</p>
+                          <p className="text-base font-semibold text-foreground">{t('teacher.builder.form.targetExpressions')}</p>
                           {advancedEntryMode !== 'manual' && (
-                            <Badge variant="accent" size="sm">AI-generated</Badge>
+                            <Badge variant="accent" size="sm">{t('teacher.builder.form.aiGenerated')}</Badge>
                           )}
                         </div>
                         <TagListEditor
                           items={canvasTargetExpressions}
                           onChange={setCanvasTargetExpressions}
-                          placeholder="Add a target expression…"
-                          ariaLabel="Target expressions"
+                          placeholder={t('teacher.builder.form.targetExpressionsPlaceholder')}
+                          ariaLabel={t('teacher.builder.form.targetExpressions')}
                         />
                       </div>
 
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
-                          <p className="text-base font-semibold text-foreground">Target vocabulary</p>
+                          <p className="text-base font-semibold text-foreground">{t('teacher.builder.form.targetVocabulary')}</p>
                           {advancedEntryMode !== 'manual' && (
-                            <Badge variant="accent" size="sm">AI-generated</Badge>
+                            <Badge variant="accent" size="sm">{t('teacher.builder.form.aiGenerated')}</Badge>
                           )}
                         </div>
                         <TagListEditor
                           items={canvasTargetVocabulary}
                           onChange={setCanvasTargetVocabulary}
-                          placeholder="Add a target vocabulary word…"
-                          ariaLabel="Target vocabulary"
+                          placeholder={t('teacher.builder.form.targetVocabularyPlaceholder')}
+                          ariaLabel={t('teacher.builder.form.targetVocabulary')}
                         />
                       </div>
 
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
-                          <p className="text-base font-semibold text-foreground">Focus grammar</p>
+                          <p className="text-base font-semibold text-foreground">{t('teacher.builder.form.focusGrammar')}</p>
                           {advancedEntryMode !== 'manual' && (
-                            <Badge variant="accent" size="sm">AI-generated</Badge>
+                            <Badge variant="accent" size="sm">{t('teacher.builder.form.aiGenerated')}</Badge>
                           )}
                         </div>
                         <TagListEditor
                           items={canvasFocusGrammar}
                           onChange={setCanvasFocusGrammar}
-                          placeholder="Add a grammar point…"
-                          ariaLabel="Focus grammar"
+                          placeholder={t('teacher.builder.form.focusGrammarPlaceholder')}
+                          ariaLabel={t('teacher.builder.form.focusGrammar')}
                         />
                       </div>
 
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
-                          <p className="text-base font-semibold text-foreground">Success criteria</p>
+                          <p className="text-base font-semibold text-foreground">{t('teacher.builder.form.successCriteria')}</p>
                           {advancedEntryMode !== 'manual' && (
-                            <Badge variant="accent" size="sm">AI-generated</Badge>
+                            <Badge variant="accent" size="sm">{t('teacher.builder.form.aiGenerated')}</Badge>
                           )}
                         </div>
                         <TagListEditor
                           items={canvasSuccessCriteria}
                           onChange={setCanvasSuccessCriteria}
-                          placeholder="Add a success criterion…"
-                          ariaLabel="Success criteria"
+                          placeholder={t('teacher.builder.form.successCriteriaPlaceholder')}
+                          ariaLabel={t('teacher.builder.form.successCriteria')}
                         />
                       </div>
 
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
-                          <p className="text-base font-semibold text-foreground">Objectives</p>
+                          <p className="text-base font-semibold text-foreground">{t('teacher.builder.form.objectives')}</p>
                           {advancedEntryMode !== 'manual' && canvasObjectivesFromAI && (
-                            <Badge variant="accent" size="sm">AI-generated</Badge>
+                            <Badge variant="accent" size="sm">{t('teacher.builder.form.aiGenerated')}</Badge>
                           )}
                         </div>
                         <TagListEditor
                           items={canvasObjectives}
                           onChange={setCanvasObjectives}
-                          placeholder="Add an objective…"
-                          ariaLabel="Objectives"
+                          placeholder={t('teacher.builder.form.objectivesPlaceholder')}
+                          ariaLabel={t('teacher.builder.form.objectives')}
                         />
                       </div>
                     </>
@@ -1086,10 +1087,10 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                   {advancedEntryMode !== 'custom_prompt' && (
                     <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
                       <Textarea
-                        label="Teacher notes"
+                        label={t('teacher.builder.form.teacherNotes')}
                         value={canvasTeacherNotes}
                         onChange={(event) => setCanvasTeacherNotes(event.target.value)}
-                        placeholder="Notes about pedagogical intent (optional)"
+                        placeholder={t('teacher.builder.form.teacherNotesPlaceholder')}
                         rows={8}
                         className="min-h-[220px]"
                       />
@@ -1099,10 +1100,10 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                   <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
                     <div className="space-y-1">
                       <p id="canvas-language-mix-label" className="text-base font-semibold text-foreground">
-                        AI tutor language mix
+                        {t('teacher.builder.languageMix.title')}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        How much should the tutor stay in the target language vs. scaffold in English?
+                        {t('teacher.builder.languageMix.hint')}
                       </p>
                     </div>
                     <div
@@ -1114,28 +1115,28 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                         [
                           {
                             value: 'english_first',
-                            label: 'English-first',
-                            hint: 'Novice-friendly - English leads, target language introduced alongside English meanings.',
+                            label: t('teacher.builder.languageMix.englishFirst'),
+                            hint: t('teacher.builder.languageMix.englishFirstHint'),
                           },
                           {
                             value: 'english_led',
-                            label: 'English-led',
-                            hint: 'English drives the conversation; target language carries key expressions and scenario moves.',
+                            label: t('teacher.builder.languageMix.englishLed'),
+                            hint: t('teacher.builder.languageMix.englishLedHint'),
                           },
                           {
                             value: 'balanced',
-                            label: 'Balanced',
-                            hint: 'Default. Alternates naturally between English and the target language.',
+                            label: t('teacher.builder.languageMix.balanced'),
+                            hint: t('teacher.builder.languageMix.balancedHint'),
                           },
                           {
                             value: 'target_led',
-                            label: 'Target-language-led',
-                            hint: 'Mostly target language; brief English only when the learner stalls.',
+                            label: t('teacher.builder.languageMix.targetLed'),
+                            hint: t('teacher.builder.languageMix.targetLedHint'),
                           },
                           {
                             value: 'target_only',
-                            label: 'Target-language-only',
-                            hint: 'Best for advanced classes - AI replies stay in the target language.',
+                            label: t('teacher.builder.languageMix.targetOnly'),
+                            hint: t('teacher.builder.languageMix.targetOnlyHint'),
                           },
                         ] as Array<{ value: TargetLanguageIntensity; label: string; hint: string }>
                       ).map((option) => {
@@ -1162,7 +1163,7 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                   </div>
 
                   <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-                    <p id="canvas-status-label" className="text-base font-semibold text-foreground">Status</p>
+                    <p id="canvas-status-label" className="text-base font-semibold text-foreground">{t('teacher.builder.status.title')}</p>
                     <div
                       className="flex gap-2"
                       role="radiogroup"
@@ -1179,7 +1180,7 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                         }`}
                         onClick={() => setCanvasStatus('draft')}
                       >
-                        Draft
+                        {t('teacher.builder.status.draft')}
                       </button>
                       <button
                         type="button"
@@ -1192,7 +1193,7 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                         }`}
                         onClick={() => setCanvasStatus('published')}
                       >
-                        Published
+                        {t('teacher.builder.status.published')}
                       </button>
                     </div>
 
@@ -1209,7 +1210,7 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                       }
                     >
                       <Sparkles size={16} className="mr-2" />
-                      {canvasStatus === 'published' ? 'Publish assignment' : 'Save as draft'}
+                      {canvasStatus === 'published' ? t('teacher.builder.status.publish') : t('teacher.builder.status.saveDraft')}
                     </Button>
                     {advancedEntryMode !== 'manual' && advancedEntryMode !== 'custom_prompt' && (
                       <Button
@@ -1218,7 +1219,7 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                         onClick={handleCanvasRegenerate}
                         disabled={canvasPhase === 'saving'}
                       >
-                        Regenerate suggestions
+                        {t('teacher.builder.status.regenerate')}
                       </Button>
                     )}
                     <Button
@@ -1228,8 +1229,8 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
                       disabled={canvasPhase === 'saving'}
                     >
                       {builderMode === 'advanced' && (advancedEntryMode === 'manual' || advancedEntryMode === 'custom_prompt')
-                        ? 'Start over'
-                        : 'Pick a different item'}
+                        ? t('teacher.builder.status.startOver')
+                        : t('teacher.builder.status.pickDifferent')}
                     </Button>
                   </div>
                 </div>
@@ -1250,7 +1251,8 @@ function renderTeacherAssignmentBuilderPage(controller: TeacherAssignmentBuilder
 }
 
 export function TeacherAssignmentBuilderPage() {
-  return renderTeacherAssignmentBuilderPage(useTeacherAssignmentBuilderController());
+  const controller = useTeacherAssignmentBuilderController();
+  return <TeacherAssignmentBuilderView controller={controller} />;
 }
 
 // ── Assignment list card with per-card collapsible plan preview ────────
@@ -1264,6 +1266,7 @@ function AssignmentListCard({
   classId: string | undefined;
   navigate: ReturnType<typeof useNavigate>;
 }) {
+  const { t } = useLanguage();
   const [expandedPreviews, setExpandedPreviews] = useState<Set<string>>(new Set());
 
   const togglePreview = (id: string) => {
@@ -1285,16 +1288,16 @@ function AssignmentListCard({
           <GraduationCap size={22} strokeWidth={2.5} />
         </div>
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">Your assignments</h2>
+          <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.builder.list.title')}</h2>
           <p className="text-sm text-muted-foreground">
-            Published assignments are live on your students' dashboards.
+            {t('teacher.builder.list.subtitle')}
           </p>
         </div>
       </div>
       <div className="mt-5 space-y-3">
         {assignments.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
-            No assignments yet. Pick a Canvas item above and publish your first one!
+            {t('teacher.builder.list.empty')}
           </div>
         ) : (
           assignments.map((assignment) => {
@@ -1319,24 +1322,24 @@ function AssignmentListCard({
                       size="sm"
                       onClick={() => navigate(`/app/teacher/classes/${classId}/assignments/${assignment.id}/analytics`)}
                     >
-                      View analytics
+                      {t('teacher.builder.list.viewAnalytics')}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => navigate(`/app/assignments/${assignment.id}`)}
                     >
-                      Preview
+                      {t('teacher.builder.list.preview')}
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => togglePreview(assignment.id)}
                       aria-expanded={isExpanded}
-                      aria-label="Toggle AI engine preview"
+                      aria-label={t('teacher.builder.list.aiPlanAriaLabel')}
                     >
                       {isExpanded ? <ChevronUp size={14} className="mr-1" /> : <ChevronDown size={14} className="mr-1" />}
-                      AI plan
+                      {t('teacher.builder.list.aiPlan')}
                     </Button>
                   </div>
                 </div>

@@ -52,6 +52,7 @@ import { PendingTeacherRequestsSection } from '@/components/teacher/PendingTeach
 import { getLtiPlatform, registerLtiPlatform, deleteLtiPlatform } from '@/api/lti';
 import type { LtiPlatformConfig } from '@/api/lti';
 import { useMembership } from '@/contexts/MembershipContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { LEARNING_LOCALES } from '@/lib/learningLocales';
 import { OnboardingHint } from '@/components/ui/OnboardingHint';
 import type {
@@ -100,7 +101,7 @@ type DashboardClassSummary = TeacherDashboardData['classes'][number];
 type DashboardSetupChecklistItem = TeacherDashboardData['setupChecklist'][number];
 type DashboardAlert = TeacherDashboardData['alerts'][number];
 type DashboardStat = {
-  label: string;
+  labelKey: string;
   value: number;
   icon: typeof BookOpen;
   accent: string;
@@ -540,25 +541,25 @@ function useTeacherDashboardController() {
   const stats = useMemo<DashboardStat[]>(
     () => [
       {
-        label: 'Classes',
+        labelKey: 'teacher.dashboard.stat.classes',
         value: filteredSummary.classCount,
         icon: BookOpen,
         accent: 'bg-primary/10 text-primary',
       },
       {
-        label: 'Students',
+        labelKey: 'teacher.dashboard.stat.students',
         value: filteredSummary.studentCount,
         icon: Users,
         accent: 'bg-success/15 text-success',
       },
       {
-        label: 'Speaking minutes',
+        labelKey: 'teacher.dashboard.stat.speakingMinutes',
         value: filteredSummary.speakingMinutes,
         icon: CalendarClock,
         accent: 'bg-accent/20 text-accent-foreground',
       },
       {
-        label: 'Assignments',
+        labelKey: 'teacher.dashboard.stat.assignments',
         value: filteredSummary.assignmentCount,
         icon: GraduationCap,
         accent: 'bg-secondary text-foreground',
@@ -726,13 +727,14 @@ function TeacherDashboardUnavailable({
   error: string | null;
   onGoToTeacherJoin: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="space-y-4">
       <Alert variant="destructive">
-        <AlertDescription>{error || 'Teacher dashboard is unavailable.'}</AlertDescription>
+        <AlertDescription>{error || t('teacher.dashboard.unavailable')}</AlertDescription>
       </Alert>
       <Button variant="outline" onClick={onGoToTeacherJoin}>
-        Go to teacher join
+        {t('teacher.dashboard.goToTeacherJoin')}
       </Button>
     </div>
   );
@@ -745,24 +747,25 @@ function TeacherDashboardHeader({
   organizationName?: string;
   onCreateClass: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div>
         <div className="mb-3 inline-flex items-center gap-2 rounded-full border-2 border-border bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           <School size={14} />
-          School integration
+          {t('teacher.dashboard.badge')}
         </div>
         <h1 className="text-3xl font-display font-bold text-foreground">
-          {organizationName || 'Teacher workspace'}
+          {organizationName || t('teacher.dashboard.workspacePlaceholder')}
         </h1>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-          Manage your classes, create speaking assignments, and track student progress.
+          {t('teacher.dashboard.subtitle')}
         </p>
       </div>
       <div className="flex flex-wrap gap-3">
         <Button onClick={onCreateClass}>
           <Plus size={16} className="mr-2" />
-          Create class
+          {t('teacher.dashboard.createClass')}
         </Button>
       </div>
     </div>
@@ -805,13 +808,14 @@ function ClassFilterBar({
   onChange: (classId: string) => void;
   onClear: () => void;
 }) {
+  const { t } = useLanguage();
   if (classes.length <= 1) return null;
 
   return (
     <div className="flex items-center gap-3">
       <Filter size={16} className="text-muted-foreground" />
       <label htmlFor="dashboard-class-filter" className="text-sm font-medium text-muted-foreground">
-        Class
+        {t('teacher.dashboard.filterLabel')}
       </label>
       <select
         id="dashboard-class-filter"
@@ -819,7 +823,7 @@ function ClassFilterBar({
         onChange={(event) => onChange(event.target.value)}
         className="h-9 rounded-xl border-2 border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none"
       >
-        <option value="">All classes</option>
+        <option value="">{t('teacher.dashboard.filterAll')}</option>
         {classes.map((classSummary) => (
           <option key={classSummary.id} value={classSummary.id}>
             {classSummary.name}
@@ -832,7 +836,7 @@ function ClassFilterBar({
           onClick={onClear}
           className="text-xs text-muted-foreground hover:text-foreground"
         >
-          Clear
+          {t('teacher.dashboard.filterClear')}
         </button>
       )}
     </div>
@@ -840,12 +844,13 @@ function ClassFilterBar({
 }
 
 function StatsGrid({ stats }: { stats: DashboardStat[] }) {
+  const { t } = useLanguage();
   return (
     <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
       {stats.map((stat) => {
         const Icon = stat.icon;
         return (
-          <Card key={stat.label} className="border-3 border-foreground p-5 shadow-stamp">
+          <Card key={stat.labelKey} className="border-3 border-foreground p-5 shadow-stamp">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div
                 className={`flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-foreground ${stat.accent}`}
@@ -853,11 +858,11 @@ function StatsGrid({ stats }: { stats: DashboardStat[] }) {
                 <Icon size={22} strokeWidth={2.5} />
               </div>
               <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Beta
+                {t('teacher.dashboard.beta')}
               </span>
             </div>
             <p className="text-3xl font-display font-bold text-foreground">{stat.value}</p>
-            <p className="mt-1 text-sm font-medium text-muted-foreground">{stat.label}</p>
+            <p className="mt-1 text-sm font-medium text-muted-foreground">{t(stat.labelKey)}</p>
           </Card>
         );
       })}
@@ -866,18 +871,19 @@ function StatsGrid({ stats }: { stats: DashboardStat[] }) {
 }
 
 function TeacherDashboardHints({ dashboard }: { dashboard: TeacherDashboardData }) {
+  const { t } = useLanguage();
   return (
     <>
       <OnboardingHint
         show={dashboard.classes.length === 0}
-        message="Create your first class to get started."
-        ctaLabel="Create Class"
+        message={t('teacher.dashboard.hint.createClass')}
+        ctaLabel={t('teacher.dashboard.hint.createClassCta')}
         ctaTo="/app/teacher"
       />
       <OnboardingHint
         show={dashboard.classes.length > 0 && dashboard.summary.studentCount === 0}
-        message="Invite students to your class using a join code."
-        ctaLabel="Go to Class"
+        message={t('teacher.dashboard.hint.inviteStudents')}
+        ctaLabel={t('teacher.dashboard.hint.inviteStudentsCta')}
         ctaTo={`/app/teacher/classes/${dashboard.classes[0]?.id}/analytics`}
       />
       <OnboardingHint
@@ -886,8 +892,8 @@ function TeacherDashboardHints({ dashboard }: { dashboard: TeacherDashboardData 
           dashboard.summary.studentCount > 0 &&
           dashboard.summary.assignmentCount === 0
         }
-        message="Create your first assignment from a class page."
-        ctaLabel="Go to Class"
+        message={t('teacher.dashboard.hint.createAssignment')}
+        ctaLabel={t('teacher.dashboard.hint.createAssignmentCta')}
         ctaTo={`/app/teacher/classes/${dashboard.classes[0]?.id}/assignments`}
       />
     </>
@@ -907,12 +913,12 @@ function SetupAndClassesSection({ controller }: { controller: TeacherDashboardCo
 }
 
 function SetupChecklistCard({ items }: { items: DashboardSetupChecklistItem[] }) {
+  const { t } = useLanguage();
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
-      <h2 className="text-xl font-display font-bold text-foreground">Setup checklist</h2>
+      <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.dashboard.setup.title')}</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Phase 1 is complete when the school workspace, first class, and first student path all exist on
-        the real data model.
+        {t('teacher.dashboard.setup.subtitle')}
       </p>
       <div className="mt-6 space-y-4">
         {items.map((item) => (
@@ -940,18 +946,19 @@ function SetupChecklistCard({ items }: { items: DashboardSetupChecklistItem[] })
 }
 
 function ClassesCard({ controller }: { controller: TeacherDashboardController }) {
+  const { t } = useLanguage();
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">Classes</h2>
+          <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.dashboard.classes.title')}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Your active classes and their student rosters.
+            {t('teacher.dashboard.classes.subtitle')}
           </p>
         </div>
         <Button size="sm" onClick={controller.openCreateDialog}>
           <Plus size={16} className="mr-2" />
-          New class
+          {t('teacher.dashboard.classes.newClass')}
         </Button>
       </div>
 
@@ -977,18 +984,18 @@ function ClassesCard({ controller }: { controller: TeacherDashboardController })
 }
 
 function EmptyClassesState({ onCreateClass }: { onCreateClass: () => void }) {
+  const { t } = useLanguage();
   return (
     <div className="mt-6 rounded-3xl border-3 border-dashed border-border bg-secondary/40 p-8 text-center">
       <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border-2 border-foreground bg-card">
         <BookOpen size={24} strokeWidth={2.5} />
       </div>
-      <h3 className="mt-4 text-xl font-display font-bold text-foreground">No classes yet</h3>
+      <h3 className="mt-4 text-xl font-display font-bold text-foreground">{t('teacher.dashboard.classes.empty.title')}</h3>
       <p className="mt-2 text-sm text-muted-foreground">
-        Create the first class so assignments, roster imports, and assignment-aware practice can anchor
-        to a real school object.
+        {t('teacher.dashboard.classes.empty.subtitle')}
       </p>
       <Button className="mt-5" onClick={onCreateClass}>
-        Create first class
+        {t('teacher.dashboard.classes.empty.cta')}
       </Button>
     </div>
   );
@@ -1009,27 +1016,28 @@ function ClassSummaryCard({
   onOpenAssignments: (classId: string) => void;
   onOpenCanvas: (classId: string) => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="w-full rounded-2xl border-2 border-border bg-secondary/50 p-5 transition-colors hover:border-primary hover:bg-secondary">
       <button
         type="button"
         onClick={() => onOpenAnalytics(classSummary.id)}
-        aria-label={`Open ${classSummary.name} analytics`}
+        aria-label={t('teacher.dashboard.class.analyticsAriaLabel').replace('{name}', classSummary.name)}
         className="block w-full cursor-pointer rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h3 className="text-lg font-display font-bold text-foreground">{classSummary.name}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {classSummary.subject || 'Subject TBD'}
+              {classSummary.subject || t('teacher.dashboard.class.subjectTbd')}
               {classSummary.term ? ` · ${classSummary.term}` : ''}
-              {classSummary.gradeBand ? ` · Grades ${classSummary.gradeBand}` : ''}
+              {classSummary.gradeBand ? ` · ${t('teacher.dashboard.class.grades').replace('{band}', classSummary.gradeBand)}` : ''}
             </p>
           </div>
           <div className="grid gap-3 sm:w-[420px] sm:grid-cols-3">
-            <ClassMetric label="Students" value={classSummary.studentCount} />
-            <ClassMetric label="Language" value={classSummary.learningLocale} />
-            <ClassMetric label="Assignments" value={classSummary.assignmentCount ?? 0} />
+            <ClassMetric label={t('teacher.dashboard.class.metricStudents')} value={classSummary.studentCount} />
+            <ClassMetric label={t('teacher.dashboard.class.metricLanguage')} value={classSummary.learningLocale} />
+            <ClassMetric label={t('teacher.dashboard.class.metricAssignments')} value={classSummary.assignmentCount ?? 0} />
           </div>
         </div>
       </button>
@@ -1040,7 +1048,7 @@ function ClassSummaryCard({
           onClick={() => onOpenJoinCode(classSummary.id)}
         >
           <UserPlus size={14} className="mr-1.5" />
-          Invite students
+          {t('teacher.dashboard.class.inviteStudents')}
         </Button>
         <Button
           variant="outline"
@@ -1048,21 +1056,23 @@ function ClassSummaryCard({
           onClick={() => onOpenRoster(classSummary.id)}
         >
           <Users size={14} className="mr-1.5" />
-          Roster
+          {t('teacher.dashboard.class.roster')}
         </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={() => onOpenAssignments(classSummary.id)}
         >
-          Build assignments
+          {t('teacher.dashboard.class.buildAssignments')}
         </Button>
         <Button
           variant="outline"
           size="sm"
           className={classSummary.canvasLinked ? 'group' : undefined}
           aria-label={
-            classSummary.canvasLinked ? 'Canvas linked - click to manage or resync' : 'Connect Canvas'
+            classSummary.canvasLinked
+              ? t('teacher.dashboard.class.canvasLinkedLabel')
+              : t('teacher.dashboard.class.connectCanvasLabel')
           }
           onClick={() => onOpenCanvas(classSummary.id)}
         >
@@ -1076,15 +1086,15 @@ function ClassSummaryCard({
                 size={14}
                 className="mr-1.5 hidden group-hover:inline group-focus-visible:inline"
               />
-              <span className="group-hover:hidden group-focus-visible:hidden">Canvas Linked</span>
+              <span className="group-hover:hidden group-focus-visible:hidden">{t('teacher.dashboard.class.canvasLinked')}</span>
               <span className="hidden group-hover:inline group-focus-visible:inline">
-                Resync Canvas
+                {t('teacher.dashboard.class.resyncCanvas')}
               </span>
             </>
           ) : (
             <>
               <LinkIcon size={14} className="mr-1.5" />
-              Canvas
+              {t('teacher.dashboard.class.canvas')}
             </>
           )}
         </Button>
@@ -1113,6 +1123,7 @@ function TeacherInviteCodeSection({ controller }: { controller: TeacherDashboard
 }
 
 function TeacherInviteCodeCard({ controller }: { controller: TeacherDashboardController }) {
+  const { t } = useLanguage();
   const code = controller.teacherInviteCode;
 
   return (
@@ -1122,8 +1133,8 @@ function TeacherInviteCodeCard({ controller }: { controller: TeacherDashboardCon
           <ShieldCheck size={20} strokeWidth={2.5} />
         </div>
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">Teacher Invite Code</h2>
-          <p className="text-sm text-muted-foreground">Share with teachers to join your school.</p>
+          <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.dashboard.invite.title')}</h2>
+          <p className="text-sm text-muted-foreground">{t('teacher.dashboard.invite.subtitle')}</p>
         </div>
       </div>
 
@@ -1139,16 +1150,16 @@ function TeacherInviteCodeCard({ controller }: { controller: TeacherDashboardCon
               type="button"
               onClick={() => controller.handleCopyTeacherInviteCode(code.inviteCode)}
               className="rounded-lg border border-border bg-card p-2 text-muted-foreground transition-colors hover:text-foreground"
-              title="Copy code"
+              title={t('teacher.dashboard.invite.copyTitle')}
             >
               <ClipboardCopy size={18} />
             </button>
           </div>
           {controller.teacherInviteCodeCopied && (
-            <p className="text-center text-sm font-medium text-success">Copied to clipboard!</p>
+            <p className="text-center text-sm font-medium text-success">{t('teacher.dashboard.invite.copied')}</p>
           )}
           <p className="text-center text-sm text-muted-foreground">
-            Teachers go to <strong>l1ngual.com/app/join-school</strong> and enter this code.
+            {t('teacher.dashboard.invite.instructions')}
           </p>
           <div className="flex justify-center gap-3">
             <Button
@@ -1157,20 +1168,20 @@ function TeacherInviteCodeCard({ controller }: { controller: TeacherDashboardCon
               onClick={controller.handleDeactivateTeacherInviteCode}
               disabled={controller.teacherInviteCodeLoading}
             >
-              Deactivate
+              {t('teacher.dashboard.invite.deactivate')}
             </Button>
           </div>
         </div>
       ) : (
         <div className="space-y-4 py-4 text-center">
           <p className="text-muted-foreground">
-            {code && !code.active ? 'The invite code has been deactivated.' : 'No active teacher invite code.'}
+            {code && !code.active ? t('teacher.dashboard.invite.deactivated') : t('teacher.dashboard.invite.noActive')}
           </p>
           <Button
             onClick={controller.handleGenerateTeacherInviteCode}
             disabled={controller.teacherInviteCodeLoading}
           >
-            {code && !code.active ? 'Regenerate' : 'Generate Invite Code'}
+            {code && !code.active ? t('teacher.dashboard.invite.regenerate') : t('teacher.dashboard.invite.generate')}
           </Button>
         </div>
       )}
@@ -1179,6 +1190,7 @@ function TeacherInviteCodeCard({ controller }: { controller: TeacherDashboardCon
 }
 
 function LtiConfigurationCard({ controller }: { controller: TeacherDashboardController }) {
+  const { t } = useLanguage();
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
       <div className="mb-4 flex items-center gap-3">
@@ -1186,9 +1198,9 @@ function LtiConfigurationCard({ controller }: { controller: TeacherDashboardCont
           <LinkIcon size={20} strokeWidth={2.5} />
         </div>
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">LTI 1.3 Configuration</h2>
+          <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.dashboard.lti.title')}</h2>
           <p className="text-sm text-muted-foreground">
-            Connect Canvas via LTI 1.3 for single sign-on and deep linking.
+            {t('teacher.dashboard.lti.subtitle')}
           </p>
         </div>
       </div>
@@ -1208,7 +1220,7 @@ function LtiConfigurationCard({ controller }: { controller: TeacherDashboardCont
               className="text-destructive hover:text-destructive"
             >
               <Trash2 size={14} className="mr-1.5" />
-              Remove LTI Platform
+              {t('teacher.dashboard.lti.removePlatform')}
             </Button>
           </div>
         </div>
@@ -1220,36 +1232,38 @@ function LtiConfigurationCard({ controller }: { controller: TeacherDashboardCont
 }
 
 function LtiRegisteredPlatform({ platform }: { platform: LtiPlatformConfig }) {
+  const { t } = useLanguage();
   return (
     <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
       <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        Registered Platform
+        {t('teacher.dashboard.lti.registered.title')}
       </h3>
       <div className="grid gap-2 text-sm">
-        <LtiPlatformDetailRow label="Issuer" value={platform.issuer} />
-        <LtiPlatformDetailRow label="Client ID" value={platform.clientId} />
-        <LtiPlatformDetailRow label="Deployment ID" value={platform.deploymentId} />
+        <LtiPlatformDetailRow label={t('teacher.dashboard.lti.registered.issuer')} value={platform.issuer} />
+        <LtiPlatformDetailRow label={t('teacher.dashboard.lti.registered.clientId')} value={platform.clientId} />
+        <LtiPlatformDetailRow label={t('teacher.dashboard.lti.registered.deploymentId')} value={platform.deploymentId} />
       </div>
     </div>
   );
 }
 
 function LtiUrlsPanel() {
+  const { t } = useLanguage();
   const origin = window.location.origin;
 
   return (
     <div className="space-y-3 rounded-2xl border-2 border-border bg-secondary/40 p-4">
       <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        Your Lingual LTI URLs
+        {t('teacher.dashboard.lti.urls.title')}
       </h3>
       <p className="text-xs text-muted-foreground">
-        Enter these in your Canvas Developer Key / LTI tool configuration.
+        {t('teacher.dashboard.lti.urls.subtitle')}
       </p>
       <div className="grid gap-2 text-sm">
-        <LtiPlatformDetailRow label="Login URL" value={`${origin}/lti/login`} />
-        <LtiPlatformDetailRow label="Launch URL" value={`${origin}/lti/callback`} />
-        <LtiPlatformDetailRow label="JWKS URL" value={`${origin}/lti/jwks`} />
-        <LtiPlatformDetailRow label="Redirect URI" value={`${origin}/lti/callback`} />
+        <LtiPlatformDetailRow label={t('teacher.dashboard.lti.urls.loginUrl')} value={`${origin}/lti/login`} />
+        <LtiPlatformDetailRow label={t('teacher.dashboard.lti.urls.launchUrl')} value={`${origin}/lti/callback`} />
+        <LtiPlatformDetailRow label={t('teacher.dashboard.lti.urls.jwksUrl')} value={`${origin}/lti/jwks`} />
+        <LtiPlatformDetailRow label={t('teacher.dashboard.lti.urls.redirectUri')} value={`${origin}/lti/callback`} />
       </div>
     </div>
   );
@@ -1265,6 +1279,7 @@ function LtiPlatformDetailRow({ label, value }: { label: string; value: string }
 }
 
 function LtiRegistrationForm({ controller }: { controller: TeacherDashboardController }) {
+  const { t } = useLanguage();
   const form = controller.ltiForm;
   const isDisabled =
     !form.issuer ||
@@ -1279,43 +1294,43 @@ function LtiRegistrationForm({ controller }: { controller: TeacherDashboardContr
       <div className="mb-4">
         <LtiUrlsPanel />
       </div>
-      <h3 className="text-base font-display font-bold text-foreground">Register Canvas Platform</h3>
+      <h3 className="text-base font-display font-bold text-foreground">{t('teacher.dashboard.lti.form.title')}</h3>
       <p className="text-sm text-muted-foreground">
-        Enter the LTI 1.3 configuration values from your Canvas Developer Key.
+        {t('teacher.dashboard.lti.form.subtitle')}
       </p>
       <div className="grid gap-3">
         <Input
-          label="Issuer"
+          label={t('teacher.dashboard.lti.form.issuer')}
           value={form.issuer}
           onChange={(event) => controller.updateLtiField('issuer', event.target.value)}
           placeholder="https://canvas.instructure.com"
         />
         <Input
-          label="Client ID"
+          label={t('teacher.dashboard.lti.form.clientId')}
           value={form.clientId}
           onChange={(event) => controller.updateLtiField('clientId', event.target.value)}
           placeholder="10000000000001"
         />
         <Input
-          label="Deployment ID"
+          label={t('teacher.dashboard.lti.form.deploymentId')}
           value={form.deploymentId}
           onChange={(event) => controller.updateLtiField('deploymentId', event.target.value)}
           placeholder="1"
         />
         <Input
-          label="Auth Login URL"
+          label={t('teacher.dashboard.lti.form.authLoginUrl')}
           value={form.authLoginUrl}
           onChange={(event) => controller.updateLtiField('authLoginUrl', event.target.value)}
           placeholder="https://canvas.instructure.com/api/lti/authorize_redirect"
         />
         <Input
-          label="Auth Token URL"
+          label={t('teacher.dashboard.lti.form.authTokenUrl')}
           value={form.authTokenUrl}
           onChange={(event) => controller.updateLtiField('authTokenUrl', event.target.value)}
           placeholder="https://canvas.instructure.com/login/oauth2/token"
         />
         <Input
-          label="Key Set URL"
+          label={t('teacher.dashboard.lti.form.keySetUrl')}
           value={form.keySetUrl}
           onChange={(event) => controller.updateLtiField('keySetUrl', event.target.value)}
           placeholder="https://canvas.instructure.com/api/lti/security/jwks"
@@ -1326,13 +1341,14 @@ function LtiRegistrationForm({ controller }: { controller: TeacherDashboardContr
         loading={controller.ltiSaving}
         disabled={isDisabled}
       >
-        Register Platform
+        {t('teacher.dashboard.lti.form.register')}
       </Button>
     </div>
   );
 }
 
 function CreateClassDialog({ controller }: { controller: TeacherDashboardController }) {
+  const { t } = useLanguage();
   return (
     <Dialog
       open={controller.isCreateDialogOpen}
@@ -1340,40 +1356,40 @@ function CreateClassDialog({ controller }: { controller: TeacherDashboardControl
     >
       <DialogContent className="border-3 border-foreground shadow-stamp">
         <DialogHeader>
-          <DialogTitle className="font-display text-2xl">Create class</DialogTitle>
+          <DialogTitle className="font-display text-2xl">{t('teacher.dashboard.createDialog.title')}</DialogTitle>
           <DialogDescription>
-            Set up a new class for your students. You can invite students after creating it.
+            {t('teacher.dashboard.createDialog.subtitle')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
           <Input
-            label="Class name"
+            label={t('teacher.dashboard.createDialog.className')}
             value={controller.classForm.name}
             onChange={(event) => controller.updateClassField('name', event.target.value)}
-            placeholder="French 1 - Period 2"
+            placeholder={t('teacher.dashboard.createDialog.classNamePlaceholder')}
           />
           <Input
-            label="Term"
+            label={t('teacher.dashboard.createDialog.term')}
             value={controller.classForm.term}
             onChange={(event) => controller.updateClassField('term', event.target.value)}
-            placeholder="Fall 2026"
+            placeholder={t('teacher.dashboard.createDialog.termPlaceholder')}
           />
           <Input
-            label="Subject"
+            label={t('teacher.dashboard.createDialog.subject')}
             value={controller.classForm.subject}
             onChange={(event) => controller.updateClassField('subject', event.target.value)}
-            placeholder="French"
+            placeholder={t('teacher.dashboard.createDialog.subjectPlaceholder')}
           />
           <Input
-            label="Grade band"
+            label={t('teacher.dashboard.createDialog.gradeBand')}
             value={controller.classForm.gradeBand}
             onChange={(event) => controller.updateClassField('gradeBand', event.target.value)}
-            placeholder="9-10"
+            placeholder={t('teacher.dashboard.createDialog.gradeBandPlaceholder')}
           />
           <div className="space-y-2">
             <label htmlFor="teacher-class-locale" className="text-base font-semibold text-foreground">
-              Practice language
+              {t('teacher.dashboard.createDialog.practiceLanguage')}
             </label>
             <select
               id="teacher-class-locale"
@@ -1392,10 +1408,10 @@ function CreateClassDialog({ controller }: { controller: TeacherDashboardControl
 
         <DialogFooter>
           <Button variant="outline" onClick={controller.closeCreateDialog}>
-            Cancel
+            {t('teacher.dashboard.createDialog.cancel')}
           </Button>
           <Button onClick={controller.handleCreateClass} loading={controller.savingClass}>
-            Create class
+            {t('teacher.dashboard.createDialog.create')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1404,6 +1420,7 @@ function CreateClassDialog({ controller }: { controller: TeacherDashboardControl
 }
 
 function JoinCodeDialog({ controller }: { controller: TeacherDashboardController }) {
+  const { t } = useLanguage();
   return (
     <Dialog
       open={controller.joinCodeClassId !== null}
@@ -1413,9 +1430,9 @@ function JoinCodeDialog({ controller }: { controller: TeacherDashboardController
     >
       <DialogContent className="border-3 border-foreground shadow-stamp">
         <DialogHeader>
-          <DialogTitle className="font-display text-2xl">Invite students</DialogTitle>
+          <DialogTitle className="font-display text-2xl">{t('teacher.dashboard.joinDialog.title')}</DialogTitle>
           <DialogDescription>
-            Share this code with students. They enter it at the join page to enroll in your class.
+            {t('teacher.dashboard.joinDialog.subtitle')}
           </DialogDescription>
         </DialogHeader>
 
@@ -1426,8 +1443,8 @@ function JoinCodeDialog({ controller }: { controller: TeacherDashboardController
             <ActiveJoinCode controller={controller} />
           ) : (
             <div className="space-y-4 py-4 text-center">
-              <p className="text-muted-foreground">No active join code for this class.</p>
-              <Button onClick={controller.handleGenerateCode}>Generate join code</Button>
+              <p className="text-muted-foreground">{t('teacher.dashboard.joinDialog.noActive')}</p>
+              <Button onClick={controller.handleGenerateCode}>{t('teacher.dashboard.joinDialog.generate')}</Button>
             </div>
           )}
         </div>
@@ -1439,12 +1456,12 @@ function JoinCodeDialog({ controller }: { controller: TeacherDashboardController
               onClick={controller.handleDeactivateCode}
               disabled={controller.joinCodeLoading}
             >
-              Deactivate code
+              {t('teacher.dashboard.joinDialog.deactivate')}
             </Button>
           )}
           {controller.joinCodeData?.active && (
             <Button onClick={controller.handleGenerateCode} disabled={controller.joinCodeLoading}>
-              Regenerate
+              {t('teacher.dashboard.joinDialog.regenerate')}
             </Button>
           )}
         </DialogFooter>
@@ -1454,6 +1471,7 @@ function JoinCodeDialog({ controller }: { controller: TeacherDashboardController
 }
 
 function ActiveJoinCode({ controller }: { controller: TeacherDashboardController }) {
+  const { t } = useLanguage();
   const code = controller.joinCodeData;
   if (!code?.active) return null;
 
@@ -1467,22 +1485,23 @@ function ActiveJoinCode({ controller }: { controller: TeacherDashboardController
           type="button"
           onClick={() => controller.handleCopyCode(code.joinCode)}
           className="rounded-lg border border-border bg-card p-2 text-muted-foreground transition-colors hover:text-foreground"
-          title="Copy code"
+          title={t('teacher.dashboard.joinDialog.copyTitle')}
         >
           <ClipboardCopy size={18} />
         </button>
       </div>
       {controller.joinCodeCopied && (
-        <p className="text-center text-sm font-medium text-success">Copied to clipboard!</p>
+        <p className="text-center text-sm font-medium text-success">{t('teacher.dashboard.joinDialog.copied')}</p>
       )}
       <p className="text-center text-sm text-muted-foreground">
-        Students go to <strong>l1ngual.com/app/join</strong> and enter this code.
+        {t('teacher.dashboard.joinDialog.instructions')}
       </p>
     </div>
   );
 }
 
 function RosterDialog({ controller }: { controller: TeacherDashboardController }) {
+  const { t } = useLanguage();
   return (
     <Dialog
       open={controller.rosterClassId !== null}
@@ -1492,7 +1511,7 @@ function RosterDialog({ controller }: { controller: TeacherDashboardController }
     >
       <DialogContent className="border-3 border-foreground shadow-stamp sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="font-display text-2xl">Class roster</DialogTitle>
+          <DialogTitle className="font-display text-2xl">{t('teacher.dashboard.roster.title')}</DialogTitle>
           <DialogDescription>
             {controller.roster.length} student{controller.roster.length !== 1 ? 's' : ''} enrolled
           </DialogDescription>
@@ -1528,13 +1547,14 @@ function RosterDialog({ controller }: { controller: TeacherDashboardController }
 }
 
 function EmptyRosterState({ onInviteStudents }: { onInviteStudents: () => void }) {
+  const { t } = useLanguage();
   return (
     <div className="py-8 text-center">
       <Users className="mx-auto size-10 text-muted-foreground" />
-      <p className="mt-3 text-muted-foreground">No students enrolled yet.</p>
+      <p className="mt-3 text-muted-foreground">{t('teacher.dashboard.roster.emptyTitle')}</p>
       <Button variant="outline" size="sm" className="mt-4" onClick={onInviteStudents}>
         <UserPlus size={14} className="mr-1.5" />
-        Invite students
+        {t('teacher.dashboard.roster.inviteStudents')}
       </Button>
     </div>
   );
@@ -1549,14 +1569,15 @@ function RosterStudentRow({
   removingUid: string | null;
   onRemove: (studentUid: string) => void;
 }) {
+  const { t } = useLanguage();
   const joinedLabel =
     student.joinSource === 'join_code'
-      ? 'Joined via code'
+      ? t('teacher.dashboard.roster.joinedViaCode')
       : student.joinSource === 'lti'
-        ? 'Joined via Canvas LTI'
+        ? t('teacher.dashboard.roster.joinedViaLti')
         : student.joinSource === 'canvas_legacy'
-          ? 'Legacy Canvas enrollment'
-          : student.joinSource || 'Enrolled';
+          ? t('teacher.dashboard.roster.legacyCanvas')
+          : student.joinSource || t('teacher.dashboard.roster.enrolled');
   const enrolledSuffix = student.enrolledAt
     ? ` · ${new Date(student.enrolledAt).toLocaleDateString()}`
     : '';
@@ -1569,12 +1590,12 @@ function RosterStudentRow({
           <p className="truncate font-medium text-foreground">{student.displayName}</p>
           {student.isOnCanvasRoster === true && (
             <span className="rounded-full border border-emerald-500/40 bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
-              On Canvas roster
+              {t('teacher.dashboard.roster.onCanvas')}
             </span>
           )}
           {student.isOnCanvasRoster === false && (
             <span className="rounded-full border border-muted bg-muted/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Not on Canvas roster
+              {t('teacher.dashboard.roster.notOnCanvas')}
             </span>
           )}
         </div>
@@ -1606,22 +1627,25 @@ function CanvasRosterGapSection({
   gap: CanvasRosterGapEntry[];
   summary: CanvasRosterGapSummary;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="mt-6 space-y-2 border-t border-border pt-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">Canvas roster - not yet joined</h3>
+        <h3 className="text-sm font-semibold text-foreground">{t('teacher.dashboard.canvas.gap.title')}</h3>
         <span className="text-xs text-muted-foreground">
-          {summary.joined} of {summary.canvas_total} Canvas students joined
+          {t('teacher.dashboard.canvas.gap.summary')
+            .replace('{joined}', String(summary.joined))
+            .replace('{total}', String(summary.canvas_total))}
         </span>
       </div>
       {gap.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          All Canvas-rostered students have joined via class code.
+          {t('teacher.dashboard.canvas.gap.allJoined')}
         </p>
       ) : (
         <>
           <p className="text-xs text-muted-foreground">
-            Share the class code with these students to enroll them.
+            {t('teacher.dashboard.canvas.gap.shareCode')}
           </p>
           <ul className="space-y-1">
             {gap.map((entry) => (

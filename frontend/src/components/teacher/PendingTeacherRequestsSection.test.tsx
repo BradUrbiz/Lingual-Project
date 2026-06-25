@@ -13,6 +13,10 @@ vi.mock('@/api/teacherRequests', () => ({
     declineTeacherJoinRequest: (...a: unknown[]) => declineMock(...a),
 }));
 
+vi.mock('@/contexts/LanguageContext', () => ({
+    useLanguage: () => ({ lang: 'en', t: (key: string) => key }),
+}));
+
 beforeEach(() => {
     listMock.mockReset();
     approveMock.mockReset();
@@ -69,7 +73,7 @@ describe('PendingTeacherRequestsSection', () => {
         fireEvent.click(await screen.findByRole('button', { name: /decline/i }));
         const reasonInput = await screen.findByLabelText(/reason/i);
         fireEvent.change(reasonInput, { target: { value: 'Wrong school' } });
-        fireEvent.click(screen.getByRole('button', { name: /decline request/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'teacher.dashboard.pending.declineRequest' }));
         await waitFor(() => {
             expect(declineMock).toHaveBeenCalledWith('tjr-1', 'Wrong school');
         });

@@ -190,10 +190,10 @@ describe('TeacherDashboardPage', () => {
     expect(statValues).toContain('5');   // assignmentCount
 
     // Stat labels also appear in class cards, so use getAllByText for all.
-    expect(screen.getAllByText('Students').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Speaking minutes')).toBeInTheDocument();
-    expect(screen.getAllByText('Classes').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Assignments').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('teacher.dashboard.stat.students').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('teacher.dashboard.stat.speakingMinutes')).toBeInTheDocument();
+    expect(screen.getAllByText('teacher.dashboard.stat.classes').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('teacher.dashboard.stat.assignments').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows both classes in the class list', async () => {
@@ -231,7 +231,7 @@ describe('TeacherDashboardPage', () => {
     });
 
     expect(
-      screen.getByText('Invite students to your class using a join code.')
+      screen.getByText('teacher.dashboard.hint.inviteStudents')
     ).toBeInTheDocument();
   });
 
@@ -242,7 +242,7 @@ describe('TeacherDashboardPage', () => {
       expect(screen.getByText('Lingual Academy')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Setup checklist')).toBeInTheDocument();
+    expect(screen.getByText('teacher.dashboard.setup.title')).toBeInTheDocument();
     expect(screen.getByText('Create school workspace')).toBeInTheDocument();
     expect(screen.getByText('Bootstrap an organization record.')).toBeInTheDocument();
     expect(screen.getByText('Create first class')).toBeInTheDocument();
@@ -280,9 +280,9 @@ describe('TeacherDashboardPage', () => {
     const openRosterForFirstClass = async () => {
       // The dashboard renders a "Roster" trigger button per class card that
       // calls openRosterDialog(classId) (see TeacherDashboardPage.tsx ~L673).
-      // The button text is "Roster" so findByRole with /^roster$/i matches it.
+      // With the i18n mock (t: key => key), the button text is the key string.
       const rosterButton = await screen.findByRole('button', {
-        name: /^roster$/i,
+        name: 'teacher.dashboard.class.roster',
       });
       fireEvent.click(rosterButton);
     };
@@ -309,7 +309,7 @@ describe('TeacherDashboardPage', () => {
       renderWithProviders();
       await openRosterForFirstClass();
 
-      expect(await screen.findByText(/On Canvas roster/i)).toBeInTheDocument();
+      expect(await screen.findByText('teacher.dashboard.roster.onCanvas')).toBeInTheDocument();
     });
 
     it('renders a "Not on Canvas roster" badge for unmatched students', async () => {
@@ -330,7 +330,7 @@ describe('TeacherDashboardPage', () => {
       renderWithProviders();
       await openRosterForFirstClass();
 
-      expect(await screen.findByText(/Not on Canvas roster/i)).toBeInTheDocument();
+      expect(await screen.findByText('teacher.dashboard.roster.notOnCanvas')).toBeInTheDocument();
     });
 
     it('hides the gap section when class has no Canvas connection', async () => {
@@ -352,7 +352,7 @@ describe('TeacherDashboardPage', () => {
       // simply not being open yet.
       await screen.findByText('Carol');
       expect(
-        screen.queryByText(/Canvas roster - not yet joined/i),
+        screen.queryByText('teacher.dashboard.canvas.gap.title'),
       ).not.toBeInTheDocument();
     });
 
@@ -375,7 +375,7 @@ describe('TeacherDashboardPage', () => {
       await openRosterForFirstClass();
 
       expect(
-        await screen.findByText(/1 of 2 Canvas students joined/),
+        await screen.findByText('teacher.dashboard.canvas.gap.summary'),
       ).toBeInTheDocument();
       expect(screen.getByText('Bob')).toBeInTheDocument();
     });

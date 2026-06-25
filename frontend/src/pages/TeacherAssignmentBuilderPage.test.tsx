@@ -124,8 +124,9 @@ describe('TeacherAssignmentBuilderPage', () => {
     });
 
     // Quick Assign is the default mode; empty-state messaging appears.
-    expect(screen.getByText('Connect a Canvas course first')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Connect Canvas' })).toBeInTheDocument();
+    // With the i18n mock (t: key => key), text renders as the key string.
+    expect(screen.getByText('teacher.builder.canvas.connectFirst')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'teacher.builder.canvas.connect' })).toBeInTheDocument();
   });
 
   it('Quick Assign: generates from Canvas, edits, and publishes', async () => {
@@ -164,11 +165,11 @@ describe('TeacherAssignmentBuilderPage', () => {
     });
 
     // Canvas picker should be visible in Quick Assign.
-    const picker = await screen.findByLabelText('Canvas item');
+    const picker = await screen.findByLabelText('teacher.builder.canvas.pickerLabel');
     fireEvent.change(picker, { target: { value: 'canvas-content-2' } });
 
     // Generate
-    fireEvent.click(screen.getByRole('button', { name: /Generate practice from this item/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'teacher.builder.canvas.generate' }));
 
     await waitFor(() => {
       expect(generateCanvasPracticeMock).toHaveBeenCalledWith('class-1', 'canvas-content-2');
@@ -178,13 +179,13 @@ describe('TeacherAssignmentBuilderPage', () => {
     const titleInput = await screen.findByDisplayValue('Dinner at the bistro');
     fireEvent.change(titleInput, { target: { value: 'Dinner at the bistro (edited)' } });
     expect(screen.queryByText('Task type')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Teacher notes')).toHaveAttribute('rows', '8');
+    expect(screen.getByLabelText('teacher.builder.form.teacherNotes')).toHaveAttribute('rows', '8');
 
     // Status defaults to Draft. Explicitly flip to Published before publishing.
-    fireEvent.click(screen.getByRole('radio', { name: 'Published' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'teacher.builder.status.published' }));
 
     // Publish.
-    fireEvent.click(screen.getByRole('button', { name: /Publish assignment/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'teacher.builder.status.publish' }));
 
     await waitFor(() => {
       expect(createCanvasPracticeMock).toHaveBeenCalledTimes(1);
@@ -229,11 +230,12 @@ describe('TeacherAssignmentBuilderPage', () => {
       },
     ];
 
-    // The success banner should render.
+    // The success banner should render. With the i18n mock, the message is built
+    // from key strings concatenated together; match on the prefix key and title.
     await waitFor(() => {
-      const banner = screen.getByText(/has been published/i);
+      const banner = screen.getByText(/teacher\.builder\.publish\.successPrefix/);
       expect(banner).toBeInTheDocument();
-      expect(within(banner).queryByText(/Dinner at the bistro \(edited\)/)).not.toBeNull();
+      expect(banner.textContent).toContain('Dinner at the bistro (edited)');
     });
   });
 
@@ -274,25 +276,25 @@ describe('TeacherAssignmentBuilderPage', () => {
       expect(screen.getByText('French 2 - Period 3')).toBeInTheDocument();
     });
 
-    const picker = await screen.findByLabelText('Canvas item');
+    const picker = await screen.findByLabelText('teacher.builder.canvas.pickerLabel');
     fireEvent.change(picker, { target: { value: 'canvas-content-2' } });
-    fireEvent.click(screen.getByRole('button', { name: /Generate practice from this item/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'teacher.builder.canvas.generate' }));
 
     await waitFor(() => {
       expect(generateCanvasPracticeMock).toHaveBeenCalled();
     });
 
     // Add an objective through the TagListEditor. The "new" input for each
-    // editor is the Input with aria-label `New <label>`.
-    const objectivesInput = await screen.findByLabelText('New Objectives');
+    // editor is the Input with aria-label `New <label>` where label is now the i18n key.
+    const objectivesInput = await screen.findByLabelText('New teacher.builder.form.objectives');
     fireEvent.change(objectivesInput, { target: { value: 'Order a full meal in French' } });
     fireEvent.keyDown(objectivesInput, { key: 'Enter' });
-    const vocabularyInput = await screen.findByLabelText('New Target vocabulary');
+    const vocabularyInput = await screen.findByLabelText('New teacher.builder.form.targetVocabulary');
     fireEvent.change(vocabularyInput, { target: { value: 'la carte' } });
     fireEvent.keyDown(vocabularyInput, { key: 'Enter' });
 
     // Publish as draft (default).
-    fireEvent.click(screen.getByRole('button', { name: /Save as draft/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'teacher.builder.status.saveDraft' }));
 
     await waitFor(() => {
       expect(createCanvasPracticeMock).toHaveBeenCalled();
@@ -343,12 +345,12 @@ describe('TeacherAssignmentBuilderPage', () => {
       expect(screen.getByText('French 2 - Period 3')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Custom Instruction' }));
-    fireEvent.change(screen.getByLabelText('Source packet'), {
+    fireEvent.click(screen.getByRole('button', { name: 'teacher.builder.mode.advanced' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'teacher.builder.advanced.sourceLabel' }));
+    fireEvent.change(screen.getByLabelText('teacher.builder.source.label'), {
       target: { value: 'Key vocabulary: reservar, camarero, cuenta. Rubric note: ask for clarification politely.' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Generate draft from source/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'teacher.builder.source.generate' }));
 
     await waitFor(() => {
       expect(generateAssignmentDraftMock).toHaveBeenCalledWith(
@@ -358,7 +360,7 @@ describe('TeacherAssignmentBuilderPage', () => {
     });
 
     expect(await screen.findByDisplayValue('Restaurant vocabulary rehearsal')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Save as draft/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'teacher.builder.status.saveDraft' }));
 
     await waitFor(() => {
       expect(createAssignmentMock).toHaveBeenCalledTimes(1);
@@ -403,20 +405,20 @@ describe('TeacherAssignmentBuilderPage', () => {
       expect(screen.getByText('French 2 - Period 3')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Manual authoring' }));
-    fireEvent.change(screen.getByLabelText('Assignment title'), {
+    fireEvent.click(screen.getByRole('button', { name: 'teacher.builder.mode.advanced' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'teacher.builder.advanced.manualLabel' }));
+    fireEvent.change(screen.getByLabelText('teacher.builder.form.assignmentTitle'), {
       target: { value: 'Manual speaking task' },
     });
-    fireEvent.change(screen.getByLabelText('Instructions'), {
+    fireEvent.change(screen.getByLabelText('teacher.builder.form.instructions'), {
       target: { value: 'Discuss your food preferences using full sentences.' },
     });
-    fireEvent.change(screen.getByLabelText('Conversation scenario'), {
+    fireEvent.change(screen.getByLabelText('teacher.builder.form.scenario'), {
       target: { value: 'You and a classmate are deciding what to order for lunch.' },
     });
     expect(screen.queryByText('Task type')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Teacher notes')).toHaveAttribute('rows', '8');
-    fireEvent.click(screen.getByRole('button', { name: /Save as draft/i }));
+    expect(screen.getByLabelText('teacher.builder.form.teacherNotes')).toHaveAttribute('rows', '8');
+    fireEvent.click(screen.getByRole('button', { name: 'teacher.builder.status.saveDraft' }));
 
     await waitFor(() => {
       expect(createAssignmentMock).toHaveBeenCalledTimes(1);

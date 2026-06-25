@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { Button, Card, Input } from '@/components/ui';
 import {
     listPendingTeacherRequests,
@@ -6,6 +6,7 @@ import {
     declineTeacherJoinRequest,
 } from '@/api/teacherRequests';
 import type { PendingTeacherRequestRow } from '@/types/teacherJoin';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 type PendingRequestsState = {
     rows: PendingTeacherRequestRow[];
@@ -53,6 +54,9 @@ function pendingRequestsReducer(
 }
 
 export function PendingTeacherRequestsSection() {
+    const { t } = useLanguage();
+    const tRef = useRef(t);
+    tRef.current = t;
     const [state, dispatch] = useReducer(pendingRequestsReducer, initialPendingRequestsState);
     const { rows, loading, declineFor, reason, submitting, error } = state;
 
@@ -62,7 +66,7 @@ export function PendingTeacherRequestsSection() {
             const out = await listPendingTeacherRequests();
             dispatch({ type: 'load-success', rows: out });
         } catch (e) {
-            dispatch({ type: 'load-error', error: e instanceof Error ? e.message : 'Failed to load requests.' });
+            dispatch({ type: 'load-error', error: e instanceof Error ? e.message : tRef.current('teacher.dashboard.pending.loadError') });
         }
     }, []);
 
@@ -74,7 +78,7 @@ export function PendingTeacherRequestsSection() {
             await approveTeacherJoinRequest(row.requestId);
             await refresh();
         } catch (e) {
-            dispatch({ type: 'patch', payload: { error: e instanceof Error ? e.message : 'Approve failed.' } });
+            dispatch({ type: 'patch', payload: { error: e instanceof Error ? e.message : t('teacher.dashboard.pending.approveError') } });
         } finally {
             dispatch({ type: 'patch', payload: { submitting: false } });
         }
@@ -88,7 +92,7 @@ export function PendingTeacherRequestsSection() {
             dispatch({ type: 'close-decline' });
             await refresh();
         } catch (e) {
-            dispatch({ type: 'patch', payload: { error: e instanceof Error ? e.message : 'Decline failed.' } });
+            dispatch({ type: 'patch', payload: { error: e instanceof Error ? e.message : t('teacher.dashboard.pending.declineError') } });
         } finally {
             dispatch({ type: 'patch', payload: { submitting: false } });
         }
@@ -102,7 +106,7 @@ export function PendingTeacherRequestsSection() {
         <Card className="p-6 space-y-4">
             <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold">
-                    Pending teacher requests {rows.length > 0 ? `(${rows.length})` : ''}
+                    {t('teacher.dashboard.pending.title')} {rows.length > 0 ? `(${rows.length})` : ''}
                 </h2>
             </div>
             {error && (
@@ -112,16 +116,16 @@ export function PendingTeacherRequestsSection() {
                 {rows.map((row) => (
                     <div key={row.requestId} className="flex items-center justify-between rounded-md border p-3">
                         <div>
-                            <div className="font-medium">{row.name || '(unnamed)'}</div>
+                            <div className="font-medium">{row.name || t('teacher.dashboard.pending.unnamed')}</div>
                             <div className="text-xs text-muted-foreground">
                                 <span>{row.email}</span>
-                                {' · via '}
-                                {row.source === 'invite_code' ? 'invite code' : 'school search'}
+                                {t('teacher.dashboard.pending.via')}
+                                {row.source === 'invite_code' ? t('teacher.dashboard.pending.viaInviteCode') : t('teacher.dashboard.pending.viaSchoolSearch')}
                             </div>
                         </div>
                         <div className="flex gap-2">
                             <Button size="sm" onClick={() => onApprove(row)} disabled={submitting}>
-                                Approve
+                                {t('teacher.dashboard.pending.approve')}
                             </Button>
                             <Button
                                 size="sm"
@@ -129,7 +133,7 @@ export function PendingTeacherRequestsSection() {
                                 onClick={() => dispatch({ type: 'patch', payload: { declineFor: row } })}
                                 disabled={submitting}
                             >
-                                Decline
+                                {t('teacher.dashboard.pending.decline')}
                             </Button>
                         </div>
                     </div>
@@ -139,23 +143,23 @@ export function PendingTeacherRequestsSection() {
             {declineFor && (
                 <Card className="p-4 space-y-3">
                     <p className="text-sm">
-                        Decline request from <strong>{declineFor.name || declineFor.email}</strong>?
+                        {t('teacher.dashboard.pending.declineFrom')} <strong>{declineFor.name || declineFor.email}</strong>?
                     </p>
                     <div className="block text-sm">
-                        <span className="block mb-1">Reason</span>
+                        <span className="block mb-1">{t('teacher.dashboard.pending.reason')}</span>
                         <Input
-                            aria-label="Decline reason"
+                            aria-label={t('teacher.dashboard.pending.declineReasonAriaLabel')}
                             value={reason}
                             onChange={(e) => dispatch({ type: 'patch', payload: { reason: e.target.value } })}
-                            placeholder="Shared with the requester."
+                            placeholder={t('teacher.dashboard.pending.declineReasonPlaceholder')}
                         />
                     </div>
                     <div className="flex gap-2">
                         <Button onClick={onDeclineSubmit} disabled={submitting || !reason.trim()}>
-                            Decline request
+                            {t('teacher.dashboard.pending.declineRequest')}
                         </Button>
                         <Button variant="ghost" onClick={() => dispatch({ type: 'close-decline' })}>
-                            Cancel
+                            {t('teacher.dashboard.pending.cancel')}
                         </Button>
                     </div>
                 </Card>

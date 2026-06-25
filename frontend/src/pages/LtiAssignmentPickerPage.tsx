@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef } from 'react';
 import { GraduationCap, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, Button, Card, Input } from '@/components/ui';
 import { getDeepLinkAssignments, submitDeepLinkResponse } from '@/api/lti';
+import { useLanguage } from '@/contexts/LanguageContext';
 import type { DeepLinkAssignment } from '@/api/lti';
 
 type LtiAssignmentPickerState = {
@@ -63,6 +64,7 @@ function ltiAssignmentPickerReducer(
 }
 
 export function LtiAssignmentPickerPage() {
+  const { t } = useLanguage();
   const [state, dispatch] = useReducer(
     ltiAssignmentPickerReducer,
     INITIAL_LTI_ASSIGNMENT_PICKER_STATE
@@ -81,7 +83,7 @@ export function LtiAssignmentPickerPage() {
           type: 'failed',
           error: err instanceof Error
             ? err.message
-            : 'Failed to load assignments. Make sure you launched this page from Canvas.',
+            : t('integrations.lti.picker.loadError'),
         });
       }
     };
@@ -122,7 +124,7 @@ export function LtiAssignmentPickerPage() {
     } catch (err) {
       dispatch({
         type: 'setError',
-        error: err instanceof Error ? err.message : 'Failed to embed assignment in Canvas.',
+        error: err instanceof Error ? err.message : t('integrations.lti.picker.embedError'),
       });
     } finally {
       dispatch({ type: 'setSubmitting', submitting: false });
@@ -143,10 +145,10 @@ export function LtiAssignmentPickerPage() {
               <GraduationCap size={28} strokeWidth={2.5} />
             </div>
             <h1 className="text-2xl font-display font-bold text-foreground">
-              Select Assignment
+              {t('integrations.lti.picker.title')}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Choose a Lingual practice assignment to embed in your Canvas module.
+              {t('integrations.lti.picker.subtitle')}
             </p>
           </div>
 
@@ -164,7 +166,7 @@ export function LtiAssignmentPickerPage() {
             <div className="text-center py-8 space-y-3">
               <GraduationCap className="mx-auto size-12 text-muted-foreground" />
               <p className="text-muted-foreground">
-                No published assignments found for this class. Create an assignment in Lingual first, then return here.
+                {t('integrations.lti.picker.empty')}
               </p>
             </div>
           ) : (
@@ -202,7 +204,7 @@ export function LtiAssignmentPickerPage() {
               <div className="space-y-1">
                 <Input
                   id="lti-points"
-                  label="Points (for grade passback)"
+                  label={t('integrations.lti.picker.pointsLabel')}
                   type="number"
                   min="0"
                   step="1"
@@ -211,7 +213,7 @@ export function LtiAssignmentPickerPage() {
                   placeholder="10"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Leave at 0 to skip grade passback. Otherwise, Lingual will report scores out of this total.
+                  {t('integrations.lti.picker.pointsHint')}
                 </p>
               </div>
 
@@ -221,7 +223,7 @@ export function LtiAssignmentPickerPage() {
                 loading={submitting}
                 disabled={!selectedId || submitting}
               >
-                {submitting ? 'Embedding...' : 'Embed in Canvas'}
+                {submitting ? t('integrations.lti.picker.embedding') : t('integrations.lti.picker.embedBtn')}
               </Button>
             </>
           )}

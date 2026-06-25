@@ -20,6 +20,14 @@ vi.mock('@/api/canvas', () => ({
   connectCanvas: (...args: unknown[]) => connectMock(...args),
 }));
 
+vi.mock('@/api/lti', () => ({
+  getLtiPlatform: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({ t: (key: string) => key }),
+}));
+
 describe('CanvasConnectPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -27,9 +35,9 @@ describe('CanvasConnectPage', () => {
 
   it('renders credential form initially', () => {
     render(<CanvasConnectPage />);
-    expect(screen.getByLabelText(/Canvas Instance URL/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Personal Access Token/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Validate/i })).toBeInTheDocument();
+    expect(screen.getByLabelText('integrations.canvas.instanceUrlLabel')).toBeInTheDocument();
+    expect(screen.getByLabelText('integrations.canvas.patLabel')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'integrations.canvas.validateBtn' })).toBeInTheDocument();
   });
 
   it('calls validate and shows course selection', async () => {
@@ -44,19 +52,19 @@ describe('CanvasConnectPage', () => {
 
     render(<CanvasConnectPage />);
 
-    fireEvent.change(screen.getByLabelText(/Canvas Instance URL/i), {
+    fireEvent.change(screen.getByLabelText('integrations.canvas.instanceUrlLabel'), {
       target: { value: 'https://school.instructure.com' },
     });
-    fireEvent.change(screen.getByLabelText(/Personal Access Token/i), {
+    fireEvent.change(screen.getByLabelText('integrations.canvas.patLabel'), {
       target: { value: 'test-pat' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Validate/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.canvas.validateBtn' }));
 
     await waitFor(() => {
       expect(screen.getByText('Korean 101')).toBeInTheDocument();
       expect(screen.getByText('Korean 201')).toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: /Connect Course/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'integrations.canvas.connectCourseBtn' })).toBeInTheDocument();
   });
 
   it('connects and navigates to class analytics', async () => {
@@ -75,16 +83,16 @@ describe('CanvasConnectPage', () => {
 
     render(<CanvasConnectPage />);
 
-    fireEvent.change(screen.getByLabelText(/Canvas Instance URL/i), {
+    fireEvent.change(screen.getByLabelText('integrations.canvas.instanceUrlLabel'), {
       target: { value: 'https://school.instructure.com' },
     });
-    fireEvent.change(screen.getByLabelText(/Personal Access Token/i), {
+    fireEvent.change(screen.getByLabelText('integrations.canvas.patLabel'), {
       target: { value: 'test-pat' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Validate/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.canvas.validateBtn' }));
 
     await waitFor(() => expect(screen.getByText('Korean 101')).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: /Connect Course/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.canvas.connectCourseBtn' }));
 
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith('/app/teacher/classes/class-1/analytics');
@@ -99,13 +107,13 @@ describe('CanvasConnectPage', () => {
 
     render(<CanvasConnectPage />);
 
-    fireEvent.change(screen.getByLabelText(/Canvas Instance URL/i), {
+    fireEvent.change(screen.getByLabelText('integrations.canvas.instanceUrlLabel'), {
       target: { value: 'https://school.instructure.com' },
     });
-    fireEvent.change(screen.getByLabelText(/Personal Access Token/i), {
+    fireEvent.change(screen.getByLabelText('integrations.canvas.patLabel'), {
       target: { value: 'bad-pat' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Validate/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'integrations.canvas.validateBtn' }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Invalid PAT or unauthorized');

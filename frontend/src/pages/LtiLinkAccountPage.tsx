@@ -3,11 +3,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Link2, Loader2, LogIn } from 'lucide-react';
 import { Alert, AlertDescription, Button, Card } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { linkLtiAccount } from '@/api/lti';
 
 export function LtiLinkAccountPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,7 +20,7 @@ export function LtiLinkAccountPage() {
       const result = await linkLtiAccount();
       navigate(result.redirectTo || '/app/teacher', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to link your account. Please try again.');
+      setError(err instanceof Error ? err.message : t('integrations.lti.link.linkError'));
     } finally {
       setLoading(false);
     }
@@ -41,7 +43,7 @@ export function LtiLinkAccountPage() {
               <Link2 size={28} strokeWidth={2.5} />
             </div>
             <h1 className="text-2xl font-display font-bold text-foreground">
-              Link Your Account
+              {t('integrations.lti.link.title')}
             </h1>
           </div>
 
@@ -54,12 +56,11 @@ export function LtiLinkAccountPage() {
           {user ? (
             <div className="space-y-4">
               <p className="text-center text-sm text-muted-foreground">
-                Your Canvas account could not be automatically matched to a Lingual account.
-                Click below to link your current Lingual session to your Canvas identity.
+                {t('integrations.lti.link.matchDesc')}
               </p>
               <div className="rounded-xl border-2 border-border bg-secondary/40 p-4 text-center">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Signed in as
+                  {t('integrations.lti.link.signedInAs')}
                 </p>
                 <p className="mt-1 font-medium text-foreground">
                   {user.email || user.name || 'Lingual user'}
@@ -69,12 +70,12 @@ export function LtiLinkAccountPage() {
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 size-4 animate-spin" />
-                    Linking…
+                    {t('integrations.lti.link.linking')}
                   </>
                 ) : (
                   <>
                     <Link2 className="mr-2 size-4" />
-                    Link Account
+                    {t('integrations.lti.link.linkBtn')}
                   </>
                 )}
               </Button>
@@ -82,13 +83,12 @@ export function LtiLinkAccountPage() {
           ) : (
             <div className="space-y-4">
               <p className="text-center text-sm text-muted-foreground">
-                You need a Lingual account before you can use Canvas integration.
-                Sign up or log in, then relaunch from Canvas.
+                {t('integrations.lti.link.noAccountDesc')}
               </p>
               <Link to="/login" className="block">
                 <Button className="w-full">
                   <LogIn className="mr-2 size-4" />
-                  Sign Up / Log In
+                  {t('integrations.lti.link.signUpBtn')}
                 </Button>
               </Link>
             </div>

@@ -4,6 +4,7 @@ import { Link as LinkIcon, ArrowLeft, CheckCircle2, ShieldCheck } from 'lucide-r
 import { validateCanvasConnection, connectCanvas } from '@/api/canvas';
 import { getLtiPlatform } from '@/api/lti';
 import { Alert, AlertDescription, Badge, Button, Card, Input } from '@/components/ui';
+import { useLanguage } from '@/contexts/LanguageContext';
 import type { CanvasCourse } from '@/types/canvas';
 
 type Step = 'credentials' | 'course-select';
@@ -70,6 +71,7 @@ export function CanvasConnectPage() {
   const [searchParams] = useSearchParams();
   const existingClassId = classId || searchParams.get('classId') || '';
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const [state, dispatch] = useReducer(canvasConnectReducer, initialCanvasConnectState);
   const { step, instanceUrl, pat, courses, selectedCourseId, loading, error, ltiConfigured } = state;
@@ -86,12 +88,12 @@ export function CanvasConnectPage() {
     try {
       const result = await validateCanvasConnection(instanceUrl.trim(), pat.trim());
       if (!result.success) {
-        dispatch({ type: 'request-error', error: result.error || 'Validation failed' });
+        dispatch({ type: 'request-error', error: result.error || t('integrations.canvas.validationFailed') });
         return;
       }
       dispatch({ type: 'validated', courses: result.courses });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Connection failed';
+      const msg = err instanceof Error ? err.message : t('integrations.canvas.connectionFailed');
       dispatch({ type: 'request-error', error: msg });
     } finally {
       dispatch({ type: 'request-finished' });
@@ -112,12 +114,12 @@ export function CanvasConnectPage() {
         existingClassId: existingClassId || undefined,
       });
       if (!result.success) {
-        dispatch({ type: 'request-error', error: result.error || 'Connection failed' });
+        dispatch({ type: 'request-error', error: result.error || t('integrations.canvas.connectionFailed') });
         return;
       }
       navigate(`/app/teacher/classes/${result.classId}/analytics`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Connection failed';
+      const msg = err instanceof Error ? err.message : t('integrations.canvas.connectionFailed');
       dispatch({ type: 'request-error', error: msg });
     } finally {
       dispatch({ type: 'request-finished' });
@@ -132,13 +134,13 @@ export function CanvasConnectPage() {
         </div>
         <div className="space-y-1">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-            LMS Integration
+            {t('integrations.canvas.kicker')}
           </p>
           <h1 className="text-3xl font-display font-bold text-foreground">
-            Connect Canvas
+            {t('integrations.canvas.title')}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Link your Canvas course so assignments appear in both Lingual and Canvas.
+            {t('integrations.canvas.subtitle')}
           </p>
         </div>
       </header>
@@ -155,13 +157,13 @@ export function CanvasConnectPage() {
             <ShieldCheck size={22} className="mt-0.5 text-primary" />
             <div>
               <h2 className="text-lg font-display font-bold text-foreground">
-                Connect with Canvas LTI (Recommended)
+                {t('integrations.canvas.ltiCard.title')}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Your school has configured LTI integration. Simply open Lingual from inside Canvas to connect automatically.
+                {t('integrations.canvas.ltiCard.desc')}
               </p>
               <p className="mt-2 text-sm font-medium text-primary">
-                No action needed here - launch Lingual from your Canvas course navigation.
+                {t('integrations.canvas.ltiCard.hint')}
               </p>
             </div>
           </div>
@@ -172,10 +174,10 @@ export function CanvasConnectPage() {
         <Card className="border-3 border-foreground p-6 shadow-stamp">
           <div className="mb-5">
             <h2 className="text-lg font-display font-bold text-foreground">
-              {ltiConfigured ? 'Or connect manually with a Personal Access Token' : 'Step 1: Canvas credentials'}
+              {ltiConfigured ? t('integrations.canvas.manualTitle') : t('integrations.canvas.credentialsTitle')}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Enter your Canvas instance URL and a Personal Access Token.
+              {t('integrations.canvas.credentialsSubtitle')}
             </p>
           </div>
 
@@ -183,7 +185,7 @@ export function CanvasConnectPage() {
             <div className="space-y-1">
               <Input
                 id="canvas-url"
-                label="Canvas Instance URL"
+                label={t('integrations.canvas.instanceUrlLabel')}
                 type="url"
                 required
                 placeholder="https://school.instructure.com"
@@ -191,27 +193,27 @@ export function CanvasConnectPage() {
                 onChange={(e) => dispatch({ type: 'set-field', field: 'instanceUrl', value: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                This is your school's Canvas address. It usually looks like yourschool.instructure.com
+                {t('integrations.canvas.instanceUrlHint')}
               </p>
             </div>
 
             <div className="space-y-1">
               <Input
                 id="canvas-pat"
-                label="Personal Access Token"
+                label={t('integrations.canvas.patLabel')}
                 type="password"
                 required
-                placeholder="Your Canvas PAT"
+                placeholder={t('integrations.canvas.patPlaceholder')}
                 value={pat}
                 onChange={(e) => dispatch({ type: 'set-field', field: 'pat', value: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                In Canvas, go to Account &gt; Settings &gt; New Access Token. Your token is encrypted and stored securely.
+                {t('integrations.canvas.patHint')}
               </p>
             </div>
 
             <Button type="submit" className="w-full" loading={loading}>
-              {loading ? 'Validating...' : 'Validate & continue'}
+              {loading ? t('integrations.canvas.validating') : t('integrations.canvas.validateBtn')}
             </Button>
           </form>
         </Card>
@@ -222,11 +224,11 @@ export function CanvasConnectPage() {
           <div className="mb-5">
             <div className="mb-3 flex items-center gap-2">
               <CheckCircle2 size={18} className="text-success" />
-              <span className="text-sm font-medium text-success">Canvas credentials verified</span>
+              <span className="text-sm font-medium text-success">{t('integrations.canvas.verified')}</span>
             </div>
-            <h2 className="text-lg font-display font-bold text-foreground">Step 2: Select course</h2>
+            <h2 className="text-lg font-display font-bold text-foreground">{t('integrations.canvas.selectCourseTitle')}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Choose the Canvas course to connect to this class.
+              {t('integrations.canvas.selectCourseSubtitle')}
             </p>
           </div>
 
@@ -263,7 +265,7 @@ export function CanvasConnectPage() {
           <div className="mt-5 flex gap-3">
             <Button variant="outline" onClick={() => dispatch({ type: 'set-step', step: 'credentials' })}>
               <ArrowLeft size={16} className="mr-2" />
-              Back
+              {t('general.back')}
             </Button>
             <Button
               className="flex-1"
@@ -271,7 +273,7 @@ export function CanvasConnectPage() {
               loading={loading}
               disabled={!selectedCourseId}
             >
-              {loading ? 'Connecting...' : 'Connect course'}
+              {loading ? t('app.learn.status.connecting') : t('integrations.canvas.connectCourseBtn')}
             </Button>
           </div>
         </Card>

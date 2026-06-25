@@ -259,7 +259,7 @@ export interface ApiResponse<T = unknown> {
 
 // Language Type
 export type Language = 'en' | 'ko';
-export type LearningLocale = 'ko-KR' | 'es-ES' | 'fr-FR' | 'ru-RU' | 'he-IL' | 'tl-PH';
+export type LearningLocale = 'ko-KR' | 'es-ES' | 'fr-FR' | 'ru-RU' | 'he-IL' | 'tl-PH' | 'en-US';
 
 // Curriculum Types
 export type {

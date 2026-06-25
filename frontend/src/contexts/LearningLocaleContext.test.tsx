@@ -18,6 +18,10 @@ vi.mock('@/hooks/useAuth', () => ({
   }),
 }));
 
+vi.mock('./LanguageContext', () => ({
+  useLanguage: () => ({ lang: 'en', setLang: vi.fn(), t: (k: string) => k }),
+}));
+
 function LocaleProbe() {
   const { learningLocale } = useLearningLocale();
   return <div>Locale: {learningLocale}</div>;

@@ -1,4 +1,5 @@
 import type { LearningLocale } from '@/types';
+import type { Language } from '@/types';
 
 export type LearningLocaleOption = {
   value: LearningLocale;
@@ -8,6 +9,7 @@ export type LearningLocaleOption = {
 };
 
 export const LEARNING_LOCALES: LearningLocaleOption[] = [
+  { value: 'en-US', label: 'English (US)', shortLabel: 'English', flag: '🇺🇸' },
   { value: 'ko-KR', label: 'Korean (Korea)', shortLabel: 'Korean', flag: '🇰🇷' },
   { value: 'es-ES', label: 'Spanish (Spain)', shortLabel: 'Spanish', flag: '🇪🇸' },
   { value: 'fr-FR', label: 'French (France)', shortLabel: 'French', flag: '🇫🇷' },
@@ -17,3 +19,7 @@ export const LEARNING_LOCALES: LearningLocaleOption[] = [
 ];
 
 export const DEFAULT_LEARNING_LOCALE: LearningLocale = 'ko-KR';
+
+export function defaultLearningLocaleFor(uiLanguage: Language): LearningLocale {
+  return uiLanguage === 'ko' ? 'en-US' : DEFAULT_LEARNING_LOCALE;
+}

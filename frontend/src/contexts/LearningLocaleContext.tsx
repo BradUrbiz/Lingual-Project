@@ -2,7 +2,8 @@
 import { createContext, use, useEffect, useMemo, useState, ReactNode } from 'react';
 import { getUserProfile } from '@/api/user';
 import { useAuth } from '@/hooks/useAuth';
-import { DEFAULT_LEARNING_LOCALE } from '@/lib/learningLocales';
+import { useLanguage } from './LanguageContext';
+import { defaultLearningLocaleFor } from '@/lib/learningLocales';
 import type { LearningLocale } from '@/types';
 
 interface LearningLocaleContextType {
@@ -21,7 +22,8 @@ export function getLearningLocaleDirection(locale: LearningLocale): 'ltr' | 'rtl
 
 export function LearningLocaleProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [learningLocale, setLearningLocale] = useState<LearningLocale>(DEFAULT_LEARNING_LOCALE);
+  const { lang } = useLanguage();
+  const [learningLocale, setLearningLocale] = useState<LearningLocale>(defaultLearningLocaleFor(lang));
 
   useEffect(() => {
     // While the email-verification gate is up, /api/user/profile is blocked
@@ -44,7 +46,7 @@ export function LearningLocaleProvider({ children }: { children: ReactNode }) {
     };
   }, [user]);
 
-  const effectiveLocale = user ? learningLocale : DEFAULT_LEARNING_LOCALE;
+  const effectiveLocale = user ? learningLocale : defaultLearningLocaleFor(lang);
   const isRTL = RTL_LEARNING_LOCALES.has(effectiveLocale);
   const value = useMemo(
     () => ({

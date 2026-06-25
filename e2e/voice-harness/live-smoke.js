@@ -143,51 +143,51 @@ async function main() {
     }));
     console.log('[voice] harness state:', JSON.stringify(harnessState));
 
-    const before = await page.evaluate(() => document.body.innerText);
-
-    console.log(`[voice] synthesizing: "${SAY}"`);
-    const wav = await tts(SAY, { engine: args.engine || 'openai', apiKey: apiKey() });
-    console.log(`[voice] TTS wav ${wav.length} bytes — injecting…`);
-
-    // Kick off playback WITHOUT awaiting, so we can sample outbound audio stats
-    // while it plays. media-source.audioLevel > 0 during playback proves OpenAI is
-    // receiving our voice; this separates "audio not forwarded" from "VAD didn't commit".
-    const playing = page.evaluate((b64) => window.__voiceHarness.speak(b64), wav.toString('base64'));
-    let peakLevel = 0;
-    for (let i = 0; i < 10; i++) {
-      const s = await page.evaluate(() => window.__voiceHarness.outboundAudioStats());
-      if (typeof s.audioLevel === 'number' && s.audioLevel > peakLevel) peakLevel = s.audioLevel;
-      if (i === 9 || i === 0) console.log(`[voice] outbound[${i}]:`, JSON.stringify(s));
-      await page.waitForTimeout(400);
+    // One turn: capture baseline, inject + commit, poll for the tutor's reply.
+    async function doTurn(text, idx) {
+      const before = await page.evaluate(() => document.body.innerText);
+      const beforeSet = new Set(before.split('\n').map((l) => l.trim()));
+      console.log(`\n[turn ${idx}] 🗣  "${text}"`);
+      const wav = await tts(text, { engine: args.engine || 'openai', apiKey: apiKey() });
+      await page.evaluate((b64) => window.__voiceHarness.speak(b64), wav.toString('base64'));
+      // Commit by default — semantic_vad doesn't close the turn on synthetic silence.
+      if (!args['no-commit']) {
+        await page.waitForTimeout(800);
+        await page.evaluate(() => window.__voiceHarness.commitInput());
+      }
+      // Poll up to 18s for new conversation lines (user echo + tutor reply).
+      let newLines = [];
+      for (let i = 0; i < 12; i++) {
+        await page.waitForTimeout(1500);
+        const after = await page.evaluate(() => document.body.innerText);
+        newLines = after
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l && !beforeSet.has(l) && !l.startsWith('Status:'));
+        if (newLines.length >= 2) break; // user line + at least one tutor line
+      }
+      await shot(page, `turn-${idx}`);
+      console.log(`[turn ${idx}] new:\n${newLines.map((l) => '   ' + l).join('\n') || '   (no reply captured)'}`);
+      return newLines;
     }
-    const dur = await playing;
-    console.log(`[voice] injected ${dur.toFixed(2)}s; peak outbound audioLevel=${peakLevel.toFixed(4)} — waiting for tutor…`);
 
-    // Commit by default — semantic_vad doesn't close the turn on synthetic silence.
-    // Pass --no-commit to reproduce the stalled-turn bug.
-    if (!args['no-commit']) {
-      await page.waitForTimeout(800);
-      const committed = await page.evaluate(() => window.__voiceHarness.commitInput());
-      console.log(`[voice] manual input_audio_buffer.commit sent: ${committed}`);
+    const turnsList = args.turns
+      ? readFileSync(resolve(process.cwd(), String(args.turns)), 'utf8')
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l && !l.startsWith('#'))
+      : [SAY];
+    console.log(`[voice] running ${turnsList.length} turn(s)…`);
+
+    for (let i = 0; i < turnsList.length; i++) {
+      await doTurn(turnsList[i], i + 1);
     }
 
-    await page.waitForTimeout(12000); // let transcription.completed + tutor respond
-    await shot(page, 'response');
-
-    // Exactly what the realtime server sent back for our injected audio.
     const events = await page.evaluate(() => window.__vhEvents || []);
-    console.log('=== realtime data-channel events ===');
-    console.log(JSON.stringify(events, null, 1));
-
-    // Isolate exactly what this turn added (selector-free): new lines only.
-    const after = await page.evaluate(() => document.body.innerText);
-    const beforeSet = new Set(before.split('\n').map((l) => l.trim()));
-    const newLines = after
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l && !beforeSet.has(l));
-    console.log('=== NEW conversation lines this turn ===');
-    console.log(newLines.join('\n') || '(none — no new text appeared)');
+    const tally = {};
+    for (const e of events) tally[e.t] = (tally[e.t] || 0) + 1;
+    console.log('\n=== realtime event tally (whole session) ===');
+    console.log(JSON.stringify(tally, null, 1));
   } catch (e) {
     console.log('[voice] STEP FAILED:', e.message);
     await shot(page, 'response').catch(() => {});

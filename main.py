@@ -29,7 +29,7 @@ def _validate_required_env() -> None:
         'CANVAS_PAT_ENCRYPTION_KEY': 'Canvas connect returns 503 when a teacher clicks Connect',
         'PUBLIC_BASE_URL': 'Email CTAs ship with relative URLs which break in email clients',
         'SUPPORT_EMAIL': 'Plan 5 — falls back to help@l1ngual.com if unset; surfaces in org_suspended email footer',
-        'INSTANCE_CONNECTION_NAME': 'Cloud SQL disabled; Postgres-backed features (none yet) fall back to Firestore',
+        'INSTANCE_CONNECTION_NAME': 'Cloud SQL disabled — school-domain reads + analytics fall back to Firestore (normal in local dev; set only in the Cloud Run deploy)',
     }
     missing_hard = [
         f'  - {k}: {reason}'

@@ -619,7 +619,7 @@ function PersonalInfoSection({
           <ProfileSelect
             label={t('app.profile.student') || 'Education Level'}
             value={formState.gradeLevel}
-            placeholder="Select Education Level"
+            placeholder={t('app.profile.selectGradeLevel') || 'Select Education Level'}
             disabled={inputsDisabled}
             options={PROFILE_GRADE_OPTIONS}
             onChange={(value) => onFieldChange('gradeLevel', value)}
@@ -628,7 +628,7 @@ function PersonalInfoSection({
           <ProfileSelect
             label={t('app.profile.nativeLanguage') || 'Native Language'}
             value={formState.nativeLanguage}
-            placeholder="Select Native Language"
+            placeholder={t('app.profile.selectNativeLanguage') || 'Select Native Language'}
             disabled={inputsDisabled}
             options={PROFILE_LANGUAGES}
             onChange={(value) => onFieldChange('nativeLanguage', value)}
@@ -637,7 +637,7 @@ function PersonalInfoSection({
           <ProfileSelect
             label={t('app.profile.location') || 'Location'}
             value={formState.location}
-            placeholder="Select Country"
+            placeholder={t('app.profile.selectCountry') || 'Select Country'}
             disabled={inputsDisabled}
             options={PROFILE_COUNTRIES}
             onChange={(value) => onFieldChange('location', value)}

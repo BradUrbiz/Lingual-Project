@@ -52,7 +52,7 @@ vi.mock('@/hooks/useRealtimeChat', () => ({
 vi.mock('@/contexts/LanguageContext', () => ({
   useLanguage: () => ({
     lang: 'en',
-    t: (key: string) => key,
+    t: (_key: string) => '',
   }),
 }));
 

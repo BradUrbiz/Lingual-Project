@@ -5,10 +5,12 @@ import { m } from 'framer-motion';
 import { AnimatedPage } from '@/components/layout';
 import { Alert, AlertDescription, Button, Card, Input } from '@/components/ui';
 import { joinClassByCode } from '@/api/schools';
+import { useLanguage } from '@/contexts/LanguageContext';
 import type { JoinClassResult } from '@/types';
 
 export function StudentJoinClassPage() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +24,7 @@ export function StudentJoinClassPage() {
 
   const handleSubmit = async () => {
     if (code.length !== 6) {
-      setError('Please enter a 6-character class code.');
+      setError(t('app.joinClass.errorLength') || 'Please enter a 6-character class code.');
       return;
     }
 
@@ -33,7 +35,7 @@ export function StudentJoinClassPage() {
       const joinResult = await joinClassByCode(code);
       setResult(joinResult);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to join class. Please check the code and try again.');
+      setError(err instanceof Error ? err.message : (t('app.joinClass.errorFailed') || 'Failed to join class. Please check the code and try again.'));
     } finally {
       setLoading(false);
     }
@@ -55,12 +57,14 @@ export function StudentJoinClassPage() {
 
               <div className="space-y-2">
                 <h1 className="text-2xl font-bold">
-                  {result.alreadyEnrolled ? 'Already Enrolled' : 'Successfully Joined!'}
+                  {result.alreadyEnrolled
+                    ? (t('app.joinClass.alreadyEnrolledTitle') || 'Already Enrolled')
+                    : (t('app.joinClass.successTitle') || 'Successfully Joined!')}
                 </h1>
                 <p className="text-muted-foreground">
                   {result.alreadyEnrolled
-                    ? `You're already enrolled in this class.`
-                    : `You've been added to the class.`}
+                    ? (t('app.joinClass.alreadyEnrolledDesc') || `You're already enrolled in this class.`)
+                    : (t('app.joinClass.successDesc') || `You've been added to the class.`)}
                 </p>
               </div>
 
@@ -72,7 +76,7 @@ export function StudentJoinClassPage() {
               </div>
 
               <Button onClick={() => navigate('/app/learn', { replace: true })} className="w-full">
-                Go to Learning
+                {t('app.joinClass.goToLearning') || 'Go to Learning'}
                 <ArrowRight className="ml-2 size-4" />
               </Button>
             </Card>
@@ -95,9 +99,9 @@ export function StudentJoinClassPage() {
               <div className="flex justify-center">
                 <Users className="size-12 text-primary" />
               </div>
-              <h1 className="text-2xl font-bold">Join a Class</h1>
+              <h1 className="text-2xl font-bold">{t('app.joinClass.title') || 'Join a Class'}</h1>
               <p className="text-muted-foreground">
-                Enter the 6-character code your teacher shared with you.
+                {t('app.joinClass.subtitle') || 'Enter the 6-character code your teacher shared with you.'}
               </p>
             </div>
 
@@ -124,11 +128,11 @@ export function StudentJoinClassPage() {
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 size-4 animate-spin" />
-                    Joining…
+                    {t('app.joinClass.joining') || 'Joining…'}
                   </>
                 ) : (
                   <>
-                    Join Class
+                    {t('app.joinClass.submit') || 'Join Class'}
                     <ArrowRight className="ml-2 size-4" />
                   </>
                 )}

@@ -629,9 +629,9 @@ function PrivacySettingsTab({ compliance, onOpenVoiceConsent, t }: PrivacySettin
                 <Mic size={18} strokeWidth={2.5} />
               </div>
               <div>
-                <div className="font-bold text-foreground">Voice practice consent</div>
+                <div className="font-bold text-foreground">{t('app.settings.privacy.voiceConsentTitle') || 'Voice practice consent'}</div>
                 <div className="text-xs text-muted-foreground">
-                  Manage whether your audio is sent to the AI tutor.
+                  {t('app.settings.privacy.voiceConsentDesc') || 'Manage whether your audio is sent to the AI tutor.'}
                 </div>
               </div>
             </div>
@@ -656,9 +656,9 @@ function PrivacySettingsTab({ compliance, onOpenVoiceConsent, t }: PrivacySettin
 
           <p className="text-sm text-muted-foreground">
             <Link to="/compliance" className="underline">
-              See Lingual's full data policy
+              {t('app.settings.privacy.dataPolicyLink') || "See Lingual's full data policy"}
             </Link>{' '}
-            for retention, who can see what, and how deletion works.
+            {t('app.settings.privacy.dataPolicySuffix') || 'for retention, who can see what, and how deletion works.'}
           </p>
         </div>
       </div>

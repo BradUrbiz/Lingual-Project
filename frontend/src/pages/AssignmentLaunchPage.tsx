@@ -41,6 +41,7 @@ function AssignmentDetailsPanel({
   bootstrap: AssignmentBootstrapData;
   lang: 'en' | 'ko';
 }) {
+  const { t } = useLanguage();
   return (
     <details open className="group">
       <summary className="cursor-pointer list-none">
@@ -51,14 +52,14 @@ function AssignmentDetailsPanel({
                 <BookOpen size={22} strokeWidth={2.5} />
               </div>
               <div>
-                <h2 className="text-lg font-display font-bold text-foreground">About this assignment</h2>
+                <h2 className="text-lg font-display font-bold text-foreground">{t('app.assignmentLaunch.aboutTitle') || 'About this assignment'}</h2>
                 <p className="text-sm text-muted-foreground">
-                  Curriculum scope, objectives, and teacher instructions
+                  {t('app.assignmentLaunch.aboutSubtitle') || 'Curriculum scope, objectives, and teacher instructions'}
                 </p>
               </div>
             </div>
-            <span className="text-xs font-medium text-muted-foreground group-open:hidden">Show details</span>
-            <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">Hide details</span>
+            <span className="text-xs font-medium text-muted-foreground group-open:hidden">{t('app.assignmentLaunch.showDetails') || 'Show details'}</span>
+            <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">{t('app.assignmentLaunch.hideDetails') || 'Hide details'}</span>
           </div>
         </Card>
       </summary>
@@ -66,7 +67,7 @@ function AssignmentDetailsPanel({
       {bootstrap.assignment.taskType === 'custom_prompt' && (
         <Card className="mt-3 border-3 border-foreground p-6 shadow-stamp">
           <h2 className="text-lg font-display font-bold text-foreground">
-            Instructions from your teacher
+            {t('app.assignmentLaunch.instructionsTitle') || 'Instructions from your teacher'}
           </h2>
           <div className="mt-4 rounded-2xl border-2 border-border bg-secondary/40 p-4">
             {bootstrap.assignment.studentInstructions ? (
@@ -75,7 +76,7 @@ function AssignmentDetailsPanel({
               </p>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Your teacher did not provide additional instructions for this practice. Start when you are ready.
+                {t('app.assignmentLaunch.noInstructions') || 'Your teacher did not provide additional instructions for this practice. Start when you are ready.'}
               </p>
             )}
           </div>
@@ -99,22 +100,25 @@ function CurriculumScopeCard({
   bootstrap: AssignmentBootstrapData;
   lang: 'en' | 'ko';
 }) {
+  const { t } = useLanguage();
   return (
     <Card className="mt-3 border-3 border-foreground p-6 shadow-stamp">
       <h2 className="text-lg font-display font-bold text-foreground">
-        {bootstrap.curriculum.package?.id === 'canvas-generated' ? 'Practice scope' : 'Curriculum scope'}
+        {bootstrap.curriculum.package?.id === 'canvas-generated'
+          ? (t('app.assignmentLaunch.practiceScope') || 'Practice scope')
+          : (t('app.assignmentLaunch.curriculumScope') || 'Curriculum scope')}
       </h2>
 
       {bootstrap.curriculum.unit && bootstrap.curriculum.module ? (
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Unit</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('app.assignmentLaunch.unit') || 'Unit'}</p>
             <p className="mt-2 font-semibold text-foreground">
               {getLocalizedText(bootstrap.curriculum.unit.title, lang, bootstrap.curriculum.unit.id)}
             </p>
           </div>
           <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Module</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('app.assignmentLaunch.module') || 'Module'}</p>
             <p className="mt-2 font-semibold text-foreground">
               {getLocalizedText(bootstrap.curriculum.module.title, lang, bootstrap.curriculum.module.id)}
             </p>
@@ -125,24 +129,24 @@ function CurriculumScopeCard({
         </div>
       ) : bootstrap.mapping?.generatedScenario ? (
         <div className="mt-6 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Conversation scenario</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('app.assignmentLaunch.conversationScenario') || 'Conversation scenario'}</p>
           <p className="mt-2 text-sm text-foreground">{bootstrap.mapping.generatedScenario}</p>
           {bootstrap.mapping.sourceCanvasItemTitle ? (
-            <p className="mt-2 text-xs text-muted-foreground">Based on: {bootstrap.mapping.sourceCanvasItemTitle}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{t('app.assignmentLaunch.basedOn') || 'Based on: '}{bootstrap.mapping.sourceCanvasItemTitle}</p>
           ) : null}
         </div>
       ) : null}
 
       <div className="mt-5 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Situation</p>
-        <p className="mt-2 font-semibold text-foreground">{bootstrap.curriculum.situation?.id || 'Canvas-generated'}</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('app.assignmentLaunch.situation') || 'Situation'}</p>
+        <p className="mt-2 font-semibold text-foreground">{bootstrap.curriculum.situation?.id || (t('app.assignmentLaunch.canvasGenerated') || 'Canvas-generated')}</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          {formatModeLabel(bootstrap.curriculum.situation?.kind)} · {String(bootstrap.curriculum.situation?.seed?.setting || 'context not specified')}
+          {formatModeLabel(bootstrap.curriculum.situation?.kind)} · {String(bootstrap.curriculum.situation?.seed?.setting || (t('app.assignmentLaunch.contextNotSpecified') || 'context not specified'))}
         </p>
       </div>
 
       <div className="mt-5">
-        <h3 className="text-base font-semibold text-foreground">Objectives</h3>
+        <h3 className="text-base font-semibold text-foreground">{t('app.assignmentLaunch.objectives') || 'Objectives'}</h3>
         <div className="mt-3 grid gap-3">
           {bootstrap.curriculum.objectives.map((objective) => (
             <div key={objective.id} className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
@@ -159,39 +163,50 @@ function CurriculumScopeCard({
 }
 
 function TeacherPracticeOverlayCard({ bootstrap }: { bootstrap: AssignmentBootstrapData }) {
+  const { t } = useLanguage();
+
+  const noTargetExpressions = t('app.assignmentLaunch.noTargetExpressions') || 'No explicit target expressions configured.';
+  const noTargetVocabulary = t('app.assignmentLaunch.noTargetVocabulary') || 'No explicit target vocabulary configured.';
+  const noFocusGrammar = t('app.assignmentLaunch.noFocusGrammar') || 'No explicit grammar focus configured.';
+  const defaultSuccessCriteria = t('app.assignmentLaunch.defaultSuccessCriteria') || 'Complete the task with sustained, assignment-aligned output.';
+
   const overlayItems = [
     {
-      label: 'Target expressions',
+      id: 'target-expressions',
+      label: t('app.assignmentLaunch.targetExpressions') || 'Target expressions',
       items: bootstrap.mapping.targetExpressions.length > 0
         ? bootstrap.mapping.targetExpressions
-        : ['No explicit target expressions configured.'],
+        : [noTargetExpressions],
     },
     {
-      label: 'Target vocabulary',
+      id: 'target-vocabulary',
+      label: t('app.assignmentLaunch.targetVocabulary') || 'Target vocabulary',
       items: (bootstrap.mapping.targetVocabulary ?? []).length > 0
         ? bootstrap.mapping.targetVocabulary ?? []
-        : ['No explicit target vocabulary configured.'],
+        : [noTargetVocabulary],
     },
     {
-      label: 'Focus grammar',
+      id: 'focus-grammar',
+      label: t('app.assignmentLaunch.focusGrammar') || 'Focus grammar',
       items: bootstrap.mapping.focusGrammar.length > 0
         ? bootstrap.mapping.focusGrammar
-        : ['No explicit grammar focus configured.'],
+        : [noFocusGrammar],
     },
     {
-      label: 'Success criteria',
+      id: 'success-criteria',
+      label: t('app.assignmentLaunch.successCriteria') || 'Success criteria',
       items: bootstrap.assignment.successCriteria.length > 0
         ? bootstrap.assignment.successCriteria
-        : ['Complete the task with sustained, assignment-aligned output.'],
+        : [defaultSuccessCriteria],
     },
   ];
 
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
-      <h2 className="text-xl font-display font-bold text-foreground">Teacher-designed practice overlay</h2>
+      <h2 className="text-xl font-display font-bold text-foreground">{t('app.assignmentLaunch.overlayTitle') || 'Teacher-designed practice overlay'}</h2>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         {overlayItems.map((group) => (
-          <div key={group.label} className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
+          <div key={group.id} className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{group.label}</p>
             <ul className="mt-3 space-y-2 text-sm text-foreground">
               {group.items.map((item) => (
@@ -201,9 +216,9 @@ function TeacherPracticeOverlayCard({ bootstrap }: { bootstrap: AssignmentBootst
           </div>
         ))}
         <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Teacher notes</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('app.assignmentLaunch.teacherNotes') || 'Teacher notes'}</p>
           <p className="mt-3 text-sm text-foreground">
-            {bootstrap.mapping.teacherNotes || 'No teacher notes were attached to this assignment.'}
+            {bootstrap.mapping.teacherNotes || (t('app.assignmentLaunch.noTeacherNotes') || 'No teacher notes were attached to this assignment.')}
           </p>
         </div>
       </div>
@@ -222,6 +237,7 @@ function PracticeWorkspaceLaunchCard({
   isTextLaunch: boolean;
   onOpenWorkspace: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
       <div className="flex items-center gap-3">
@@ -229,47 +245,53 @@ function PracticeWorkspaceLaunchCard({
           <Mic size={22} strokeWidth={2.5} />
         </div>
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">Open practice workspace</h2>
+          <h2 className="text-xl font-display font-bold text-foreground">{t('app.assignmentLaunch.openWorkspace') || 'Open practice workspace'}</h2>
           <p className="text-sm text-muted-foreground">
-            Practice opens in a focused assignment workspace with assignment-only history and your teacher’s goals visible while you talk.
+            {t('app.assignmentLaunch.openWorkspaceDesc') || "Practice opens in a focused assignment workspace with assignment-only history and your teacher's goals visible while you talk."}
           </p>
         </div>
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Voice</p>
-          <p className="mt-2 font-semibold text-foreground">{bootstrap.launch.voiceAllowed ? 'Allowed' : 'Blocked'}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('app.assignmentLaunch.voice') || 'Voice'}</p>
+          <p className="mt-2 font-semibold text-foreground">
+            {bootstrap.launch.voiceAllowed ? (t('app.assignmentLaunch.allowed') || 'Allowed') : (t('app.assignmentLaunch.blocked') || 'Blocked')}
+          </p>
         </div>
         <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Text fallback</p>
-          <p className="mt-2 font-semibold text-foreground">{bootstrap.launch.textAllowed ? 'Available' : 'Blocked'}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('app.assignmentLaunch.textFallback') || 'Text fallback'}</p>
+          <p className="mt-2 font-semibold text-foreground">
+            {bootstrap.launch.textAllowed ? (t('app.assignmentLaunch.available') || 'Available') : (t('app.assignmentLaunch.blocked') || 'Blocked')}
+          </p>
         </div>
       </div>
 
       {bootstrap.launch.retentionPolicy ? (
         <div className="mt-4 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Retention</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('app.assignmentLaunch.retention') || 'Retention'}</p>
           <p className="mt-2 text-sm text-foreground">
-            {bootstrap.launch.retentionPolicy.label} · Raw audio{' '}
-            {bootstrap.launch.retentionPolicy.rawAudioStorageAllowed ? 'stored' : 'not stored'}
+            {bootstrap.launch.retentionPolicy.label}{' · '}{t('app.assignmentLaunch.rawAudioLabel') || 'Raw audio'}{' '}
+            {bootstrap.launch.retentionPolicy.rawAudioStorageAllowed
+              ? (t('app.assignmentLaunch.stored') || 'stored')
+              : (t('app.assignmentLaunch.notStored') || 'not stored')}
           </p>
         </div>
       ) : null}
 
       <div className="mt-4 rounded-2xl border-2 border-border bg-secondary/40 p-4">
-        <p className="text-sm font-semibold text-foreground">How it works</p>
+        <p className="text-sm font-semibold text-foreground">{t('app.assignmentLaunch.howItWorks') || 'How it works'}</p>
         <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-          <li>• Opens an assignment-only chat workspace</li>
-          <li>• Keeps your assignment goals visible while you practice</li>
-          <li>• Saves separate attempts and lets you resume older threads</li>
+          <li>• {t('app.assignmentLaunch.howItWorks1') || 'Opens an assignment-only chat workspace'}</li>
+          <li>• {t('app.assignmentLaunch.howItWorks2') || 'Keeps your assignment goals visible while you practice'}</li>
+          <li>• {t('app.assignmentLaunch.howItWorks3') || 'Saves separate attempts and lets you resume older threads'}</li>
         </ul>
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
         <Button onClick={onOpenWorkspace} disabled={!canStartPractice}>
           <PlayCircle size={16} className="mr-2" />
-          {isTextLaunch ? 'Start text practice' : 'Start assignment practice'}
+          {isTextLaunch ? (t('app.assignmentLaunch.startText') || 'Start text practice') : (t('app.assignmentLaunch.startAssignment') || 'Start assignment practice')}
         </Button>
       </div>
     </Card>
@@ -279,7 +301,7 @@ function PracticeWorkspaceLaunchCard({
 export function AssignmentLaunchPage() {
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const navigate = useNavigate();
-  const { lang } = useLanguage();
+  const { lang, t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [bootstrap, setBootstrap] = useState<AssignmentBootstrapData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -290,7 +312,7 @@ export function AssignmentLaunchPage() {
 
     if (!assignmentId) {
       setLoading(false);
-      setError('Assignment id is required.');
+      setError(t('app.assignmentLaunch.errorNoId') || 'Assignment id is required.');
       return;
     }
 
@@ -303,7 +325,7 @@ export function AssignmentLaunchPage() {
         setError(null);
       } catch (loadError) {
         if (!isActive) return;
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load assignment.');
+        setError(loadError instanceof Error ? loadError.message : (t('app.assignmentLaunch.errorLoadFailed') || 'Failed to load assignment.'));
       } finally {
         if (isActive) setLoading(false);
       }
@@ -327,10 +349,10 @@ export function AssignmentLaunchPage() {
     return (
       <div className="space-y-4">
         <Alert variant="destructive">
-          <AlertDescription>{error || 'Assignment launch data is unavailable.'}</AlertDescription>
+          <AlertDescription>{error || (t('app.assignmentLaunch.errorUnavailable') || 'Assignment launch data is unavailable.')}</AlertDescription>
         </Alert>
         <Button variant="outline" onClick={() => navigate('/app/learn')}>
-          Back to learning dashboard
+          {t('app.assignmentLaunch.backToDashboard') || 'Back to learning dashboard'}
         </Button>
       </div>
     );
@@ -352,14 +374,14 @@ export function AssignmentLaunchPage() {
               </Badge>
               {bootstrap.teacherPreview ? (
                 <Badge variant="accent" size="sm">
-                  Teacher preview
+                  {t('app.assignmentLaunch.teacherPreviewBadge') || 'Teacher preview'}
                 </Badge>
               ) : null}
             </div>
             <h1 className="text-3xl font-display font-bold text-foreground">{bootstrap.assignment.title}</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              {bootstrap.class.name} · {bootstrap.class.subject || 'Language practice'} ·{' '}
-              {bootstrap.class.term || 'Current term'}
+              {bootstrap.class.name} · {bootstrap.class.subject || (t('app.assignmentLaunch.languagePractice') || 'Language practice')} ·{' '}
+              {bootstrap.class.term || (t('app.assignmentLaunch.currentTerm') || 'Current term')}
             </p>
             {bootstrap.assignment.description ? (
               <p className="mt-3 max-w-3xl text-sm text-foreground/80">{bootstrap.assignment.description}</p>
@@ -367,19 +389,19 @@ export function AssignmentLaunchPage() {
           </div>
           <div className="grid gap-2 sm:grid-cols-3">
             <div className="rounded-2xl border-2 border-border bg-secondary/50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Modality</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('app.assignmentLaunch.modality') || 'Modality'}</p>
               <p className="mt-1 text-lg font-bold text-foreground">
                 {formatModeLabel(bootstrap.launch.modality.mode)}
               </p>
             </div>
             <div className="rounded-2xl border-2 border-border bg-secondary/50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Attempts</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('app.assignmentLaunch.attempts') || 'Attempts'}</p>
               <p className="mt-1 text-lg font-bold text-foreground">
-                {bootstrap.launch.maxAttempts ?? 'Unlimited'}
+                {bootstrap.launch.maxAttempts ?? (t('app.assignmentLaunch.unlimited') || 'Unlimited')}
               </p>
             </div>
             <div className="rounded-2xl border-2 border-border bg-secondary/50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Locale</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('app.assignmentLaunch.locale') || 'Locale'}</p>
               <p className="mt-1 text-lg font-bold text-foreground">{bootstrap.class.learningLocale}</p>
             </div>
           </div>
@@ -390,8 +412,7 @@ export function AssignmentLaunchPage() {
         <Alert>
           <CheckCircle2 className="size-4" />
           <AlertDescription>
-            This launch is running in teacher preview mode. Students will only see it when they are actively enrolled
-            and the assignment is published.
+            {t('app.assignmentLaunch.teacherPreviewNotice') || 'This launch is running in teacher preview mode. Students will only see it when they are actively enrolled and the assignment is published.'}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -415,12 +436,12 @@ export function AssignmentLaunchPage() {
           <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span>
               {bootstrap.launch.fallbackApplied
-                ? 'Voice is blocked for this student, so this assignment has been downgraded to assignment-scoped text practice.'
-                : 'This assignment is configured to launch in assignment-scoped text mode.'}
+                ? (t('app.assignmentLaunch.voiceBlockedNotice') || 'Voice is blocked for this student, so this assignment has been downgraded to assignment-scoped text practice.')
+                : (t('app.assignmentLaunch.textModeNotice') || 'This assignment is configured to launch in assignment-scoped text mode.')}
             </span>
             {bootstrap.launch.fallbackApplied ? (
               <Button size="sm" variant="outline" onClick={() => navigate('/app/consent/voice')}>
-                Grant voice consent
+                {t('app.assignmentLaunch.grantVoiceConsent') || 'Grant voice consent'}
               </Button>
             ) : null}
           </AlertDescription>

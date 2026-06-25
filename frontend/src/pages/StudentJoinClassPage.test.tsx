@@ -19,7 +19,7 @@ vi.mock('@/api/schools', () => ({
 vi.mock('@/contexts/LanguageContext', () => ({
   useLanguage: () => ({
     lang: 'en',
-    t: (key: string) => key,
+    t: (_key: string) => '',
   }),
 }));
 

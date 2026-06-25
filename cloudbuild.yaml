@@ -82,7 +82,7 @@ substitutions:
   # SQL IAM user. _DUAL_WRITE_SCHOOL_CHAIN gates the fail-open parent-chain shadow
   # (org/membership/class); _DUAL_WRITE_ENROLLMENTS gates the enrollment shadow.
   # Parent chain must be enabled first (it is) so enrollment FKs resolve.
-  _INSTANCE_CONNECTION_NAME: 'lingu-480600:us-central1:lingual'
+  _INSTANCE_CONNECTION_NAME: 'lingu-480600:us-central1:lingual-v2'
   _DB_USER: '6288717566-compute@developer'
   _DB_NAME: lingual
   _DUAL_WRITE_SCHOOL_CHAIN: '1'

@@ -82,11 +82,15 @@ AVATAR_REACTION_INTENTS = [
 
 REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15'
 REALTIME_CLIENT_SECRET_TTL_SECONDS = 600
-# Default input-audio transcription model. Override per-deploy with the
-# REALTIME_TRANSCRIPTION_MODEL env var so we can A/B candidates (e.g.
-# gpt-4o-transcribe, gpt-realtime-whisper) against real learner audio without a
-# code change. Resolved at request time via resolve_realtime_transcription_model().
-REALTIME_INPUT_AUDIO_TRANSCRIPTION_MODEL = 'gpt-4o-mini-transcribe-2025-12-15'
+# Default input-audio transcription model. gpt-realtime-whisper won the A/B
+# against real code-switching learner audio (clearly more accurate; streaming-
+# native so the learner's own transcript appears live). It does NOT accept the
+# transcription `prompt` param — the builder drops the prompt for it automatically
+# (see realtime_transcription_supports_prompt). Override per-deploy with the
+# REALTIME_TRANSCRIPTION_MODEL env var (e.g. to fall back to gpt-4o-transcribe,
+# which keeps the prompt). Resolved at request time via
+# resolve_realtime_transcription_model().
+REALTIME_INPUT_AUDIO_TRANSCRIPTION_MODEL = 'gpt-realtime-whisper'
 REALTIME_TRANSCRIPTION_MODEL_ENV = 'REALTIME_TRANSCRIPTION_MODEL'
 # Realtime transcription models that do NOT accept the `prompt` parameter in GA
 # realtime sessions. Sending a prompt to these makes the client_secret mint fail,

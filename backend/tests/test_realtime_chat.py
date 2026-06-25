@@ -577,7 +577,7 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
         self.assertEqual(audio_input['format'], {'type': 'audio/pcm', 'rate': 24000})
         self.assertEqual(
             audio_input['transcription']['model'],
-            'gpt-4o-mini-transcribe-2025-12-15',
+            'gpt-realtime-whisper',
         )
         self.assertEqual(audio_input['turn_detection']['type'], 'semantic_vad')
         self.assertEqual(audio_input['turn_detection']['eagerness'], 'auto')
@@ -612,7 +612,14 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
         self.assertNotIn('silence_duration_ms', turn_detection)
 
     def test_realtime_session_request_accepts_transcription_language_and_prompt(self):
-        with patch.dict('os.environ', {}, clear=False):
+        # Pin a prompt-capable model: the default (gpt-realtime-whisper) drops the
+        # prompt, so this contract test uses gpt-4o-transcribe to verify both the
+        # language hint and the prompt thread through for prompt-capable models.
+        with patch.dict(
+            'os.environ',
+            {'REALTIME_TRANSCRIPTION_MODEL': 'gpt-4o-transcribe'},
+            clear=False,
+        ):
             payload = build_realtime_session_request(
                 'Base instructions',
                 transcription_language='fr',
@@ -814,7 +821,13 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
     def test_realtime_session_uses_chat_language_mix_for_free_practice(self):
         self.fake_db.chats['student-1']['chat-existing']['language_mix_level'] = 'target_led'
 
-        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-openai-key'}, clear=False):
+        # Pin a prompt-capable STT model so the transcription prompt assertions
+        # below hold (the default gpt-realtime-whisper drops the prompt).
+        with patch.dict(
+            'os.environ',
+            {'OPENAI_API_KEY': 'test-openai-key', 'REALTIME_TRANSCRIPTION_MODEL': 'gpt-4o-transcribe'},
+            clear=False,
+        ):
             with patch('backend.routes.chat.requests.post') as mocked_post:
                 mocked_post.return_value = FakeRealtimeSessionResponse()
 
@@ -857,7 +870,13 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
             'teacher_notes': 'Keep the student in the restaurant ordering lane.',
         })
 
-        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-openai-key'}, clear=False):
+        # Pin a prompt-capable STT model so the transcription prompt assertions
+        # below hold (the default gpt-realtime-whisper drops the prompt).
+        with patch.dict(
+            'os.environ',
+            {'OPENAI_API_KEY': 'test-openai-key', 'REALTIME_TRANSCRIPTION_MODEL': 'gpt-4o-transcribe'},
+            clear=False,
+        ):
             with patch('backend.routes.chat.requests.post') as mocked_post:
                 mocked_post.return_value = FakeRealtimeSessionResponse()
 

@@ -20,6 +20,10 @@
   "auth.resetSent": "해당 이메일이 등록되어 있다면 비밀번호 재설정 링크가 발송되었습니다.",
   "auth.resetBack": "로그인으로 돌아가기",
   "auth.resetError": "비밀번호 재설정 이메일을 보내지 못했습니다.",
+  "auth.subtitle": "실시간 피드백으로 스피킹을 연습하세요.",
+  "auth.testimonial.quote": "하루 10분씩 연습했더니 수업 시간에 자신 있게 말할 수 있게 됐어요.",
+  "auth.testimonial.name": "Sofia Ramirez",
+  "auth.testimonial.role": "AP 스페인어 수강생",
 
   "general.title": "당신에 대해 알아볼게요",
   "general.nameLabel": "이름이 어떻게 되세요?",

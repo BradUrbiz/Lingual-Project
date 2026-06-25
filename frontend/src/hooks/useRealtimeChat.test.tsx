@@ -134,6 +134,24 @@ describe('useRealtimeChat directive continuation', () => {
     vi.unstubAllGlobals();
   });
 
+  it('requests the microphone with echo cancellation, noise suppression, and auto gain', async () => {
+    render(<HookHarness />);
+
+    await act(async () => {
+      await latestHookState?.connect();
+    });
+
+    const getUserMediaMock = vi.mocked(window.navigator.mediaDevices.getUserMedia);
+    expect(getUserMediaMock).toHaveBeenCalledTimes(1);
+    expect(getUserMediaMock).toHaveBeenCalledWith({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+  });
+
   it('waits for response.done before continuing a directive tool call and ignores duplicate done events', async () => {
     render(<HookHarness />);
 

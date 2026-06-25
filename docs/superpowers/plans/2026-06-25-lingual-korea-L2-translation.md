@@ -125,6 +125,18 @@ For each page/component in the cluster:
 
 ---
 
+### Task 1b (added from L1 `/ko` smoke): Cluster — Auth + landing gaps (DO FIRST)
+
+**Discovered 2026-06-25** during the L1 live smoke: the "student/B2C surfaces are already translated" assumption is **incomplete**. At `/ko`, `LoginPage.tsx` renders fully **English** (confirmed **0 `t()` calls**), and a few `LandingPage` strings fall back to English (e.g. "I'm a Student/Teacher/School Admin"). These are the **highest-traffic entry points** for a new Korean user — do this cluster FIRST.
+
+**Files:** `frontend/src/pages/LoginPage.tsx`, `frontend/src/pages/SignupPage.tsx` (verify — likely also 0 `t()`), and the untranslated `frontend/src/pages/LandingPage.tsx` strings. Keys: `auth.*` (reuse existing `auth.*` keys from `i18n/*.json` where they already exist — several do), `landing.*`.
+
+- [ ] Apply the Extraction Recipe. For `LoginPage`/`SignupPage`, MANY `auth.*` keys already exist in `en.json`/`ko.json` (the i18n files predate these hardcoded pages) — prefer reusing them over inventing new keys.
+- [ ] Parity test green; render-review `/ko/login` and `/ko/signup` + the landing page at `/ko` — confirm NO English leaks on these entry points.
+- [ ] Commit: `feat(lingual-korea): Korean coverage — auth pages + landing gaps`
+
+---
+
 ### Task 2: Cluster — Teacher dashboard + authoring
 
 **Files:** `frontend/src/pages/TeacherDashboardPage.tsx`, `frontend/src/pages/TeacherAssignmentBuilderPage.tsx` (+ any `components/` they render that hold copy). Keys: `teacher.*`.

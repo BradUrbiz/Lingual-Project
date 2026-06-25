@@ -363,7 +363,7 @@ export function PronunciationPracticePage() {
           console.error('Failed to upload pronunciation audio:', uploadError);
         }
       } else if (audioBlob && !rawAudioStorageAllowedRef.current) {
-        toast.info('Raw audio retention is disabled for this school context, so the recording was not stored.');
+        toast.info(t('app.practice.toast.retentionDisabled') || 'Raw audio retention is disabled for this school context, so the recording was not stored.');
       }
       const attemptPayload: PronunciationAttempt = {
         ...attempt,
@@ -874,7 +874,7 @@ function RecordingPanel({
           <track
             kind="captions"
             srcLang="en"
-            label="Recognized speech"
+            label={t('app.practice.recording.captionLabel') || 'Recognized speech'}
             src={latestAttemptCaptionUrl ?? undefined}
             default
           />
@@ -920,6 +920,7 @@ function WordsPanel({
             selectedWordIndex={selectedWordIndex}
             words={latestAttempt.words}
             onSelectWord={onSelectWord}
+            t={t}
           />
 
           {selectedWord ? (
@@ -942,10 +943,12 @@ function WordButtons({
   selectedWordIndex,
   words,
   onSelectWord,
+  t,
 }: {
   selectedWordIndex: number;
   words: PronunciationWord[];
   onSelectWord: (selectedWordIndex: number) => void;
+  t: TranslationFn;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -956,7 +959,7 @@ function WordButtons({
             type="button"
             key={`${word.word}-${index}`}
             onClick={() => onSelectWord(index)}
-            aria-label={`${word.word}${isSelected ? ' selected' : ''}`}
+            aria-label={`${word.word}${isSelected ? ` ${t('app.practice.words.selectedSuffix') || 'selected'}` : ''}`}
             className={clsx(
               'px-3 py-1 rounded-lg border-2 text-sm font-semibold transition-all',
               isSelected

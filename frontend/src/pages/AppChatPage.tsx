@@ -580,7 +580,7 @@ function useAppChatPageController() {
         languageMixLevel: chat.languageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL,
       });
     } catch (err) {
-      dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : 'Failed to load chat' } });
+      dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : (t('app.learn.chat.error.loadChat') || 'Failed to load chat') } });
     } finally {
       dispatch({ type: 'patch', payload: { loadingChat: false } });
     }
@@ -611,7 +611,7 @@ function useAppChatPageController() {
         languageMixLevel: createdLanguageMixLevel || DEFAULT_LANGUAGE_MIX_LEVEL,
       });
     } catch (err) {
-      dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : 'Failed to create chat' } });
+      dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : (t('app.learn.chat.error.createChat') || 'Failed to create chat') } });
     } finally {
       dispatch({ type: 'patch', payload: { loadingChat: false } });
     }
@@ -641,7 +641,7 @@ function useAppChatPageController() {
         }
       } catch (err) {
         if (!isActive) return;
-        dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : 'Failed to load sessions' } });
+        dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : (t('app.learn.chat.error.loadSessions') || 'Failed to load sessions') } });
       } finally {
         if (isActive) dispatch({ type: 'patch', payload: { loadingSessions: false } });
       }
@@ -711,7 +711,7 @@ function useAppChatPageController() {
       dispatch({ type: 'patch', payload: { isConnecting: true } });
       await connect({ chatId: currentChatId, speakingSpeed });
     } catch (err) {
-      dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : 'Failed to start realtime session' } });
+      dispatch({ type: 'patch', payload: { error: err instanceof Error ? err.message : (t('app.learn.chat.error.startRealtime') || 'Failed to start realtime session') } });
     } finally {
       dispatch({ type: 'patch', payload: { isConnecting: false } });
     }
@@ -735,7 +735,7 @@ function useAppChatPageController() {
       type: 'patch',
       payload: {
         languageMixLevel: nextLanguageMixLevel,
-        languageMixNotice: isConnected ? 'Reconnect voice to apply this language mix.' : null,
+        languageMixNotice: isConnected ? (t('app.learn.chat.languageMixReconnect') || 'Reconnect voice to apply this language mix.') : null,
       },
     });
 
@@ -754,7 +754,7 @@ function useAppChatPageController() {
         payload: {
           languageMixLevel: previousLanguageMixLevel,
           languageMixNotice: null,
-          error: err instanceof Error ? err.message : 'Failed to update language mix',
+          error: err instanceof Error ? err.message : (t('app.learn.chat.error.updateLanguageMix') || 'Failed to update language mix'),
         },
       });
     }
@@ -839,7 +839,7 @@ function useAppChatPageController() {
     } catch (err) {
       dispatch({
         type: 'patch',
-        payload: { error: err instanceof Error ? err.message : 'Failed to send message' },
+        payload: { error: err instanceof Error ? err.message : (t('app.learn.chat.error.sendMessage') || 'Failed to send message') },
       });
       dispatch({ type: 'resetTextAvatar' });
     } finally {
@@ -871,7 +871,7 @@ function useAppChatPageController() {
       }
     } catch (err) {
       console.error('Failed to delete chat:', err);
-      dispatch({ type: 'patch', payload: { error: 'Failed to delete chat' } });
+      dispatch({ type: 'patch', payload: { error: (t('app.learn.chat.error.deleteChat') || 'Failed to delete chat') } });
     } finally {
       isDeletingChatRef.current = false;
     }
@@ -1071,8 +1071,8 @@ function DesktopSessionsPanel({ controller }: { controller: AppChatPageControlle
         <button
           type="button"
           onClick={handleToggleSidebarExpanded}
-          aria-label={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-          title={isSidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          aria-label={isSidebarExpanded ? (t('app.learn.sessions.collapse') || 'Collapse sidebar') : (t('app.learn.sessions.expand') || 'Expand sidebar')}
+          title={isSidebarExpanded ? (t('app.learn.sessions.collapse') || 'Collapse sidebar') : (t('app.learn.sessions.expand') || 'Expand sidebar')}
           className="inline-flex size-10 items-center justify-center rounded-xl border-2 border-border bg-card text-foreground transition-colors hover:bg-secondary"
         >
           {isSidebarExpanded ? <ChevronLeft size={18} strokeWidth={2.5} /> : <ChevronRight size={18} strokeWidth={2.5} />}
@@ -1162,7 +1162,7 @@ function ChatAvatarPane({ controller }: { controller: AppChatPageController }) {
                 <span className="text-3xl">🧑‍🏫</span>
               </div>
               <p className="text-sm font-bold">{t('app.learn.chat.title')}</p>
-              <p className="mt-1 text-xs">Loading avatar…</p>
+              <p className="mt-1 text-xs">{t('app.learn.chat.avatarLoading') || 'Loading avatar…'}</p>
             </div>
           </div>
         }
@@ -1292,7 +1292,7 @@ function ChatHeader({ controller }: { controller: AppChatPageController }) {
           <Menu size={14} strokeWidth={2.5} />
         </button>
         {CHAT_AVATAR_AVAILABLE ? (
-          <button type="button" onClick={() => updateAvatarEnabled(!isAvatarEnabled)} aria-label={isAvatarEnabled ? 'Hide avatar' : 'Show avatar'} title={isAvatarEnabled ? 'Hide avatar' : 'Show avatar'} className={clsx('hidden size-8 items-center justify-center rounded-xl border-2 transition-colors lg:inline-flex', isAvatarEnabled ? 'border-primary bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:border-border hover:bg-secondary hover:text-foreground')}>
+          <button type="button" onClick={() => updateAvatarEnabled(!isAvatarEnabled)} aria-label={isAvatarEnabled ? (t('app.learn.chat.hideAvatar') || 'Hide avatar') : (t('app.learn.chat.showAvatar') || 'Show avatar')} title={isAvatarEnabled ? (t('app.learn.chat.hideAvatar') || 'Hide avatar') : (t('app.learn.chat.showAvatar') || 'Show avatar')} className={clsx('hidden size-8 items-center justify-center rounded-xl border-2 transition-colors lg:inline-flex', isAvatarEnabled ? 'border-primary bg-primary/10 text-primary' : 'border-transparent text-muted-foreground hover:border-border hover:bg-secondary hover:text-foreground')}>
             <MonitorPlay size={16} strokeWidth={2.5} />
           </button>
         ) : null}
@@ -1335,6 +1335,7 @@ function ChatMessagesPane({ controller }: { controller: AppChatPageController })
 }
 
 function ChatMessageBubble({ message, userAvatar }: { message: ChatMessage; userAvatar: string | null }) {
+  const { t } = useLanguage();
   const isUser = message.role === 'user';
 
   return (
@@ -1344,13 +1345,13 @@ function ChatMessageBubble({ message, userAvatar }: { message: ChatMessage; user
       className={clsx('flex gap-3', isUser ? 'flex-row-reverse' : 'flex-row')}
     >
       {isUser && !userAvatar ? (
-        <div aria-label="You" className="flex size-10 shrink-0 items-center justify-center rounded-xl border-2 border-foreground bg-secondary text-muted-foreground">
+        <div aria-label={t('app.learn.chat.userLabel') || 'You'} className="flex size-10 shrink-0 items-center justify-center rounded-xl border-2 border-foreground bg-secondary text-muted-foreground">
           <CircleUserRound className="size-6" strokeWidth={1.75} />
         </div>
       ) : (
         <img
           src={isUser ? (userAvatar as string) : AI_AVATAR}
-          alt={isUser ? 'You' : 'Lingual AI'}
+          alt={isUser ? (t('app.learn.chat.userLabel') || 'You') : (t('app.learn.chat.aiName') || 'Lingual AI')}
           className="size-10 shrink-0 rounded-xl border-2 border-foreground bg-card object-cover object-center"
         />
       )}

@@ -697,7 +697,7 @@ function CurriculumGameCards({
           </h2>
           <p className="text-sm text-muted-foreground">
             {selectedScenario
-              ? `For ${selectedScenario.title}`
+              ? (t('app.games.forScenario') || 'For {title}').replace('{title}', selectedScenario.title)
               : (t('app.games.noScenario') || 'No scenarios for this objective yet')}
           </p>
         </div>

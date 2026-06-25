@@ -91,7 +91,14 @@ async function main() {
 
   const page = await context.newPage();
 
-  // speak(): TTS -> base64 -> play into the live mic track; wait for playback + gap.
+  // speak(): TTS -> base64 -> play into the live mic track; commit the turn; gap.
+  // The commit is essential: semantic_vad does not declare speech_stopped on our
+  // synthetic trailing silence (a real mic has ambient noise; ours is digital
+  // silence), so the turn never closes on its own and the tutor never responds.
+  // Committing ourselves replicates what the server VAD does for a real student;
+  // the app's transcription.completed handler + shouldRespondToRealtimeTurn gate
+  // then run on the real path. Verified live: injected "Quiero un café con leche"
+  // transcribed correctly and the tutor replied contextually.
   async function speak(text) {
     const wav = await tts(text, ttsOpts);
     const b64 = wav.toString('base64');
@@ -99,6 +106,8 @@ async function main() {
       (encoded) => window.__voiceHarness.speak(encoded),
       b64,
     );
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.__voiceHarness.commitInput());
     await page.waitForTimeout(GAP_MS);
     return dur;
   }

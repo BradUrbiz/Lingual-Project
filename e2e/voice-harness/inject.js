@@ -37,6 +37,37 @@ export function voiceHarnessInit() {
     window.RTCPeerConnection = Wrapped;
   }
 
+  // Sniff the realtime event data channel (both directions) so we can see exactly
+  // what the server sends back for our injected audio: speech_started?
+  // transcription.completed? transcription.failed? error? Nothing at all?
+  if (RTC && RTC.prototype && RTC.prototype.createDataChannel && !RTC.prototype.createDataChannel.__vhWrapped) {
+    const origCDC = RTC.prototype.createDataChannel;
+    const wrappedCDC = function (...a) {
+      const dc = origCDC.apply(this, a);
+      const rec = (dir, raw) => {
+        try {
+          const evt = JSON.parse(raw);
+          const entry = { dir, t: evt.type };
+          if (typeof evt.transcript === 'string') entry.transcript = evt.transcript;
+          if (evt.error && evt.error.message) entry.error = evt.error.message;
+          (window.__vhEvents = window.__vhEvents || []).push(entry);
+        } catch (_e) {
+          /* non-JSON frame */
+        }
+      };
+      dc.addEventListener('message', (ev) => rec('in', ev.data));
+      const origSend = dc.send.bind(dc);
+      dc.send = (data) => {
+        rec('out', data);
+        return origSend(data);
+      };
+      window.__vhDataChannel = dc; // for manual turn-commit (see commitInput)
+      return dc;
+    };
+    wrappedCDC.__vhWrapped = true;
+    RTC.prototype.createDataChannel = wrappedCDC;
+  }
+
   let ac = null;
   let dest = null;
 
@@ -116,6 +147,20 @@ export function voiceHarnessInit() {
     /** Is the synthetic mic currently wired up? */
     isReady() {
       return !!dest;
+    },
+
+    /**
+     * Force end-of-turn by committing the input buffer ourselves. semantic_vad
+     * does not reliably declare speech_stopped on our synthetic trailing silence,
+     * so the turn never closes on its own. Committing replicates what the server
+     * VAD does for a real student; the app's transcription.completed handler + its
+     * shouldRespondToRealtimeTurn gate then run on the real path.
+     */
+    commitInput() {
+      const dc = window.__vhDataChannel;
+      if (!dc || dc.readyState !== 'open') return false;
+      dc.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+      return true;
     },
 
     /** Aggregate outbound audio stats across captured peer connections. */

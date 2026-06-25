@@ -71,14 +71,30 @@ node harness.js --turns=turns.example.txt --engine=say   # free/offline
 Test beds (from project notes): Korean Test Class (join `PMDS35`); Spanish
 "Voice test - cafe scaffolded". Student: `teststudent@testing.com` / `lingual123`.
 
+## Turn-commit: why `commitInput()` exists
+
+Verified live against prod (Spanish café bed): the session uses `semantic_vad`
+with `create_response: false` (`backend/routes/chat.py:371`). With our synthetic
+mic, the server fires `input_audio_buffer.speech_started` and streams
+`conversation.item.input_audio_transcription.delta` — but **never fires
+`speech_stopped`**, so the turn never commits, `transcription.completed` never
+fires, the app's `shouldRespondToRealtimeTurn` gate never runs, and the tutor
+stays silent. A real mic emits ambient noise that lets semantic_vad detect the
+pause; our trailing silence is digital-clean, so it doesn't.
+
+`speak()` fixes this by sending `input_audio_buffer.commit` itself after each
+utterance (`inject.js` → `window.__voiceHarness.commitInput()`, via the sniffed
+realtime data channel). That closes the turn the way the server VAD would for a
+real student; everything downstream (transcription, the response gate,
+`response.create`) runs on the real app path. Proven: injected
+"Quiero un café con leche, por favor." transcribed correctly and the tutor
+replied "Claro, ¿algo más que te gustaría? Quizá una galleta…".
+
 ## Honest limits
 
 - **Exploratory, not deterministic CI.** The tutor's wording varies, so you can't
   assert exact responses. Pedagogy *correctness* still belongs to the text path +
   backend unit tests; this harness proves audio→transcription→response *works* and
   lets you observe behavior.
-- **VAD turn-taking is the real flakiness source**, not injection. Synthetic
-  silence between utterances helps, but barge-in/overlap timing is imperfect —
-  inherent to testing a live realtime model.
 - **Each live run spends** a Realtime session (per-minute) + TTS calls. Fine for
   manual QA; not for high-volume CI.

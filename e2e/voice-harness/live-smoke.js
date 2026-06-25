@@ -162,8 +162,22 @@ async function main() {
     }
     const dur = await playing;
     console.log(`[voice] injected ${dur.toFixed(2)}s; peak outbound audioLevel=${peakLevel.toFixed(4)} — waiting for tutor…`);
-    await page.waitForTimeout(12000); // let VAD close the turn + tutor respond
+
+    // Commit by default — semantic_vad doesn't close the turn on synthetic silence.
+    // Pass --no-commit to reproduce the stalled-turn bug.
+    if (!args['no-commit']) {
+      await page.waitForTimeout(800);
+      const committed = await page.evaluate(() => window.__voiceHarness.commitInput());
+      console.log(`[voice] manual input_audio_buffer.commit sent: ${committed}`);
+    }
+
+    await page.waitForTimeout(12000); // let transcription.completed + tutor respond
     await shot(page, 'response');
+
+    // Exactly what the realtime server sent back for our injected audio.
+    const events = await page.evaluate(() => window.__vhEvents || []);
+    console.log('=== realtime data-channel events ===');
+    console.log(JSON.stringify(events, null, 1));
 
     // Isolate exactly what this turn added (selector-free): new lines only.
     const after = await page.evaluate(() => document.body.innerText);

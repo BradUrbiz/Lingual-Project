@@ -238,20 +238,18 @@ describe('TeacherAssignmentAnalyticsPage', () => {
     });
 
     expect(await screen.findByText('Family Interview')).toBeInTheDocument();
-    expect(screen.getByText('Objective alignment')).toBeInTheDocument();
+    expect(screen.getByText('teacher.assignmentAnalytics.objectiveAlignment.title')).toBeInTheDocument();
     expect(screen.getByText('Speaking Rubric')).toBeInTheDocument();
     expect(screen.getByText('ask_follow_up')).toBeInTheDocument();
-    expect(
-      screen.getByText('Passé composé auxiliary followed by infinitive: 2 · students 1')
-    ).toBeInTheDocument();
-    expect(screen.getByText('Recent attempts')).toBeInTheDocument();
+    expect(screen.getByText(/Passé composé auxiliary followed by infinitive: 2/)).toBeInTheDocument();
+    expect(screen.getByText('teacher.assignmentAnalytics.recentAttempts.title')).toBeInTheDocument();
     expect(screen.getByText('clarity: 3.25')).toBeInTheDocument();
-    expect(screen.getByText(/Estimated rubric score 3\.25/i)).toBeInTheDocument();
-    expect(screen.getAllByText('meeting threshold').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Threshold 3').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('medium confidence').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Evidence: ask_follow_up x4/i)).toBeInTheDocument();
-    expect(screen.getByText(/Concerns: fr\.past_auxiliary_infinitive x2/i)).toBeInTheDocument();
+    expect(screen.getByText(/teacher\.assignmentAnalytics\.objectiveAlignment\.estimatedScore/)).toBeInTheDocument();
+    expect(screen.getAllByText('teacher.assignmentAnalytics.meetingThreshold').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('teacher.assignmentAnalytics.threshold').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('teacher.assignmentAnalytics.confidence').length).toBeGreaterThan(0);
+    expect(screen.getByText('teacher.assignmentAnalytics.evidence')).toBeInTheDocument();
+    expect(screen.getByText('teacher.assignmentAnalytics.concerns')).toBeInTheDocument();
     expect(
       screen.getByText(
         'Communicative-function, discourse-move, repeated-error, and feedback signals are still heuristic detections, although they now use locale-aware pattern libraries.'

@@ -13,6 +13,13 @@ vi.mock('@/api/teacher', () => ({
   updateStudentCompliance: (...args: unknown[]) => updateStudentComplianceMock(...args),
 }));
 
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({
+    lang: 'en',
+    t: (key: string) => key,
+  }),
+}));
+
 const MOCK_SESSION: PracticeSessionDto = {
   id: 'session-abc',
   orgId: 'org-1',
@@ -132,9 +139,9 @@ describe('TeacherStudentDrillDownPage', () => {
     expect(screen.queryByText('Guardian packet')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Guardian consent')).not.toBeInTheDocument();
 
-    const voiceSelect = screen.getByLabelText('Voice consent');
+    const voiceSelect = screen.getByLabelText('teacher.studentDrillDown.consentModality.voiceConsentLabel');
     fireEvent.change(voiceSelect, { target: { value: 'granted' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save consent state' }));
+    fireEvent.click(screen.getByRole('button', { name: 'teacher.studentDrillDown.consentModality.save' }));
 
     await waitFor(() => {
       expect(updateStudentComplianceMock).toHaveBeenCalledWith('class-1', 'student-1', expect.objectContaining({
@@ -163,7 +170,7 @@ describe('TeacherStudentDrillDownPage', () => {
 
     await screen.findByText('Student One');
 
-    const debriefLink = screen.getByRole('link', { name: 'View debrief' });
+    const debriefLink = screen.getByRole('link', { name: 'teacher.studentDrillDown.recentSessions.viewDebrief' });
     expect(debriefLink).toBeInTheDocument();
     expect(debriefLink).toHaveAttribute('href', expect.stringContaining('practice-sessions/session-abc/debrief'));
   });
@@ -188,7 +195,7 @@ describe('TeacherStudentDrillDownPage', () => {
 
     await screen.findByText('Student One');
 
-    expect(screen.queryByRole('link', { name: 'View debrief' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'teacher.studentDrillDown.recentSessions.viewDebrief' })).not.toBeInTheDocument();
   });
 
   it('does not show "View debrief" links when debriefEnabled is absent', async () => {
@@ -210,6 +217,6 @@ describe('TeacherStudentDrillDownPage', () => {
 
     await screen.findByText('Student One');
 
-    expect(screen.queryByRole('link', { name: 'View debrief' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'teacher.studentDrillDown.recentSessions.viewDebrief' })).not.toBeInTheDocument();
   });
 });

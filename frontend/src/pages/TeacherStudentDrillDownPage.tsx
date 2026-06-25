@@ -19,6 +19,7 @@ import {
   updateStudentCompliance,
 } from '@/api/teacher';
 import { Alert, AlertDescription, Badge, Button, Card } from '@/components/ui';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { formatSpeakingMinutes } from '@/lib/utils';
 import type {
   ConsentStatus,
@@ -165,6 +166,7 @@ function AssignmentBreakdownCard({
   assignments: StudentDrillDownData['assignments'];
   onOpenAssignment: (assignmentId: string) => void;
 }) {
+  const { t } = useLanguage();
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
       <div className="flex items-center gap-3">
@@ -172,15 +174,15 @@ function AssignmentBreakdownCard({
           <ClipboardList size={22} strokeWidth={2.5} />
         </div>
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">Assignment breakdown</h2>
-          <p className="text-sm text-muted-foreground">Practice activity per assignment</p>
+          <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.studentDrillDown.assignmentBreakdown.title')}</h2>
+          <p className="text-sm text-muted-foreground">{t('teacher.studentDrillDown.assignmentBreakdown.subtitle')}</p>
         </div>
       </div>
 
       <div className="mt-6 space-y-3">
         {assignments.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
-            No assignment sessions recorded for this student yet.
+            {t('teacher.studentDrillDown.assignmentBreakdown.empty')}
           </div>
         ) : (
           assignments.map((assignment) => (
@@ -197,10 +199,10 @@ function AssignmentBreakdownCard({
                 </Badge>
               </div>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                <span>{assignment.sessionCount} sessions</span>
-                <span>{formatSpeakingMinutes(assignment.estimatedSpeakingTimeSeconds)} min</span>
-                <span>{assignment.totalStudentTurns} turns</span>
-                <span>{assignment.selfCorrectionCount} self-corrections</span>
+                <span>{t('teacher.studentDrillDown.assignmentBreakdown.sessions').replace('{n}', String(assignment.sessionCount))}</span>
+                <span>{t('teacher.studentDrillDown.assignmentBreakdown.min').replace('{n}', String(formatSpeakingMinutes(assignment.estimatedSpeakingTimeSeconds)))}</span>
+                <span>{t('teacher.studentDrillDown.assignmentBreakdown.turns').replace('{n}', String(assignment.totalStudentTurns))}</span>
+                <span>{t('teacher.studentDrillDown.assignmentBreakdown.selfCorrections').replace('{n}', String(assignment.selfCorrectionCount))}</span>
               </div>
 
               {assignment.targetExpressionTotalHits > 0 && (
@@ -223,7 +225,7 @@ function AssignmentBreakdownCard({
                   ))}
                   {typeof assignment.rubricAverageScore === 'number' && (
                     <Badge variant="accent" size="sm">
-                      avg {assignment.rubricAverageScore.toFixed(2)}
+                      {t('teacher.studentDrillDown.assignmentBreakdown.avg').replace('{n}', assignment.rubricAverageScore.toFixed(2))}
                     </Badge>
                   )}
                 </div>
@@ -253,6 +255,7 @@ function ConsentModalityCard({
   onDraftChange,
   onSave,
 }: ConsentModalityCardProps) {
+  const { t } = useLanguage();
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
       <div className="flex items-center gap-3">
@@ -260,8 +263,8 @@ function ConsentModalityCard({
           <CheckCircle2 size={22} strokeWidth={2.5} />
         </div>
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">Consent and modality</h2>
-          <p className="text-sm text-muted-foreground">Voice launch eligibility for this student.</p>
+          <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.studentDrillDown.consentModality.title')}</h2>
+          <p className="text-sm text-muted-foreground">{t('teacher.studentDrillDown.consentModality.subtitle')}</p>
         </div>
       </div>
 
@@ -269,10 +272,10 @@ function ConsentModalityCard({
         <div className="mt-6 space-y-4">
           <div className="flex flex-wrap gap-2">
             <Badge variant={compliance.voiceAllowed ? 'success' : 'outline'} size="sm">
-              Voice {compliance.voiceAllowed ? 'allowed' : 'blocked'}
+              {compliance.voiceAllowed ? t('teacher.studentDrillDown.consentModality.voiceAllowed') : t('teacher.studentDrillDown.consentModality.voiceBlocked')}
             </Badge>
             <Badge variant={compliance.textAllowed ? 'accent' : 'outline'} size="sm">
-              Text {compliance.textAllowed ? 'allowed' : 'blocked'}
+              {compliance.textAllowed ? t('teacher.studentDrillDown.consentModality.textAllowed') : t('teacher.studentDrillDown.consentModality.textBlocked')}
             </Badge>
             <Badge variant="secondary" size="sm">
               {compliance.retentionPolicy.label}
@@ -281,7 +284,7 @@ function ConsentModalityCard({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-2 text-sm font-medium text-foreground">
-              <span>Voice consent</span>
+              <span>{t('teacher.studentDrillDown.consentModality.voiceConsentLabel')}</span>
               <select
                 value={complianceDraft.voiceConsentStatus}
                 onChange={(event) => onDraftChange({ voiceConsentStatus: event.target.value as ConsentStatus })}
@@ -290,20 +293,20 @@ function ConsentModalityCard({
                 {CONSENT_OPTIONS.flatMap((option) => (
                   option.value === 'not_required'
                     ? []
-                    : [<option key={option.value} value={option.value}>{option.label}</option>]
+                    : [<option key={option.value} value={option.value}>{t(`teacher.studentDrillDown.consent.${option.value}`)}</option>]
                 ))}
               </select>
             </label>
 
             <label className="space-y-2 text-sm font-medium text-foreground">
-              <span>Retention policy</span>
+              <span>{t('teacher.studentDrillDown.consentModality.retentionPolicyLabel')}</span>
               <select
                 value={complianceDraft.retentionPolicyId}
                 onChange={(event) => onDraftChange({ retentionPolicyId: event.target.value })}
                 className="w-full rounded-2xl border-2 border-border bg-background px-4 py-3 text-sm text-foreground focus:border-foreground focus:outline-none"
               >
                 {RETENTION_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                  <option key={option.value} value={option.value}>{t(`teacher.studentDrillDown.retention.${option.value}`)}</option>
                 ))}
               </select>
             </label>
@@ -316,21 +319,21 @@ function ConsentModalityCard({
               onChange={(event) => onDraftChange({ textAllowed: event.target.checked })}
               className="size-4 rounded border-border"
             />
-            Text launch allowed for this student
+            {t('teacher.studentDrillDown.consentModality.textLaunchAllowed')}
           </label>
 
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={onSave} loading={isSavingCompliance}>
-              Save consent state
+              {t('teacher.studentDrillDown.consentModality.save')}
             </Button>
             <p className="text-sm text-muted-foreground">
-              Last verified: {compliance.lastVerifiedAt || 'not recorded'}
+              {t('teacher.studentDrillDown.consentModality.lastVerified').replace('{date}', compliance.lastVerifiedAt || t('teacher.studentDrillDown.consentModality.notRecorded'))}
             </p>
           </div>
         </div>
       ) : (
         <div className="mt-6 rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
-          Consent state is unavailable for this student.
+          {t('teacher.studentDrillDown.consentModality.unavailable')}
         </div>
       )}
 
@@ -344,6 +347,7 @@ function ConsentModalityCard({
 }
 
 function RepeatedErrorsCard({ repeatedErrors }: { repeatedErrors: StudentDrillDownData['repeatedErrors'] }) {
+  const { t } = useLanguage();
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
       <div className="flex items-center gap-3">
@@ -351,15 +355,15 @@ function RepeatedErrorsCard({ repeatedErrors }: { repeatedErrors: StudentDrillDo
           <AlertTriangle size={22} strokeWidth={2.5} />
         </div>
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">Repeated errors</h2>
-          <p className="text-sm text-muted-foreground">Error patterns across all assignments</p>
+          <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.sessionDebrief.repeatedErrors.title')}</h2>
+          <p className="text-sm text-muted-foreground">{t('teacher.studentDrillDown.repeatedErrors.subtitle')}</p>
         </div>
       </div>
 
       <div className="mt-6 space-y-3">
         {repeatedErrors.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
-            No repeated error patterns detected yet.
+            {t('teacher.studentDrillDown.repeatedErrors.empty')}
           </div>
         ) : (
           repeatedErrors.map((err) => (
@@ -367,11 +371,11 @@ function RepeatedErrorsCard({ repeatedErrors }: { repeatedErrors: StudentDrillDo
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-semibold text-foreground">{err.label}</p>
                 <Badge variant="outline" size="sm">{err.category}</Badge>
-                <Badge variant="secondary" size="sm">count {err.count}</Badge>
+                <Badge variant="secondary" size="sm">{t('teacher.studentDrillDown.repeatedErrors.count').replace('{n}', String(err.count))}</Badge>
               </div>
               {err.rubricDimensionIds.length > 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Rubric: {err.rubricDimensionIds.join(', ')}
+                  {t('teacher.studentDrillDown.repeatedErrors.rubric').replace('{ids}', err.rubricDimensionIds.join(', '))}
                 </p>
               )}
             </div>
@@ -389,36 +393,39 @@ function RecentSessionsCard({
   recentSessions: StudentDrillDownData['recentSessions'];
   debriefEnabled?: boolean;
 }) {
+  const { t } = useLanguage();
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
-      <h2 className="text-xl font-display font-bold text-foreground">Recent sessions</h2>
+      <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.studentDrillDown.recentSessions.title')}</h2>
       <div className="mt-5 space-y-3">
         {recentSessions.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
-            No practice sessions recorded yet.
+            {t('teacher.studentDrillDown.recentSessions.empty')}
           </div>
         ) : (
           recentSessions.map((session) => (
             <div key={session.id} className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" size="sm">{session.status}</Badge>
-                <Badge variant="secondary" size="sm">Turns {session.sessionSummary.studentTurnCount}</Badge>
+                <Badge variant="secondary" size="sm">{t('teacher.studentDrillDown.recentSessions.turns').replace('{n}', String(session.sessionSummary.studentTurnCount))}</Badge>
                 {debriefEnabled ? (
                   <Link
                     to={`/app/teacher/practice-sessions/${session.id}/debrief`}
                     className="ml-auto text-sm font-medium text-primary underline-offset-4 hover:underline"
                   >
-                    View debrief
+                    {t('teacher.studentDrillDown.recentSessions.viewDebrief')}
                   </Link>
                 ) : null}
               </div>
               <p className="mt-3 text-sm text-foreground">
-                Speaking {session.sessionSummary.estimatedSpeakingTimeSeconds}s · Self-corrections{' '}
-                {session.sessionSummary.selfCorrectionCount} · Task completions {session.sessionSummary.taskCompletionCount}
+                {t('teacher.studentDrillDown.recentSessions.summary')
+                  .replace('{speakingS}', String(session.sessionSummary.estimatedSpeakingTimeSeconds))
+                  .replace('{selfCorrections}', String(session.sessionSummary.selfCorrectionCount))
+                  .replace('{taskCompletions}', String(session.sessionSummary.taskCompletionCount))}
               </p>
               {session.sessionSummary.endedReason ? (
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Ended: {session.sessionSummary.endedReason}
+                  {t('teacher.studentDrillDown.recentSessions.ended').replace('{reason}', session.sessionSummary.endedReason)}
                 </p>
               ) : null}
             </div>
@@ -433,6 +440,7 @@ export function TeacherStudentDrillDownPage() {
   const { classId, studentUid } = useParams<{ classId: string; studentUid: string }>();
   const navigate = useNavigate();
   const [state, dispatch] = useReducer(studentDrillDownReducer, initialStudentDrillDownState);
+  const { t } = useLanguage();
   const {
     loading,
     error,
@@ -501,25 +509,25 @@ export function TeacherStudentDrillDownPage() {
     return (
       <div className="space-y-4">
         <Alert variant="destructive">
-          <AlertDescription>{error || 'Student analytics are unavailable.'}</AlertDescription>
+          <AlertDescription>{error || t('teacher.studentDrillDown.unavailable')}</AlertDescription>
         </Alert>
         <Button
           variant="outline"
           onClick={() => navigate(classId ? `/app/teacher/classes/${classId}/analytics` : '/app/teacher')}
         >
-          Back to class
+          {t('teacher.studentDrillDown.backToClass')}
         </Button>
       </div>
     );
   }
 
   const stats = [
-    { label: 'Sessions', value: analytics.summary.sessionCount, icon: BarChart3, accent: 'bg-primary/10 text-primary' },
-    { label: 'Student turns', value: analytics.summary.totalStudentTurns, icon: Users, accent: 'bg-success/15 text-success' },
-    { label: 'Speaking minutes', value: formatSpeakingMinutes(analytics.summary.estimatedSpeakingTimeSeconds), icon: MessageSquareText, accent: 'bg-accent/20 text-accent-foreground' },
-    { label: 'Words / turn', value: analytics.summary.averageStudentWordsPerTurn > 0 ? analytics.summary.averageStudentWordsPerTurn.toFixed(1) : '0', icon: Target, accent: 'bg-secondary text-foreground' },
-    { label: 'Self-corrections', value: analytics.summary.selfCorrectionCount, icon: CheckCircle2, accent: 'bg-primary/5 text-foreground' },
-    { label: 'Repeated errors', value: analytics.summary.repeatedErrorCount, icon: AlertTriangle, accent: 'bg-destructive/10 text-destructive' },
+    { label: t('teacher.debrief.participation.sessions'), value: analytics.summary.sessionCount, icon: BarChart3, accent: 'bg-primary/10 text-primary' },
+    { label: t('teacher.studentDrillDown.stat.studentTurns'), value: analytics.summary.totalStudentTurns, icon: Users, accent: 'bg-success/15 text-success' },
+    { label: t('teacher.dashboard.stat.speakingMinutes'), value: formatSpeakingMinutes(analytics.summary.estimatedSpeakingTimeSeconds), icon: MessageSquareText, accent: 'bg-accent/20 text-accent-foreground' },
+    { label: t('teacher.studentDrillDown.stat.wordsPerTurn'), value: analytics.summary.averageStudentWordsPerTurn > 0 ? analytics.summary.averageStudentWordsPerTurn.toFixed(1) : '0', icon: Target, accent: 'bg-secondary text-foreground' },
+    { label: t('teacher.studentDrillDown.stat.selfCorrections'), value: analytics.summary.selfCorrectionCount, icon: CheckCircle2, accent: 'bg-primary/5 text-foreground' },
+    { label: t('teacher.sessionDebrief.repeatedErrors.title'), value: analytics.summary.repeatedErrorCount, icon: AlertTriangle, accent: 'bg-destructive/10 text-destructive' },
   ];
 
   return (
@@ -532,11 +540,11 @@ export function TeacherStudentDrillDownPage() {
           onClick={() => navigate(`/app/teacher/classes/${classId}/analytics`)}
         >
           <ArrowLeft size={16} className="mr-2" />
-          Back to class
+          {t('teacher.studentDrillDown.backToClass')}
         </Button>
         <h1 className="text-3xl font-display font-bold text-foreground">{analytics.student.displayName}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {analytics.class.name} · {analytics.class.subject || 'Language practice'} · {analytics.class.term || 'Current term'}
+          {analytics.class.name} · {analytics.class.subject || t('teacher.classAnalytics.languagePractice')} · {analytics.class.term || t('teacher.classAnalytics.currentTerm')}
         </p>
       </div>
 

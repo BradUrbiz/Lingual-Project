@@ -26,7 +26,7 @@ def _deps(db):
         get_current_user_uid=lambda: (session.get('user') or {}).get('uid'),
         get_openai_client=lambda: None, get_assessment=lambda: {},
         compute_results=lambda *a, **k: {}, get_proficiency_description=lambda *a, **k: {},
-        login_required=_passthrough, get_user_proficiency_context=lambda: '',
+        login_required=_passthrough, get_user_proficiency_context=lambda **_: '',
         build_system_prompt=lambda _c: '', get_school_request_context=lambda: None,
         set_active_school_membership=lambda *a, **k: None,
         allowed_learning_locales={'es-ES'}, allowed_minigame_types=set(),

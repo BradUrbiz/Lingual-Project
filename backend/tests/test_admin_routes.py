@@ -389,7 +389,7 @@ class TestAdminRoutes(unittest.TestCase):
             compute_results=lambda *_a, **_kw: {},
             get_proficiency_description=lambda *_a, **_kw: {},
             login_required=passthrough_login_required,
-            get_user_proficiency_context=lambda: '',
+            get_user_proficiency_context=lambda **_: '',
             build_system_prompt=lambda _: '',
             get_school_request_context=get_school_request_context,
             set_active_school_membership=lambda _: None,

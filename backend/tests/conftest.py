@@ -851,7 +851,7 @@ def make_test_deps(
         compute_results=lambda *a, **kw: {},
         get_proficiency_description=lambda *a, **kw: {"level": "Novice Mid", "description": "Test"},
         login_required=passthrough_login_required,
-        get_user_proficiency_context=lambda: "",
+        get_user_proficiency_context=lambda **_: "",
         build_system_prompt=lambda _ctx: "",
             get_school_request_context=get_school_request_context,
         set_active_school_membership=set_active_school_membership,

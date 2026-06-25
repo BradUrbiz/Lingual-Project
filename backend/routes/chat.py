@@ -559,7 +559,8 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     or 'en'
                 )
             else:
-                proficiency_context = deps.get_user_proficiency_context()
+                native_language = resolve_native_language(ui_language)
+                proficiency_context = deps.get_user_proficiency_context(native_language=native_language)
                 profile_context = deps.db.get_user_profile_context(uid) or {}
                 learning_locale = profile_context.get('learning_locale', 'ko-KR')
                 chat_id = payload.get('chatId')
@@ -569,7 +570,6 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     else None
                 )
                 language_mix_level = (chat or {}).get('language_mix_level', 'balanced')
-                native_language = resolve_native_language(ui_language)
                 system_instructions = deps.build_system_prompt(
                     proficiency_context,
                     learning_locale,
@@ -941,11 +941,11 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 )
                 coach_note_allowed = True
             else:
-                proficiency_context = deps.get_user_proficiency_context()
+                native_language = resolve_native_language(ui_language)
+                proficiency_context = deps.get_user_proficiency_context(native_language=native_language)
                 profile_context = deps.db.get_user_profile_context(uid) or {}
                 learning_locale = profile_context.get('learning_locale', 'ko-KR')
                 language_mix_level = chat.get('language_mix_level', 'balanced')
-                native_language = resolve_native_language(ui_language)
                 system_prompt = deps.build_system_prompt(
                     proficiency_context,
                     learning_locale,

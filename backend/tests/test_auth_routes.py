@@ -131,7 +131,7 @@ def _build_app(db=None, firebase_auth=None):
         compute_results=lambda *a, **kw: {},
         get_proficiency_description=lambda *a, **kw: {"level": "Novice Mid", "description": "Test description"},
         login_required=passthrough_login_required,
-        get_user_proficiency_context=lambda: "",
+        get_user_proficiency_context=lambda **_: "",
         build_system_prompt=lambda _ctx: "",
             get_school_request_context=lambda: None,
         set_active_school_membership=lambda _mid: None,

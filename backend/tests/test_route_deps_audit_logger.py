@@ -25,7 +25,7 @@ def _make_minimal_deps(audit_logger: AuditLogger) -> RouteDeps:
         compute_results=lambda *_a, **_kw: {},
         get_proficiency_description=lambda *_a, **_kw: {},
         login_required=lambda fn: fn,
-        get_user_proficiency_context=lambda: '',
+        get_user_proficiency_context=lambda **_: '',
         build_system_prompt=lambda *_a, **_kw: '',
         get_school_request_context=lambda: None,
         set_active_school_membership=lambda _mid: None,

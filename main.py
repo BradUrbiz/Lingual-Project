@@ -208,7 +208,7 @@ def index():
 # API endpoints below handle data operations
 
 
-def get_user_proficiency_context():
+def get_user_proficiency_context(native_language="English"):
     uid = get_current_user_uid()
 
     # Get profile context from database
@@ -231,7 +231,7 @@ def get_user_proficiency_context():
             "Assume ACTFL Intermediate Mid/High: comfortable with everyday "
             "topics, can sustain a conversation in the target language, and "
             "benefits from concise corrective feedback rather than heavy "
-            "English scaffolding."
+            f"{native_language} scaffolding."
         )
 
     global_stage = results.get('global_stage', 0)

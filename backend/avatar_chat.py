@@ -15,6 +15,7 @@ from flask import Flask, jsonify, request, session
 from flask_sock import Sock
 
 from backend.route_deps import RouteDeps
+from backend.services.native_language import resolve_native_language
 
 ALLOWED_AFFECTS = {
     'neutral',
@@ -449,7 +450,8 @@ def resolve_system_instructions(deps: RouteDeps, payload: dict[str, Any]) -> str
     if ui_language not in deps.supported_ui_languages:
         ui_language = 'en'
 
-    proficiency_context = deps.get_user_proficiency_context()
+    native_language = resolve_native_language(ui_language)
+    proficiency_context = deps.get_user_proficiency_context(native_language=native_language)
     uid = deps.get_current_user_uid()
     profile_context = deps.db.get_user_profile_context(uid) or {}
     learning_locale = profile_context.get('learning_locale', 'ko-KR')

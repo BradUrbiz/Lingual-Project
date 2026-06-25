@@ -20,7 +20,7 @@ def _minimal_deps(**overrides):
         compute_results=lambda a, b: {},
         get_proficiency_description=lambda **k: {},
         login_required=lambda f: f,
-        get_user_proficiency_context=lambda: '',
+        get_user_proficiency_context=lambda **_: '',
         build_system_prompt=lambda **k: '',
         get_school_request_context=lambda: None,
         set_active_school_membership=lambda x: None,

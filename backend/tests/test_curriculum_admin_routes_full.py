@@ -377,7 +377,7 @@ class CurriculumAdminRoutesTestCase(unittest.TestCase):
                 'description': 'Test level',
             },
             login_required=passthrough_login_required,
-            get_user_proficiency_context=lambda: '',
+            get_user_proficiency_context=lambda **_: '',
             build_system_prompt=lambda _context: '',
             get_school_request_context=get_school_request_context,
             set_active_school_membership=set_active_school_membership,

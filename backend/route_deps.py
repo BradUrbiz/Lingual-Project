@@ -27,7 +27,7 @@ class RouteDeps:
     compute_results: Callable[[dict, dict], dict]
     get_proficiency_description: Callable[..., Mapping[str, str]]
     login_required: Callable[[Callable[..., Any]], Callable[..., Any]]
-    get_user_proficiency_context: Callable[[], str]
+    get_user_proficiency_context: Callable[..., str]
     build_system_prompt: Callable[..., str]
     get_school_request_context: Callable[[], Any]
     set_active_school_membership: Callable[[str], Any]

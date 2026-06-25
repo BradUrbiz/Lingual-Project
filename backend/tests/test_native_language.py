@@ -1,3 +1,5 @@
+import inspect
+import re
 import unittest
 from unittest import mock
 
@@ -6,6 +8,7 @@ from backend.services.native_language import (
     resolve_native_language,
     native_scaffolding_enabled,
 )
+import backend.services.native_language as _native_language_module
 
 
 class NativeLanguageTestCase(unittest.TestCase):
@@ -31,6 +34,25 @@ class NativeLanguageTestCase(unittest.TestCase):
     def test_flag_on_allows_korean(self):
         self.assertTrue(native_scaffolding_enabled())
         self.assertEqual(resolve_native_language('ko'), 'Korean')
+
+
+class StdlibBoundaryTestCase(unittest.TestCase):
+    """Assert that native_language.py only imports stdlib modules (os)."""
+
+    def test_only_stdlib_imports(self):
+        source = inspect.getsource(_native_language_module)
+        import_lines = [
+            line.strip()
+            for line in source.splitlines()
+            if re.match(r'^\s*(import|from)\s+', line)
+        ]
+        for line in import_lines:
+            # Allow only 'import os' or 'from os ...'
+            self.assertRegex(
+                line,
+                r'^(import os|from os\b)',
+                msg=f"Non-stdlib import found in native_language.py: {line!r}",
+            )
 
 
 if __name__ == '__main__':

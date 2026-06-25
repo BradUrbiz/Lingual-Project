@@ -1,6 +1,8 @@
 # backend/tests/test_native_scaffolding_prompts.py
 import unittest
+from unittest import mock
 
+import main
 from main import build_free_practice_language_mix_policy
 
 
@@ -45,6 +47,23 @@ class BuildSystemPromptNativeTestCase(unittest.TestCase):
         # The gloss line and the ratio line must use the native language.
         self.assertIn('Korean meaning', prompt)
         self.assertIn('not the Korean-vs-target-language ratio', prompt)
+
+
+class ProficiencyContextNativeTestCase(unittest.TestCase):
+    def test_default_contains_english_scaffolding(self):
+        with mock.patch.object(main, 'get_current_user_uid', return_value=None):
+            self.assertIn('English scaffolding', main.get_user_proficiency_context())
+
+    def test_default_byte_identical_to_explicit_english(self):
+        with mock.patch.object(main, 'get_current_user_uid', return_value=None):
+            self.assertEqual(
+                main.get_user_proficiency_context(),
+                main.get_user_proficiency_context(native_language='English'),
+            )
+
+    def test_korean_native_scaffolding(self):
+        with mock.patch.object(main, 'get_current_user_uid', return_value=None):
+            self.assertIn('Korean scaffolding', main.get_user_proficiency_context(native_language='Korean'))
 
 
 if __name__ == '__main__':

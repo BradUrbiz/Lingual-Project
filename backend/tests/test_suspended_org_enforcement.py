@@ -430,7 +430,7 @@ def _make_deps(fake_db):
             'level': 'Intermediate Mid', 'description': 'Test level',
         },
         login_required=_passthrough_login_required,
-        get_user_proficiency_context=lambda: 'Intermediate Mid',
+        get_user_proficiency_context=lambda **_: 'Intermediate Mid',
         build_system_prompt=lambda *_args, **_kwargs: 'free practice prompt',
         get_school_request_context=get_school_request_context,
         set_active_school_membership=lambda _mid: None,

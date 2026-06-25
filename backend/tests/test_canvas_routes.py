@@ -193,7 +193,7 @@ def _make_app(db):
         compute_results=lambda *a, **kw: {},
         get_proficiency_description=lambda *a, **kw: {'level': 'Novice', 'description': 'Test'},
         login_required=passthrough_login_required,
-        get_user_proficiency_context=lambda: '',
+        get_user_proficiency_context=lambda **_: '',
         build_system_prompt=lambda _c: '',
             get_school_request_context=get_school_ctx,
         set_active_school_membership=lambda _mid: None,

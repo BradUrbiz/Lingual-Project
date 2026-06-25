@@ -301,41 +301,41 @@ def normalize_free_practice_language_mix_level(value):
     return 'balanced'
 
 
-def build_free_practice_language_mix_policy(language_name, language_mix_level):
+def build_free_practice_language_mix_policy(language_name, language_mix_level, native_language="English"):
     if language_mix_level == 'english_first':
         return (
-            f'The selected language mix level is english_first. Lead each turn in English and keep the conversation '
-            f'accessible for a novice. Introduce any {language_name} word or short phrase with an immediate English '
-            f'meaning. Accept English replies as valid progress. Invite short {language_name} attempts, but do not '
+            f'The selected language mix level is english_first. Lead each turn in {native_language} and keep the conversation '
+            f'accessible for a novice. Introduce any {language_name} word or short phrase with an immediate {native_language} '
+            f'meaning. Accept {native_language} replies as valid progress. Invite short {language_name} attempts, but do not '
             f'require them to keep the conversation moving. Do not let full {language_name} sentences dominate the '
             f'turn unless the learner explicitly asks for more immersion or is already sustaining {language_name} '
             'comfortably. Never exceed the bounds of the selected language mix level.'
         )
     if language_mix_level == 'english_led':
         return (
-            f'The selected language mix level is english_led. English leads the conversation. Open most turns in '
-            f'English, then model key {language_name} phrases or short sentences with quick English support. Use '
+            f'The selected language mix level is english_led. {native_language} leads the conversation. Open most turns in '
+            f'{native_language}, then model key {language_name} phrases or short sentences with quick {native_language} support. Use '
             f'{language_name} for recasts, repeatable phrases, and scenario moves, but keep the learner safe to reply '
-            f'mostly in English. If the learner increasingly sustains {language_name}, adapt somewhat toward the '
-            f'learner without leaving the English-led range. Never exceed the bounds of the selected language mix '
+            f'mostly in {native_language}. If the learner increasingly sustains {language_name}, adapt somewhat toward the '
+            f'learner without leaving the {native_language}-led range. Never exceed the bounds of the selected language mix '
             'level.'
         )
     if language_mix_level == 'target_led':
         return (
-            f'The selected language mix level is target_led. Start mostly in {language_name} and use brief English '
-            f'only when the learner stalls, asks for help, or repeatedly falls back to English. Adapt somewhat toward '
+            f'The selected language mix level is target_led. Start mostly in {language_name} and use brief {native_language} '
+            f'only when the learner stalls, asks for help, or repeatedly falls back to {native_language}. Adapt somewhat toward '
             f'the learner, but keep the conversation target-language-led. Never exceed the bounds of the selected '
             'language mix level.'
         )
     if language_mix_level == 'target_only':
         return (
             f'The selected language mix level is target_only. Stay in {language_name} for almost every turn. Use '
-            'English only if the learner explicitly asks for translation or help, then return to the target language '
+            f'{native_language} only if the learner explicitly asks for translation or help, then return to the target language '
             'immediately. Do not adapt away from target_only unless the learner explicitly asks for translation/help.'
         )
     return (
-        f'The selected language mix level is balanced. Use both English and {language_name} regularly. Observe '
-        f'whether the learner is using mostly English, mostly {language_name}, or both, and adapt somewhat toward the '
+        f'The selected language mix level is balanced. Use both {native_language} and {language_name} regularly. Observe '
+        f'whether the learner is using mostly {native_language}, mostly {language_name}, or both, and adapt somewhat toward the '
         'learner while keeping the conversation balanced. never exceed the bounds of the selected language mix level.'
     )
 

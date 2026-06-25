@@ -293,7 +293,7 @@ function AnimatedRoutes() {
 }
 
 function App() {
-  // Use /app as base path in production (when built with base: '/app/')
+  // basename is '' in production (Vite base: '/') and '/ko' under the Korean URL prefix
   const existingBase = import.meta.env.BASE_URL.replace(/\/$/, '') || '';
   const { localePrefix, lang } = detectLocale(window.location.pathname, existingBase);
   const basename = `${existingBase}${localePrefix}`;

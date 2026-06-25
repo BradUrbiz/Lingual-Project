@@ -18,4 +18,14 @@ describe('LanguageToggle', () => {
     expect(assign).toHaveBeenCalledWith('/ko/app/teacher');
     expect(localStorage.getItem('lingual.uiLanguage')).toBe('ko');
   });
+
+  it('does not navigate when clicking the already-active language', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { pathname: '/app/teacher', assign } as unknown as Location);
+    render(<LanguageProvider initialLang="en"><LanguageToggle /></LanguageProvider>);
+    await act(async () => {
+      screen.getByText('EN').click();
+    });
+    expect(assign).not.toHaveBeenCalled();
+  });
 });

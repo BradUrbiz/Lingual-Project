@@ -84,18 +84,21 @@ export function WizardStep3Integration({ state, dispatch }: WizardStep3Props) {
         <fieldset>
           <legend className="text-sm font-medium">Does your school use Canvas LMS?</legend>
           <div className="mt-2 flex flex-wrap gap-2">
-            {(['yes', 'no', 'unknown'] as const).map((opt) => (
-              <label key={opt} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                <input
-                  type="radio"
-                  name="usesCanvas"
-                  aria-label={`Uses Canvas: ${opt}`}
-                  checked={usesCanvas === opt}
-                  onChange={() => chooseUsesCanvas(opt)}
-                />
-                <span className="capitalize">{opt}</span>
-              </label>
-            ))}
+            {(['yes', 'no', 'unknown'] as const).map((opt) => {
+              const label = opt === 'yes' ? 'Yes' : opt === 'no' ? 'No' : 'Unknown';
+              return (
+                <label key={opt} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                  <input
+                    type="radio"
+                    name="usesCanvas"
+                    aria-label={`Uses Canvas: ${label}`}
+                    checked={usesCanvas === opt}
+                    onChange={() => chooseUsesCanvas(opt)}
+                  />
+                  <span className="capitalize">{opt}</span>
+                </label>
+              );
+            })}
           </div>
         </fieldset>
 

@@ -91,7 +91,7 @@ export function WizardStep1Organization({ state, dispatch }: WizardStep1Props) {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {SCHOOL_TYPES.map(({ value, label }) => (
             <label key={value} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-              <input type="radio" name="schoolType" value={label}
+              <input type="radio" name="schoolType" value={value}
                      checked={state.schoolType === value}
                      onChange={() => setField(dispatch, 'schoolType', value)} />
               <span>{label}</span>
@@ -104,7 +104,7 @@ export function WizardStep1Organization({ state, dispatch }: WizardStep1Props) {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {PUBLIC_PRIVATE.map(({ value, label }) => (
             <label key={value} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-              <input type="radio" name="publicPrivate" value={label}
+              <input type="radio" name="publicPrivate" value={value}
                      checked={state.publicPrivate === value}
                      onChange={() => setField(dispatch, 'publicPrivate', value)} />
               <span>{label}</span>

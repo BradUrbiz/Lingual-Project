@@ -24,8 +24,8 @@ describe('WizardStep1Organization', () => {
     expect(screen.getByLabelText(/website/i)).toHaveValue('https://ssfs.org');
     expect(screen.getByLabelText(/country/i)).toHaveValue('US');
     expect(screen.getByLabelText(/state/i)).toHaveValue('CA');
-    expect(screen.getByDisplayValue('K-12')).toBeChecked();
-    expect(screen.getByDisplayValue('Private')).toBeChecked();
+    expect(screen.getByDisplayValue('k12')).toBeChecked();
+    expect(screen.getByDisplayValue('private')).toBeChecked();
     expect(screen.getByDisplayValue('50-100')).toBeChecked();
   });
 

@@ -74,8 +74,8 @@ describe('AdminOrgWizardPage', () => {
     fireEvent.change(screen.getByLabelText(/website/i), { target: { value: 'https://sf.org' } });
     fireEvent.change(screen.getByLabelText(/country/i), { target: { value: 'US' } });
     fireEvent.change(screen.getByLabelText(/state/i), { target: { value: 'CA' } });
-    fireEvent.click(screen.getByDisplayValue('K-12'));
-    fireEvent.click(screen.getByDisplayValue('Private'));
+    fireEvent.click(screen.getByDisplayValue('k12'));
+    fireEvent.click(screen.getByDisplayValue('private'));
     fireEvent.click(screen.getByDisplayValue('50-100'));
 
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));

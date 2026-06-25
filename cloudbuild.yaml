@@ -305,10 +305,17 @@ substitutions:
   # teacher-only/no student impact. Rollback instant: --update-env-vars PEDAGOGY_ENGINE_DEBRIEF_ROLLUP=0.
   _PEDAGOGY_ENGINE_DEBRIEF_ROLLUP: '1'
   # S3.2 chip fast gate — fires the chip on L1-fallback (learner shortfall) and a bounded
-  # periodic floor, making turn-1 chips locale-agnostic. Default '0' (not cut over); flip
-  # via --update-env-vars after burn-in. --set-env-vars=REPLACE means this MUST live here
-  # or a redeploy silently drops the flag (env var absent = off, safe but not durable).
-  _PEDAGOGY_ENGINE_CHIP_FAST_GATE: '0'
+  # periodic floor, making turn-1 chips locale-agnostic. CUT OVER 2026-06-25 (rev
+  # lingual-app-00087-ddr): shipped inert at '0' on rev 00086 (image 1ae66ac, alongside
+  # the Korean /ko launch), flipped live via --update-env-vars, then prod runtime-verified
+  # — a fresh es-ES text session whose turn-1 was an English-fallback turn ("Hi, I would
+  # like to know what you have...") produced a persisted coach chip at turn_index 0 (the
+  # FIRST turn), vs the old ~turn-3 lag (the en/fr-only ERROR_RULES meant
+  # metric.error_detected never fired for es/ko, so the chip only surfaced via the tutor-
+  # recast path). Default bumped 0->1 for durability (--set-env-vars=REPLACE, so the
+  # default MUST match the live '1'). Rollback instant: --update-env-vars
+  # PEDAGOGY_ENGINE_CHIP_FAST_GATE=0.
+  _PEDAGOGY_ENGINE_CHIP_FAST_GATE: '1'
 
 # Store images in Artifact Registry
 images:

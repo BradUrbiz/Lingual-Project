@@ -35,7 +35,9 @@ School integration is the top strategic priority. The system has moved past its 
 
 ### Language Support Is Not the Focus
 
-The learning engine is deliberately language-agnostic. Adding a locale is a config change in `main.py` (`ALLOWED_LEARNING_LOCALES` + `LEARNING_LOCALE_PROMPT_CONFIG`), not a product initiative. Currently configured locales: `ko-KR`, `es-ES`, `fr-FR`, `ru-RU`, `he-IL`, `tl-PH`. Most US schools teach Spanish and French, so those get exercised most, but the architecture should never hard-code a single language. Prompt assembly, analytics, and rubrics must stay locale-parametric.
+The learning engine is deliberately language-agnostic. Adding a locale is a config change in `main.py` (`ALLOWED_LEARNING_LOCALES` + `LEARNING_LOCALE_PROMPT_CONFIG`), not a product initiative. Currently configured locales: `ko-KR`, `es-ES`, `fr-FR`, `ru-RU`, `he-IL`, `tl-PH`, `en-US`. Most US schools teach Spanish and French, so those get exercised most, but the architecture should never hard-code a single language. Prompt assembly, analytics, and rubrics must stay locale-parametric.
+
+**Two axes, don't conflate them.** *UI language* (the chrome the user reads) is separate from *learning target* (the language they practice). The **Lingual Korea localization (shipped 2026-06-25)** added a fully-Korean UI at `l1ngual.com/ko/…` (path-prefix routing; the customer surface — student/auth/teacher/admin/integration — is `t()`-wired with parity-gated `en.json`/`ko.json`) whose default learning target is English (`en-US`), with the tutor scaffolding in the learner's native language (`PEDAGOGY_NATIVE_SCAFFOLDING`). Korean copy is machine-drafted pending a native-speaker tone pass and legal-copy counsel review; PIPA/non-Canvas KR-market work is deferred ("L4"). See `frontend/CLAUDE.md` (i18n) and `docs/school-integration/LIMITATIONS.md` (rr–vv).
 
 ### User Roles
 

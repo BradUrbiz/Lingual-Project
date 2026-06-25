@@ -52,6 +52,15 @@ Production build uses `base: '/'` in Vite. `basename` in `App.tsx` is computed d
 - `frontend/src/pages/AdminCompliancePage.tsx`, `AdminDeletionRequestsPage.tsx`, `LingualSchoolRequestsPage.tsx`
 - `frontend/src/hooks/useRealtimeChat.ts`, `useAvatarChatSession.ts`
 
+## Internationalization (i18n)
+
+UI strings render through `useLanguage().t(key)` (`contexts/LanguageContext.tsx`) over `i18n/en.json` (source) + `i18n/ko.json` (Korean), fallback `ko → en → key`. UI language is driven by the `/ko` URL prefix (see Routing) — separate from the *learning target* (`LearningLocaleContext`).
+
+- **Parity is enforced by a test.** `i18n/i18n.parity.test.ts` fails if `en.json`/`ko.json` key sets diverge, or if a statically-referenced `t('literal')` key is missing from `en.json`. Every new key goes in BOTH files. Run it after any string change.
+- **Namespaces** (dotted keys): `auth.*` / `landing.*` (consumer, 해요체), `teacher.*` / `admin.*` / `integrations.*` (professional, 합쇼체/존댓말), `compliance.*` / `guardian.*` (legal — counsel-review pending, see LIMITATIONS (ss)). Reuse an existing exact-English key before adding one.
+- **Adding a string:** wire it to `t('namespace.key')`, add en→ko pair, keep parity green. No hardcoded user-visible English in pages/components. Interpolation uses `t('key').replace('{token}', value)` — don't introduce a second convention.
+- **Scope:** the full customer surface is Korean-capable. `pages/LingualAdmin/*` (internal staff) is intentionally English-only (LIMITATIONS (tt)). Translation dictionaries are not code-split yet (LIMITATIONS (uu)).
+
 ## Conventions
 
 - **Do not edit `static/react/`** — it is the frontend build output (`npm run build` regenerates it).

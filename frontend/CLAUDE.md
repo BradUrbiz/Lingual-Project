@@ -32,7 +32,7 @@ Outermost → innermost, in `App.tsx`:
 - `TeacherRoute` — membership role must be teacher or admin
 - `LingualAdminRoute` — Lingual-side superadmin
 
-Production build uses `base: '/app/'` in Vite, and `basename` in `App.tsx` is derived from `import.meta.env.BASE_URL`.
+Production build uses `base: '/'` in Vite. `basename` in `App.tsx` is computed dynamically from the URL: `detectLocale(window.location.pathname, BASE_URL)` appends `/ko` when the path is locale-prefixed, so `/ko/…` URLs render the Korean UI with no route duplication (React Router prepends `basename` to every link). See `src/lib/localeRouting.ts`.
 
 ## Layout (`frontend/src/`)
 

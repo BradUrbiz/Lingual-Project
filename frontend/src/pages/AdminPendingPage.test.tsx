@@ -25,6 +25,10 @@ vi.mock('@/hooks/useAuth', () => ({
   }),
 }));
 
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({ t: (key: string) => key }),
+}));
+
 function renderPage() {
   return render(<MemoryRouter><AdminPendingPage /></MemoryRouter>);
 }
@@ -47,8 +51,8 @@ describe('AdminPendingPage', () => {
       requesterEmail: 'ada@ssfs.org',
     });
     renderPage();
-    await waitFor(() => expect(screen.getByText(/SF Friends/)).toBeInTheDocument());
-    expect(screen.getByText(/awaiting/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('admin.pending.awaiting.title')).toBeInTheDocument());
+    expect(screen.getByText('admin.pending.awaiting.title')).toBeInTheDocument();
   });
 
   it('does not offer edit while the request is still pending', async () => {
@@ -57,10 +61,10 @@ describe('AdminPendingPage', () => {
       requesterEmail: 'ada@ssfs.org',
     });
     renderPage();
-    await waitFor(() => expect(screen.getByText(/SF Friends/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('admin.pending.awaiting.title')).toBeInTheDocument());
 
     expect(screen.queryByRole('button', { name: /edit request/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/cancel this request before editing/i)).toBeInTheDocument();
+    expect(screen.getByText('admin.pending.awaiting.changeDetails')).toBeInTheDocument();
   });
 
   it('redirects to the wizard when no request exists', async () => {
@@ -115,8 +119,8 @@ describe('AdminPendingPage', () => {
       id: 'r1', status: 'pending', schoolName: 'SF Friends',
     });
     renderPage();
-    await waitFor(() => screen.getByText(/SF Friends/));
-    fireEvent.click(screen.getByRole('button', { name: /cancel request/i }));
+    await waitFor(() => expect(screen.getByText('admin.pending.awaiting.title')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'admin.pending.awaiting.cancelRequest' }));
     await waitFor(() => expect(cancelMineMock).toHaveBeenCalled());
     expect(navigateMock).toHaveBeenCalledWith('/signup/admin/org-wizard', expect.anything());
   });

@@ -5,6 +5,7 @@ import {
   cancelMySchoolRequest,
 } from '@/api/schoolRequests';
 import { useAuth } from '@/hooks/useAuth';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { SCHOOL_ADMIN_HOME_ROUTE } from '@/lib/homeRoutes';
 import type { SchoolRequest } from '@/types/schoolRequest';
 
@@ -13,6 +14,7 @@ const POLL_MS = 30_000;
 export function AdminPendingPage() {
   const navigate = useNavigate();
   const { refreshUser } = useAuth();
+  const { t } = useLanguage();
   const [req, setReq] = useState<SchoolRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
@@ -67,28 +69,28 @@ export function AdminPendingPage() {
   }
 
   if (loading || !req) {
-    return <div className="p-8 text-sm text-muted-foreground">Loading…</div>;
+    return <div className="p-8 text-sm text-muted-foreground">{t('admin.pending.loading')}</div>;
   }
 
   if (req.status === 'rejected') {
     return (
       <div className="mx-auto max-w-xl space-y-4 px-6 py-10">
-        <h1 className="text-2xl font-bold">School registration needs more info</h1>
-        <p>We weren't able to approve <strong>{req.schoolName}</strong> as submitted.</p>
+        <h1 className="text-2xl font-bold">{t('admin.pending.rejected.title')}</h1>
+        <p>{t('admin.pending.rejected.body').replace('{schoolName}', req.schoolName)}</p>
         {req.rejectionReason && (
           <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 text-sm">
-            <div className="font-semibold">Reviewer notes</div>
+            <div className="font-semibold">{t('admin.pending.rejected.reviewerNotes')}</div>
             <div className="mt-1">{req.rejectionReason}</div>
           </div>
         )}
         <div className="flex flex-wrap gap-3">
           <button type="button" onClick={() => navigate('/signup/admin/org-wizard')}
                   className="rounded-md border-2 border-foreground bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
-            Edit and resubmit
+            {t('admin.pending.rejected.editResubmit')}
           </button>
           <a href="mailto:support@l1ngual.com"
              className="rounded-md border px-4 py-2 text-sm">
-            Contact support
+            {t('admin.pending.rejected.contactSupport')}
           </a>
         </div>
       </div>
@@ -98,26 +100,32 @@ export function AdminPendingPage() {
   // Pending UI
   return (
     <div className="mx-auto max-w-xl space-y-5 px-6 py-10">
-      <h1 className="text-2xl font-bold">Awaiting Lingual approval</h1>
-      <p><strong>{req.schoolName}</strong> was submitted{req.createdAt ? ` on ${new Date(req.createdAt).toLocaleDateString()}` : ''}.</p>
+      <h1 className="text-2xl font-bold">{t('admin.pending.awaiting.title')}</h1>
+      <p>
+        {req.createdAt
+          ? t('admin.pending.awaiting.submittedOn')
+              .replace('{schoolName}', req.schoolName)
+              .replace('{date}', new Date(req.createdAt).toLocaleDateString())
+          : t('admin.pending.awaiting.submittedNoDate').replace('{schoolName}', req.schoolName)}
+      </p>
       <p className="text-sm text-muted-foreground">
-        We usually review within 24 hours. We'll email you at <strong>{req.requesterEmail}</strong> when a decision is made.
+        {t('admin.pending.awaiting.reviewNotice').replace('{email}', req.requesterEmail)}
       </p>
       {(req.preInvitedTeachers && req.preInvitedTeachers.length > 0) && (
         <div className="rounded-md border bg-muted/30 p-3 text-sm">
-          <div className="mb-1 font-medium">Pre-invited teachers</div>
+          <div className="mb-1 font-medium">{t('admin.pending.awaiting.preInvitedTeachers')}</div>
           <ul className="list-disc pl-5">
             {req.preInvitedTeachers.map((e) => <li key={e}>{e}</li>)}
           </ul>
         </div>
       )}
       <p className="text-sm text-muted-foreground">
-        Need to change the details? Cancel this request before editing and resubmitting it.
+        {t('admin.pending.awaiting.changeDetails')}
       </p>
       <div className="flex flex-wrap gap-3">
         <button type="button" onClick={handleCancel} disabled={cancelling}
                 className="rounded-md border px-4 py-2 text-sm disabled:opacity-60">
-          {cancelling ? 'Cancelling…' : 'Cancel request'}
+          {cancelling ? t('admin.pending.awaiting.cancelling') : t('admin.pending.awaiting.cancelRequest')}
         </button>
       </div>
     </div>

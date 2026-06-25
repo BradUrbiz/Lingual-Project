@@ -28,21 +28,16 @@ import type {
   DeletionScopeType,
 } from '@/types';
 import { useMembership } from '@/contexts/MembershipContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
-const STATUS_CONFIG: Record<DeletionRequestStatus, { label: string; color: string }> = {
-  requested: { label: 'Pending Review', color: 'bg-amber-100 text-amber-800' },
-  approved: { label: 'Approved', color: 'bg-blue-100 text-blue-800' },
-  rejected: { label: 'Rejected', color: 'bg-gray-100 text-gray-800' },
-  in_progress: { label: 'In Progress', color: 'bg-indigo-100 text-indigo-800' },
-  completed: { label: 'Completed', color: 'bg-green-100 text-green-800' },
-  failed: { label: 'Failed', color: 'bg-red-100 text-red-800' },
-  partially_completed: { label: 'Partial', color: 'bg-orange-100 text-orange-800' },
-};
-
-const SCOPE_LABELS: Record<DeletionScopeType, string> = {
-  student: 'Student Data',
-  class: 'Class Data',
-  org: 'Organization Data',
+const STATUS_COLOR: Record<DeletionRequestStatus, string> = {
+  requested: 'bg-amber-100 text-amber-800',
+  approved: 'bg-blue-100 text-blue-800',
+  rejected: 'bg-gray-100 text-gray-800',
+  in_progress: 'bg-indigo-100 text-indigo-800',
+  completed: 'bg-green-100 text-green-800',
+  failed: 'bg-red-100 text-red-800',
+  partially_completed: 'bg-orange-100 text-orange-800',
 };
 
 function formatTimestamp(value?: string | null) {
@@ -53,8 +48,19 @@ function formatTimestamp(value?: string | null) {
 }
 
 function StatusBadge({ status }: { status: DeletionRequestStatus }) {
-  const config = STATUS_CONFIG[status] || { label: status, color: 'bg-gray-100 text-gray-800' };
-  return <Badge className={config.color}>{config.label}</Badge>;
+  const { t } = useLanguage();
+  const statusKeyMap: Record<DeletionRequestStatus, string> = {
+    requested: 'admin.deletionRequests.status.requested',
+    approved: 'admin.deletionRequests.status.approved',
+    rejected: 'admin.deletionRequests.status.rejected',
+    in_progress: 'admin.deletionRequests.status.inProgress',
+    completed: 'admin.deletionRequests.status.completed',
+    failed: 'admin.deletionRequests.status.failed',
+    partially_completed: 'admin.deletionRequests.status.partiallyCompleted',
+  };
+  const color = STATUS_COLOR[status] || 'bg-gray-100 text-gray-800';
+  const label = statusKeyMap[status] ? t(statusKeyMap[status]) : status;
+  return <Badge className={color}>{label}</Badge>;
 }
 
 function StatusIcon({ status }: { status: DeletionRequestStatus }) {
@@ -143,7 +149,6 @@ function adminDeletionReducer(
         showNewForm: false,
         newScopeId: '',
         newReason: '',
-        statusMessage: 'Deletion request created successfully.',
       };
     case 'create-finished':
       return { ...state, creating: false };
@@ -177,42 +182,55 @@ function NewDeletionRequestForm({
   onCreate,
   onCancel,
 }: NewDeletionRequestFormProps) {
+  const { t } = useLanguage();
+  const scopeIdLabel =
+    scopeType === 'student'
+      ? t('admin.deletionRequests.form.scopeIdLabelStudent')
+      : scopeType === 'class'
+      ? t('admin.deletionRequests.form.scopeIdLabelClass')
+      : t('admin.deletionRequests.form.scopeIdLabelOrg');
+  const scopeTypeName =
+    scopeType === 'student'
+      ? t('admin.deletionRequests.form.scopeStudent')
+      : scopeType === 'class'
+      ? t('admin.deletionRequests.form.scopeClass')
+      : t('admin.deletionRequests.form.scopeOrg');
   return (
     <Card className="p-4 space-y-3 border-dashed">
-      <h3 className="text-sm font-medium">Create Deletion Request</h3>
+      <h3 className="text-sm font-medium">{t('admin.deletionRequests.form.title')}</h3>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label htmlFor="deletion-scope-type" className="text-xs text-muted-foreground">Scope Type</label>
+          <label htmlFor="deletion-scope-type" className="text-xs text-muted-foreground">{t('admin.deletionRequests.form.scopeTypeLabel')}</label>
           <select
             id="deletion-scope-type"
             className="w-full mt-1 px-3 py-2 rounded-md border text-sm bg-background"
             value={scopeType}
             onChange={(e) => onScopeTypeChange(e.target.value as DeletionScopeType)}
           >
-            <option value="student">Student</option>
-            <option value="class">Class</option>
-            <option value="org">Organization</option>
+            <option value="student">{t('admin.deletionRequests.form.scopeStudent')}</option>
+            <option value="class">{t('admin.deletionRequests.form.scopeClass')}</option>
+            <option value="org">{t('admin.deletionRequests.form.scopeOrg')}</option>
           </select>
         </div>
         <div>
           <label htmlFor="deletion-scope-id" className="text-xs text-muted-foreground">
-            {scopeType === 'student' ? 'Student UID' : scopeType === 'class' ? 'Class ID' : 'Organization ID'}
+            {scopeIdLabel}
           </label>
           <Input
             id="deletion-scope-id"
             className="mt-1"
-            placeholder={`Enter ${scopeType} ID`}
+            placeholder={t('admin.deletionRequests.form.scopeIdPlaceholder').replace('{scopeType}', scopeTypeName)}
             value={scopeId}
             onChange={(e) => onScopeIdChange(e.target.value)}
           />
         </div>
       </div>
       <div>
-        <label htmlFor="deletion-reason" className="text-xs text-muted-foreground">Reason (optional)</label>
+        <label htmlFor="deletion-reason" className="text-xs text-muted-foreground">{t('admin.deletionRequests.form.reasonLabel')}</label>
         <Input
           id="deletion-reason"
           className="mt-1"
-          placeholder="e.g., Parent deletion request under COPPA"
+          placeholder={t('admin.deletionRequests.form.reasonPlaceholder')}
           value={reason}
           onChange={(e) => onReasonChange(e.target.value)}
         />
@@ -220,10 +238,10 @@ function NewDeletionRequestForm({
       <div className="flex gap-2">
         <Button size="sm" onClick={onCreate} disabled={creating || !scopeId.trim()}>
           {creating && <Loader2 className="size-3 mr-1 animate-spin" />}
-          Submit Request
+          {t('admin.deletionRequests.form.submit')}
         </Button>
         <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancel
+          {t('admin.deletionRequests.form.cancel')}
         </Button>
       </div>
     </Card>
@@ -255,6 +273,13 @@ function DeletionRequestList({
   onExecute,
   onRetry,
 }: DeletionRequestListProps) {
+  const { t } = useLanguage();
+  const scopeLabelMap: Record<DeletionScopeType, string> = {
+    student: t('admin.deletionRequests.scope.student'),
+    class: t('admin.deletionRequests.scope.class'),
+    org: t('admin.deletionRequests.scope.org'),
+  };
+
   if (loading && requests.length === 0) {
     return (
       <div className="flex justify-center py-12">
@@ -266,7 +291,7 @@ function DeletionRequestList({
   if (requests.length === 0) {
     return (
       <Card className="p-8 text-center text-muted-foreground">
-        No deletion requests found.
+        {t('admin.deletionRequests.empty')}
       </Card>
     );
   }
@@ -280,7 +305,7 @@ function DeletionRequestList({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <StatusBadge status={req.status} />
-                <Badge variant="outline">{SCOPE_LABELS[req.scopeType]}</Badge>
+                <Badge variant="outline">{scopeLabelMap[req.scopeType]}</Badge>
                 <span className="text-xs text-muted-foreground font-mono truncate">
                   {req.scopeId}
                 </span>
@@ -290,12 +315,12 @@ function DeletionRequestList({
               )}
               {req.reviewNotes && (
                 <p className="text-xs text-muted-foreground mt-1 italic">
-                  Review: {req.reviewNotes}
+                  {t('admin.deletionRequests.detail.review')} {req.reviewNotes}
                 </p>
               )}
               <div className="text-xs text-muted-foreground mt-2 flex gap-4">
-                <span>Created: {formatTimestamp(req.createdAt)}</span>
-                {req.completedAt && <span>Completed: {formatTimestamp(req.completedAt)}</span>}
+                <span>{t('admin.deletionRequests.detail.created')} {formatTimestamp(req.createdAt)}</span>
+                {req.completedAt && <span>{t('admin.deletionRequests.detail.completed')} {formatTimestamp(req.completedAt)}</span>}
               </div>
 
               {req.executionSummary && typeof req.executionSummary === 'object' && 'firestoreCounts' in req.executionSummary && (
@@ -305,8 +330,14 @@ function DeletionRequestList({
                     const fc = counts.firestoreCounts as Record<string, number> | undefined;
                     return fc ? (
                       <span>
-                        Firestore: {fc.deleted ?? 0} deleted / {fc.targeted ?? 0} targeted
-                        {fc.failed ? ` / ${fc.failed} failed` : ''}
+                        {fc.failed
+                          ? t('admin.deletionRequests.detail.firestoreCountsFailed')
+                              .replace('{deleted}', String(fc.deleted ?? 0))
+                              .replace('{targeted}', String(fc.targeted ?? 0))
+                              .replace('{failed}', String(fc.failed))
+                          : t('admin.deletionRequests.detail.firestoreCounts')
+                              .replace('{deleted}', String(fc.deleted ?? 0))
+                              .replace('{targeted}', String(fc.targeted ?? 0))}
                       </span>
                     ) : null;
                   })()}
@@ -318,7 +349,7 @@ function DeletionRequestList({
               {req.status === 'requested' && (
                 <>
                   <Input
-                    placeholder="Review notes"
+                    placeholder={t('admin.deletionRequests.action.reviewNotesPlaceholder')}
                     className="text-xs h-7 w-40"
                     value={actionLoading === req.id ? reviewNotes : ''}
                     onChange={(e) => onReviewNotesChange(req.id, e.target.value)}
@@ -331,7 +362,7 @@ function DeletionRequestList({
                     disabled={actionLoading === req.id && creating}
                     onClick={() => onApprove(req.id)}
                   >
-                    <CheckCircle2 className="size-3 mr-1" /> Approve
+                    <CheckCircle2 className="size-3 mr-1" /> {t('admin.deletionRequests.action.approve')}
                   </Button>
                   <Button
                     size="sm"
@@ -340,7 +371,7 @@ function DeletionRequestList({
                     disabled={actionLoading === req.id && creating}
                     onClick={() => onReject(req.id)}
                   >
-                    <XCircle className="size-3 mr-1" /> Reject
+                    <XCircle className="size-3 mr-1" /> {t('admin.deletionRequests.action.reject')}
                   </Button>
                 </>
               )}
@@ -355,7 +386,7 @@ function DeletionRequestList({
                   {actionLoading === req.id
                     ? <Loader2 className="size-3 mr-1 animate-spin" />
                     : <Play className="size-3 mr-1" />}
-                  Execute
+                  {t('admin.deletionRequests.action.execute')}
                 </Button>
               )}
               {(req.status === 'failed' || req.status === 'partially_completed') && (
@@ -369,7 +400,7 @@ function DeletionRequestList({
                   {actionLoading === req.id
                     ? <Loader2 className="size-3 mr-1 animate-spin" />
                     : <RefreshCw className="size-3 mr-1" />}
-                  Retry
+                  {t('admin.deletionRequests.action.retry')}
                 </Button>
               )}
             </div>
@@ -383,6 +414,7 @@ function DeletionRequestList({
 export function AdminDeletionRequestsPage() {
   const navigate = useNavigate();
   const { hasRole } = useMembership();
+  const { t } = useLanguage();
   const isAdmin = hasRole('school_admin');
   const [state, dispatch] = useReducer(adminDeletionReducer, initialAdminDeletionState);
   const {
@@ -407,10 +439,10 @@ export function AdminDeletionRequestsPage() {
     } catch (err) {
       dispatch({
         type: 'load-error',
-        error: err instanceof Error ? err.message : 'Failed to load deletion requests.',
+        error: err instanceof Error ? err.message : t('admin.deletionRequests.err.loadFailed'),
       });
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadRequests();
@@ -427,9 +459,10 @@ export function AdminDeletionRequestsPage() {
       };
       await createDeletionRequest(payload);
       dispatch({ type: 'create-success' });
+      dispatch({ type: 'set-status-message', statusMessage: t('admin.deletionRequests.msg.created') });
       await loadRequests();
     } catch (err) {
-      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : 'Failed to create request.' });
+      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : t('admin.deletionRequests.err.createFailed') });
     } finally {
       dispatch({ type: 'create-finished' });
     }
@@ -440,10 +473,10 @@ export function AdminDeletionRequestsPage() {
       dispatch({ type: 'set-action-loading', requestId });
       await approveDeletionRequest(requestId, reviewNotes);
       dispatch({ type: 'set-review-notes', reviewNotes: '' });
-      dispatch({ type: 'set-status-message', statusMessage: 'Request approved.' });
+      dispatch({ type: 'set-status-message', statusMessage: t('admin.deletionRequests.msg.approved') });
       await loadRequests();
     } catch (err) {
-      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : 'Failed to approve.' });
+      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : t('admin.deletionRequests.err.approveFailed') });
     } finally {
       dispatch({ type: 'set-action-loading', requestId: null });
     }
@@ -454,10 +487,10 @@ export function AdminDeletionRequestsPage() {
       dispatch({ type: 'set-action-loading', requestId });
       await rejectDeletionRequest(requestId, reviewNotes);
       dispatch({ type: 'set-review-notes', reviewNotes: '' });
-      dispatch({ type: 'set-status-message', statusMessage: 'Request rejected.' });
+      dispatch({ type: 'set-status-message', statusMessage: t('admin.deletionRequests.msg.rejected') });
       await loadRequests();
     } catch (err) {
-      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : 'Failed to reject.' });
+      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : t('admin.deletionRequests.err.rejectFailed') });
     } finally {
       dispatch({ type: 'set-action-loading', requestId: null });
     }
@@ -467,10 +500,10 @@ export function AdminDeletionRequestsPage() {
     try {
       dispatch({ type: 'set-action-loading', requestId });
       await executeDeletionRequest(requestId);
-      dispatch({ type: 'set-status-message', statusMessage: 'Deletion executed.' });
+      dispatch({ type: 'set-status-message', statusMessage: t('admin.deletionRequests.msg.executed') });
       await loadRequests();
     } catch (err) {
-      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : 'Execution failed.' });
+      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : t('admin.deletionRequests.err.executeFailed') });
     } finally {
       dispatch({ type: 'set-action-loading', requestId: null });
     }
@@ -480,10 +513,10 @@ export function AdminDeletionRequestsPage() {
     try {
       dispatch({ type: 'set-action-loading', requestId });
       await retryDeletionRequest(requestId);
-      dispatch({ type: 'set-status-message', statusMessage: 'Retry executed.' });
+      dispatch({ type: 'set-status-message', statusMessage: t('admin.deletionRequests.msg.retried') });
       await loadRequests();
     } catch (err) {
-      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : 'Retry failed.' });
+      dispatch({ type: 'set-error', error: err instanceof Error ? err.message : t('admin.deletionRequests.err.retryFailed') });
     } finally {
       dispatch({ type: 'set-action-loading', requestId: null });
     }
@@ -494,7 +527,7 @@ export function AdminDeletionRequestsPage() {
       <div className="max-w-3xl mx-auto p-6">
         <Alert>
           <AlertDescription>
-            Only school administrators can access deletion requests.
+            {t('admin.deletionRequests.accessDenied')}
           </AlertDescription>
         </Alert>
       </div>
@@ -506,22 +539,22 @@ export function AdminDeletionRequestsPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate('/app/teacher')}>
-          <ArrowLeft className="size-4 mr-1" /> Back
+          <ArrowLeft className="size-4 mr-1" /> {t('admin.deletionRequests.back')}
         </Button>
         <div className="flex-1">
           <h1 className="text-xl font-semibold flex items-center gap-2">
             <ShieldAlert className="size-5" />
-            Data Deletion Requests
+            {t('admin.deletionRequests.pageTitle')}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage student and class data deletion requests for your organization.
+            {t('admin.deletionRequests.pageSubtitle')}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={loadRequests} disabled={loading}>
-          <RefreshCw className={`size-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
+          <RefreshCw className={`size-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> {t('admin.deletionRequests.refresh')}
         </Button>
         <Button size="sm" onClick={() => dispatch({ type: 'toggle-new-form' })}>
-          <Trash2 className="size-4 mr-1" /> New Request
+          <Trash2 className="size-4 mr-1" /> {t('admin.deletionRequests.newRequest')}
         </Button>
       </div>
 

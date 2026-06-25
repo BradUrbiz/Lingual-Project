@@ -22,6 +22,7 @@ from backend.services.pedagogy.integration import (
     director_enabled,
 )
 from backend.services.compliance import create_consent_event, resolve_assignment_launch
+from backend.services.native_language import resolve_native_language
 from backend.services.suspended_org_guard import SuspendedOrgError, enforce_org_active
 
 
@@ -568,10 +569,12 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                     else None
                 )
                 language_mix_level = (chat or {}).get('language_mix_level', 'balanced')
+                native_language = resolve_native_language(ui_language)
                 system_instructions = deps.build_system_prompt(
                     proficiency_context,
                     learning_locale,
                     language_mix_level,
+                    native_language=native_language,
                 )
             transcription_language, transcription_language_name = (
                 resolve_realtime_transcription_language_hint(learning_locale)
@@ -942,10 +945,12 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 profile_context = deps.db.get_user_profile_context(uid) or {}
                 learning_locale = profile_context.get('learning_locale', 'ko-KR')
                 language_mix_level = chat.get('language_mix_level', 'balanced')
+                native_language = resolve_native_language(ui_language)
                 system_prompt = deps.build_system_prompt(
                     proficiency_context,
                     learning_locale,
                     language_mix_level,
+                    native_language=native_language,
                 )
 
             messages = [{'role': 'system', 'content': system_prompt}]

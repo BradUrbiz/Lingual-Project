@@ -31,5 +31,21 @@ class FreePracticeMixPolicyNativeTestCase(unittest.TestCase):
         self.assertIn('Korean leads the conversation', policy)
 
 
+class BuildSystemPromptNativeTestCase(unittest.TestCase):
+    def test_default_native_byte_identical(self):
+        from main import build_system_prompt
+        self.assertEqual(
+            build_system_prompt('PROFICIENCY', 'es-ES', 'balanced'),
+            build_system_prompt('PROFICIENCY', 'es-ES', 'balanced', native_language='English'),
+        )
+
+    def test_korean_native_in_template(self):
+        from main import build_system_prompt
+        prompt = build_system_prompt('PROFICIENCY', 'en-US', 'balanced', native_language='Korean')
+        # The gloss line and the ratio line must use the native language.
+        self.assertIn('Korean meaning', prompt)
+        self.assertIn('not the Korean-vs-target-language ratio', prompt)
+
+
 if __name__ == '__main__':
     unittest.main()

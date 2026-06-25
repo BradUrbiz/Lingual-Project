@@ -340,7 +340,7 @@ def build_free_practice_language_mix_policy(language_name, language_mix_level, n
     )
 
 
-def build_system_prompt(proficiency_context, learning_locale='ko-KR', language_mix_level='balanced'):
+def build_system_prompt(proficiency_context, learning_locale='ko-KR', language_mix_level='balanced', native_language="English"):
     locale_config = LEARNING_LOCALE_PROMPT_CONFIG.get(
         learning_locale,
         LEARNING_LOCALE_PROMPT_CONFIG['ko-KR'],
@@ -352,6 +352,7 @@ def build_system_prompt(proficiency_context, learning_locale='ko-KR', language_m
     language_mix_policy = build_free_practice_language_mix_policy(
         language_name,
         normalized_language_mix_level,
+        native_language,
     )
 
     return f"""You are Lingu, a friendly {language_name} conversation partner for free practice. Hold a natural conversation that feels real, not scripted.
@@ -365,7 +366,7 @@ SESSION DEFAULTS:
 LANGUAGE MIX POLICY:
 - {language_mix_policy}
 - When proficiency guidance and the selected language mix level pull in different directions, follow the selected language mix level for language choice.
-- Let proficiency change difficulty, pacing, and correction depth, not the English-vs-target-language ratio.
+- Let proficiency change difficulty, pacing, and correction depth, not the {native_language}-vs-target-language ratio.
 
 CONVERSATION STYLE:
 - Follow the learner's lead. If they shift the topic, shift with them and do not steer back to the previous subject.
@@ -376,7 +377,7 @@ CONVERSATION STYLE:
 
 RESPONSE FORMAT:
 - Natural conversation style.
-- New words/phrases: {language_name} phrase - English meaning.
+- New words/phrases: {language_name} phrase - {native_language} meaning.
 - Corrections: brief, kind, woven into the next turn.
 - End with a follow-up that opens the next step of the conversation."""
 

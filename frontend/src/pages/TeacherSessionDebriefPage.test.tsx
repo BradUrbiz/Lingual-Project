@@ -9,6 +9,10 @@ vi.mock('@/api/teacher', () => ({
   getSessionDebrief: (...args: unknown[]) => getSessionDebriefMock(...args),
 }));
 
+vi.mock('@/contexts/LanguageContext', () => ({
+  useLanguage: () => ({ t: (key: string) => key }),
+}));
+
 const FULL_DEBRIEF: SessionDebrief = {
   sessionId: 'session-abc',
   status: 'completed',
@@ -74,18 +78,18 @@ describe('TeacherSessionDebriefPage', () => {
     renderPage();
 
     // Header
-    expect(await screen.findByText('Session debrief')).toBeInTheDocument();
+    expect(await screen.findByText('teacher.sessionDebrief.pageTitle')).toBeInTheDocument();
     expect(screen.getByText('completed')).toBeInTheDocument();
 
     // Section headings
-    expect(screen.getByText('Coverage')).toBeInTheDocument();
-    expect(screen.getByText('Uptake')).toBeInTheDocument();
-    expect(screen.getByText('Repeated errors')).toBeInTheDocument();
-    expect(screen.getByText('Coach review')).toBeInTheDocument();
-    expect(screen.getByText('Help usage')).toBeInTheDocument();
-    expect(screen.getByText('Affect readiness')).toBeInTheDocument();
-    expect(screen.getByText('Suggested next practice')).toBeInTheDocument();
-    expect(screen.getByText('Caveats')).toBeInTheDocument();
+    expect(screen.getByText('teacher.sessionDebrief.coverage.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.sessionDebrief.uptake.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.sessionDebrief.repeatedErrors.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.coachReview.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.help.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.affect.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.suggestedNext.title')).toBeInTheDocument();
+    expect(screen.getByText('teacher.debrief.caveats.title')).toBeInTheDocument();
 
     // Coach review renders object-shaped wins/work_on as text (NOT "[object Object]")
     expect(screen.getByText('Used target expressions naturally')).toBeInTheDocument();
@@ -115,9 +119,9 @@ describe('TeacherSessionDebriefPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('Coaching interventions')).toBeInTheDocument();
-    expect(screen.getByText(/Korean/)).toBeInTheDocument();
-    expect(screen.getByText(/la cuenta/)).toBeInTheDocument();
+    expect(await screen.findByText('teacher.debrief.coaching.title')).toBeInTheDocument();
+    expect(screen.getByText(/teacher\.sessionDebrief\.coaching\.langDrift/)).toBeInTheDocument();
+    expect(screen.getByText(/teacher\.sessionDebrief\.coaching\.targetNeglect/)).toBeInTheDocument();
   });
 
   it('omits Coaching interventions section when directorReSteers.count is 0', async () => {
@@ -129,8 +133,8 @@ describe('TeacherSessionDebriefPage', () => {
 
     renderPage();
 
-    await screen.findByText('Session debrief');
-    expect(screen.queryByText('Coaching interventions')).not.toBeInTheDocument();
+    await screen.findByText('teacher.sessionDebrief.pageTitle');
+    expect(screen.queryByText('teacher.debrief.coaching.title')).not.toBeInTheDocument();
   });
 
   it('renders Targeted corrections section when promotions.count > 0', async () => {
@@ -148,11 +152,11 @@ describe('TeacherSessionDebriefPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('Targeted corrections')).toBeInTheDocument();
+    expect(await screen.findByText('teacher.debrief.corrections.title')).toBeInTheDocument();
     // Assert on the card's UNIQUE row labels (these phrasings exist only in PromotionsCard),
     // not the bare targets — "subjunctive"/"ser vs estar" also appear in suggestedNext/repeatedErrors.
-    expect(screen.getByText(/Drilled.*subjunctive.*focus grammar/)).toBeInTheDocument();
-    expect(screen.getByText(/Drilled.*ser vs estar.*recurring error/)).toBeInTheDocument();
+    expect(screen.getByText('teacher.sessionDebrief.promotions.hardTarget')).toBeInTheDocument();
+    expect(screen.getByText('teacher.sessionDebrief.promotions.repeat')).toBeInTheDocument();
   });
 
   it('omits Targeted corrections section when promotions.count is 0', async () => {
@@ -164,8 +168,8 @@ describe('TeacherSessionDebriefPage', () => {
 
     renderPage();
 
-    await screen.findByText('Session debrief');
-    expect(screen.queryByText('Targeted corrections')).not.toBeInTheDocument();
+    await screen.findByText('teacher.sessionDebrief.pageTitle');
+    expect(screen.queryByText('teacher.debrief.corrections.title')).not.toBeInTheDocument();
   });
 
   it('renders not-available state when getSessionDebrief returns null, no crash', async () => {
@@ -173,11 +177,11 @@ describe('TeacherSessionDebriefPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('Session debrief is not available.')).toBeInTheDocument();
+    expect(await screen.findByText('teacher.sessionDebrief.notAvailable')).toBeInTheDocument();
 
     // No section headings should be present
-    expect(screen.queryByText('Coverage')).not.toBeInTheDocument();
-    expect(screen.queryByText('Uptake')).not.toBeInTheDocument();
-    expect(screen.queryByText('Caveats')).not.toBeInTheDocument();
+    expect(screen.queryByText('teacher.sessionDebrief.coverage.title')).not.toBeInTheDocument();
+    expect(screen.queryByText('teacher.sessionDebrief.uptake.title')).not.toBeInTheDocument();
+    expect(screen.queryByText('teacher.debrief.caveats.title')).not.toBeInTheDocument();
   });
 });

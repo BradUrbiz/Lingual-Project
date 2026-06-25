@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { getSessionDebrief, type SessionDebrief } from '@/api/teacher';
 import { Alert, AlertDescription, Badge, Card } from '@/components/ui';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // ── State ────────────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function CoverageCard({ coverage }: { coverage: SessionDebrief['coverage'] }) {
+  const { t } = useLanguage();
   const expressionEntries = Object.entries(coverage.expressionHits);
   const vocabEntries = Object.entries(coverage.vocabularyHits);
   const hasHits = expressionEntries.length > 0 || vocabEntries.length > 0;
@@ -94,12 +96,12 @@ function CoverageCard({ coverage }: { coverage: SessionDebrief['coverage'] }) {
   const hasRecycle = coverage.recycle.length > 0;
 
   return (
-    <SectionCard title="Coverage" icon={Target} accent="bg-primary/10 text-primary">
+    <SectionCard title={t('teacher.sessionDebrief.coverage.title')} icon={Target} accent="bg-primary/10 text-primary">
       {hasHits ? (
         <div className="space-y-4">
           {expressionEntries.length > 0 && (
             <div>
-              <p className="mb-2 text-sm font-medium text-foreground">Target expression hits</p>
+              <p className="mb-2 text-sm font-medium text-foreground">{t('teacher.sessionDebrief.coverage.expressionHits')}</p>
               <div className="flex flex-wrap gap-2">
                 {expressionEntries.map(([expr, count]) => (
                   <Badge key={expr} variant="outline" size="sm">
@@ -111,7 +113,7 @@ function CoverageCard({ coverage }: { coverage: SessionDebrief['coverage'] }) {
           )}
           {vocabEntries.length > 0 && (
             <div>
-              <p className="mb-2 text-sm font-medium text-foreground">Vocabulary hits</p>
+              <p className="mb-2 text-sm font-medium text-foreground">{t('teacher.sessionDebrief.coverage.vocabularyHits')}</p>
               <div className="flex flex-wrap gap-2">
                 {vocabEntries.map(([word, count]) => (
                   <Badge key={word} variant="secondary" size="sm">
@@ -123,14 +125,14 @@ function CoverageCard({ coverage }: { coverage: SessionDebrief['coverage'] }) {
           )}
         </div>
       ) : (
-        <EmptyState message="No expression or vocabulary hits recorded." />
+        <EmptyState message={t('teacher.sessionDebrief.coverage.noHits')} />
       )}
 
       {(hasUncovered || hasRecycle) && (
         <div className="mt-4 space-y-3">
           {hasUncovered && (
             <div>
-              <p className="mb-2 text-sm font-medium text-muted-foreground">Uncovered expressions</p>
+              <p className="mb-2 text-sm font-medium text-muted-foreground">{t('teacher.sessionDebrief.coverage.uncovered')}</p>
               <div className="flex flex-wrap gap-2">
                 {coverage.uncovered.map((expr) => (
                   <Badge key={expr} variant="outline" size="sm">
@@ -142,7 +144,7 @@ function CoverageCard({ coverage }: { coverage: SessionDebrief['coverage'] }) {
           )}
           {hasRecycle && (
             <div>
-              <p className="mb-2 text-sm font-medium text-muted-foreground">Flagged for recycle</p>
+              <p className="mb-2 text-sm font-medium text-muted-foreground">{t('teacher.sessionDebrief.coverage.recycle')}</p>
               <div className="flex flex-wrap gap-2">
                 {coverage.recycle.map((expr) => (
                   <Badge key={expr} variant="accent" size="sm">
@@ -159,25 +161,26 @@ function CoverageCard({ coverage }: { coverage: SessionDebrief['coverage'] }) {
 }
 
 function UptakeCard({ uptake }: { uptake: SessionDebrief['uptake'] }) {
+  const { t } = useLanguage();
   const { selfCorrectionCount, feedbackCounts, taskCompletionCount } = uptake;
   return (
-    <SectionCard title="Uptake" icon={TrendingUp} accent="bg-success/15 text-success">
+    <SectionCard title={t('teacher.sessionDebrief.uptake.title')} icon={TrendingUp} accent="bg-success/15 text-success">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
           <p className="text-2xl font-display font-bold text-foreground">{selfCorrectionCount}</p>
-          <p className="mt-1 text-sm text-muted-foreground">Self-corrections</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t('teacher.debrief.uptake.selfCorrections')}</p>
         </div>
         <div className="rounded-2xl border-2 border-border bg-secondary/40 p-4">
           <p className="text-2xl font-display font-bold text-foreground">{taskCompletionCount}</p>
-          <p className="mt-1 text-sm text-muted-foreground">Task completions</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t('teacher.debrief.uptake.taskCompletions')}</p>
         </div>
       </div>
       <div className="mt-4">
-        <p className="mb-2 text-sm font-medium text-foreground">Feedback counts</p>
+        <p className="mb-2 text-sm font-medium text-foreground">{t('teacher.debrief.uptake.feedbackCounts')}</p>
         <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" size="sm">Recast: {feedbackCounts.recast}</Badge>
-          <Badge variant="outline" size="sm">Elicitation: {feedbackCounts.elicitation}</Badge>
-          <Badge variant="outline" size="sm">Review item: {feedbackCounts.reviewItem}</Badge>
+          <Badge variant="outline" size="sm">{t('teacher.sessionDebrief.uptake.recast').replace('{count}', String(feedbackCounts.recast))}</Badge>
+          <Badge variant="outline" size="sm">{t('teacher.sessionDebrief.uptake.elicitation').replace('{count}', String(feedbackCounts.elicitation))}</Badge>
+          <Badge variant="outline" size="sm">{t('teacher.sessionDebrief.uptake.reviewItem').replace('{count}', String(feedbackCounts.reviewItem))}</Badge>
         </div>
       </div>
     </SectionCard>
@@ -185,10 +188,11 @@ function UptakeCard({ uptake }: { uptake: SessionDebrief['uptake'] }) {
 }
 
 function RepeatedErrorsCard({ repeatedErrors }: { repeatedErrors: SessionDebrief['repeatedErrors'] }) {
+  const { t } = useLanguage();
   return (
-    <SectionCard title="Repeated errors" icon={AlertTriangle} accent="bg-destructive/10 text-destructive">
+    <SectionCard title={t('teacher.sessionDebrief.repeatedErrors.title')} icon={AlertTriangle} accent="bg-destructive/10 text-destructive">
       {repeatedErrors.length === 0 ? (
-        <EmptyState message="No repeated error patterns detected in this session." />
+        <EmptyState message={t('teacher.sessionDebrief.repeatedErrors.empty')} />
       ) : (
         <div className="space-y-3">
           {repeatedErrors.map((err, i) => (
@@ -204,6 +208,7 @@ function RepeatedErrorsCard({ repeatedErrors }: { repeatedErrors: SessionDebrief
 }
 
 function CoachReviewCard({ coachReview }: { coachReview: SessionDebrief['coachReview'] }) {
+  const { t } = useLanguage();
   if (!coachReview) return null;
 
   // Backend shape (serialize_coach_review): wins=[{text}], work_on=[{utterance,better,why,target,confidence_caveat}].
@@ -227,13 +232,13 @@ function CoachReviewCard({ coachReview }: { coachReview: SessionDebrief['coachRe
   const workOn = (Array.isArray(coachReview.work_on) ? coachReview.work_on : []).map(workOnText).filter(Boolean);
 
   return (
-    <SectionCard title="Coach review" icon={Star} accent="bg-accent/20 text-accent-foreground">
+    <SectionCard title={t('teacher.debrief.coachReview.title')} icon={Star} accent="bg-accent/20 text-accent-foreground">
       <div className="space-y-4">
         {wins.length > 0 && (
           <div>
             <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-foreground">
               <CheckCircle2 size={14} className="text-success" />
-              Wins
+              {t('teacher.sessionDebrief.coachReview.wins')}
             </p>
             <ul className="space-y-1.5">
               {wins.map((win, i) => (
@@ -248,7 +253,7 @@ function CoachReviewCard({ coachReview }: { coachReview: SessionDebrief['coachRe
           <div>
             <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-foreground">
               <Wrench size={14} className="text-primary" />
-              Work on
+              {t('teacher.sessionDebrief.coachReview.workOn')}
             </p>
             <ul className="space-y-1.5">
               {workOn.map((item, i) => (
@@ -260,7 +265,7 @@ function CoachReviewCard({ coachReview }: { coachReview: SessionDebrief['coachRe
           </div>
         )}
         {wins.length === 0 && workOn.length === 0 && (
-          <EmptyState message="No coach review details available." />
+          <EmptyState message={t('teacher.sessionDebrief.coachReview.empty')} />
         )}
       </div>
     </SectionCard>
@@ -268,22 +273,23 @@ function CoachReviewCard({ coachReview }: { coachReview: SessionDebrief['coachRe
 }
 
 function DirectorReSteersCard({ reSteers }: { reSteers: SessionDebrief['directorReSteers'] }) {
+  const { t } = useLanguage();
   if (!reSteers || reSteers.count === 0) return null;
   const label = (kind: string, target: string) => {
-    if (kind === 'language_drift') return `Kept the tutor speaking ${target || 'the target language'}`;
-    if (kind === 'target_neglect') return `Steered back to “${target}”`;
-    return `Re-steered the tutor${target ? ` (${target})` : ''}`;
+    if (kind === 'language_drift') return t('teacher.sessionDebrief.coaching.langDrift').replace('{target}', target || 'the target language');
+    if (kind === 'target_neglect') return t('teacher.sessionDebrief.coaching.targetNeglect').replace('{target}', target);
+    return target ? t('teacher.sessionDebrief.coaching.genericWithTarget').replace('{target}', target) : t('teacher.sessionDebrief.coaching.generic');
   };
   const kindLabel = (kind: string) => {
-    if (kind === 'language_drift') return 'Language';
-    if (kind === 'target_neglect') return 'Target';
-    return 'Re-steer';
+    if (kind === 'language_drift') return t('teacher.sessionDebrief.coaching.kindLanguage');
+    if (kind === 'target_neglect') return t('teacher.sessionDebrief.coaching.kindTarget');
+    return t('teacher.sessionDebrief.coaching.kindRe');
   };
   return (
-    <SectionCard title="Coaching interventions" icon={Compass} accent="bg-secondary text-foreground">
+    <SectionCard title={t('teacher.debrief.coaching.title')} icon={Compass} accent="bg-secondary text-foreground">
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          Moments the AI coach corrected the tutor mid-conversation.
+          {t('teacher.sessionDebrief.coaching.description')}
         </p>
         <ul className="space-y-1.5">
           {reSteers.items.map((r, i) => (
@@ -291,7 +297,7 @@ function DirectorReSteersCard({ reSteers }: { reSteers: SessionDebrief['director
               <p className="flex-1 text-sm text-foreground">
                 {label(r.kind, r.target)}
                 {r.turnIndex != null ? (
-                  <span className="ml-1 text-muted-foreground">(turn {r.turnIndex})</span>
+                  <span className="ml-1 text-muted-foreground">{t('teacher.sessionDebrief.coaching.turnLabel').replace('{n}', String(r.turnIndex))}</span>
                 ) : null}
               </p>
               <Badge variant="secondary" size="sm">{kindLabel(r.kind)}</Badge>
@@ -304,22 +310,23 @@ function DirectorReSteersCard({ reSteers }: { reSteers: SessionDebrief['director
 }
 
 function PromotionsCard({ promotions }: { promotions: SessionDebrief['promotions'] }) {
+  const { t } = useLanguage();
   if (!promotions || promotions.count === 0) return null;
   const label = (reason: string, target: string) => {
-    if (reason === 'hard_target') return `Drilled "${target}" (focus grammar)`;
-    if (reason === 'repeat') return `Drilled "${target}" (recurring error)`;
-    return `Drilled "${target}"`;
+    if (reason === 'hard_target') return t('teacher.sessionDebrief.promotions.hardTarget').replace('{target}', target);
+    if (reason === 'repeat') return t('teacher.sessionDebrief.promotions.repeat').replace('{target}', target);
+    return t('teacher.sessionDebrief.promotions.generic').replace('{target}', target);
   };
   const reasonLabel = (reason: string) => {
-    if (reason === 'hard_target') return 'Grammar';
-    if (reason === 'repeat') return 'Recurring';
-    return 'Promoted';
+    if (reason === 'hard_target') return t('teacher.sessionDebrief.promotions.grammar');
+    if (reason === 'repeat') return t('teacher.sessionDebrief.promotions.recurring');
+    return t('teacher.sessionDebrief.promotions.promoted');
   };
   return (
-    <SectionCard title="Targeted corrections" icon={Repeat} accent="bg-accent/20 text-accent-foreground">
+    <SectionCard title={t('teacher.debrief.corrections.title')} icon={Repeat} accent="bg-accent/20 text-accent-foreground">
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          Recurring errors the engine wove back into the conversation for self-repair.
+          {t('teacher.sessionDebrief.promotions.description')}
         </p>
         <ul className="space-y-1.5">
           {promotions.items.map((p, i) => (
@@ -327,7 +334,7 @@ function PromotionsCard({ promotions }: { promotions: SessionDebrief['promotions
               <p className="flex-1 text-sm text-foreground">
                 {label(p.reason, p.target)}
                 {p.turnIndex != null ? (
-                  <span className="ml-1 text-muted-foreground">(turn {p.turnIndex})</span>
+                  <span className="ml-1 text-muted-foreground">{t('teacher.sessionDebrief.coaching.turnLabel').replace('{n}', String(p.turnIndex))}</span>
                 ) : null}
               </p>
               <Badge variant="secondary" size="sm">{reasonLabel(p.reason)}</Badge>
@@ -340,16 +347,17 @@ function PromotionsCard({ promotions }: { promotions: SessionDebrief['promotions
 }
 
 function HelpUsageCard({ helpUsage }: { helpUsage: SessionDebrief['helpUsage'] }) {
+  const { t } = useLanguage();
   const kindEntries = Object.entries(helpUsage.byKind);
   return (
-    <SectionCard title="Help usage" icon={HelpCircle} accent="bg-secondary text-foreground">
+    <SectionCard title={t('teacher.debrief.help.title')} icon={HelpCircle} accent="bg-secondary text-foreground">
       <div className="mb-4 rounded-2xl border-2 border-border bg-secondary/40 p-4">
         <p className="text-2xl font-display font-bold text-foreground">{helpUsage.askCount}</p>
-        <p className="mt-1 text-sm text-muted-foreground">Total ask events</p>
+        <p className="mt-1 text-sm text-muted-foreground">{t('teacher.debrief.help.totalAskEvents')}</p>
       </div>
       {kindEntries.length > 0 ? (
         <div>
-          <p className="mb-2 text-sm font-medium text-foreground">By kind</p>
+          <p className="mb-2 text-sm font-medium text-foreground">{t('teacher.debrief.byKind')}</p>
           <div className="flex flex-wrap gap-2">
             {kindEntries.map(([kind, count]) => (
               <Badge key={kind} variant="outline" size="sm">
@@ -359,20 +367,21 @@ function HelpUsageCard({ helpUsage }: { helpUsage: SessionDebrief['helpUsage'] }
           </div>
         </div>
       ) : (
-        <EmptyState message="No help-kind breakdown recorded." />
+        <EmptyState message={t('teacher.sessionDebrief.help.noBreakdown')} />
       )}
     </SectionCard>
   );
 }
 
 function AffectCard({ affect }: { affect: SessionDebrief['affect'] }) {
+  const { t } = useLanguage();
   if (!affect) return null;
   return (
-    <SectionCard title="Affect readiness" icon={MessageSquareText} accent="bg-primary/5 text-foreground">
+    <SectionCard title={t('teacher.debrief.affect.title')} icon={MessageSquareText} accent="bg-primary/5 text-foreground">
       <div className="space-y-3">
         {affect.readiness ? (
           <div className="flex items-center gap-3">
-            <p className="text-sm font-medium text-muted-foreground">Readiness</p>
+            <p className="text-sm font-medium text-muted-foreground">{t('teacher.sessionDebrief.affect.readiness')}</p>
             <Badge variant="secondary" size="sm">{affect.readiness}</Badge>
           </div>
         ) : null}
@@ -380,7 +389,7 @@ function AffectCard({ affect }: { affect: SessionDebrief['affect'] }) {
           <p className="text-sm text-foreground">{affect.reason}</p>
         ) : null}
         {!affect.readiness && !affect.reason && (
-          <EmptyState message="No affect signal recorded." />
+          <EmptyState message={t('teacher.sessionDebrief.affect.noSignal')} />
         )}
       </div>
     </SectionCard>
@@ -388,10 +397,11 @@ function AffectCard({ affect }: { affect: SessionDebrief['affect'] }) {
 }
 
 function SuggestedNextCard({ suggestedNext }: { suggestedNext: SessionDebrief['suggestedNext'] }) {
+  const { t } = useLanguage();
   return (
-    <SectionCard title="Suggested next practice" icon={BookOpen} accent="bg-primary/10 text-primary">
+    <SectionCard title={t('teacher.debrief.suggestedNext.title')} icon={BookOpen} accent="bg-primary/10 text-primary">
       {suggestedNext.length === 0 ? (
-        <EmptyState message="No suggestions generated for this session." />
+        <EmptyState message={t('teacher.sessionDebrief.suggestedNext.empty')} />
       ) : (
         <ul className="space-y-2">
           {suggestedNext.map((item, i) => (
@@ -406,10 +416,11 @@ function SuggestedNextCard({ suggestedNext }: { suggestedNext: SessionDebrief['s
 }
 
 function CaveatsCard({ caveats }: { caveats: SessionDebrief['caveats'] }) {
+  const { t } = useLanguage();
   return (
-    <SectionCard title="Caveats" icon={AlertTriangle} accent="bg-muted text-muted-foreground">
+    <SectionCard title={t('teacher.debrief.caveats.title')} icon={AlertTriangle} accent="bg-muted text-muted-foreground">
       {caveats.length === 0 ? (
-        <EmptyState message="No caveats." />
+        <EmptyState message={t('teacher.debrief.caveats.empty')} />
       ) : (
         <ul className="space-y-2">
           {caveats.map((caveat, i) => (
@@ -427,6 +438,7 @@ function CaveatsCard({ caveats }: { caveats: SessionDebrief['caveats'] }) {
 
 export function TeacherSessionDebriefPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const { t } = useLanguage();
   const [state, dispatch] = useReducer(debriefReducer, { phase: 'loading' });
 
   useEffect(() => {
@@ -474,7 +486,7 @@ export function TeacherSessionDebriefPage() {
       <div className="space-y-4">
         <Alert variant={state.phase === 'error' ? 'destructive' : 'default'}>
           <AlertDescription>
-            {state.phase === 'error' ? state.message : 'Session debrief is not available.'}
+            {state.phase === 'error' ? state.message : t('teacher.sessionDebrief.notAvailable')}
           </AlertDescription>
         </Alert>
       </div>
@@ -488,7 +500,7 @@ export function TeacherSessionDebriefPage() {
       {/* Header */}
       <div>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-display font-bold text-foreground">Session debrief</h1>
+          <h1 className="text-3xl font-display font-bold text-foreground">{t('teacher.sessionDebrief.pageTitle')}</h1>
           {debrief.status ? (
             <Badge variant={debrief.status === 'completed' ? 'success' : 'outline'} size="sm">
               {debrief.status}
@@ -496,8 +508,8 @@ export function TeacherSessionDebriefPage() {
           ) : null}
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          {debrief.startedAt ? `Started ${formatTimestamp(debrief.startedAt)}` : 'Start time unknown'}
-          {debrief.endedAt ? ` · Ended ${formatTimestamp(debrief.endedAt)}` : ''}
+          {debrief.startedAt ? t('teacher.sessionDebrief.startedAt').replace('{ts}', formatTimestamp(debrief.startedAt)) : t('teacher.sessionDebrief.startTimeUnknown')}
+          {debrief.endedAt ? t('teacher.sessionDebrief.endedAt').replace('{ts}', formatTimestamp(debrief.endedAt)) : ''}
         </p>
       </div>
 

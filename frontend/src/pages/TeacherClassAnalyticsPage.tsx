@@ -21,13 +21,7 @@ import { CanvasSyncStatus } from '@/components/canvas/CanvasSyncStatus';
 import { OnboardingHint } from '@/components/ui/OnboardingHint';
 import { formatSpeakingMinutes } from '@/lib/utils';
 import type { ClassAnalyticsData } from '@/types';
-
-const STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
-  { value: 'published', label: 'Published' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'archived', label: 'Archived' },
-];
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const SELECT_STYLE = 'h-9 rounded-xl border-2 border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none';
 
@@ -146,15 +140,22 @@ function ClassAnalyticsFilters({
   onApplyDateFilter,
   onClearDateFilter,
 }: ClassAnalyticsFiltersProps) {
+  const { t } = useLanguage();
+  const statusOptions = [
+    { value: '', label: t('teacher.classAnalytics.status.allStatuses') },
+    { value: 'published', label: t('teacher.classAnalytics.status.published') },
+    { value: 'draft', label: t('teacher.classAnalytics.status.draft') },
+    { value: 'archived', label: t('teacher.classAnalytics.status.archived') },
+  ];
   return (
     <Card className="border-2 border-border p-4">
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <Filter size={16} />
-          Filters
+          {t('teacher.classAnalytics.filters.label')}
         </div>
         <label className="space-y-1">
-          <span className="text-xs font-medium text-muted-foreground">From</span>
+          <span className="text-xs font-medium text-muted-foreground">{t('teacher.classAnalytics.filters.from')}</span>
           <div className="relative">
             <Calendar className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <input
@@ -166,7 +167,7 @@ function ClassAnalyticsFilters({
           </div>
         </label>
         <label className="space-y-1">
-          <span className="text-xs font-medium text-muted-foreground">To</span>
+          <span className="text-xs font-medium text-muted-foreground">{t('teacher.classAnalytics.filters.to')}</span>
           <div className="relative">
             <Calendar className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <input
@@ -179,23 +180,23 @@ function ClassAnalyticsFilters({
         </label>
         <Button size="sm" onClick={onApplyDateFilter} disabled={loading || (!dateFrom && !dateTo)}>
           {loading ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : null}
-          Apply
+          {t('teacher.classAnalytics.filters.apply')}
         </Button>
         {hasActiveDateFilter && (
           <Button variant="ghost" size="sm" onClick={onClearDateFilter} disabled={loading}>
             <X size={14} className="mr-1" />
-            Clear dates
+            {t('teacher.classAnalytics.filters.clearDates')}
           </Button>
         )}
         <div className="ml-auto">
           <label className="space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">Assignment status</span>
+            <span className="text-xs font-medium text-muted-foreground">{t('teacher.classAnalytics.filters.assignmentStatus')}</span>
             <select
               value={statusFilter}
               onChange={(e) => onStatusFilterChange(e.target.value)}
               className={SELECT_STYLE + ' w-[150px]'}
             >
-              {STATUS_OPTIONS.map((opt) => (
+              {statusOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
@@ -206,10 +207,10 @@ function ClassAnalyticsFilters({
       </div>
       {hasActiveDateFilter && (
         <p className="mt-2 text-xs text-muted-foreground">
-          Showing sessions from{' '}
-          <strong>{appliedDateFrom || 'the beginning'}</strong>
-          {' to '}
-          <strong>{appliedDateTo || 'now'}</strong>
+          {t('teacher.classAnalytics.filters.showingFrom')}{' '}
+          <strong>{appliedDateFrom || t('teacher.classAnalytics.filters.beginning')}</strong>
+          {' '}{t('teacher.classAnalytics.filters.toWord')}{' '}
+          <strong>{appliedDateTo || t('teacher.classAnalytics.filters.now')}</strong>
         </p>
       )}
     </Card>
@@ -229,6 +230,7 @@ function AssignmentActivityCard({
   statusFilter,
   onOpenAssignment,
 }: AssignmentActivityCardProps) {
+  const { t } = useLanguage();
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
       <div className="flex items-center gap-3">
@@ -236,10 +238,11 @@ function AssignmentActivityCard({
           <ClipboardList size={22} strokeWidth={2.5} />
         </div>
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">Assignments</h2>
+          <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.classAnalytics.assignments.title')}</h2>
           <p className="text-sm text-muted-foreground">
-            Per-assignment practice activity
-            {statusFilter ? ` (${statusFilter})` : ''}
+            {statusFilter
+              ? t('teacher.classAnalytics.assignments.subtitleFiltered').replace('{status}', statusFilter)
+              : t('teacher.classAnalytics.assignments.subtitle')}
           </p>
         </div>
       </div>
@@ -248,8 +251,8 @@ function AssignmentActivityCard({
         {assignments.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
             {statusFilter
-              ? `No ${statusFilter} assignments found.`
-              : 'No assignments have been created for this class yet.'}
+              ? t('teacher.classAnalytics.assignments.emptyFiltered').replace('{status}', statusFilter)
+              : t('teacher.classAnalytics.assignments.empty')}
           </div>
         ) : (
           assignments.map((assignment) => (
@@ -267,10 +270,10 @@ function AssignmentActivityCard({
                 </Badge>
               </div>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                <span>{assignment.sessionCount} sessions</span>
-                <span>{assignment.uniqueStudentCount} students</span>
-                <span>{formatSpeakingMinutes(assignment.estimatedSpeakingTimeSeconds)} min speaking</span>
-                <span>{assignment.selfCorrectionCount} self-corrections</span>
+                <span>{t('teacher.classAnalytics.assignments.sessions').replace('{n}', String(assignment.sessionCount))}</span>
+                <span>{t('teacher.classAnalytics.assignments.students').replace('{n}', String(assignment.uniqueStudentCount))}</span>
+                <span>{t('teacher.classAnalytics.assignments.speaking').replace('{n}', String(formatSpeakingMinutes(assignment.estimatedSpeakingTimeSeconds)))}</span>
+                <span>{t('teacher.classAnalytics.assignments.selfCorrections').replace('{n}', String(assignment.selfCorrectionCount))}</span>
               </div>
             </button>
           ))
@@ -287,6 +290,7 @@ type StudentSummaryCardProps = {
 };
 
 function StudentSummaryCard({ students, classId, onOpenStudent }: StudentSummaryCardProps) {
+  const { t } = useLanguage();
   return (
     <Card className="border-3 border-foreground p-6 shadow-stamp">
       <div className="flex items-center gap-3">
@@ -294,15 +298,15 @@ function StudentSummaryCard({ students, classId, onOpenStudent }: StudentSummary
           <Users size={22} strokeWidth={2.5} />
         </div>
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">Students</h2>
-          <p className="text-sm text-muted-foreground">Per-student practice summary</p>
+          <h2 className="text-xl font-display font-bold text-foreground">{t('teacher.classAnalytics.students.title')}</h2>
+          <p className="text-sm text-muted-foreground">{t('teacher.classAnalytics.students.subtitle')}</p>
         </div>
       </div>
 
       <div className="mt-6 space-y-3">
         {students.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
-            No students have practiced in this class yet.
+            {t('teacher.classAnalytics.students.empty')}
           </div>
         ) : (
           students.map((student) => (
@@ -315,16 +319,16 @@ function StudentSummaryCard({ students, classId, onOpenStudent }: StudentSummary
             >
               <p className="text-sm font-semibold text-foreground">{student.displayName}</p>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                <span>{student.sessionCount} sessions</span>
-                <span>{formatSpeakingMinutes(student.estimatedSpeakingTimeSeconds)} min speaking</span>
-                <span>{student.totalStudentTurns} turns</span>
+                <span>{t('teacher.classAnalytics.students.sessions').replace('{n}', String(student.sessionCount))}</span>
+                <span>{t('teacher.classAnalytics.students.speaking').replace('{n}', String(formatSpeakingMinutes(student.estimatedSpeakingTimeSeconds)))}</span>
+                <span>{t('teacher.classAnalytics.students.turns').replace('{n}', String(student.totalStudentTurns))}</span>
                 <span>
                   {student.averageStudentWordsPerTurn > 0
-                    ? `${student.averageStudentWordsPerTurn} words/turn`
-                    : 'no turns yet'}
+                    ? t('teacher.classAnalytics.students.wordsPerTurn').replace('{n}', String(student.averageStudentWordsPerTurn))
+                    : t('teacher.classAnalytics.students.noTurns')}
                 </span>
                 {student.selfCorrectionCount > 0 && (
-                  <span>{student.selfCorrectionCount} self-corrections</span>
+                  <span>{t('teacher.classAnalytics.students.selfCorrections').replace('{n}', String(student.selfCorrectionCount))}</span>
                 )}
               </div>
             </button>
@@ -338,6 +342,7 @@ function StudentSummaryCard({ students, classId, onOpenStudent }: StudentSummary
 export function TeacherClassAnalyticsPage() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [state, dispatch] = useReducer(classAnalyticsReducer, initialClassAnalyticsState);
   const {
     loading,
@@ -414,10 +419,10 @@ export function TeacherClassAnalyticsPage() {
     return (
       <div className="space-y-4">
         <Alert variant="destructive">
-          <AlertDescription>{error || 'Class analytics are unavailable.'}</AlertDescription>
+          <AlertDescription>{error || t('teacher.classAnalytics.unavailable')}</AlertDescription>
         </Alert>
         <Button variant="outline" onClick={() => navigate('/app/teacher')}>
-          Back to dashboard
+          {t('teacher.classAnalytics.backToDashboard')}
         </Button>
       </div>
     );
@@ -429,12 +434,12 @@ export function TeacherClassAnalyticsPage() {
       : '0';
 
   const stats = [
-    { label: 'Assignments', value: analytics.summary.assignmentCount, icon: ClipboardList, accent: 'bg-primary/10 text-primary' },
-    { label: 'Students enrolled', value: analytics.summary.enrolledStudentCount, icon: Users, accent: 'bg-success/15 text-success' },
-    { label: 'Avg sessions / student', value: avgSessionsPerStudent, icon: BarChart3, accent: 'bg-accent/20 text-accent-foreground' },
-    { label: 'Speaking minutes', value: formatSpeakingMinutes(analytics.summary.estimatedSpeakingTimeSeconds), icon: MessageSquareText, accent: 'bg-secondary text-foreground' },
-    { label: 'Self-corrections', value: analytics.summary.selfCorrectionCount, icon: CheckCircle2, accent: 'bg-primary/5 text-foreground' },
-    { label: 'Repeated errors', value: analytics.summary.repeatedErrorCount, icon: AlertTriangle, accent: 'bg-destructive/10 text-destructive' },
+    { label: t('teacher.dashboard.stat.assignments'), value: analytics.summary.assignmentCount, icon: ClipboardList, accent: 'bg-primary/10 text-primary' },
+    { label: t('teacher.classAnalytics.stats.studentsEnrolled'), value: analytics.summary.enrolledStudentCount, icon: Users, accent: 'bg-success/15 text-success' },
+    { label: t('teacher.classAnalytics.stats.avgSessions'), value: avgSessionsPerStudent, icon: BarChart3, accent: 'bg-accent/20 text-accent-foreground' },
+    { label: t('teacher.dashboard.stat.speakingMinutes'), value: formatSpeakingMinutes(analytics.summary.estimatedSpeakingTimeSeconds), icon: MessageSquareText, accent: 'bg-secondary text-foreground' },
+    { label: t('teacher.debrief.uptake.selfCorrections'), value: analytics.summary.selfCorrectionCount, icon: CheckCircle2, accent: 'bg-primary/5 text-foreground' },
+    { label: t('teacher.classAnalytics.stats.repeatedErrors'), value: analytics.summary.repeatedErrorCount, icon: AlertTriangle, accent: 'bg-destructive/10 text-destructive' },
   ];
 
   return (
@@ -447,7 +452,7 @@ export function TeacherClassAnalyticsPage() {
             onClick={() => navigate('/app/teacher')}
           >
             <ArrowLeft size={16} className="mr-2" />
-            Back to dashboard
+            {t('teacher.classAnalytics.backToDashboard')}
           </Button>
           <Button
             variant="outline"
@@ -455,13 +460,13 @@ export function TeacherClassAnalyticsPage() {
             onClick={() => navigate(`/app/teacher/classes/${classId}/compliance`)}
           >
             <ShieldCheck size={16} className="mr-2" />
-            Compliance ops
+            {t('teacher.classAnalytics.complianceOps')}
           </Button>
         </div>
         {classId && <CanvasSyncStatus classId={classId} />}
         <h1 className="text-3xl font-display font-bold text-foreground">{analytics.class.name}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {analytics.class.subject || 'Language practice'} · {analytics.class.term || 'Current term'}
+          {analytics.class.subject || t('teacher.classAnalytics.languagePractice')} · {analytics.class.term || t('teacher.classAnalytics.currentTerm')}
           {analytics.class.gradeBand ? ` · ${analytics.class.gradeBand}` : ''}
         </p>
       </div>
@@ -483,19 +488,19 @@ export function TeacherClassAnalyticsPage() {
         <>
           <OnboardingHint
             show={analytics.summary.enrolledStudentCount === 0}
-            message="Share the join code with your students to get started."
-            ctaLabel="Manage Join Code"
+            message={t('teacher.classAnalytics.onboarding.shareCode')}
+            ctaLabel={t('teacher.classAnalytics.onboarding.shareCodeCta')}
             ctaTo={`/app/teacher`}
           />
           <OnboardingHint
             show={analytics.summary.enrolledStudentCount > 0 && analytics.assignments.length === 0}
-            message="Map your curriculum to create assignments."
-            ctaLabel="Map Curriculum"
+            message={t('teacher.classAnalytics.onboarding.mapCurriculum')}
+            ctaLabel={t('teacher.classAnalytics.onboarding.mapCurriculumCta')}
             ctaTo={`/app/teacher/classes/${classId}/assignments`}
           />
           <OnboardingHint
             show={analytics.summary.enrolledStudentCount > 0 && analytics.assignments.length > 0 && analytics.assignments.every((a: { sessionCount?: number }) => (a.sessionCount ?? 0) === 0)}
-            message="Your assignments are ready - students can start practicing."
+            message={t('teacher.classAnalytics.onboarding.assignmentsReady')}
           />
         </>
       )}

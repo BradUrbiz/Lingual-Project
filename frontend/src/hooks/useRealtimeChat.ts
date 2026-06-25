@@ -1068,7 +1068,17 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
         setRemoteAudioStream(stream);
       };
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Enable the browser's voice-processing chain explicitly. Without echo
+      // cancellation the tutor's own audio leaks back into the mic and trips the
+      // server VAD, cutting the tutor off mid-sentence (interrupt_response: true).
+      // Noise suppression + auto gain also clean up the audio sent to STT.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       mediaStreamRef.current = stream;
       await startMicMeter();
 

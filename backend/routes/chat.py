@@ -1028,6 +1028,10 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
 
         except SuspendedOrgError as exc:
             return jsonify(exc.to_payload()), 403
+        except DbUnavailableError as exc:
+            # Transient PG outage on the practice-session read -> retryable 503,
+            # not a false 404/500 mid text-practice.
+            return jsonify(exc.to_payload()), 503
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 

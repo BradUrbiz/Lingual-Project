@@ -744,6 +744,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                     review = generate_coach_review(deps, bootstrap, uid, session_id)
 
             return jsonify({'success': True, 'coachReview': review})
+        except DbUnavailableError as exc:
+            return jsonify(exc.to_payload()), 503  # transient DB outage, not a real miss
         except Exception as exc:
             print(f'Coach review error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
@@ -891,6 +893,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({'success': False, 'error': str(exc)}), 403
         except ValueError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 404
+        except DbUnavailableError as exc:
+            return jsonify(exc.to_payload()), 503  # transient DB outage, not empty analytics
         except Exception as exc:
             print(f'Assignment analytics error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
@@ -940,6 +944,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             })
         except SchoolContextPermissionError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 403
+        except DbUnavailableError as exc:
+            return jsonify(exc.to_payload()), 503  # transient DB outage, not empty analytics
         except Exception as exc:
             print(f'Class analytics error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
@@ -977,6 +983,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             })
         except SchoolContextPermissionError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 403
+        except DbUnavailableError as exc:
+            return jsonify(exc.to_payload()), 503  # transient DB outage, not empty analytics
         except Exception as exc:
             print(f'Student drill-down error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
@@ -1022,6 +1030,10 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
         try:
             sessions = deps.db.list_assignment_practice_sessions(assignment_id)
             debrief = build_assignment_debrief(sessions)
+        except DbUnavailableError as exc:
+            # Transient DB outage -> retryable 503, NOT a fake-empty debrief that reads
+            # as "no coaching happened" to the teacher.
+            return jsonify(exc.to_payload()), 503
         except Exception:
             logger.exception('assignment debrief assembly failed (assignment_id=%s)', assignment_id)
             debrief = build_assignment_debrief([])  # fail-soft: minimal, caveats present

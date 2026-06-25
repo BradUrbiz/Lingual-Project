@@ -280,6 +280,21 @@ class TestAnalyticsReadContract(unittest.TestCase):
             out = self.router.get_practice_session('sess-1')
         self.assertEqual(out, {'id': 'sess-1', 'src': 'fs'})
 
+    def test_get_practice_session_raises_when_no_engine_and_mirror_retired(self):
+        # Codex finding: engine=None (Cloud SQL provider absent/misconfigured) + no mirror
+        # must ALSO raise, not hand back a false-empty Firestore read.
+        self._cutover(mirror=False)
+        router = ReadRouter(self.fs, sql_engine=lambda: None)
+        with self.assertRaises(read_router.DbUnavailableError):
+            router.get_practice_session('sess-1')
+
+    def test_get_practice_session_no_engine_fails_open_when_mirror_present(self):
+        # With a mirror still written, engine=None degrades to Firestore (legacy).
+        self._cutover(mirror=True)
+        self.fs.get_practice_session = lambda sid: {'id': sid, 'src': 'fs'}
+        router = ReadRouter(self.fs, sql_engine=lambda: None)
+        self.assertEqual(router.get_practice_session('sess-1'), {'id': 'sess-1', 'src': 'fs'})
+
     def test_get_practice_session_genuine_miss_returns_none_not_raise(self):
         # A real not-found (PG returns None -> _FALLBACK) must NOT raise — it stays a
         # clean 404, distinct from the DB-down 503.

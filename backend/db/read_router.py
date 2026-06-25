@@ -331,8 +331,16 @@ class ReadRouter:
         if mode not in ('shadow', '1'):
             return fs_call()
         engine = _resolve_engine(self._sql_engine)
-        if engine is None:                       # no Cloud SQL target -> Firestore
-            return fs_call()
+        if engine is None:                       # no Cloud SQL target
+            if mode == '1' and not fail_open:
+                # No engine AND no Firestore mirror (analytics under
+                # WRITE_FIRESTORE_ANALYTICS=0): returning fs_call() would hand back a
+                # false empty — same lie as a swallowed PG exception. Surface it.
+                _log.error(
+                    '%s: no Cloud SQL engine and no Firestore mirror -> DbUnavailableError (503)', flag
+                )
+                raise DbUnavailableError(flag)
+            return fs_call()                     # shadow / fail-open: degrade to Firestore
         if mode == 'shadow':
             fs_result = fs_call()
             self._shadow_compare(flag, fs_result, pg_call, engine, ignore, extract, normalize)

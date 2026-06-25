@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from flask import Blueprint, Response, jsonify, request
 
+from backend.db.read_router import DbUnavailableError
 from backend.route_deps import RouteDeps
 from backend.routes.schools import build_class_summary, build_setup_checklist, list_accessible_teacher_classes
 from backend.services.compliance import (
@@ -227,6 +228,10 @@ def build_teacher_dashboard_payload(deps: RouteDeps, context) -> dict:
                 for session in sessions:
                     summary = session.get("session_summary") or {}
                     total_speaking_seconds += int(summary.get("estimated_speaking_time_seconds") or 0)
+            except DbUnavailableError:
+                # A transient DB outage must not silently show 0 speaking minutes — let
+                # it surface so the route returns a retryable 503 (the teacher retries).
+                raise
             except Exception:
                 pass
     speaking_minutes = round(total_speaking_seconds / 60)
@@ -265,6 +270,8 @@ def create_teacher_blueprint(deps: RouteDeps) -> Blueprint:
             })
         except SchoolContextPermissionError as exc:
             return jsonify({"success": False, "error": str(exc)}), 403
+        except DbUnavailableError as exc:
+            return jsonify(exc.to_payload()), 503  # transient DB outage, not a real failure
         except Exception as exc:
             print(f"Teacher dashboard error: {exc}")
             return jsonify({"success": False, "error": str(exc)}), 500

@@ -17,7 +17,13 @@ logger = logging.getLogger(__name__)
 COACH_CHIP_MODEL = "gpt-5.4-mini-2026-03-17"
 TRANSCRIPT_WINDOW = 6  # last ~3 exchanges of context for the latest learner turn
 CORRECTIVE_EVENT_TYPES = {
-    "feedback.recast", "feedback.elicitation", "feedback.review_item", "metric.repeated_error",
+    "feedback.recast", "feedback.elicitation", "feedback.review_item",
+    # metric.error_detected fires on the FIRST learner slip (marker-independent),
+    # so the chip can surface on turn 1 instead of waiting for the error to recur
+    # (metric.repeated_error needs >=2) or for the tutor's recast to match a marker
+    # phrase. metric.repeated_error stays in the set so a repeat still opens the
+    # gate even when the per-turn error detector misses the first occurrence.
+    "metric.error_detected", "metric.repeated_error",
 }
 
 
@@ -32,8 +38,9 @@ def _string_list(value: object) -> list[str]:
 
 
 def _turn_had_corrective_signal(events: object, turn_index: int) -> bool:
-    """Learner-turn N (metric.repeated_error) and the tutor's response at N+1
-    (feedback.recast/elicitation/review_item) both count."""
+    """A corrective signal at the learner turn N (metric.error_detected on the
+    first slip, or metric.repeated_error on a recurrence) or at the tutor's
+    response at N+1 (feedback.recast/elicitation/review_item) opens the gate."""
     if not isinstance(events, list):
         return False
     window = {turn_index, turn_index + 1}

@@ -476,6 +476,29 @@ class GenerateCoachChipTestCase(unittest.TestCase):
             self.assertIsNone(generate_coach_chip(_FakeDeps(db, client), _BOOTSTRAP, 'student-1', 'sess-1', 4))
         self.assertEqual(client.create_calls, 0)
 
+    def test_first_error_detected_opens_gate(self):
+        # A single metric.error_detected (the FIRST slip, before it repeats) must
+        # open the chip gate so the learner can see a structured chip early --
+        # not only after the same error recurs (metric.repeated_error needs >=2).
+        # The chip LLM still decides whether to surface anything, so this only
+        # widens *when* a chip is possible, never forces one.
+        from backend.services.coach_chip_service import generate_coach_chip
+        client = _FakeOpenAI(content=_CHIP_JSON)
+        db = _FakeDb(session=_SESSION, chat=_CHAT,
+                     events=[{'turn_index': 4, 'event_type': 'metric.error_detected'}])
+        with _chips_on():
+            chip = generate_coach_chip(_FakeDeps(db, client), _BOOTSTRAP, 'student-1', 'sess-1', 4)
+        self.assertIsNotNone(chip)
+        self.assertEqual(chip['turn_index'], 4)
+        self.assertEqual(client.create_calls, 1)
+
+    def test_first_error_detected_counts_as_corrective_signal(self):
+        # Focused unit test on the gate helper: a learner-turn error at turn N
+        # opens the gate at turn N (window covers {N, N+1}).
+        from backend.services.coach_chip_service import _turn_had_corrective_signal
+        events = [{'turn_index': 4, 'event_type': 'metric.error_detected'}]
+        self.assertTrue(_turn_had_corrective_signal(events, 4))
+
     def test_happy_path_generates_and_appends(self):
         from backend.services.coach_chip_service import generate_coach_chip
         client = _FakeOpenAI(content=_CHIP_JSON)

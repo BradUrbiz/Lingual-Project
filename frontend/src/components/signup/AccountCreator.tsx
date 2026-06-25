@@ -78,7 +78,7 @@ export function AccountCreator({ intendedRole, onSuccess }: AccountCreatorProps)
 
       <div className="my-6 flex items-center gap-4">
         <div className="flex-1 border-t-2 border-border" />
-        <span className="text-sm font-medium text-muted-foreground">{t('auth.signup.or')}</span>
+        <span className="text-sm font-medium text-muted-foreground">{t('auth.or')}</span>
         <div className="flex-1 border-t-2 border-border" />
       </div>
 

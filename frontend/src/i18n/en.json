@@ -52,7 +52,6 @@
   "auth.signup.emailPlaceholder": "you@school.edu",
   "auth.signup.passwordPlaceholder": "At least 6 characters",
   "auth.signup.createAccount": "Create account",
-  "auth.signup.or": "or",
 
   "general.title": "Build your speaking profile",
   "general.nameLabel": "Preferred name",

@@ -52,7 +52,6 @@
   "auth.signup.emailPlaceholder": "you@school.edu",
   "auth.signup.passwordPlaceholder": "6자 이상 입력하세요",
   "auth.signup.createAccount": "계정 만들기",
-  "auth.signup.or": "또는",
 
   "general.title": "당신에 대해 알아볼게요",
   "general.nameLabel": "이름이 어떻게 되세요?",

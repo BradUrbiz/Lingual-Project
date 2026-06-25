@@ -54,6 +54,7 @@ export function SignupPage() {
         type="button"
         onClick={() => navigate('/')}
         className="absolute left-6 top-6 z-10 inline-flex items-center gap-2 rounded-lg border-2 border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
+        aria-label={t('auth.backAriaLabel')}
       >
         <ArrowLeft size={16} strokeWidth={2.5} />
         <span>{t('auth.back')}</span>

@@ -22,6 +22,21 @@ export function voiceHarnessInit() {
   if (window.__voiceHarness) return;
   const AC = window.AudioContext || window['webkitAudioContext'];
 
+  // Capture the app's RTCPeerConnection instances so we can verify our injected
+  // audio is actually being transmitted (outbound-rtp bytesSent / audioLevel),
+  // distinguishing "audio not forwarded" from "forwarded but VAD didn't commit".
+  const RTC = window.RTCPeerConnection;
+  if (RTC && !RTC.__vhWrapped) {
+    const Wrapped = function (...a) {
+      const pc = new RTC(...a);
+      (window.__vhPCs = window.__vhPCs || []).push(pc);
+      return pc;
+    };
+    Wrapped.prototype = RTC.prototype;
+    Wrapped.__vhWrapped = true;
+    window.RTCPeerConnection = Wrapped;
+  }
+
   let ac = null;
   let dest = null;
 
@@ -101,6 +116,29 @@ export function voiceHarnessInit() {
     /** Is the synthetic mic currently wired up? */
     isReady() {
       return !!dest;
+    },
+
+    /** Aggregate outbound audio stats across captured peer connections. */
+    async outboundAudioStats() {
+      const pcs = window.__vhPCs || [];
+      const result = { peerConnections: pcs.length, outbound: [] };
+      for (const pc of pcs) {
+        try {
+          const stats = await pc.getStats();
+          stats.forEach((r) => {
+            if (r.type === 'outbound-rtp' && r.kind === 'audio') {
+              result.outbound.push({ bytesSent: r.bytesSent, packetsSent: r.packetsSent });
+            }
+            if (r.type === 'media-source' && r.kind === 'audio') {
+              result.audioLevel = r.audioLevel;
+              result.totalAudioEnergy = r.totalAudioEnergy;
+            }
+          });
+        } catch (_e) {
+          /* ignore */
+        }
+      }
+      return result;
     },
   };
 }

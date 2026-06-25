@@ -299,6 +299,7 @@ export function AppLearningPage() {
       <LearningDashboardHeader t={t} />
 
       <JoinClassPanel
+        t={t}
         joinCode={state.joinCode}
         joinLoading={state.joinLoading}
         joinError={state.joinError}
@@ -308,6 +309,7 @@ export function AppLearningPage() {
       />
 
       <ClassesAssignmentsSection
+        t={t}
         assignments={state.assignments}
         assignmentsLoading={state.assignmentsLoading}
         assignmentError={state.assignmentError}
@@ -322,6 +324,7 @@ export function AppLearningPage() {
       <FreePracticeSection t={t} />
 
       <CanvasModulesSection
+        t={t}
         canvasContent={state.canvasContent}
         onLaunchAssignment={(assignmentId) => navigate(`/app/assignments/${assignmentId}`)}
       />
@@ -360,6 +363,7 @@ function LearningDashboardHeader({ t }: { t: TranslationFn }) {
 }
 
 type JoinClassPanelProps = {
+  t: TranslationFn;
   joinCode: string;
   joinLoading: boolean;
   joinError: string | null;
@@ -369,6 +373,7 @@ type JoinClassPanelProps = {
 };
 
 function JoinClassPanel({
+  t,
   joinCode,
   joinLoading,
   joinError,
@@ -385,9 +390,9 @@ function JoinClassPanel({
               <Users size={20} strokeWidth={2.5} />
             </div>
             <div>
-              <h2 className="text-lg font-display font-bold text-foreground">Join a classroom</h2>
+              <h2 className="text-lg font-display font-bold text-foreground">{t('app.dashboard.join.title') || 'Join a classroom'}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Enter your teacher&apos;s 6-character class code to connect this dashboard to assigned practice.
+                {t('app.dashboard.join.subtitle') || "Enter your teacher's 6-character class code to connect this dashboard to assigned practice."}
               </p>
             </div>
           </div>
@@ -400,7 +405,7 @@ function JoinClassPanel({
               placeholder="ABC123"
               maxLength={6}
               className="text-center font-mono text-lg tracking-[0.28em] uppercase"
-              aria-label="Class join code"
+              aria-label={t('app.dashboard.join.codeLabel') || 'Class join code'}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   void onJoinClass();
@@ -418,11 +423,11 @@ function JoinClassPanel({
               {joinLoading ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
-                  Joining…
+                  {t('app.dashboard.join.joining') || 'Joining…'}
                 </>
               ) : (
                 <>
-                  Join class
+                  {t('app.dashboard.join.submit') || 'Join class'}
                   <ArrowRight className="ml-2 size-4" />
                 </>
               )}
@@ -436,7 +441,7 @@ function JoinClassPanel({
           {joinSuccess ? (
             <Alert variant="success">
               <CheckCircle2 className="size-4" />
-              <AlertTitle>Class connected</AlertTitle>
+              <AlertTitle>{t('app.dashboard.join.successTitle') || 'Class connected'}</AlertTitle>
               <AlertDescription>{joinSuccess}</AlertDescription>
             </Alert>
           ) : null}
@@ -447,6 +452,7 @@ function JoinClassPanel({
 }
 
 type ClassesAssignmentsSectionProps = {
+  t: TranslationFn;
   assignments: StudentAssignmentSummary[];
   assignmentsLoading: boolean;
   assignmentError: string | null;
@@ -459,6 +465,7 @@ type ClassesAssignmentsSectionProps = {
 };
 
 function ClassesAssignmentsSection({
+  t,
   assignments,
   assignmentsLoading,
   assignmentError,
@@ -473,17 +480,18 @@ function ClassesAssignmentsSection({
     <section className={`${SURFACE_CLASS} p-6`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg font-display font-bold text-foreground">Your classes and assignments</h2>
+          <h2 className="text-lg font-display font-bold text-foreground">{t('app.dashboard.classes.title') || 'Your classes and assignments'}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            See the classes you&apos;re in and the practice your teachers assign there.
+            {t('app.dashboard.classes.subtitle') || "See the classes you're in and the practice your teachers assign there."}
           </p>
         </div>
         <Badge variant="secondary" size="sm">
-          {assignments.length} active
+          {(t('app.dashboard.classes.active') || '{count} active').replace('{count}', String(assignments.length))}
         </Badge>
       </div>
 
       <ClassesPanel
+        t={t}
         classes={classes}
         classesLoading={classesLoading}
         classError={classError}
@@ -492,6 +500,7 @@ function ClassesAssignmentsSection({
       />
 
       <AssignmentsPanel
+        t={t}
         assignments={assignments}
         assignmentsLoading={assignmentsLoading}
         assignmentError={assignmentError}
@@ -504,6 +513,7 @@ function ClassesAssignmentsSection({
 }
 
 type ClassesPanelProps = {
+  t: TranslationFn;
   classes: TeacherClassSummary[];
   classesLoading: boolean;
   classError: string | null;
@@ -512,6 +522,7 @@ type ClassesPanelProps = {
 };
 
 function ClassesPanel({
+  t,
   classes,
   classesLoading,
   classError,
@@ -522,7 +533,7 @@ function ClassesPanel({
     return (
       <div className="mt-5 flex items-center gap-3 rounded-2xl border-2 border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" />
-        Loading classes…
+        {t('app.dashboard.classes.loading') || 'Loading classes…'}
       </div>
     );
   }
@@ -530,7 +541,7 @@ function ClassesPanel({
   if (classError) {
     return (
       <Alert variant="destructive" className="mt-5">
-        <AlertTitle>Couldn&apos;t load your classes</AlertTitle>
+        <AlertTitle>{t('app.dashboard.classes.errorTitle') || "Couldn't load your classes"}</AlertTitle>
         <AlertDescription className="flex flex-col gap-3">
           <span>{classError}</span>
           <Button
@@ -542,7 +553,7 @@ function ClassesPanel({
             }}
             className="self-start"
           >
-            Retry
+            {t('app.dashboard.retry') || 'Retry'}
           </Button>
         </AlertDescription>
       </Alert>
@@ -552,7 +563,7 @@ function ClassesPanel({
   if (!classes.length) {
     return (
       <div className="mt-5 rounded-2xl border-2 border-dashed border-border bg-secondary/30 p-5 text-sm text-muted-foreground">
-        You&apos;re not enrolled in any classes yet. Join a classroom with your teacher&apos;s code above and it will appear here.
+        {t('app.dashboard.classes.empty') || "You're not enrolled in any classes yet. Join a classroom with your teacher's code above and it will appear here."}
       </div>
     );
   }
@@ -560,7 +571,7 @@ function ClassesPanel({
   return (
     <div className="mt-5">
       <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-        Classes you are in
+        {t('app.dashboard.classes.youAreIn') || 'Classes you are in'}
       </p>
       <div className="flex flex-wrap gap-2">
         {classes.map((classSummary) => (
@@ -572,7 +583,7 @@ function ClassesPanel({
           >
             <span>{classSummary.name}</span>
             <span className="text-xs text-muted-foreground">
-              {classSummary.assignmentCount ?? 0} assignments
+              {(t('app.dashboard.classes.assignmentCount') || '{count} assignments').replace('{count}', String(classSummary.assignmentCount ?? 0))}
             </span>
           </button>
         ))}
@@ -582,6 +593,7 @@ function ClassesPanel({
 }
 
 type AssignmentsPanelProps = {
+  t: TranslationFn;
   assignments: StudentAssignmentSummary[];
   assignmentsLoading: boolean;
   assignmentError: string | null;
@@ -591,6 +603,7 @@ type AssignmentsPanelProps = {
 };
 
 function AssignmentsPanel({
+  t,
   assignments,
   assignmentsLoading,
   assignmentError,
@@ -602,7 +615,7 @@ function AssignmentsPanel({
     return (
       <div className="mt-6 flex items-center gap-3 rounded-2xl border-2 border-border bg-secondary/40 p-5 text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" />
-        Loading assignments…
+        {t('app.dashboard.assignments.loading') || 'Loading assignments…'}
       </div>
     );
   }
@@ -610,7 +623,7 @@ function AssignmentsPanel({
   if (assignmentError) {
     return (
       <Alert variant="destructive" className="mt-6">
-        <AlertTitle>Couldn&apos;t load your assignments</AlertTitle>
+        <AlertTitle>{t('app.dashboard.assignments.errorTitle') || "Couldn't load your assignments"}</AlertTitle>
         <AlertDescription className="flex flex-col gap-3">
           <span>{assignmentError}</span>
           <Button
@@ -622,7 +635,7 @@ function AssignmentsPanel({
             }}
             className="self-start"
           >
-            Retry
+            {t('app.dashboard.retry') || 'Retry'}
           </Button>
         </AlertDescription>
       </Alert>
@@ -635,11 +648,11 @@ function AssignmentsPanel({
         <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border-2 border-foreground bg-card">
           <GraduationCap size={24} strokeWidth={2.5} />
         </div>
-        <h3 className="mt-4 text-xl font-display font-bold text-foreground">No school assignments yet</h3>
+        <h3 className="mt-4 text-xl font-display font-bold text-foreground">{t('app.dashboard.assignments.emptyTitle') || 'No school assignments yet'}</h3>
         <p className="mt-2 text-sm text-muted-foreground">
           {classesCount > 0
-            ? 'You are enrolled in classes. Assignments will show up here when your teacher publishes them.'
-            : 'When a teacher publishes an assignment for your class, it will show up here.'}
+            ? t('app.dashboard.assignments.emptyEnrolled') || 'You are enrolled in classes. Assignments will show up here when your teacher publishes them.'
+            : t('app.dashboard.assignments.emptyNotEnrolled') || 'When a teacher publishes an assignment for your class, it will show up here.'}
         </p>
       </div>
     );
@@ -647,25 +660,29 @@ function AssignmentsPanel({
 
   return (
     <div className="mt-6 grid gap-4 md:grid-cols-2">
-      {assignments.map((assignment) => (
+      {assignments.map((assignment) => {
+        const statusKey = `app.dashboard.assignment.status.${assignment.status}`;
+        const statusLabel = t(statusKey);
+        return (
         <div key={assignment.id} className="rounded-2xl border-2 border-border bg-secondary/40 p-5">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={assignment.status === 'published' ? 'success' : 'outline'} size="sm">
-              {assignment.status}
+              {statusLabel === statusKey ? assignment.status : statusLabel}
             </Badge>
           </div>
           <h3 className="mt-4 text-xl font-display font-bold text-foreground">{assignment.title}</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            {assignment.className || 'Your class'} {assignment.dueAt ? `· Due ${assignment.dueAt}` : ''}
+            {assignment.className || t('app.dashboard.assignments.defaultClassName') || 'Your class'} {assignment.dueAt ? `· ${(t('app.dashboard.assignments.due') || 'Due {date}').replace('{date}', assignment.dueAt)}` : ''}
           </p>
           <p className="mt-3 text-sm text-foreground/80">
-            {assignment.description || 'Assignment details will be shown on the launch page.'}
+            {assignment.description || t('app.dashboard.assignments.defaultDescription') || 'Assignment details will be shown on the launch page.'}
           </p>
           <Button className="mt-5" onClick={() => onLaunchAssignment(assignment.id)}>
-            Launch assignment
+            {t('app.dashboard.assignments.launch') || 'Launch assignment'}
           </Button>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -702,20 +719,21 @@ function FreePracticeSection({ t }: { t: TranslationFn }) {
 }
 
 type CanvasModulesSectionProps = {
+  t: TranslationFn;
   canvasContent: CanvasCourseContentItem[];
   onLaunchAssignment: (assignmentId: string) => void;
 };
 
-function CanvasModulesSection({ canvasContent, onLaunchAssignment }: CanvasModulesSectionProps) {
+function CanvasModulesSection({ t, canvasContent, onLaunchAssignment }: CanvasModulesSectionProps) {
   if (!canvasContent.length) return null;
 
   return (
     <section className={`${SURFACE_CLASS} p-6`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg font-display font-bold text-foreground">Course modules</h2>
+          <h2 className="text-lg font-display font-bold text-foreground">{t('app.dashboard.canvas.title') || 'Course modules'}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Canvas course content from your enrolled classes.
+            {t('app.dashboard.canvas.subtitle') || 'Canvas course content from your enrolled classes.'}
           </p>
         </div>
       </div>

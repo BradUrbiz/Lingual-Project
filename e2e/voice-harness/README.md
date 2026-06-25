@@ -71,10 +71,33 @@ node harness.js --turns=turns.example.txt --engine=say   # free/offline
 Test beds (from project notes): Korean Test Class (join `PMDS35`); Spanish
 "Voice test - cafe scaffolded". Student: `teststudent@testing.com` / `lingual123`.
 
+## Scripted, auto-navigating: `live-smoke.js`
+
+`harness.js` needs you to navigate to a voice assignment by hand. `live-smoke.js`
+does the whole thing without manual clicks (login → assignment → start → mic →
+inject → commit → capture), in stages so you only spend Realtime when you mean to:
+
+```bash
+# 1. List the student's assignments + ids (no spend)
+node live-smoke.js --stage=recon
+# 2. Confirm an assignment allows voice (no spend)
+node live-smoke.js --stage=launch --assignment=<id>
+# 3. Full run — single utterance or a turns file (spends Realtime + TTS)
+node live-smoke.js --stage=voice --fresh --assignment=<id> --say="Hola, quiero un café."
+node live-smoke.js --stage=voice --fresh --assignment=<id> --turns=turns.example.txt
+```
+
+`live-smoke.js` flags: `--stage=recon|launch|voice`, `--assignment=<id>`,
+`--fresh` (clean attempt so the per-turn diff is clean), `--say="..."` (single
+utterance), `--turns=<file>` (multi-turn), `--no-commit` (reproduce the stalled-turn
+bug). Each turn it injects, commits, polls for the tutor reply, and writes
+`turn-N.png`. Diagnostics it prints: `window.__vhEvents` (the realtime data-channel
+event timeline) and `outboundAudioStats()` (WebRTC bytesSent / audioLevel).
+
 ## Turn-commit: why `commitInput()` exists
 
 Verified live against prod (Spanish café bed): the session uses `semantic_vad`
-with `create_response: false` (`backend/routes/chat.py:371`). With our synthetic
+with `create_response: false` (`backend/routes/chat.py:371-376`). With our synthetic
 mic, the server fires `input_audio_buffer.speech_started` and streams
 `conversation.item.input_audio_transcription.delta` — but **never fires
 `speech_stopped`**, so the turn never commits, `transcription.completed` never

@@ -1,5 +1,4 @@
-import type { LearningLocale } from '@/types';
-import type { Language } from '@/types';
+import type { LearningLocale, Language } from '@/types';
 
 export type LearningLocaleOption = {
   value: LearningLocale;

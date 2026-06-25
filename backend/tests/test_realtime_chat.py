@@ -686,11 +686,12 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
                 preferred_active_membership_id=preferred,
             )
 
-        def build_system_prompt(context, learning_locale='ko-KR', language_mix_level='balanced'):
+        def build_system_prompt(context, learning_locale='ko-KR', language_mix_level='balanced', native_language='English'):
             self.build_system_prompt_calls.append({
                 'context': context,
                 'learning_locale': learning_locale,
                 'language_mix_level': language_mix_level,
+                'native_language': native_language,
             })
             return f'Generic prompt: {context} ({learning_locale}) [{language_mix_level}]'
 
@@ -1068,7 +1069,7 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
                 preferred_active_membership_id=preferred,
             )
 
-        def build_system_prompt(context, learning_locale='ko-KR', language_mix_level='balanced'):
+        def build_system_prompt(context, learning_locale='ko-KR', language_mix_level='balanced', native_language='English'):
             return f'Generic prompt: {context} ({learning_locale}) [{language_mix_level}]'
 
         deps = RouteDeps(

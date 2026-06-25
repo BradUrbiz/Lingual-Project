@@ -6,7 +6,6 @@ Three meaningful tests (not the tautological brief sketch):
 2. test_korean_native_uses_korean_support: Korean support appears when ui='ko'.
 3. test_flag_off_forces_english_even_for_ko: Flag=0 keeps English even for ko.
 """
-import os
 import unittest
 from types import SimpleNamespace
 from unittest import mock

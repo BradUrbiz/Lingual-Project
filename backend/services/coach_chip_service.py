@@ -108,7 +108,8 @@ def generate_coach_chip(deps: Any, bootstrap: dict, uid: str, session_id: str, t
         if client is None:
             return None
 
-        feedback_policy = mapping.get("feedbackPolicy") if isinstance(mapping.get("feedbackPolicy"), dict) else {}
+        feedback_policy_raw = mapping.get("feedbackPolicy")
+        feedback_policy: dict[str, Any] = feedback_policy_raw if isinstance(feedback_policy_raw, dict) else {}
         surface = "voice" if "voice" in str(session.get("modality") or "").lower() else "text"
         ui_language = _s(session.get("ui_language")) or "en"
 

@@ -988,5 +988,15 @@ class AffectStateAnalysisStateTestCase(unittest.TestCase):
         self.assertIsNone(normalize_analysis_state({'affect_state': 'oops'})['affect_state'])
 
 
+class AnalysisStateCoachChipLastEvalTurnTestCase(unittest.TestCase):
+    def test_analysis_state_carries_coach_chip_last_eval_turn(self):
+        from backend.services.practice_analytics import normalize_analysis_state, default_analysis_state
+        self.assertIsNone(default_analysis_state()['coach_chip_last_eval_turn'])
+        self.assertEqual(
+            normalize_analysis_state({'coach_chip_last_eval_turn': 4})['coach_chip_last_eval_turn'], 4)
+        self.assertIsNone(
+            normalize_analysis_state({'coach_chip_last_eval_turn': 'x'})['coach_chip_last_eval_turn'])
+
+
 if __name__ == "__main__":
     unittest.main()

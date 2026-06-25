@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 COACH_CHIP_MODEL = "gpt-5.4-mini-2026-03-17"
 TRANSCRIPT_WINDOW = 6  # last ~3 exchanges of context for the latest learner turn
+FLOOR_TURN_GAP = 2  # S3.2 fast gate: minimum turns between consecutive LLM evals
 CORRECTIVE_EVENT_TYPES = {
     "feedback.recast", "feedback.elicitation", "feedback.review_item",
     # metric.error_detected fires on the FIRST learner slip (marker-independent),
@@ -53,7 +54,12 @@ def _turn_had_corrective_signal(events: object, turn_index: int) -> bool:
 
 
 def generate_coach_chip(deps: Any, bootstrap: dict, uid: str, session_id: str, turn_index: int) -> dict | None:
-    from backend.services.pedagogy.integration import coach_chips_enabled
+    from backend.services.pedagogy.integration import (
+        coach_chips_enabled, chip_fast_gate_enabled,
+    )
+    from backend.services.pedagogy.language_signal import (
+        detect_target_language_shortfall, produced_target_language,
+    )
 
     if not coach_chips_enabled():
         return None
@@ -88,11 +94,8 @@ def generate_coach_chip(deps: Any, bootstrap: dict, uid: str, session_id: str, t
             if isinstance(existing, dict) and existing.get("turn_index") == turn_index:
                 return existing
 
-        # Heuristic gate: spend an LLM call only when this exchange flagged something.
-        events = deps.db.list_session_learning_events(session_id)
-        if not _turn_had_corrective_signal(events, turn_index):
-            return None
-
+        # Fetch transcript window BEFORE the gate decision so the fast gate can
+        # inspect the latest learner turn.
         transcript_ref = session.get("transcript_ref")
         chat_id = _s(transcript_ref.get("chat_id")) if isinstance(transcript_ref, dict) else ""
         if not chat_id:
@@ -102,6 +105,31 @@ def generate_coach_chip(deps: Any, bootstrap: dict, uid: str, session_id: str, t
         messages = messages if isinstance(messages, list) else []
         window = messages[-TRANSCRIPT_WINDOW:]
         if not window:
+            return None
+
+        # Latest learner content for language-signal checks.
+        latest_learner = next(
+            (m.get("content", "") for m in reversed(window) if isinstance(m, dict) and m.get("role") == "user"),
+            "",
+        )
+        latest_learner = latest_learner if isinstance(latest_learner, str) else ""
+
+        # Inline locale read (curriculum_snapshot.package.learningLocale).
+        locale = (((session.get("curriculum_snapshot") or {}).get("package") or {}).get("learningLocale")) or "en"
+
+        # Gate decision: corrective signal always opens; fast gate adds shortfall and floor.
+        events = deps.db.list_session_learning_events(session_id)
+        corrective = _turn_had_corrective_signal(events, turn_index)
+        fast = chip_fast_gate_enabled()
+        if fast:
+            shortfall = detect_target_language_shortfall(latest_learner, locale)
+            last_eval = analysis_state.get("coach_chip_last_eval_turn")
+            gap = (turn_index - last_eval) if isinstance(last_eval, int) else (turn_index + 1)
+            floor = gap >= FLOOR_TURN_GAP and produced_target_language(latest_learner, locale)
+            open_gate = corrective or shortfall or floor
+        else:
+            open_gate = corrective
+        if not open_gate:
             return None
 
         client = deps.get_openai_client()
@@ -122,7 +150,24 @@ def generate_coach_chip(deps: Any, bootstrap: dict, uid: str, session_id: str, t
         )
         item = parse_coach_chip(json.loads(response.choices[0].message.content),
                                 surface=surface, known_targets=targets)
+
+        # Re-read before write (S3.1 lesson) so a concurrent analysis_state write
+        # that landed during the (slow, multi-second) LLM call is not clobbered.
+        fresh = deps.db.get_practice_session(session_id)
+        target_state = (
+            normalize_analysis_state(fresh.get("analysis_state"))
+            if isinstance(fresh, dict) else analysis_state
+        )
+
         if item is None:
+            # Flag-OFF path: return early without touching state (byte-identical).
+            # Fast-gate path: LLM eval ran but produced no chip — advance last_eval_turn
+            # so the floor stays bounded (a no-chip eval still counts as an eval).
+            if fast:
+                target_state["coach_chip_last_eval_turn"] = turn_index
+                deps.db.update_practice_session_analysis_state(
+                    session_id, target_state, sql_engine=deps.sql_engine
+                )
             return None
 
         serialized = {
@@ -132,13 +177,7 @@ def generate_coach_chip(deps: Any, bootstrap: dict, uid: str, session_id: str, t
             "surface": surface,
             **serialize_coach_chip(item),
         }
-        # Re-read before write (S3.1 lesson) so a concurrent analysis_state write
-        # that landed during the (slow, multi-second) LLM call is not clobbered.
-        fresh = deps.db.get_practice_session(session_id)
-        target_state = (
-            normalize_analysis_state(fresh.get("analysis_state"))
-            if isinstance(fresh, dict) else analysis_state
-        )
+
         chips = list(target_state.get("coach_chips", []))
         if any(isinstance(c, dict) and c.get("turn_index") == turn_index for c in chips):
             return next(c for c in chips if isinstance(c, dict) and c.get("turn_index") == turn_index)
@@ -173,6 +212,9 @@ def generate_coach_chip(deps: Any, bootstrap: dict, uid: str, session_id: str, t
 
         chips.append(serialized)
         target_state["coach_chips"] = chips
+        # Fast gate: advance last_eval_turn on every LLM eval (chip or no-chip).
+        if fast:
+            target_state["coach_chip_last_eval_turn"] = turn_index
         deps.db.update_practice_session_analysis_state(session_id, target_state, sql_engine=deps.sql_engine)
         return serialized
     except Exception:

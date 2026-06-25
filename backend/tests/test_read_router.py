@@ -170,6 +170,30 @@ class TestRouting(unittest.TestCase):
             out = self._route(lambda: {'src': 'fs'}, lambda s: {'src': 'pg'})
         self.assertEqual(out, {'src': 'fs'})
 
+    def test_cutover_no_mirror_raises_dbunavailable_on_pg_error(self):
+        # fail_open=False (analytics family, Firestore mirror retired): a PG failure has
+        # nothing to fall back to, so it must RAISE (-> 503), not silently return empty.
+        os.environ[_FLAG] = '1'
+
+        def boom(self, pc, eng):
+            raise RuntimeError('[Errno 111] Connection refused')
+
+        with mock.patch.object(ReadRouter, '_pg_read', boom):
+            with self.assertRaises(read_router.DbUnavailableError):
+                self.router._route_read(
+                    _FLAG, lambda: {'src': 'fs'}, lambda s: {'src': 'pg'}, fail_open=False
+                )
+
+    def test_cutover_fail_open_false_still_degrades_on_fallback_sentinel(self):
+        # _FALLBACK is "PG can't answer this" (a genuine miss / unresolved parent), NOT a
+        # failure: still degrade to Firestore, never raise. Only an exception is "DB down".
+        os.environ[_FLAG] = '1'
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: pc('SESS')):
+            out = self.router._route_read(
+                _FLAG, lambda: {'src': 'fs'}, lambda s: read_router._FALLBACK, fail_open=False
+            )
+        self.assertEqual(out, {'src': 'fs'})
+
     def test_no_engine_falls_back_to_firestore_even_when_flag_on(self):
         os.environ[_FLAG] = '1'
         router = ReadRouter(types.SimpleNamespace(), sql_engine=lambda: None)
@@ -212,6 +236,61 @@ class TestRouting(unittest.TestCase):
         self.assertEqual(router.get_org_by_teacher_invite_code('X')['code'], 'X')
         self.assertEqual(router.search_organizations('a', limit=3)[0], {'id': 'o', 'q': 'a', 'limit': 3})
         self.assertEqual(router.count_organizations_by_status('active'), 7)
+
+
+class TestAnalyticsReadContract(unittest.TestCase):
+    """The analytics family runs with WRITE_FIRESTORE_ANALYTICS='0' (mirror retired), so a
+    PG read failure has no Firestore mirror to fail-open to. It MUST surface as
+    DbUnavailableError (routes -> retryable 503), NOT a silent None that handlers
+    mistranslate to a false 404 'not found'. A genuine miss still returns None (-> real 404).
+    Mirrors the prod incident: Cloud SQL 'Connection refused' during an instance restart."""
+
+    def setUp(self):
+        for k in ('READ_PG_ANALYTICS_SESSIONS', 'READ_PG_ASSIGNMENTS', 'WRITE_FIRESTORE_ANALYTICS'):
+            os.environ.pop(k, None)
+            self.addCleanup(lambda key=k: os.environ.pop(key, None))
+        self.fs = types.SimpleNamespace(get_practice_session=lambda sid: None)
+        self.router = ReadRouter(self.fs, sql_engine=lambda: object())
+
+    def _cutover(self, *, mirror):
+        os.environ['READ_PG_ANALYTICS_SESSIONS'] = '1'
+        os.environ['READ_PG_ASSIGNMENTS'] = '1'
+        os.environ['WRITE_FIRESTORE_ANALYTICS'] = '1' if mirror else '0'
+
+    def test_get_practice_session_raises_when_pg_down_and_mirror_retired(self):
+        self._cutover(mirror=False)
+
+        def boom(self, pc, eng):
+            raise RuntimeError('[Errno 111] Connection refused')
+
+        with mock.patch.object(ReadRouter, '_pg_read', boom):
+            with self.assertRaises(read_router.DbUnavailableError):
+                self.router.get_practice_session('sess-1')
+
+    def test_get_practice_session_fails_open_when_mirror_present(self):
+        # If the Firestore mirror is still written, the legacy fail-open is preserved
+        # (there is a real fallback to serve), so a PG error degrades silently.
+        self._cutover(mirror=True)
+        self.fs.get_practice_session = lambda sid: {'id': sid, 'src': 'fs'}
+
+        def boom(self, pc, eng):
+            raise RuntimeError('pg down')
+
+        with mock.patch.object(ReadRouter, '_pg_read', boom):
+            out = self.router.get_practice_session('sess-1')
+        self.assertEqual(out, {'id': 'sess-1', 'src': 'fs'})
+
+    def test_get_practice_session_genuine_miss_returns_none_not_raise(self):
+        # A real not-found (PG returns None -> _FALLBACK) must NOT raise — it stays a
+        # clean 404, distinct from the DB-down 503.
+        self._cutover(mirror=False)
+        with mock.patch.object(ReadRouter, '_pg_read', lambda self, pc, eng: pc('SESS')):
+            with mock.patch(
+                'backend.db.repository.analytics_reads.get_practice_session',
+                return_value=None,
+            ):
+                out = self.router.get_practice_session('missing')
+        self.assertIsNone(out)
 
 
 def _make_org(**overrides):

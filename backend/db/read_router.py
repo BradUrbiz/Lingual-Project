@@ -151,6 +151,30 @@ _ASSIGNMENT_SHADOW_NORMALIZE = {
 # to Firestore — a silent data loss the fail-open contract is meant to prevent.
 _FALLBACK = object()
 
+
+class DbUnavailableError(RuntimeError):
+    """A PG-authoritative read failed and there is NO Firestore mirror to fail-open to.
+
+    This is the analytics family once ``WRITE_FIRESTORE_ANALYTICS='0'`` (steady state
+    since 2026-06-03): the practice_sessions / learning_events rows live ONLY in Postgres,
+    so a transient PG outage (e.g. Cloud SQL "Connection refused" during an instance
+    restart) has nothing to fall back to. Returning empty/None in that case would make the
+    route handlers emit a false 404 "not found" — indistinguishable from real data loss.
+
+    Routes translate THIS to a retryable 503 (mirrors ``SuspendedOrgError.to_payload()``),
+    so the SPA backs off and retries instead of treating a blip as a missing session.
+    A genuine miss (PG returns None -> ``_FALLBACK``) is a DIFFERENT path and still degrades
+    to a real not-found — only an actual read *exception* raises this.
+    """
+
+    def to_payload(self) -> dict:
+        return {
+            'success': False,
+            'error': 'The service is temporarily unavailable. Please try again in a moment.',
+            'retryable': True,
+        }
+
+
 # Flag-state ranking for a reader gated on MORE THAN ONE entity flag. The effective
 # mode is the WEAKER of the flags: a cross-family reader is only as cut-over as its
 # least-cut-over family, so it never serves PG for one family while the other has
@@ -282,7 +306,7 @@ class ReadRouter:
                 flag, stats[0], stats[1],
             )
 
-    def _route_read(self, flag, fs_call, pg_call, *, ignore=frozenset(), extract=None, also=None, normalize=None):
+    def _route_read(self, flag, fs_call, pg_call, *, ignore=frozenset(), extract=None, also=None, normalize=None, fail_open=True):
         """The 3-state per-entity gate. See module docstring. `extract` (shadow only)
         maps each result to its comparable part for paginated/wrapped reads. `also`
         (optional) is ONE or MORE additional entity flags this reader depends on — a
@@ -290,7 +314,15 @@ class ReadRouter:
         the WEAKER of `flag` and every `also` flag (cross-family readers, e.g.
         list_student_classes reads PG class rows via an enrollment JOIN; the analytics
         session/event readers depend on two upstream families each). `normalize`
-        (shadow only) canonicalizes specific fields on both sides before the diff."""
+        (shadow only) canonicalizes specific fields on both sides before the diff.
+
+        `fail_open` (PG-authoritative '1' mode only): when True (default), a PG read
+        EXCEPTION degrades to Firestore — the rollback bridge, valid while a Firestore
+        mirror is still written. When False (a family whose mirror has been retired, e.g.
+        analytics under WRITE_FIRESTORE_ANALYTICS='0'), there is nothing to degrade TO, so
+        a PG exception raises DbUnavailableError (-> 503) instead of returning a false
+        empty. This only gates the EXCEPTION path; the `_FALLBACK` (genuine-miss) path
+        below still degrades regardless, so a real not-found stays a real not-found."""
         if also:
             also_flags = (also,) if isinstance(also, str) else tuple(also)
             mode = _weaker_mode(flag, *also_flags)
@@ -307,12 +339,29 @@ class ReadRouter:
             return fs_result
         try:                                     # mode == '1': PG authoritative
             pg_result = self._pg_read(pg_call, engine)
-        except Exception:  # noqa: BLE001 — fail-open: any PG failure -> Firestore
+        except Exception as exc:  # noqa: BLE001
+            if not fail_open:                     # no Firestore mirror -> surface, don't lie
+                _log.exception(
+                    '%s: PG read failed and no Firestore mirror -> DbUnavailableError (503)', flag
+                )
+                raise DbUnavailableError(flag) from exc
             _log.exception('%s: PG read failed; fail-open to Firestore', flag)
             return fs_call()
         if pg_result is _FALLBACK:               # pg_call couldn't answer -> Firestore
             return fs_call()
         return pg_result
+
+    @staticmethod
+    def _analytics_fail_open() -> bool:
+        """The analytics family (practice_sessions + learning_events) may fail-open to
+        Firestore on a PG error ONLY while the Firestore mirror is still written
+        (``WRITE_FIRESTORE_ANALYTICS`` != '0'). Once the mirror is retired (the steady
+        state), there is no fallback copy, so a PG read failure must raise
+        DbUnavailableError (-> 503) rather than return a false empty. Reuses the write-path
+        gate so reads and writes never disagree about whether a mirror exists, and the
+        contract self-heals if the mirror is ever turned back on for rollback."""
+        from backend.db.dual_write_analytics import firestore_analytics_enabled
+        return firestore_analytics_enabled()
 
     # --- overridden readers ----------------------------------------------
 
@@ -617,6 +666,7 @@ class ReadRouter:
             pg_call,
             ignore=_ANALYTICS_SHADOW_IGNORE,
             also='READ_PG_ASSIGNMENTS',
+            fail_open=self._analytics_fail_open(),
         )
 
     def list_assignment_practice_sessions(self, assignment_id):
@@ -634,6 +684,7 @@ class ReadRouter:
             pg_call,
             ignore=_ANALYTICS_SHADOW_IGNORE,
             also='READ_PG_ASSIGNMENTS',
+            fail_open=self._analytics_fail_open(),
         )
 
     def list_student_assignment_practice_sessions(self, assignment_id, student_uid):
@@ -653,6 +704,7 @@ class ReadRouter:
             pg_call,
             ignore=_ANALYTICS_SHADOW_IGNORE,
             also='READ_PG_ASSIGNMENTS',
+            fail_open=self._analytics_fail_open(),
         )
 
     def list_class_practice_sessions(self, class_id):
@@ -670,6 +722,7 @@ class ReadRouter:
             pg_call,
             ignore=_ANALYTICS_SHADOW_IGNORE,
             also='READ_PG_ASSIGNMENTS',
+            fail_open=self._analytics_fail_open(),
         )
 
     def list_student_class_practice_sessions(self, class_id, student_uid):
@@ -689,6 +742,7 @@ class ReadRouter:
             pg_call,
             ignore=_ANALYTICS_SHADOW_IGNORE,
             also='READ_PG_ASSIGNMENTS',
+            fail_open=self._analytics_fail_open(),
         )
 
     # --- analytics: learning_events (Slice D) ----------------------------
@@ -722,6 +776,7 @@ class ReadRouter:
             pg_call,
             ignore=_ANALYTICS_SHADOW_IGNORE,
             also=('READ_PG_ANALYTICS_SESSIONS', 'READ_PG_ASSIGNMENTS'),
+            fail_open=self._analytics_fail_open(),
         )
 
     def list_session_learning_events(self, session_id):
@@ -739,6 +794,7 @@ class ReadRouter:
             pg_call,
             ignore=_ANALYTICS_SHADOW_IGNORE,
             also=('READ_PG_ANALYTICS_SESSIONS', 'READ_PG_ASSIGNMENTS'),
+            fail_open=self._analytics_fail_open(),
         )
 
     def list_student_class_learning_events(self, class_id, student_uid):
@@ -758,4 +814,5 @@ class ReadRouter:
             pg_call,
             ignore=_ANALYTICS_SHADOW_IGNORE,
             also=('READ_PG_ANALYTICS_SESSIONS', 'READ_PG_ASSIGNMENTS'),
+            fail_open=self._analytics_fail_open(),
         )

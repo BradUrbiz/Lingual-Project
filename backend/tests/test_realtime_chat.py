@@ -929,6 +929,32 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         self.assertIn('Parisian bistro', instructions)
         self.assertIn('Could I have', instructions)
 
+    def test_realtime_session_returns_503_when_practice_session_read_is_db_unavailable(self):
+        # Regression: a transient Cloud SQL outage made get_practice_session() fail-open to
+        # an empty (mirror-retired) Firestore -> None -> false 404 "Practice session not
+        # found". The read now raises DbUnavailableError and the route surfaces a
+        # retryable 503 instead of a misleading 404.
+        from backend.db.read_router import DbUnavailableError
+
+        def boom(_session_id):
+            raise DbUnavailableError('READ_PG_ANALYTICS_SESSIONS')
+
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-openai-key'}, clear=False):
+            with patch.object(self.fake_db, 'get_practice_session', boom):
+                response = self.client.post('/api/realtime/session', json={
+                    'uiLanguage': 'en',
+                    'practice': {
+                        'type': 'canvas_generated',
+                        'assignmentId': 'assignment-1',
+                        'practiceSessionId': 'practice-1',
+                    },
+                })
+
+        self.assertEqual(response.status_code, 503)
+        payload = response.get_json()
+        self.assertFalse(payload['success'])
+        self.assertTrue(payload.get('retryable'))
+
     @unittest.skip(
         "Pilot override: voice is unconditionally allowed, so the voice-block "
         "path is unreachable even on the fast path. Re-enable when "

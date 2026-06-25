@@ -8,6 +8,7 @@ import requests
 from flask import Blueprint, current_app, jsonify, request
 from openai import APIStatusError, RateLimitError
 
+from backend.db.read_router import DbUnavailableError
 from backend.route_deps import RouteDeps
 from backend.services.assignment_resolver import (
     build_assignment_prompt_bootstrap_from_practice_session,
@@ -633,6 +634,11 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 'Realtime session ValueError (-> %s): %s', status_code, error
             )
             return jsonify({'error': error, 'success': False}), status_code
+        except DbUnavailableError as exc:
+            # Transient PG outage on the practice-session read (no Firestore mirror).
+            # Surface a retryable 503 so the SPA backs off, NOT a false 404 "not found".
+            current_app.logger.warning('Realtime session DB unavailable -> 503')
+            return jsonify(exc.to_payload()), 503
         except Exception as e:
             current_app.logger.exception('Realtime session unexpected error')
             return jsonify({'error': str(e), 'success': False}), 500

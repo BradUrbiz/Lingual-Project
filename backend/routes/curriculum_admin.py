@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, request
 
 import database
 from backend.db import dual_write_analytics
+from backend.db.read_router import DbUnavailableError
 from backend.route_deps import RouteDeps
 from backend.services.assignment_resolver import (
     SUPPORTED_ASSIGNMENT_STATUSES,
@@ -520,6 +521,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({'success': False, 'error': error}), status_code
         except PermissionError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 403
+        except DbUnavailableError as exc:
+            return jsonify(exc.to_payload()), 503  # transient DB outage, not a real miss
         except Exception as exc:
             print(f'Assignment workspace error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
@@ -608,6 +611,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
             return jsonify({'success': False, 'error': error}), status_code
         except PermissionError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 403
+        except DbUnavailableError as exc:
+            return jsonify(exc.to_payload()), 503  # transient DB outage, not a real miss
         except Exception as exc:
             print(f'Practice session creation error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500
@@ -699,6 +704,8 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 'success': True,
                 'practiceSession': serialize_practice_session(deps.db.get_practice_session(session_id)),
             })
+        except DbUnavailableError as exc:
+            return jsonify(exc.to_payload()), 503  # transient DB outage, not a real miss
         except Exception as exc:
             print(f'Practice session event error: {exc}')
             return jsonify({'success': False, 'error': str(exc)}), 500

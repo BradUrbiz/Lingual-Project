@@ -163,7 +163,17 @@ from backend.avatar_chat import register_avatar_chat_routes
 from backend.route_deps import RouteDeps, _no_sql_engine
 from backend.services.audit import AuditLogger
 from backend.db.sql import get_engine, sql_enabled  # inert Postgres engine provider (ADR-0001)
-from backend.db.read_router import ReadRouter  # flag-gated PG read cutover (default OFF)
+from backend.db.read_router import ReadRouter, DbUnavailableError  # flag-gated PG read cutover (default OFF)
+
+
+@app.errorhandler(DbUnavailableError)
+def _handle_db_unavailable(exc: DbUnavailableError):
+    """App-wide backstop: a PG-authoritative read failed with no Firestore mirror to fall
+    back to (analytics family under WRITE_FIRESTORE_ANALYTICS=0). Any handler that lets it
+    propagate gets a retryable 503 — never a raw 500 or a false 404. The student
+    practice-loop handlers translate it inline; this catches everything else."""
+    app.logger.warning('DbUnavailableError -> 503 (transient PG outage, no mirror)')
+    return jsonify(exc.to_payload()), 503
 from backend.routes.auth import create_auth_blueprint
 from backend.routes.chat import create_chat_blueprint
 from backend.routes.assessment import create_assessment_blueprint

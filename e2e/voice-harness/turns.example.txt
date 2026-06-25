@@ -1,0 +1,7 @@
+# One utterance per line. Blank lines and #comments are skipped.
+# Each line is synthesized and spoken into the live voice call, in order.
+# Spanish café scenario:
+Hola, buenos días.
+Quisiera un café con leche, por favor.
+¿Cuánto cuesta?
+Gracias, hasta luego.

@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>voice-harness self-test</title>
+  </head>
+  <body style="font-family: system-ui; padding: 2rem">
+    <h1 id="status">requesting mic…</h1>
+    <p>
+      This page calls <code>getUserMedia({ audio })</code> (which the harness has
+      overridden), runs the resulting track through an AnalyserNode, and reports the
+      peak RMS. If injection works, speaking raises the peak above the silence floor.
+    </p>
+    <script>
+      window.__rmsPeak = 0;
+      window.__samples = 0;
+      (async () => {
+        const status = document.getElementById('status');
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const ac = new (window.AudioContext || window['webkitAudioContext'])();
+          const src = ac.createMediaStreamSource(stream);
+          const an = ac.createAnalyser();
+          an.fftSize = 2048;
+          src.connect(an);
+          const data = new Float32Array(an.fftSize);
+          status.textContent = 'listening (peak RMS: 0.0000)';
+          setInterval(() => {
+            an.getFloatTimeDomainData(data);
+            let sum = 0;
+            for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+            const rms = Math.sqrt(sum / data.length);
+            window.__samples++;
+            if (rms > window.__rmsPeak) window.__rmsPeak = rms;
+            status.textContent = 'listening (peak RMS: ' + window.__rmsPeak.toFixed(4) + ')';
+          }, 50);
+        } catch (e) {
+          status.textContent = 'getUserMedia FAILED: ' + e;
+        }
+      })();
+    </script>
+  </body>
+</html>

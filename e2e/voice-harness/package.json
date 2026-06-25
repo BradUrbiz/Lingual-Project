@@ -1,0 +1,17 @@
+{
+  "name": "lingual-voice-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Drive Lingual's realtime voice tutor by injecting on-demand TTS audio into the page's microphone (getUserMedia override). Type text -> spoken into the live WebRTC call.",
+  "bin": {
+    "voice-harness": "./harness.js"
+  },
+  "scripts": {
+    "selftest": "node harness.js --self-test --engine=say",
+    "start": "node harness.js"
+  },
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  }
+}

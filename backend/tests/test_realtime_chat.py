@@ -627,6 +627,59 @@ class RealtimeChatHelpersTestCase(unittest.TestCase):
             'Primary expected language is French. English may also appear.',
         )
 
+    def test_realtime_session_request_honors_transcription_model_env(self):
+        with patch.dict(
+            'os.environ',
+            {'REALTIME_TRANSCRIPTION_MODEL': 'gpt-4o-transcribe'},
+            clear=False,
+        ):
+            payload = build_realtime_session_request('Base instructions')
+
+        transcription = payload['session']['audio']['input']['transcription']
+
+        self.assertEqual(transcription['model'], 'gpt-4o-transcribe')
+
+    def test_realtime_session_request_keeps_prompt_for_prompt_capable_model(self):
+        with patch.dict(
+            'os.environ',
+            {'REALTIME_TRANSCRIPTION_MODEL': 'gpt-4o-transcribe'},
+            clear=False,
+        ):
+            payload = build_realtime_session_request(
+                'Base instructions',
+                transcription_language='es',
+                transcription_prompt='Primary expected language is Spanish. English may also appear.',
+            )
+
+        transcription = payload['session']['audio']['input']['transcription']
+
+        self.assertEqual(transcription['language'], 'es')
+        self.assertEqual(
+            transcription['prompt'],
+            'Primary expected language is Spanish. English may also appear.',
+        )
+
+    def test_realtime_session_request_omits_prompt_for_whisper_model(self):
+        # gpt-realtime-whisper does NOT accept the `prompt` parameter in GA realtime
+        # sessions; sending one makes the client_secret mint fail. The builder must
+        # drop the prompt for such models while keeping the language hint.
+        with patch.dict(
+            'os.environ',
+            {'REALTIME_TRANSCRIPTION_MODEL': 'gpt-realtime-whisper'},
+            clear=False,
+        ):
+            payload = build_realtime_session_request(
+                'Base instructions',
+                transcription_language='es',
+                transcription_prompt='Primary expected language is Spanish. English may also appear.',
+            )
+
+        transcription = payload['session']['audio']['input']['transcription']
+
+        self.assertEqual(transcription['model'], 'gpt-realtime-whisper')
+        self.assertEqual(transcription['language'], 'es')
+        self.assertNotIn('prompt', transcription)
+
     def test_realtime_session_request_includes_avatar_tools_when_enabled(self):
         with patch.dict('os.environ', {'ENABLE_PILOT_AVATAR': 'true', 'ENABLE_REALTIME_AVATAR_DIRECTIVES': 'true'}, clear=False):
             payload = build_realtime_session_request('Base instructions')

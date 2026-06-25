@@ -82,7 +82,30 @@ AVATAR_REACTION_INTENTS = [
 
 REALTIME_MODEL = 'gpt-realtime-mini-2025-12-15'
 REALTIME_CLIENT_SECRET_TTL_SECONDS = 600
+# Default input-audio transcription model. Override per-deploy with the
+# REALTIME_TRANSCRIPTION_MODEL env var so we can A/B candidates (e.g.
+# gpt-4o-transcribe, gpt-realtime-whisper) against real learner audio without a
+# code change. Resolved at request time via resolve_realtime_transcription_model().
 REALTIME_INPUT_AUDIO_TRANSCRIPTION_MODEL = 'gpt-4o-mini-transcribe-2025-12-15'
+REALTIME_TRANSCRIPTION_MODEL_ENV = 'REALTIME_TRANSCRIPTION_MODEL'
+# Realtime transcription models that do NOT accept the `prompt` parameter in GA
+# realtime sessions. Sending a prompt to these makes the client_secret mint fail,
+# so the builder drops the prompt (but keeps the language hint) for them. The
+# gpt-4o(-mini)-transcribe family does accept prompt hints.
+REALTIME_TRANSCRIPTION_MODELS_WITHOUT_PROMPT = ('gpt-realtime-whisper', 'whisper-1')
+
+
+def resolve_realtime_transcription_model() -> str:
+    configured = os.environ.get(REALTIME_TRANSCRIPTION_MODEL_ENV, '').strip()
+    return configured or REALTIME_INPUT_AUDIO_TRANSCRIPTION_MODEL
+
+
+def realtime_transcription_supports_prompt(model: str) -> bool:
+    normalized = (model or '').strip().lower()
+    return not any(
+        normalized == name or normalized.startswith(f'{name}-')
+        for name in REALTIME_TRANSCRIPTION_MODELS_WITHOUT_PROMPT
+    )
 REALTIME_SPEAKING_SPEED_DEFAULT = 1.0
 REALTIME_SPEAKING_SPEED_MIN = 0.25
 REALTIME_SPEAKING_SPEED_MAX = 1.5
@@ -317,11 +340,16 @@ def build_realtime_session_request(
         'Only respond when the learner is clearly addressing you.\n\n'
         f'{build_realtime_pacing_instruction(normalized_speaking_speed)}'
     )
+    transcription_model = resolve_realtime_transcription_model()
     input_audio_transcription: dict[str, Any] = {
-        'model': REALTIME_INPUT_AUDIO_TRANSCRIPTION_MODEL,
+        'model': transcription_model,
         'language': transcription_language,
     }
-    if isinstance(transcription_prompt, str) and transcription_prompt.strip():
+    if (
+        isinstance(transcription_prompt, str)
+        and transcription_prompt.strip()
+        and realtime_transcription_supports_prompt(transcription_model)
+    ):
         input_audio_transcription['prompt'] = transcription_prompt.strip()
 
     session_payload: dict[str, Any] = {

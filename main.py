@@ -72,7 +72,7 @@ CORS(app, origins=['http://localhost:5173', 'http://localhost:3000'], supports_c
 # Initialize Firebase Admin SDK
 firebase_app = None
 FIREBASE_PROJECT_ID = os.environ.get('GOOGLE_CLOUD_PROJECT', 'lingu-480600')
-ALLOWED_LEARNING_LOCALES = {'ko-KR', 'es-ES', 'fr-FR', 'ru-RU', 'he-IL', 'tl-PH'}
+ALLOWED_LEARNING_LOCALES = {'ko-KR', 'es-ES', 'fr-FR', 'ru-RU', 'he-IL', 'tl-PH', 'en-US'}
 ALLOWED_MINIGAME_TYPES = {'listening_quiz', 'grammar_challenge'}
 SUPPORTED_UI_LANGUAGES = {'en', 'ko'}
 LEARNING_LOCALE_PROMPT_CONFIG = {
@@ -105,6 +105,11 @@ LEARNING_LOCALE_PROMPT_CONFIG = {
         'language_name': 'Tagalog',
         'conversation_note': 'Use natural conversational Tagalog. Include romanization hints only when genuinely helpful for beginners. Filipino often code-switches with English — follow the learner\'s lead on mixing.',
         'register_note': 'Be mindful of formal (po/opo) vs informal register and let the conversation context guide which to use.',
+    },
+    'en-US': {
+        'language_name': 'English',
+        'conversation_note': 'Use natural spoken English and include pronunciation or usage hints only when genuinely useful.',
+        'register_note': 'Keep register natural and learner-friendly; default to clear, everyday American English.',
     },
 }
 FREE_PRACTICE_LANGUAGE_MIX_LEVELS = {

@@ -1,0 +1,42 @@
+# Teacher FDE
+
+Status: Active — Phase 0 (framework) in progress
+Last updated: 2026-06-27
+Owner: Product + Engineering
+
+**Teacher FDE** (Forward-Deployed Engineering, for teachers) is the initiative that establishes
+*how teachers design conversational learning* on Lingual: turning teacher intent into engine-ready
+assignment input, making the conversation's execution observable, and building teacher literacy in
+the medium.
+
+It is the **teacher-facing front of the pedagogy engine** (`../Pedagogy Engineering/`). The engine
+answers *"given good input, how does the conversation produce learning?"* — Teacher FDE answers the
+**prior** question:
+
+> **"What should the teacher put in, and how do they know it worked?"**
+
+The name is deliberate. Today, no one — not teachers, not the field — has an established method for
+leveraging real-time AI conversation as structured classroom learning. Lingual's job is to *be the
+forward-deployed engineer*: define that method, encode it into the product, and co-develop it with
+real teachers in real classrooms.
+
+## Documents
+
+| Document | Purpose | When to update |
+|----------|---------|----------------|
+| `CHARTER.md` | Why this exists, the problem, the thesis, success criteria, non-goals | Mission, scope, or success criteria change |
+| `ROADMAP.md` | Phases, current status, decision log, open questions | A phase starts/ends, a decision lands, or an open question resolves |
+| `DESIGN_LANGUAGE.md` | The keystone — the Conversational Learning Design Language (the framework all three surfaces draw from) | The framework's structure or content changes |
+| `TASKS.md` | Phased checklist | Items start, complete, block, or are newly identified |
+
+**Update order on scope changes:** CHARTER → DESIGN_LANGUAGE → ROADMAP → TASKS.
+
+## Status legend (TASKS)
+
+- `[ ]` not started · `[-]` in progress · `[x]` done · `[!]` blocked / needs decision
+
+## Relationship to other docs
+
+- `../Pedagogy Engineering/PEDAGOGY_ENGINE.md` — the execution engine Teacher FDE feeds and observes.
+- `../PRD.md` / `../TECH_SPEC.md` — the parent school-integration product + architecture.
+- `../../Pedagogy Research/` — SLA / pedagogy source material; Phase 0 external research lands here or is linked.

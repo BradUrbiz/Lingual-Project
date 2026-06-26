@@ -1,6 +1,6 @@
 # The Conversational Learning Design Language
 
-Status: **DRAFT v0 — under review** (skeleton; pending team + design-partner validation and external-research grounding)
+Status: **v0 — team-approved 2026-06-27** (working framework; pending design-partner validation + external-research grounding)
 Last updated: 2026-06-27
 Owner: Product + Engineering
 
@@ -72,7 +72,9 @@ Candidate archetypes (v0 — to be validated/expanded):
 Each archetype documents: the communicative objective it fits, the target slots it naturally elicits,
 the scenario shape, a worked example, and the realized signals to expect (→ §E).
 
-> _Open: which 3–4 archetypes do we ship first? Anchor to what the design partner actually teaches._
+> _Open: which 3–4 archetypes do we ship first? Anchor to what the design partner actually teaches —
+> **HS advanced / pre-AP Spanish** (AP Spanish Language & Culture themes; opinion/debate + negotiation
+> likely weigh heavier than beginner transactions at this level)._
 
 ## §D. The quality model (when is input "engine-ready"?)
 
@@ -116,8 +118,8 @@ of Phase 1.
 
 ## Validation status
 
-- [ ] §A thesis — grounded against external research
-- [ ] §B variables — confirmed complete / correctly abstracted with team + design partner
-- [ ] §C archetypes — first 3–4 chosen, anchored to the design partner's real teaching
-- [ ] §D quality model — validated as the readiness rubric
-- [ ] §E signals — confirmed against the actual engine emissions and the chosen headline metric
+- [-] §A thesis — external-research grounding fired (`/deep-research`, 2026-06-27); design-partner validation pending
+- [x] §B variables — team-approved 2026-06-27; design-partner validation pending (possible add: tutor persona / interlocutor role)
+- [ ] §C archetypes — first 3–4 chosen, anchored to the design partner's real teaching (**HS advanced / pre-AP Spanish**)
+- [x] §D quality model — team-approved 2026-06-27 as the readiness rubric
+- [x] §E signals — team-approved 2026-06-27 (headline metric = **task–target alignment gap**); confirm against actual engine emissions in Phase 1

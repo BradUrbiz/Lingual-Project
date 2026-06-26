@@ -12,11 +12,11 @@ Owner: Product + Engineering
 
 - [x] Establish the program, decisions, and doc home (`CHARTER`, `ROADMAP`, `DESIGN_LANGUAGE`, `TASKS`). — 2026-06-27
 - [x] Engine-lever audit: input field → engine behavior → degradation-when-thin (folded into `DESIGN_LANGUAGE.md` §B/§E). — 2026-06-26
-- [-] **Validate the v0 framework skeleton** (`DESIGN_LANGUAGE.md` §A–§E) with the team. Open: §B variable completeness, §C archetype shortlist, §E headline metric.
-- [ ] **External SLA-grounding research** (`/deep-research`): how to structure real-time conversational practice for L2 acquisition; which teacher-controllable variables matter. Land/link in `../../Pedagogy Research/`, fold into §A. — _awaiting go/no-go + wording_
-- [ ] **Design-partner intake**: identify the pilot teacher, their language/level, current authoring pain; schedule a real session to observe.
+- [x] **Validated the v0 framework skeleton** (`DESIGN_LANGUAGE.md` §A–§E) with the team — approved as the working framework (headline metric = task–target alignment gap). Design-partner validation pending. — 2026-06-27
+- [-] **External SLA-grounding research** (`/deep-research`, Opus 4.8): fired 2026-06-27, scoped to **pre-AP advanced Spanish** + teacher-controllable variables. Land/link in `../../Pedagogy Research/`, fold into §A. (workflow `w9iqkc281`)
+- [-] **Design-partner intake**: level = **HS advanced / pre-AP Spanish**. Still open: identity, current authoring pain, schedule a real session to observe.
 - [ ] Co-validate `DESIGN_LANGUAGE.md` with the design partner; reshape v0 from their mental model.
-- [ ] Choose the first 3–4 archetypes (§C), anchored to what the design partner teaches.
+- [ ] Choose the first 3–4 archetypes (§C), anchored to what the design partner teaches (**pre-AP advanced Spanish**).
 - [ ] Phase 0 exit: design-partner-validated v0, concrete enough to drive Phase 1.
 
 ## Phase 1 — Observability (intended → realized) — NEXT

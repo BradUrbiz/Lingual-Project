@@ -57,6 +57,10 @@ view as a teaching mirror, (c) an **exemplar / archetype library** (the design p
 | 2026-06-27 | **Framework v0 (§A–§E) approved by the team** as the working skeleton; design-partner validation still pending. | Skeleton matches the team's mental model; concrete enough to drive Phase 0 grounding + Phase 1. |
 | 2026-06-27 | **Design partner = high-school ADVANCED / pre-AP Spanish** (≈ ACTFL Intermediate-Mid → Advanced-Low). | Anchors §C archetypes, the research scope, and Phase 1 to a concrete learner level instead of generic SLA. |
 | 2026-06-27 | **External SLA research fired** (`/deep-research`, Opus 4.8), scoped to pre-AP advanced Spanish + teacher-controllable variables. | §A grounding runs in parallel without blocking the first deployable surface. |
+| 2026-06-27 | **Feedback policy is exposed to teachers** as a first-class design variable (not hidden behind a "rigor" macro). | Teachers should consciously own the accuracy↔fluency stance; it materially changes correction behavior. |
+| 2026-06-27 | **Tutor persona / interlocutor role added** as a design variable (§B). | Who the AI plays drives register + which functions are elicited; first-class in the language even though it renders via scenario/instructions + the voice avatar today. |
+| 2026-06-27 | **§C archetypes anchored to ACTFL interpersonal/presentational + AP Spanish themes**; beginner transaction de-emphasized. | Lingual's primary environment is pre-AP advanced Spanish / ACTFL curricula — start where it will actually be used. |
+| 2026-06-27 | **Design-partner curriculum is directly readable via the class Canvas PAT** (in `.env`) — capability noted, ingestion deferred. | Lets us ground archetypes + worked examples in the partner's real AP/ACTFL units instead of invented scenarios, when we pick it up. |
 
 ## Open questions
 
@@ -64,8 +68,10 @@ view as a teaching mirror, (c) an **exemplar / archetype library** (the design p
   (2026-06-27). Design-partner validation still pending (Phase 0 teacher-reality stream).
 - [x] **External research go.** Fired 2026-06-27 (`/deep-research`, Opus 4.8) — scoped to pre-AP
   advanced Spanish + teacher-controllable variables.
-- [-] **Design partner specifics.** Level known: **HS advanced / pre-AP Spanish**. Still open: who
-  specifically, their current authoring pain, and when we can observe a real session.
+- [-] **Design partner specifics.** Level known: **HS advanced / pre-AP Spanish**. Their real course
+  materials are **readable via the class Canvas PAT** (in `.env`) — deferred ingestion, capability
+  noted. Still open: who specifically, their current authoring pain, and when we can observe a real
+  session.
 - [ ] **Observability surface shape (Phase 1).** Where does it live (extend the existing teacher
   debrief / plan-preview, or a new surface?) and what's the minimum first cut? — Deferred to Phase 1
   brainstorm.

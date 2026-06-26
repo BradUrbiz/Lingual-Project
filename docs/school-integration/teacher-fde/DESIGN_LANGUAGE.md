@@ -44,6 +44,7 @@ each: what it is · the learning mechanism it serves · what the engine does wit
 |---|---|---|---|
 | **Communicative objective** (`objectives`) | Defines the can-do goal | S1 objective-target routing; S3 coach/Ask scope | Empty → no objective anchor; corrections untethered to intent |
 | **Task / scenario** (`generated_scenario`, `task_type`) | The situation that makes targets *necessary* (TBLT) | S1 task context; `task_type` = info-gap / opinion-gap / decision-making (TBLT shapes) or `custom_prompt` (engine OFF) | Misaligned scenario → targets never elicited; `custom_prompt` → no pedagogy guarantees |
+| **Tutor persona / interlocutor role** (in `instructions` / `generated_scenario` today; candidate first-class field) | Register, pragmatic functions, and affect the *role* elicits (debate opponent → argument; community member → interview; skeptical customer → persuasion) | Rendered into the system prompt via scenario/instructions; the voice surface also carries an avatar persona | Unset → generic tutor; register + role-specific functions under-elicited |
 | **Target expressions / vocabulary** (`target_expressions`, `target_vocabulary`) | Forms to elicit + recycle | S1 recast-first; **S2 recycling hit-count**; S3 coach/Ask alignment; S4.2 coverage; **S5 target-neglect** | Empty → recycling + neglect-detection silently dead; vague → hit-counting meaningless |
 | **Focus grammar** (`focus_grammar`) | Structures practiced under pressure | **S1 prompt-first (Lyster) routing** | Empty → grammar routing silent no-op; (note: S2 excludes grammar by design) |
 | **Success criteria** (`success_criteria`) | The observable "done well" bar | S1 task context; teacher debrief | Vague → learner can't tell what counts; weak completion signal |
@@ -52,9 +53,10 @@ each: what it is · the learning mechanism it serves · what the engine does wit
 | **Feedback policy** (`feedbackPolicy.mode`) | Accuracy↔fluency stance | S1 elicitation timing; S2 recycling directedness; S3 coach depth; S4.1 affect stance | Missing → defaults to balanced (often fine, but unset ≠ chosen) |
 | **Teacher notes** (`teacher_notes`) | Conveys intent the fields can't | S1 GUIDANCE section | Missing → tutor lacks pedagogical context |
 
-> _Open: is this the complete set of variables a teacher should consciously control, or do we hide
-> some (e.g. feedback policy) behind a higher-level "rigor" choice? Are we missing a variable for
-> **interlocutor role / tutor persona**?_
+> _Resolved 2026-06-27: **feedback policy is exposed to teachers** as a first-class variable — not
+> hidden behind a higher-level "rigor" macro (teachers should consciously own the accuracy↔fluency
+> stance). **Tutor persona / interlocutor role added** (row above). Remaining open: does persona
+> warrant its own input field now, or stay scenario-embedded for v0?_
 
 ## §C. The design patterns (archetypes / recipes)
 
@@ -62,19 +64,36 @@ A small set of proven task shapes, each with target slots pre-wired so task–ta
 *default*, not an achievement. These become both the authoring templates (#1) and the literacy
 exemplars (#3).
 
-Candidate archetypes (v0 — to be validated/expanded):
-- **Transaction / role-play** (order food, book a room) — forces functional expressions + politeness forms.
-- **Opinion / debate** (opinion-gap) — forces stance + justification + agreement/disagreement language.
-- **Information gap / jigsaw** — forces question forms + clarification; each side holds half the info.
-- **Narrative retell** — forces past tense + sequencing connectives.
-- **Decision / negotiation** — forces conditionals + comparison + persuasion.
+**v0 archetype set — anchored to ACTFL interpersonal/presentational speaking + AP Spanish Language &
+Culture themes** (pre-AP advanced). Beginner "transaction/role-play" is intentionally de-emphasized —
+it under-stretches this level. Each archetype pre-wires target slots so task–target alignment is the
+*default*, names the interlocutor persona, and maps to a `task_type`.
 
-Each archetype documents: the communicative objective it fits, the target slots it naturally elicits,
-the scenario shape, a worked example, and the realized signals to expect (→ §E).
+Ship-first set (3–4):
+1. **Opinion / argumentation** (`opinion_gap`) — defend a stance on a societal issue (AP: *los desafíos
+   mundiales*, *la ciencia y la tecnología*). Elicits: opinion frames + subjunctive of doubt/emotion
+   (*no creo que…*, *es importante que…*), connectors (*sin embargo, por lo tanto*), agree/disagree
+   pragmatics. Persona = a respectful debate partner.
+2. **Negotiation / decision-making** (`decision_making`) — reach a shared plan or agreement (AP: *la
+   vida contemporánea*). Elicits: conditional, comparatives, persuasion, polite disagreement. Persona
+   = a peer with competing preferences.
+3. **Interview / information-gap** (`information_gap`) — each side holds half the information; interview
+   a community member or exchange cultural detail (AP: *familias y comunidades*, *la identidad personal
+   y pública*). Elicits: question formation, clarification/follow-up, register control. Persona = the
+   person being interviewed.
+4. **Cultural comparison** (presentational-into-interpersonal) — compare a product/practice/perspective
+   across cultures (mirrors the AP cultural-comparison task). Elicits: comparative structures,
+   presentational discourse markers, register shifts. Persona = a curious peer from the target culture.
 
-> _Open: which 3–4 archetypes do we ship first? Anchor to what the design partner actually teaches —
-> **HS advanced / pre-AP Spanish** (AP Spanish Language & Culture themes; opinion/debate + negotiation
-> likely weigh heavier than beginner transactions at this level)._
+Bench (later): **narrative / past-event retell** (preterite ↔ imperfect contrast — a core pre-AP
+grammar focus); **transaction / role-play** (kept only for lower-level or scaffolding use).
+
+Each archetype documents: the objective it fits, the target slots it naturally elicits, the scenario
+shape, the **interlocutor persona**, a worked Spanish example, and the realized signals to expect (→ §E).
+
+> _Open: confirm the ship-first set against (a) the deep-research evidence on task type × proficiency
+> and (b) the design partner's actual AP/ACTFL units — readable via the class **Canvas PAT** (see
+> ROADMAP). The first worked example should use a real unit from the partner's course._
 
 ## §D. The quality model (when is input "engine-ready"?)
 
@@ -119,7 +138,7 @@ of Phase 1.
 ## Validation status
 
 - [-] §A thesis — external-research grounding fired (`/deep-research`, 2026-06-27); design-partner validation pending
-- [x] §B variables — team-approved 2026-06-27; design-partner validation pending (possible add: tutor persona / interlocutor role)
-- [ ] §C archetypes — first 3–4 chosen, anchored to the design partner's real teaching (**HS advanced / pre-AP Spanish**)
+- [x] §B variables — team-approved 2026-06-27 (feedback policy exposed; tutor persona / interlocutor role added); design-partner validation pending
+- [-] §C archetypes — v0 ship-first set drafted (opinion / negotiation / interview-info-gap / cultural-comparison), anchored to ACTFL + AP themes; confirm vs research + the partner's real Canvas units
 - [x] §D quality model — team-approved 2026-06-27 as the readiness rubric
 - [x] §E signals — team-approved 2026-06-27 (headline metric = **task–target alignment gap**); confirm against actual engine emissions in Phase 1

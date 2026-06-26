@@ -16,7 +16,8 @@ Owner: Product + Engineering
 - [-] **External SLA-grounding research** (`/deep-research`, Opus 4.8): fired 2026-06-27, scoped to **pre-AP advanced Spanish** + teacher-controllable variables. Land/link in `../../Pedagogy Research/`, fold into §A. (workflow `w9iqkc281`)
 - [-] **Design-partner intake**: level = **HS advanced / pre-AP Spanish**. Still open: identity, current authoring pain, schedule a real session to observe.
 - [ ] Co-validate `DESIGN_LANGUAGE.md` with the design partner; reshape v0 from their mental model.
-- [ ] Choose the first 3–4 archetypes (§C), anchored to what the design partner teaches (**pre-AP advanced Spanish**).
+- [-] Archetypes (§C): v0 ship-first set drafted (opinion / negotiation / interview-info-gap / cultural-comparison), anchored to ACTFL + AP Spanish themes. Confirm vs research + the partner's real units.
+- [ ] (Deferred — capability noted) Ingest the design partner's real AP/ACTFL units via the class **Canvas PAT** (`.env`) to ground archetypes + the first worked examples.
 - [ ] Phase 0 exit: design-partner-validated v0, concrete enough to drive Phase 1.
 
 ## Phase 1 — Observability (intended → realized) — NEXT

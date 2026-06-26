@@ -17,8 +17,8 @@ Owner: Product + Engineering
 - [ ] **Evidence-flywheel agenda**: design Phase 1 observability to probe the 3 evidence-thin variables (see ROADMAP "Research agenda") — turn real sessions into the SLA evidence the literature lacks.
 - [-] **Design-partner intake**: level = **HS advanced / pre-AP Spanish**. Still open: identity, current authoring pain, schedule a real session to observe.
 - [ ] Co-validate `DESIGN_LANGUAGE.md` with the design partner; reshape v0 from their mental model.
-- [-] Archetypes (§C): v0 ship-first set drafted (opinion / negotiation / interview-info-gap / cultural-comparison), anchored to ACTFL + AP Spanish themes. Confirm vs research + the partner's real units.
-- [ ] (Deferred — capability noted) Ingest the design partner's real AP/ACTFL units via the class **Canvas PAT** (`.env`) to ground archetypes + the first worked examples.
+- [-] Archetypes (§C): v0 ship-first set drafted + **first worked example grounded in the partner's real L1 unit**. Confirm full set vs research + design-partner sign-off.
+- [x] Ingested the design partner's real curriculum via the Canvas PAT (read-only) → `DESIGN_PARTNER_CURRICULUM.md` (Polón, VHL Imagina / AP-track); grounded the first §C worked example. — 2026-06-27
 - [ ] Phase 0 exit: design-partner-validated v0, concrete enough to drive Phase 1.
 
 ## Phase 1 — Observability (intended → realized) — NEXT

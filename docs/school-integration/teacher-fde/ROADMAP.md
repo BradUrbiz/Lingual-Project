@@ -63,6 +63,8 @@ view as a teaching mirror, (c) an **exemplar / archetype library** (the design p
 | 2026-06-27 | **Design-partner curriculum is directly readable via the class Canvas PAT** (in `.env`) — capability noted, ingestion deferred. | Lets us ground archetypes + worked examples in the partner's real AP/ACTFL units instead of invented scenarios, when we pick it up. |
 | 2026-06-27 | **SLA research landed** (`RESEARCH_SLA_GROUNDING.md`): spine confirmed, **corrective feedback is the #1 evidenced lever**, task difficulty refuted as a grammar-forcer. Folded into `DESIGN_LANGUAGE.md` §A/§B/§C. | Anchors the framework in adversarially-verified evidence; sharpens which variables we trust vs. treat as hypotheses. |
 | 2026-06-27 | **Observability becomes an evidence flywheel.** The three evidence-thin variables (language-mix, recycling, modality) are exactly where Lingual already runs all three and the literature is silent → our observability data is positioned to produce the missing SLA evidence. | Reframes Phase 1 from "a teacher feature" to "the way Lingual generates evidence the field lacks" — a durable strategic asset. |
+| 2026-06-27 | **Design-partner curriculum ingested** (read-only Canvas pull) → `DESIGN_PARTNER_CURRICULUM.md`; first §C worked example grounded in his real L1 "Las relaciones personales" unit. Partner = **Eduardo Polón**, VHL Imagina / AP-track. | Archetypes + examples now sit on a real course, not invented scenarios — the FDE grounding the spine called for. |
+| 2026-06-27 | **Speak the teacher's vocabulary.** He already uses a task taxonomy (OVERVIEW→…→ASSESS) + ACTFL modes, and is AI-forward (has AI-use guideline pages). The design language should map onto his terms, not impose new ones. | Lower adoption friction; the gap we fill is execution-at-scale + observability, not "what to practice." |
 
 ## Open questions
 
@@ -70,10 +72,10 @@ view as a teaching mirror, (c) an **exemplar / archetype library** (the design p
   (2026-06-27). Design-partner validation still pending (Phase 0 teacher-reality stream).
 - [x] **External research go.** Fired 2026-06-27 (`/deep-research`, Opus 4.8) — scoped to pre-AP
   advanced Spanish + teacher-controllable variables.
-- [-] **Design partner specifics.** Level known: **HS advanced / pre-AP Spanish**. Their real course
-  materials are **readable via the class Canvas PAT** (in `.env`) — deferred ingestion, capability
-  noted. Still open: who specifically, their current authoring pain, and when we can observe a real
-  session.
+- [-] **Design partner specifics.** **Eduardo Polón** — *Advanced Spanish: Contemporary Topics &
+  Culture* (VHL Imagina, AP-track), `ssfs.instructure.com`. Curriculum ingested
+  (`DESIGN_PARTNER_CURRICULUM.md`). Still open: his current authoring pain, and scheduling a real
+  session to observe.
 - [ ] **Observability surface shape (Phase 1).** Where does it live (extend the existing teacher
   debrief / plan-preview, or a new surface?) and what's the minimum first cut? — Deferred to Phase 1
   brainstorm.

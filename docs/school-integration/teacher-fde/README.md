@@ -28,6 +28,7 @@ real teachers in real classrooms.
 | `ROADMAP.md` | Phases, current status, decision log, open questions | A phase starts/ends, a decision lands, or an open question resolves |
 | `DESIGN_LANGUAGE.md` | The keystone — the Conversational Learning Design Language (the framework all three surfaces draw from) | The framework's structure or content changes |
 | `RESEARCH_SLA_GROUNDING.md` | Adversarially-verified SLA evidence base grounding `DESIGN_LANGUAGE.md` §A | A new research pass lands or a claim is revised |
+| `DESIGN_PARTNER_CURRICULUM.md` | The design partner's real Canvas curriculum (read-only pull) grounding §C archetypes/examples | Curriculum is re-pulled or the partner changes |
 | `TASKS.md` | Phased checklist | Items start, complete, block, or are newly identified |
 
 **Update order on scope changes:** CHARTER → DESIGN_LANGUAGE → ROADMAP → TASKS.

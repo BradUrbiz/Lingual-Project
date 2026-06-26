@@ -116,6 +116,29 @@ hypothesized sequencing rule, not a guaranteed gain.
 Each archetype documents: the objective it fits, the target slots it naturally elicits, the scenario
 shape, the **interlocutor persona**, a worked Spanish example, and the realized signals to expect (→ §E).
 
+### Worked example — grounded in the design partner's real L1 unit (`DESIGN_PARTNER_CURRICULUM.md`)
+
+**Source:** Imagina L1 *Sentir y Vivir — Las relaciones personales*, §2.2 "Interpersonal Communication
+by way of the Vocabulario." **Archetype:** Opinion / argumentation (interpersonal).
+
+- **Objective (can-do):** express and defend preferences about personal relationships; describe
+  emotional states with their cause.
+- **Scenario / task:** the learner meets a Spanish-speaking peer who interviews them about what they
+  want in relationships and gently pushes back, forcing justification.
+- **Interlocutor persona:** a curious, slightly contrarian peer (`amigo/a`) from the target culture.
+- **Target expressions:** *¿Qué deseas / buscas en una relación?* · *Prefiero evitar…* ·
+  *Me siento ___ cuando ___* · *Conozco a gente que ___*
+- **Focus grammar:** subjunctive in adjective clauses w/ indefinite antecedent (*Busco a alguien que
+  **sea**…*); ser vs. estar (personality vs. state — L1 Estructura 1.2); gustar-type verbs for emotion
+  (L1 Estructura 1.3).
+- **Target vocabulary:** las relaciones · los sentimientos · las personalidades · los estados
+  emocionales · los estados civiles.
+- **Success criteria:** states ≥2 preferences *with justification*; uses *Me siento… cuando…*
+  correctly; sustains the exchange with ≥1 follow-up question.
+- **Language-mix:** target-led (advanced), brief English only on a stall. **Modality:** voice.
+- **Realized signals (§E):** per-target hit-counts on the four expressions; whether the scenario forced
+  the subjunctive-in-adjective-clause; the **alignment gap** (intended vs. elicited).
+
 > _Open: confirm the ship-first set against (a) the deep-research evidence on task type × proficiency
 > and (b) the design partner's actual AP/ACTFL units — readable via the class **Canvas PAT** (see
 > ROADMAP). The first worked example should use a real unit from the partner's course._
@@ -164,6 +187,6 @@ of Phase 1.
 
 - [x] §A thesis — grounded by `RESEARCH_SLA_GROUNDING.md` (2026-06-27): spine confirmed, corrective feedback elevated as #1 lever, task difficulty refuted, 3 variables flagged theory-derived
 - [x] §B variables — team-approved 2026-06-27 (feedback policy exposed; tutor persona / interlocutor role added); design-partner validation pending
-- [-] §C archetypes — v0 ship-first set drafted (opinion / negotiation / interview-info-gap / cultural-comparison), anchored to ACTFL + AP themes; confirm vs research + the partner's real Canvas units
+- [-] §C archetypes — v0 set drafted + **first worked example grounded in the partner's real L1 unit** (`DESIGN_PARTNER_CURRICULUM.md`); still pending design-partner sign-off + confirm vs research
 - [x] §D quality model — team-approved 2026-06-27 as the readiness rubric
 - [x] §E signals — team-approved 2026-06-27 (headline metric = **task–target alignment gap**); confirm against actual engine emissions in Phase 1

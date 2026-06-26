@@ -1,6 +1,6 @@
 # The Conversational Learning Design Language
 
-Status: **v0 — team-approved 2026-06-27** (working framework; pending design-partner validation + external-research grounding)
+Status: **v0 — team-approved + research-grounded 2026-06-27** (working framework; pending design-partner validation)
 Last updated: 2026-06-27
 Owner: Product + Engineering
 
@@ -23,15 +23,27 @@ not optional. A good assignment is one where *succeeding at the task requires us
 Thin/misaligned input fails not because a field is blank but because the learner can complete the
 scenario without ever using what they were meant to practice.
 
-Supporting SLA principles (to be grounded / corrected by the external-research stream):
-- **Pushed output** (Swain) — production under communicative pressure drives acquisition.
-- **Focus on form** (Long) — attention to form *within* meaningful interaction, not isolated drill.
-- **Interaction / negotiation of meaning** — repair and clarification are where learning concentrates.
-- **Comprehensible input / i+1** (Krashen) — scaffolding pitched just beyond current level.
-- **Spaced retrieval / recycling** — targets re-encountered across sessions, not once.
+**Grounded by the SLA evidence** (`RESEARCH_SLA_GROUNDING.md`, 2026-06-27 — adversarially verified;
+read its caveats):
+- **Task–target alignment confirmed; task *difficulty* is the wrong knob.** "Task design forces the
+  form" survived verification; "harder task → richer grammar" was *refuted* (0-3). Complexity is a
+  small accuracy nudge (d≈0.28), not a grammar-forcer → lean on **design**, not difficulty.
+- **Corrective feedback is the #1 evidenced teacher-controllable lever** (durable d≈0.64–0.74). Push
+  **self-repair / elicitation over recasts** (0.83 vs 0.53, *stronger* for advanced learners), **match
+  explicitness to feature complexity + developmental stage** (explicit on subjunctive/conditional/
+  aspect; don't re-drill passed features), **deliver early**. This validates the engine's existing
+  grammar→prompt-first / lexical→recast-first routing.
+- **The AI-tutor premise is validated** (chatbot g≈0.608).
+- **Theory-derived, NOT confirmed here:** scaffolding / L1–L2 mix, spaced recycling, and modality —
+  three of our §B variables had *no* claim survive verification. They rest on Krashen/Swain/Long
+  theory, and become the **first targets of the observability + design-partner evidence loop** (the
+  literature is silent exactly where Lingual already runs all three → our data can produce the missing
+  evidence).
 
-> _Open: confirm/rank these against the literature; add task-complexity (Robinson) and corrective-
-> feedback timing evidence. (External-research stream.)_
+Underlying principles the above draws on: pushed output (Swain), focus on form (Long), interaction &
+negotiation of meaning (Long), comprehensible input / i+1 (Krashen), spaced retrieval. Population
+caveat: surviving evidence skews EFL/lower-proficiency — advanced-Spanish applicability is partly
+extrapolation.
 
 ## §B. The design variables (the teacher's vocabulary)
 
@@ -52,6 +64,14 @@ each: what it is · the learning mechanism it serves · what the engine does wit
 | **Modality** (`modality_override`) | Voice = pushed output, real-time; Text = noticing, planning time | Voice vs text prompt + surface | Mismatch to objective → wrong cognitive demand |
 | **Feedback policy** (`feedbackPolicy.mode`) | Accuracy↔fluency stance | S1 elicitation timing; S2 recycling directedness; S3 coach depth; S4.1 affect stance | Missing → defaults to balanced (often fine, but unset ≠ chosen) |
 | **Teacher notes** (`teacher_notes`) | Conveys intent the fields can't | S1 GUIDANCE section | Missing → tutor lacks pedagogical context |
+
+**Evidence strength** (per `RESEARCH_SLA_GROUNDING.md`): **feedback policy**, **task/scenario design**,
+and **focus grammar (via prompt-first routing)** are the **high-evidence** levers — corrective feedback
+is the single best-supported teacher-controllable variable (prompts > recasts; match explicitness to
+feature complexity + developmental stage; deliver early). **Task *difficulty* is explicitly NOT a
+reliable lever** (refuted). **Language-mix intensity**, **modality**, and the cross-session
+**recycling** behavior over targets are **theory-derived, not empirically confirmed** for this
+population — treat their settings as hypotheses to validate through the observability loop.
 
 > _Resolved 2026-06-27: **feedback policy is exposed to teachers** as a first-class variable — not
 > hidden behind a higher-level "rigor" macro (teachers should consciously own the accuracy↔fluency
@@ -87,6 +107,11 @@ Ship-first set (3–4):
 
 Bench (later): **narrative / past-event retell** (preterite ↔ imperfect contrast — a core pre-AP
 grammar focus); **transaction / role-play** (kept only for lower-level or scaffolding use).
+
+**Design rule (grounded):** an archetype earns its keep by *forcing the form*, not by being hard
+(`RESEARCH_SLA_GROUNDING.md` F1/F3 — difficulty was *refuted* as a grammar-forcer). Across a unit,
+sequence assignments **simple → complex** (SSARC) so forms stabilize before complexification — a
+hypothesized sequencing rule, not a guaranteed gain.
 
 Each archetype documents: the objective it fits, the target slots it naturally elicits, the scenario
 shape, the **interlocutor persona**, a worked Spanish example, and the realized signals to expect (→ §E).
@@ -137,7 +162,7 @@ of Phase 1.
 
 ## Validation status
 
-- [-] §A thesis — external-research grounding fired (`/deep-research`, 2026-06-27); design-partner validation pending
+- [x] §A thesis — grounded by `RESEARCH_SLA_GROUNDING.md` (2026-06-27): spine confirmed, corrective feedback elevated as #1 lever, task difficulty refuted, 3 variables flagged theory-derived
 - [x] §B variables — team-approved 2026-06-27 (feedback policy exposed; tutor persona / interlocutor role added); design-partner validation pending
 - [-] §C archetypes — v0 ship-first set drafted (opinion / negotiation / interview-info-gap / cultural-comparison), anchored to ACTFL + AP themes; confirm vs research + the partner's real Canvas units
 - [x] §D quality model — team-approved 2026-06-27 as the readiness rubric

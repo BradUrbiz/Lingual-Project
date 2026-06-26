@@ -13,7 +13,8 @@ Owner: Product + Engineering
 - [x] Establish the program, decisions, and doc home (`CHARTER`, `ROADMAP`, `DESIGN_LANGUAGE`, `TASKS`). — 2026-06-27
 - [x] Engine-lever audit: input field → engine behavior → degradation-when-thin (folded into `DESIGN_LANGUAGE.md` §B/§E). — 2026-06-26
 - [x] **Validated the v0 framework skeleton** (`DESIGN_LANGUAGE.md` §A–§E) with the team — approved as the working framework (headline metric = task–target alignment gap). Design-partner validation pending. — 2026-06-27
-- [-] **External SLA-grounding research** (`/deep-research`, Opus 4.8): fired 2026-06-27, scoped to **pre-AP advanced Spanish** + teacher-controllable variables. Land/link in `../../Pedagogy Research/`, fold into §A. (workflow `w9iqkc281`)
+- [x] **External SLA-grounding research** (`/deep-research`, Opus 4.8) — DONE 2026-06-27 (24 sources, 21 verified findings). Synthesis in `RESEARCH_SLA_GROUNDING.md`; folded into `DESIGN_LANGUAGE.md` §A/§B/§C. Headline: spine confirmed, corrective feedback = #1 lever, task difficulty refuted, 3 variables (language-mix/recycling/modality) flagged theory-derived.
+- [ ] **Evidence-flywheel agenda**: design Phase 1 observability to probe the 3 evidence-thin variables (see ROADMAP "Research agenda") — turn real sessions into the SLA evidence the literature lacks.
 - [-] **Design-partner intake**: level = **HS advanced / pre-AP Spanish**. Still open: identity, current authoring pain, schedule a real session to observe.
 - [ ] Co-validate `DESIGN_LANGUAGE.md` with the design partner; reshape v0 from their mental model.
 - [-] Archetypes (§C): v0 ship-first set drafted (opinion / negotiation / interview-info-gap / cultural-comparison), anchored to ACTFL + AP Spanish themes. Confirm vs research + the partner's real units.

@@ -27,6 +27,7 @@ real teachers in real classrooms.
 | `CHARTER.md` | Why this exists, the problem, the thesis, success criteria, non-goals | Mission, scope, or success criteria change |
 | `ROADMAP.md` | Phases, current status, decision log, open questions | A phase starts/ends, a decision lands, or an open question resolves |
 | `DESIGN_LANGUAGE.md` | The keystone — the Conversational Learning Design Language (the framework all three surfaces draw from) | The framework's structure or content changes |
+| `RESEARCH_SLA_GROUNDING.md` | Adversarially-verified SLA evidence base grounding `DESIGN_LANGUAGE.md` §A | A new research pass lands or a claim is revised |
 | `TASKS.md` | Phased checklist | Items start, complete, block, or are newly identified |
 
 **Update order on scope changes:** CHARTER → DESIGN_LANGUAGE → ROADMAP → TASKS.

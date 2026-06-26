@@ -61,6 +61,8 @@ view as a teaching mirror, (c) an **exemplar / archetype library** (the design p
 | 2026-06-27 | **Tutor persona / interlocutor role added** as a design variable (§B). | Who the AI plays drives register + which functions are elicited; first-class in the language even though it renders via scenario/instructions + the voice avatar today. |
 | 2026-06-27 | **§C archetypes anchored to ACTFL interpersonal/presentational + AP Spanish themes**; beginner transaction de-emphasized. | Lingual's primary environment is pre-AP advanced Spanish / ACTFL curricula — start where it will actually be used. |
 | 2026-06-27 | **Design-partner curriculum is directly readable via the class Canvas PAT** (in `.env`) — capability noted, ingestion deferred. | Lets us ground archetypes + worked examples in the partner's real AP/ACTFL units instead of invented scenarios, when we pick it up. |
+| 2026-06-27 | **SLA research landed** (`RESEARCH_SLA_GROUNDING.md`): spine confirmed, **corrective feedback is the #1 evidenced lever**, task difficulty refuted as a grammar-forcer. Folded into `DESIGN_LANGUAGE.md` §A/§B/§C. | Anchors the framework in adversarially-verified evidence; sharpens which variables we trust vs. treat as hypotheses. |
+| 2026-06-27 | **Observability becomes an evidence flywheel.** The three evidence-thin variables (language-mix, recycling, modality) are exactly where Lingual already runs all three and the literature is silent → our observability data is positioned to produce the missing SLA evidence. | Reframes Phase 1 from "a teacher feature" to "the way Lingual generates evidence the field lacks" — a durable strategic asset. |
 
 ## Open questions
 
@@ -75,3 +77,15 @@ view as a teaching mirror, (c) an **exemplar / archetype library** (the design p
 - [ ] **Observability surface shape (Phase 1).** Where does it live (extend the existing teacher
   debrief / plan-preview, or a new surface?) and what's the minimum first cut? — Deferred to Phase 1
   brainstorm.
+
+## Research agenda (from the SLA evidence gaps)
+
+`RESEARCH_SLA_GROUNDING.md` found *no* surviving evidence for three of our variables — and the
+literature's own open questions land exactly where Lingual already operates. Design Phase 1
+observability to probe these, turning real sessions into evidence:
+
+- **Modality** — spoken (pushed output, no planning) vs. text (noticing, planning) for advanced learners.
+- **L1/L2 mix** — optimal `target_language_intensity` / translanguaging for Intermediate-Mid → Advanced-Low.
+- **Spaced recycling** — does S2 cross-session recycling beat massed practice in conversational AI?
+- **Real-time LLM elicitation** — can the voice tutor reliably elicit self-repair over recast without
+  answer-dumping? (Directly our S3.2 / S3.3 / S3.4 anti-answer-dump problem.)

@@ -1,4 +1,6 @@
+import os
 import unittest
+from unittest import mock
 
 from backend.services.pedagogy.alignment import build_alignment
 from backend.services.practice_analytics import build_assignment_realized_input
@@ -90,6 +92,41 @@ class BuildAssignmentRealizedInputTestCase(unittest.TestCase):
         out = build_assignment_realized_input([], ["hola"])
         self.assertEqual(out, {"hit_counts": {"hola": 0}, "students_elicited": {"hola": 0},
                                "student_count": 0, "session_count": 0})
+
+
+class AlignmentFlagTestCase(unittest.TestCase):
+    def test_default_off(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            from backend.services.pedagogy.integration import alignment_view_enabled
+            self.assertFalse(alignment_view_enabled())
+
+    def test_on_when_truthy(self):
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_ALIGNMENT_VIEW": "1"}):
+            from backend.services.pedagogy.integration import alignment_view_enabled
+            self.assertTrue(alignment_view_enabled())
+
+
+class RealizedWiringTestCase(unittest.TestCase):
+    """The route composes build_assignment_realized_input -> build_alignment over
+    the plan's lexical targets. This pins that composition."""
+
+    def test_route_composition_attaches_realized(self):
+        targets = [
+            {"surface": "hola", "kind": "expression", "feedbackRoute": "recast_first"},
+            {"surface": "subj", "kind": "grammar_rule", "feedbackRoute": "prompt_first"},
+        ]
+        sessions = [
+            {"student_uid": "s1", "session_summary": {"target_expression_hits": {"hola": 4}}},
+        ]
+        lexical = [t["surface"] for t in targets
+                   if t["kind"] in ("expression", "vocabulary")]
+        realized = build_alignment(targets, build_assignment_realized_input(sessions, lexical))
+        self.assertEqual(realized["studentCount"], 1)
+        self.assertEqual(realized["neverElicited"], [])
+        hola = next(t for t in realized["perTarget"] if t["surface"] == "hola")
+        self.assertEqual(hola["tier"], "solid")
+        subj = next(t for t in realized["perTarget"] if t["surface"] == "subj")
+        self.assertFalse(subj["measurable"])
 
 
 if __name__ == "__main__":

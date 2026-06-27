@@ -111,6 +111,13 @@ def teacher_preview_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_TEACHER_PREVIEW", "").strip().lower() in _TRUTHY
 
 
+def alignment_view_enabled() -> bool:
+    """Teacher FDE Phase 1 — the task–target alignment view (a realized overlay on
+    the plan-preview). Default off; read-only/additive (no live-path effect).
+    Reads PEDAGOGY_ENGINE_ALIGNMENT_VIEW."""
+    return os.environ.get("PEDAGOGY_ENGINE_ALIGNMENT_VIEW", "").strip().lower() in _TRUTHY
+
+
 def resolve_assignment_system_prompt(
     bootstrap: dict[str, Any],
     *,

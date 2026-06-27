@@ -26,7 +26,13 @@ from backend.services.director_service import assess_drift
 from backend.services.ask_service import answer_ask
 from backend.services.pedagogy.assignment_debrief import build_assignment_debrief
 from backend.services.pedagogy.debrief import build_session_debrief
-from backend.services.pedagogy.integration import debrief_enabled, debrief_rollup_enabled, teacher_preview_enabled
+from backend.services.pedagogy.alignment import build_alignment
+from backend.services.pedagogy.integration import (
+    alignment_view_enabled,
+    debrief_enabled,
+    debrief_rollup_enabled,
+    teacher_preview_enabled,
+)
 from backend.services.pedagogy.plan import compile_prompt_plan, serialize_plan_preview
 from backend.services.compliance import (
     create_consent_event,
@@ -44,6 +50,7 @@ from backend.services.practice_analytics import (
     SUPPORTED_EVENT_TYPES,
     apply_learning_event_to_session,
     build_assignment_analytics_payload,
+    build_assignment_realized_input,
     build_class_analytics_payload,
     build_derived_learning_events,
     build_learning_event_payload,
@@ -1060,6 +1067,25 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                 # Base plan: NO coverage/affect — the student-independent
                 # "compiler's first inference" the teacher sees at authoring time.
                 preview = serialize_plan_preview(compile_prompt_plan(bootstrap))
+                realized_requested = (
+                    str(request.args.get('realized', '')).strip().lower()
+                    in {'1', 'true', 'yes', 'on'}
+                )
+                if preview and realized_requested and alignment_view_enabled():
+                    try:
+                        targets = preview.get('targets') or []
+                        lexical = [
+                            t['surface'] for t in targets
+                            if t.get('kind') in ('expression', 'vocabulary') and t.get('surface')
+                        ]
+                        sessions = deps.db.list_assignment_practice_sessions(assignment_id)
+                        realized_input = build_assignment_realized_input(sessions, lexical)
+                        preview['realized'] = build_alignment(targets, realized_input)
+                    except Exception:
+                        logger.exception(
+                            'alignment realized join failed; omitting realized '
+                            '(assignment_id=%s)', assignment_id)
+                        preview['realized'] = None
             except Exception:
                 logger.exception('plan-preview assembly failed; returning null preview '
                                  '(assignment_id=%s)', assignment_id)

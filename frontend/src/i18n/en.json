@@ -868,6 +868,10 @@
   "teacher.builder.plan.tableTarget": "Target",
   "teacher.builder.plan.tableKind": "Kind",
   "teacher.builder.plan.tableCorrection": "How the AI corrects it",
+  "teacher.builder.plan.titleRealized": "How the AI ran this assignment",
+  "teacher.builder.plan.tableRealized": "Realized (hits · level · students)",
+  "teacher.builder.plan.notYetMeasurable": "designed · not yet measurable",
+  "teacher.builder.plan.neverElicitedTitle": "Designed but never came up — adjust the scenario so it requires these, or drop them:",
   "teacher.builder.regenerate.confirm": "Regenerating will replace your current title, scenario, and other edits with a new AI draft. Continue?",
 
   "teacher.debrief.pageTitle": "Assignment coaching debrief",

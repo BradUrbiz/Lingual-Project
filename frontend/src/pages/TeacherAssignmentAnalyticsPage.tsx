@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { getAssignmentAnalytics } from '@/api/assignments';
 import { Alert, AlertDescription, Badge, Button, Card } from '@/components/ui';
+import { AssignmentPlanPreview } from '@/components/assignments/AssignmentPlanPreview';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { AssignmentAnalyticsData } from '@/types';
 
@@ -444,6 +445,8 @@ export function TeacherAssignmentAnalyticsPage() {
       ))}
 
       {analytics.assignment.taskType === 'custom_prompt' && <ScaffoldFreeAssignmentCard />}
+
+      {assignmentId ? <AssignmentPlanPreview assignmentId={assignmentId} withRealized /> : null}
 
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">

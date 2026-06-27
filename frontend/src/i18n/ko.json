@@ -868,6 +868,10 @@
   "teacher.builder.plan.tableTarget": "목표",
   "teacher.builder.plan.tableKind": "종류",
   "teacher.builder.plan.tableCorrection": "AI 교정 방법",
+  "teacher.builder.plan.titleRealized": "AI가 이 과제를 실제로 어떻게 운영했는가",
+  "teacher.builder.plan.tableRealized": "실제 (사용 횟수 · 수준 · 학생 수)",
+  "teacher.builder.plan.notYetMeasurable": "설계됨 · 아직 측정 불가",
+  "teacher.builder.plan.neverElicitedTitle": "설계했지만 한 번도 등장하지 않음 — 시나리오가 이를 요구하도록 조정하거나 제거하세요:",
   "teacher.builder.regenerate.confirm": "재생성하면 현재 제목, 시나리오 및 기타 편집 내용이 새 AI 초안으로 대체됩니다. 계속하시겠습니까?",
 
   "teacher.debrief.pageTitle": "과제 코칭 디브리프",

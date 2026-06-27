@@ -42,3 +42,31 @@ describe('AssignmentPlanPreview', () => {
     expect(container.textContent ?? '').not.toMatch(/information_gap|engine is off/i);
   });
 });
+
+describe('AssignmentPlanPreview realized', () => {
+  beforeEach(() => getAssignmentPlanPreviewMock.mockReset());
+
+  it('renders realized hits and the never-elicited callout', async () => {
+    getAssignmentPlanPreviewMock.mockResolvedValue({
+      engineEnabled: true, rawTutorMode: false, taskType: 'opinion_gap',
+      targets: [
+        { surface: 'hola', kind: 'expression', feedbackRoute: 'recast_first' },
+        { surface: 'subj', kind: 'grammar_rule', feedbackRoute: 'prompt_first' },
+      ],
+      realized: {
+        studentCount: 3, sessionCount: 4,
+        perTarget: [
+          { surface: 'hola', kind: 'expression', measurable: true, hits: 5, tier: 'solid', studentsElicited: 3 },
+          { surface: 'subj', kind: 'grammar_rule', measurable: false, hits: null, tier: null, studentsElicited: null },
+        ],
+        neverElicited: ['adios'],
+        alignmentRate: { measurableTargetCount: 1, elicitedCount: 1, solidCount: 1 },
+      },
+    });
+    render(<AssignmentPlanPreview assignmentId="a1" withRealized />);
+    expect(await screen.findByText('hola')).toBeInTheDocument();
+    expect(screen.getByText(/5 · solid · 3\/3/)).toBeInTheDocument();  // realized cell (one node)
+    expect(screen.getByText('adios')).toBeInTheDocument();        // never-elicited surface
+    expect(screen.getByTestId('align-never-elicited')).toBeInTheDocument();
+  });
+});

@@ -363,6 +363,23 @@ export interface PlanPreviewTarget {
   feedbackRoute: string;
 }
 
+export interface PlanPreviewRealizedTarget {
+  surface: string;
+  kind: string;
+  measurable: boolean;
+  hits: number | null;
+  tier: string | null;
+  studentsElicited: number | null;
+}
+
+export interface PlanPreviewRealized {
+  studentCount: number;
+  sessionCount: number;
+  perTarget: PlanPreviewRealizedTarget[];
+  neverElicited: string[];
+  alignmentRate: { measurableTargetCount: number; elicitedCount: number; solidCount: number };
+}
+
 export interface PlanPreview {
   engineEnabled: boolean;
   rawTutorMode: boolean;
@@ -371,11 +388,15 @@ export interface PlanPreview {
   targets?: PlanPreviewTarget[];
   recycling?: unknown;
   guaranteesDisabled?: string[];
+  realized?: PlanPreviewRealized | null;
 }
 
-export const getAssignmentPlanPreview = async (assignmentId: string): Promise<PlanPreview | null> => {
+export const getAssignmentPlanPreview = async (
+  assignmentId: string,
+  opts?: { realized?: boolean },
+): Promise<PlanPreview | null> => {
   const response = await api.get<{ success: boolean; teacherPreviewEnabled: boolean; planPreview?: PlanPreview | null }>(
-    `/teacher/assignments/${assignmentId}/plan-preview`,
+    `/teacher/assignments/${assignmentId}/plan-preview${opts?.realized ? '?realized=1' : ''}`,
   );
   return response.data.success && response.data.teacherPreviewEnabled ? (response.data.planPreview ?? null) : null;
 };

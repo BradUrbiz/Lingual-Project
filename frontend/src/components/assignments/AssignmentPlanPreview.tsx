@@ -1,19 +1,19 @@
 import { useEffect, useState } from 'react';
-import { getAssignmentPlanPreview, type PlanPreview } from '@/api/teacher';
+import { getAssignmentPlanPreview, type PlanPreview, type PlanPreviewRealizedTarget } from '@/api/teacher';
 import { useLanguage } from '@/contexts/LanguageContext';
 
-export function AssignmentPlanPreview({ assignmentId }: { assignmentId: string }) {
+export function AssignmentPlanPreview({ assignmentId, withRealized }: { assignmentId: string; withRealized?: boolean }) {
   const { t } = useLanguage();
   const [preview, setPreview] = useState<PlanPreview | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let active = true;
-    getAssignmentPlanPreview(assignmentId)
+    getAssignmentPlanPreview(assignmentId, { realized: withRealized })
       .then((p) => { if (active) { setPreview(p); setLoaded(true); } })
       .catch(() => { if (active) setLoaded(true); });
     return () => { active = false; };
-  }, [assignmentId]);
+  }, [assignmentId, withRealized]);
 
   if (!loaded || !preview) return null;  // flag off / unavailable → render nothing
 
@@ -30,12 +30,22 @@ export function AssignmentPlanPreview({ assignmentId }: { assignmentId: string }
     );
   }
 
+  const realized = preview.realized ?? null;
+  const realizedBySurface = new Map<string, PlanPreviewRealizedTarget>(
+    (realized?.perTarget ?? []).map((r) => [`${r.kind}:${r.surface}`, r]),
+  );
+
+  const realizedCell = (kind?: string, surface?: string) => {
+    const r = realizedBySurface.get(`${kind}:${surface}`);
+    if (!r) return null;
+    if (!r.measurable) return <span className="text-muted-foreground">{t('teacher.builder.plan.notYetMeasurable')}</span>;
+    return <span>{r.hits} · {r.tier} · {r.studentsElicited}/{realized?.studentCount}</span>;
+  };
+
   return (
     <div className="rounded-md border bg-muted/30 p-3 text-sm">
-      <p className="font-medium">{t('teacher.builder.plan.title')}</p>
-      <p className="mt-1 text-muted-foreground">
-        {t('teacher.builder.plan.subtitle')}
-      </p>
+      <p className="font-medium">{realized ? t('teacher.builder.plan.titleRealized') : t('teacher.builder.plan.title')}</p>
+      <p className="mt-1 text-muted-foreground">{t('teacher.builder.plan.subtitle')}</p>
       {preview.taskType ? <p className="mt-1">{t('teacher.builder.plan.taskType')} <span className="font-mono">{preview.taskType}</span></p> : null}
       {preview.correctionPosture ? (
         <p className="mt-1">
@@ -43,13 +53,27 @@ export function AssignmentPlanPreview({ assignmentId }: { assignmentId: string }
           {' '}{t('teacher.builder.plan.elicitsAfter').replace('{n}', String(preview.correctionPosture.elicitationRepeatThreshold))}
         </p>
       ) : null}
+      {realized && realized.neverElicited.length ? (
+        <div data-testid="align-never-elicited" className="mt-2 rounded border border-amber-300 bg-amber-50 p-2">
+          <p className="font-medium">{t('teacher.builder.plan.neverElicitedTitle')}</p>
+          <ul className="list-disc pl-5">
+            {realized.neverElicited.map((s) => <li key={s} className="font-mono">{s}</li>)}
+          </ul>
+        </div>
+      ) : null}
       {preview.targets?.length ? (
         <table className="mt-2 w-full text-left">
-          <thead><tr><th>{t('teacher.builder.plan.tableTarget')}</th><th>{t('teacher.builder.plan.tableKind')}</th><th>{t('teacher.builder.plan.tableCorrection')}</th></tr></thead>
+          <thead><tr>
+            <th>{t('teacher.builder.plan.tableTarget')}</th>
+            <th>{t('teacher.builder.plan.tableKind')}</th>
+            <th>{t('teacher.builder.plan.tableCorrection')}</th>
+            {realized ? <th>{t('teacher.builder.plan.tableRealized')}</th> : null}
+          </tr></thead>
           <tbody>
             {preview.targets.map((target) => (
               <tr key={`${target.kind}:${target.surface}`}>
                 <td className="font-mono">{target.surface}</td><td>{target.kind}</td><td>{target.feedbackRoute}</td>
+                {realized ? <td>{realizedCell(target.kind, target.surface)}</td> : null}
               </tr>
             ))}
           </tbody>

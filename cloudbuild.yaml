@@ -317,8 +317,9 @@ substitutions:
   # PEDAGOGY_ENGINE_CHIP_FAST_GATE=0.
   _PEDAGOGY_ENGINE_CHIP_FAST_GATE: '1'
   # Teacher FDE Phase 1 — task–target alignment view (read-only teacher overlay).
-  # Ships inert at '0' (matches absent/off live); flip via --update-env-vars after burn-in.
-  _PEDAGOGY_ENGINE_ALIGNMENT_VIEW: '0'
+  # CUT OVER 2026-06-27 (rev lingual-app-00092-sgk); default bumped 0->1 for durability
+  # (matches live). Rollback: --update-env-vars PEDAGOGY_ENGINE_ALIGNMENT_VIEW=0.
+  _PEDAGOGY_ENGINE_ALIGNMENT_VIEW: '1'
 
 # Store images in Artifact Registry
 images:

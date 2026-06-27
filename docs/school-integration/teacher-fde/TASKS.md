@@ -34,7 +34,8 @@ Owner: Product + Engineering
 
 ## Phase 2 — Guided authoring — LATER
 
-- [ ] (Scoped after Phase 1.) Plain-language intent → engine-ready structured input, composed from §B/§C.
+- [x] **Prose-extraction spike DONE 2026-06-28** (`PHASE2_PROSE_EXTRACTION_SPIKE.md`) — validated the 3/3 synthetic finding on Polón's REAL prose with the real text-LLM pattern. **Hypothesis SUPPORTED:** lexical core (expressions/vocab/objectives/scenario/persona/success/modality) extracts faithfully + degrades to clarifying questions on thin input; the one boundary — `focus_grammar` — is fixed by pairing with a curriculum map (Imagina Lección→Estructuras) the prose already references. Pre-sign-off; validates engine feasibility, not end-to-end UX.
+- [ ] (Scoped after Phase 1 + sign-off.) **Authoring = paste-prose → extract → confirm/correct** (NOT a variables form). Pair with a curriculum map; surface provenance (explicit=pre-confirmed, inferred=review); thin input → clarifying questions. Reusable extraction contract in the spike doc §"Phase 2 design implications".
 
 ## Woven — Literacy
 

@@ -872,6 +872,9 @@
   "teacher.builder.plan.tableRealized": "실제 (사용 횟수 · 수준 · 학생 수)",
   "teacher.builder.plan.notYetMeasurable": "설계됨 · 아직 측정 불가",
   "teacher.builder.plan.neverElicitedTitle": "설계했지만 한 번도 등장하지 않음 — 시나리오가 이를 요구하도록 조정하거나 제거하세요:",
+  "teacher.builder.plan.uptakeHeadline": "목표 표현 산출 {measured}건 중 {afterPrompt}건은 자기수정 유도 후, {afterRecast}건은 형태 제공 후, {unprompted}건은 유도 없이 자발적으로 나왔습니다.",
+  "teacher.builder.plan.uptakeTooltip": "✋ 자기수정 유도 후 · 🔁 튜터가 형태를 제공한 후 · ★ 유도 없이 자발적으로",
+  "teacher.builder.plan.uptakeCaveat": "휴리스틱: 피드백 감지와 각 산출의 연결은 근사치입니다. '자발적'은 부족이 아니라 바람직한 결과입니다.",
   "teacher.builder.regenerate.confirm": "재생성하면 현재 제목, 시나리오 및 기타 편집 내용이 새 AI 초안으로 대체됩니다. 계속하시겠습니까?",
 
   "teacher.debrief.pageTitle": "과제 코칭 디브리프",

@@ -872,6 +872,9 @@
   "teacher.builder.plan.tableRealized": "Realized (hits · level · students)",
   "teacher.builder.plan.notYetMeasurable": "designed · not yet measurable",
   "teacher.builder.plan.neverElicitedTitle": "Designed but never came up — adjust the scenario so it requires these, or drop them:",
+  "teacher.builder.plan.uptakeHeadline": "Of {measured} target productions, {afterPrompt} followed a self-repair prompt, {afterRecast} followed a hand-over, and {unprompted} were unprompted.",
+  "teacher.builder.plan.uptakeTooltip": "✋ after a self-repair prompt · 🔁 after the tutor supplied the form · ★ unprompted (spontaneous)",
+  "teacher.builder.plan.uptakeCaveat": "Heuristic: feedback detection and the link to each production are approximate. Unprompted is the desired outcome, not a gap.",
   "teacher.builder.regenerate.confirm": "Regenerating will replace your current title, scenario, and other edits with a new AI draft. Continue?",
 
   "teacher.debrief.pageTitle": "Assignment coaching debrief",

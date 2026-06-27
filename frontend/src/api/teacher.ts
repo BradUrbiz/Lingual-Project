@@ -372,12 +372,26 @@ export interface PlanPreviewRealizedTarget {
   studentsElicited: number | null;
 }
 
+export interface PlanPreviewUptakeTarget {
+  surface: string;
+  afterPrompt: number;
+  afterRecast: number;
+  unprompted: number;
+}
+
+export interface PlanPreviewUptake {
+  window: number;
+  totals: { afterPrompt: number; afterRecast: number; unprompted: number; measured: number };
+  perTarget: PlanPreviewUptakeTarget[];
+}
+
 export interface PlanPreviewRealized {
   studentCount: number;
   sessionCount: number;
   perTarget: PlanPreviewRealizedTarget[];
   neverElicited: string[];
   alignmentRate: { measurableTargetCount: number; elicitedCount: number; solidCount: number };
+  uptake?: PlanPreviewUptake | null;
 }
 
 export interface PlanPreview {

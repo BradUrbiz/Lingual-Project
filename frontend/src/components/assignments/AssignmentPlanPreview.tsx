@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getAssignmentPlanPreview, type PlanPreview, type PlanPreviewRealizedTarget } from '@/api/teacher';
+import { getAssignmentPlanPreview, type PlanPreview, type PlanPreviewRealizedTarget, type PlanPreviewUptakeTarget } from '@/api/teacher';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 export function AssignmentPlanPreview({ assignmentId, withRealized }: { assignmentId: string; withRealized?: boolean }) {
@@ -34,12 +34,26 @@ export function AssignmentPlanPreview({ assignmentId, withRealized }: { assignme
   const realizedBySurface = new Map<string, PlanPreviewRealizedTarget>(
     (realized?.perTarget ?? []).map((r) => [`${r.kind}:${r.surface}`, r]),
   );
+  const uptake = realized?.uptake ?? null;
+  const uptakeBySurface = new Map<string, PlanPreviewUptakeTarget>(
+    (uptake?.perTarget ?? []).map((u) => [u.surface, u]),
+  );
 
   const realizedCell = (kind?: string, surface?: string) => {
     const r = realizedBySurface.get(`${kind}:${surface}`);
     if (!r) return null;
     if (!r.measurable) return <span className="text-muted-foreground">{t('teacher.builder.plan.notYetMeasurable')}</span>;
-    return <span>{r.hits} · {r.tier} · {r.studentsElicited}/{realized?.studentCount}</span>;
+    const u = surface ? uptakeBySurface.get(surface) : undefined;
+    return (
+      <span>
+        {r.hits} · {r.tier} · {r.studentsElicited}/{realized?.studentCount}
+        {u ? (
+          <span className="ml-2 text-muted-foreground" title={t('teacher.builder.plan.uptakeTooltip')}>
+            ✋{u.afterPrompt} · 🔁{u.afterRecast} · ★{u.unprompted}
+          </span>
+        ) : null}
+      </span>
+    );
   };
 
   return (
@@ -59,6 +73,18 @@ export function AssignmentPlanPreview({ assignmentId, withRealized }: { assignme
           <ul className="list-disc pl-5">
             {realized.neverElicited.map((s) => <li key={s} className="font-mono">{s}</li>)}
           </ul>
+        </div>
+      ) : null}
+      {uptake && uptake.totals.measured > 0 ? (
+        <div data-testid="uptake-headline" className="mt-2 rounded border bg-background p-2">
+          <p>
+            {t('teacher.builder.plan.uptakeHeadline')
+              .replace('{measured}', String(uptake.totals.measured))
+              .replace('{afterPrompt}', String(uptake.totals.afterPrompt))
+              .replace('{afterRecast}', String(uptake.totals.afterRecast))
+              .replace('{unprompted}', String(uptake.totals.unprompted))}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{t('teacher.builder.plan.uptakeCaveat')}</p>
         </div>
       ) : null}
       {preview.targets?.length ? (

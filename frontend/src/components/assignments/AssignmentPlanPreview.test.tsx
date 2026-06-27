@@ -69,4 +69,44 @@ describe('AssignmentPlanPreview realized', () => {
     expect(screen.getByText('adios')).toBeInTheDocument();        // never-elicited surface
     expect(screen.getByTestId('align-never-elicited')).toBeInTheDocument();
   });
+
+  it('renders the uptake headline and per-target indicator when uptake is present', async () => {
+    getAssignmentPlanPreviewMock.mockResolvedValue({
+      engineEnabled: true, rawTutorMode: false, taskType: 'opinion_gap',
+      targets: [{ surface: 'hola', kind: 'expression', feedbackRoute: 'recast_first' }],
+      realized: {
+        studentCount: 3, sessionCount: 4,
+        perTarget: [
+          { surface: 'hola', kind: 'expression', measurable: true, hits: 5, tier: 'solid', studentsElicited: 3 },
+        ],
+        neverElicited: [],
+        alignmentRate: { measurableTargetCount: 1, elicitedCount: 1, solidCount: 1 },
+        uptake: {
+          window: 2,
+          totals: { afterPrompt: 2, afterRecast: 1, unprompted: 4, measured: 7 },
+          perTarget: [{ surface: 'hola', afterPrompt: 2, afterRecast: 1, unprompted: 4 }],
+        },
+      },
+    });
+    render(<AssignmentPlanPreview assignmentId="a1" withRealized />);
+    expect(await screen.findByTestId('uptake-headline')).toBeInTheDocument();
+    // per-target glyph indicator (one node) shows the three counts
+    expect(screen.getByText(/2.*1.*4/)).toBeInTheDocument();
+  });
+
+  it('self-hides the uptake headline when uptake is absent', async () => {
+    getAssignmentPlanPreviewMock.mockResolvedValue({
+      engineEnabled: true, rawTutorMode: false, taskType: 'opinion_gap',
+      targets: [{ surface: 'hola', kind: 'expression', feedbackRoute: 'recast_first' }],
+      realized: {
+        studentCount: 1, sessionCount: 1,
+        perTarget: [{ surface: 'hola', kind: 'expression', measurable: true, hits: 1, tier: 'emerging', studentsElicited: 1 }],
+        neverElicited: [],
+        alignmentRate: { measurableTargetCount: 1, elicitedCount: 1, solidCount: 0 },
+      },
+    });
+    render(<AssignmentPlanPreview assignmentId="a1" withRealized />);
+    expect(await screen.findByText('hola')).toBeInTheDocument();
+    expect(screen.queryByTestId('uptake-headline')).not.toBeInTheDocument();
+  });
 });

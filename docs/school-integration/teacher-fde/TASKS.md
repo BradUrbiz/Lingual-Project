@@ -24,7 +24,7 @@ Owner: Product + Engineering
 ## Phase 1 — Observability (intended → realized) — IN PROGRESS
 
 - [x] Brainstormed the surface + headline metric → **Task–Target Alignment View** (extend the plan-preview into an intended→realized arc). Spec: `docs/superpowers/specs/2026-06-27-teacher-fde-alignment-view-design.md`. — 2026-06-27
-- [ ] Write the implementation plan from the spec (writing-plans).
+- [x] Wrote the implementation plan: `docs/superpowers/plans/2026-06-27-teacher-fde-alignment-view.md` (4 TDD tasks: pure join → realized aggregator → route+flag+cloudbuild → frontend). — 2026-06-27
 - [ ] Build behind `PEDAGOGY_ENGINE_ALIGNMENT_VIEW`: pure `pedagogy/alignment.py` + plan-preview route `?realized=1` + `AssignmentPlanPreview` extension; tests gate `make test-backend`.
 - [ ] Deploy inert → cut over → validate with the design partner on a real run.
 - [ ] Fast-follow: modality split of the realized signal (voice vs. text).

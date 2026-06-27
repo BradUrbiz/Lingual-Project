@@ -1,6 +1,7 @@
 import unittest
 
 from backend.services.pedagogy.alignment import build_alignment
+from backend.services.practice_analytics import build_assignment_realized_input
 
 
 def _targets():
@@ -65,6 +66,30 @@ class BuildAlignmentTestCase(unittest.TestCase):
 
 def by_surface(out, surface):
     return next(t for t in out["perTarget"] if t["surface"] == surface)
+
+
+class BuildAssignmentRealizedInputTestCase(unittest.TestCase):
+    def _sessions(self):
+        return [
+            {"student_uid": "s1", "session_summary": {
+                "target_expression_hits": {"hola": 2}, "target_vocabulary_hits": {"casa": 1}}},
+            {"student_uid": "s2", "session_summary": {
+                "target_expression_hits": {"hola": 1}, "target_vocabulary_hits": {}}},
+            {"student_uid": "s1", "session_summary": {
+                "target_expression_hits": {"hola": 0}, "target_vocabulary_hits": {"casa": 3}}},
+        ]
+
+    def test_aggregates_hits_distinct_students_and_counts(self):
+        out = build_assignment_realized_input(self._sessions(), ["hola", "casa", "adios"])
+        self.assertEqual(out["hit_counts"], {"hola": 3, "casa": 4, "adios": 0})
+        self.assertEqual(out["students_elicited"], {"hola": 2, "casa": 1, "adios": 0})  # casa only s1
+        self.assertEqual(out["student_count"], 2)   # s1, s2 distinct
+        self.assertEqual(out["session_count"], 3)
+
+    def test_empty_sessions(self):
+        out = build_assignment_realized_input([], ["hola"])
+        self.assertEqual(out, {"hit_counts": {"hola": 0}, "students_elicited": {"hola": 0},
+                               "student_count": 0, "session_count": 0})
 
 
 if __name__ == "__main__":

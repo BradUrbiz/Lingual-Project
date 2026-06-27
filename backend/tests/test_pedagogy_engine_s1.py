@@ -208,6 +208,7 @@ class ImportBoundaryTestCase(unittest.TestCase):
             "import backend.services.pedagogy.assignment_debrief\n"
             "import backend.services.pedagogy.drift\n"
             "import backend.services.pedagogy.language_signal\n"
+            "import backend.services.pedagogy.alignment\n"
             "forbidden = sorted(\n"
             "    m for m in sys.modules\n"
             "    if 'openai' in m.lower()\n"

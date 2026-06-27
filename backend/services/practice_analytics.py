@@ -2344,6 +2344,41 @@ def build_assignment_coverage_input(
     }
 
 
+def build_assignment_realized_input(
+    sessions: list[dict[str, Any]] | None,
+    target_surfaces: list[str],
+) -> dict[str, Any]:
+    """Aggregate the class's realized signal for an assignment into plain counts.
+
+    Pure: caller fetches ``sessions`` first. For each lexical target surface:
+    total hits across sessions, and the count of DISTINCT students with >=1 hit.
+    """
+    surfaces = list(target_surfaces or [])
+    hit_counts: dict[str, int] = {s: 0 for s in surfaces}
+    elicited: dict[str, set] = {s: set() for s in surfaces}
+    student_ids: set = set()
+    session_count = 0
+    for session in sessions or []:
+        session_count += 1
+        student_uid = _normalize_string(session.get('student_uid'))
+        if student_uid:
+            student_ids.add(student_uid)
+        summary = normalize_session_summary(session.get('session_summary'))
+        for source in ('target_expression_hits', 'target_vocabulary_hits'):
+            for surface, count in (summary.get(source) or {}).items():
+                if surface in hit_counts:
+                    c = int(count)
+                    hit_counts[surface] += c
+                    if c > 0 and student_uid:
+                        elicited[surface].add(student_uid)
+    return {
+        'hit_counts': hit_counts,
+        'students_elicited': {s: len(uids) for s, uids in elicited.items()},
+        'student_count': len(student_ids),
+        'session_count': session_count,
+    }
+
+
 def compute_assignment_coverage_state(
     db: Any,
     bootstrap: Any,

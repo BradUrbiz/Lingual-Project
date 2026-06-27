@@ -15,8 +15,8 @@ Owner: Product + Engineering
 - [x] **Validated the v0 framework skeleton** (`DESIGN_LANGUAGE.md` §A–§E) with the team — approved as the working framework (headline metric = task–target alignment gap). Design-partner validation pending. — 2026-06-27
 - [x] **External SLA-grounding research** (`/deep-research`, Opus 4.8) — DONE 2026-06-27 (24 sources, 21 verified findings). Synthesis in `RESEARCH_SLA_GROUNDING.md`; folded into `DESIGN_LANGUAGE.md` §A/§B/§C. Headline: spine confirmed, corrective feedback = #1 lever, task difficulty refuted, 3 variables (language-mix/recycling/modality) flagged theory-derived.
 - [ ] **Evidence-flywheel agenda**: design Phase 1 observability to probe the 3 evidence-thin variables (see ROADMAP "Research agenda") — turn real sessions into the SLA evidence the literature lacks.
-- [-] **Design-partner intake**: level = **HS advanced / pre-AP Spanish**. Still open: identity, current authoring pain, schedule a real session to observe.
-- [ ] Co-validate `DESIGN_LANGUAGE.md` with the design partner; reshape v0 from their mental model.
+- [-] **Design-partner intake**: level = **HS advanced / pre-AP Spanish**; identity = **Eduardo Polón**. **Co-validation session kit READY** (`PHASE0_SESSION_KIT.md`, 2026-06-28 — live 30–45 min format chosen: interview-first → live alignment-view demo → §A–§E co-validation → commit). Still open (human, in-the-loop): confirm the channel to Polón, schedule + run the session, capture his authoring pain.
+- [ ] Co-validate `DESIGN_LANGUAGE.md` with the design partner; reshape v0 from their mental model. **Run from `PHASE0_SESSION_KIT.md`** — drives the 8 validation decisions (D1–D8) back into §A–§E, ROADMAP, and this file.
 - [-] Archetypes (§C): v0 ship-first set drafted + **first worked example grounded in the partner's real L1 unit**. Confirm full set vs research + design-partner sign-off.
 - [x] Ingested the design partner's real curriculum via the Canvas PAT (read-only) → `DESIGN_PARTNER_CURRICULUM.md` (Polón, VHL Imagina / AP-track); grounded the first §C worked example. — 2026-06-27
 - [ ] Phase 0 exit: design-partner-validated v0, concrete enough to drive Phase 1.

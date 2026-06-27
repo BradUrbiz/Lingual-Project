@@ -76,8 +76,9 @@ view as a teaching mirror, (c) an **exemplar / archetype library** (the design p
   advanced Spanish + teacher-controllable variables.
 - [-] **Design partner specifics.** **Eduardo Polón** — *Advanced Spanish: Contemporary Topics &
   Culture* (VHL Imagina, AP-track), `ssfs.instructure.com`. Curriculum ingested
-  (`DESIGN_PARTNER_CURRICULUM.md`). Still open: his current authoring pain, and scheduling a real
-  session to observe.
+  (`DESIGN_PARTNER_CURRICULUM.md`). **Co-validation session kit ready** (`PHASE0_SESSION_KIT.md`,
+  2026-06-28; live-session format). Still open (human, in-the-loop): confirm the channel to Polón,
+  schedule + run the session (captures his authoring pain + resolves the D1–D8 validation decisions).
 - [x] **Observability surface shape (Phase 1).** RESOLVED 2026-06-27 — extend the **plan-preview** into
   an intended→realized arc (the alignment gap), per-assignment, review mode. Spec:
   `docs/superpowers/specs/2026-06-27-teacher-fde-alignment-view-design.md`.

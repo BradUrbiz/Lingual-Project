@@ -1079,8 +1079,9 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                             if t.get('kind') in ('expression', 'vocabulary') and t.get('surface')
                         ]
                         sessions = deps.db.list_assignment_practice_sessions(assignment_id)
-                        realized_input = build_assignment_realized_input(sessions, lexical)
-                        preview['realized'] = build_alignment(targets, realized_input)
+                        if sessions:
+                            realized_input = build_assignment_realized_input(sessions, lexical)
+                            preview['realized'] = build_alignment(targets, realized_input)
                     except Exception:
                         logger.exception(
                             'alignment realized join failed; omitting realized '

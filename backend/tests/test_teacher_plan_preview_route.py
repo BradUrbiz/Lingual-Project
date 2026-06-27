@@ -185,3 +185,64 @@ class AlignmentViewRouteTests(unittest.TestCase):
             resp = client.get('/api/teacher/assignments/a1/plan-preview')
         self.assertEqual(resp.status_code, 200)
         self.assertNotIn('realized', resp.get_json()['planPreview'])
+
+    def _app_with_session_fetch_error(self):
+        """Like _app_with_sessions but list_assignment_practice_sessions raises."""
+        class _DbWithError(_Db):
+            def list_assignment_practice_sessions(self, _assignment_id):
+                raise RuntimeError('db exploded')
+
+        app = Flask(__name__)
+        app.secret_key = 'test'
+        app.register_blueprint(create_curriculum_admin_blueprint(RouteDeps(
+            db=_DbWithError(), firebase_auth=None,
+            get_current_user_uid=lambda: (session.get('user') or {}).get('uid'),
+            get_openai_client=lambda: None, get_assessment=lambda: {},
+            compute_results=lambda *a, **k: {}, get_proficiency_description=lambda *a, **k: {},
+            login_required=_passthrough, get_user_proficiency_context=lambda **_: '',
+            build_system_prompt=lambda _c: '', get_school_request_context=lambda: None,
+            set_active_school_membership=lambda *a, **k: None,
+            allowed_learning_locales={'es-ES'}, allowed_minigame_types=set(),
+            supported_ui_languages={'en'}, audit_logger=None,
+        )))
+        return app
+
+    _PREVIEW_WITH_TARGETS = {
+        'engineEnabled': True, 'rawTutorMode': False, 'taskType': 'information_gap',
+        'correctionPosture': {'mode': 'balanced', 'recastDefault': True, 'elicitationRepeatThreshold': 2},
+        'targets': [{'surface': 'la cuenta', 'kind': 'expression', 'feedbackRoute': 'recast_first'}],
+    }
+
+    def test_no_sessions_no_realized_key(self):
+        """Flag ON + ?realized=1 + no sessions → planPreview has no realized key (no-sessions guard)."""
+        with mock.patch.dict(os.environ, {
+                'PEDAGOGY_ENGINE_TEACHER_PREVIEW': '1',
+                'PEDAGOGY_ENGINE_ALIGNMENT_VIEW': '1'}), \
+             mock.patch('backend.routes.curriculum_admin._require_assignment_teacher_access'), \
+             mock.patch('backend.routes.curriculum_admin.resolve_assignment_bootstrap_for_user', return_value={}), \
+             mock.patch('backend.routes.curriculum_admin.compile_prompt_plan', return_value=object()), \
+             mock.patch('backend.routes.curriculum_admin.serialize_plan_preview',
+                        return_value=dict(self._PREVIEW_WITH_TARGETS)):
+            client = self._app_with_sessions([]).test_client()
+            _login(client)
+            resp = client.get('/api/teacher/assignments/a1/plan-preview?realized=1')
+        self.assertEqual(resp.status_code, 200)
+        planPreview = resp.get_json()['planPreview']
+        self.assertNotIn('realized', planPreview)
+
+    def test_sessions_fetch_error_realized_none(self):
+        """Flag ON + ?realized=1 + sessions fetch raises → 200 fail-soft, realized is None."""
+        with mock.patch.dict(os.environ, {
+                'PEDAGOGY_ENGINE_TEACHER_PREVIEW': '1',
+                'PEDAGOGY_ENGINE_ALIGNMENT_VIEW': '1'}), \
+             mock.patch('backend.routes.curriculum_admin._require_assignment_teacher_access'), \
+             mock.patch('backend.routes.curriculum_admin.resolve_assignment_bootstrap_for_user', return_value={}), \
+             mock.patch('backend.routes.curriculum_admin.compile_prompt_plan', return_value=object()), \
+             mock.patch('backend.routes.curriculum_admin.serialize_plan_preview',
+                        return_value=dict(self._PREVIEW_WITH_TARGETS)):
+            client = self._app_with_session_fetch_error().test_client()
+            _login(client)
+            resp = client.get('/api/teacher/assignments/a1/plan-preview?realized=1')
+        self.assertEqual(resp.status_code, 200)
+        planPreview = resp.get_json()['planPreview']
+        self.assertIsNone(planPreview['realized'])

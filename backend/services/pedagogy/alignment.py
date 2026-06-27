@@ -25,7 +25,8 @@ def build_alignment(plan_targets: list[dict], realized_input: dict) -> dict[str,
     session_count = int(realized_input.get("session_count") or 0)
 
     lexical_surfaces = [
-        t.get("surface") for t in plan_targets if t.get("kind") in _MEASURABLE_KINDS
+        t.get("surface") for t in plan_targets
+        if t.get("kind") in _MEASURABLE_KINDS and t.get("surface")
     ]
     coverage = compute_coverage_state(lexical_surfaces, hit_counts, {}, max(session_count, 1))
     tier_by_surface = {tc.surface: tc.tier for tc in coverage.per_target}
@@ -37,7 +38,7 @@ def build_alignment(plan_targets: list[dict], realized_input: dict) -> dict[str,
     for t in plan_targets:
         surface = t.get("surface")
         kind = t.get("kind")
-        if kind in _MEASURABLE_KINDS:
+        if kind in _MEASURABLE_KINDS and surface:
             measurable_count += 1
             hits = int(hits_by_surface.get(surface, 0))
             tier = tier_by_surface.get(surface, "not_attempted")

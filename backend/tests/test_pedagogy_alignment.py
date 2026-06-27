@@ -65,6 +65,16 @@ class BuildAlignmentTestCase(unittest.TestCase):
         self.assertEqual(set(out["neverElicited"]),
                          {"Me siento ___ cuando ___", "Conozco a gente que ___", "relaciones"})
 
+    def test_malformed_target_missing_surface_not_in_never_elicited(self):
+        """A target with kind='expression' but no 'surface' key must not put None in neverElicited."""
+        targets = [
+            {"surface": "la cuenta", "kind": "expression", "feedbackRoute": "recast_first"},
+            {"kind": "expression", "feedbackRoute": "recast_first"},  # malformed: no 'surface'
+        ]
+        out = build_alignment(targets, {})
+        self.assertNotIn(None, out["neverElicited"])
+        # function must not raise
+
 
 def by_surface(out, surface):
     return next(t for t in out["perTarget"] if t["surface"] == surface)

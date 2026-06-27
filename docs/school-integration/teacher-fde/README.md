@@ -30,6 +30,7 @@ real teachers in real classrooms.
 | `RESEARCH_SLA_GROUNDING.md` | Adversarially-verified SLA evidence base grounding `DESIGN_LANGUAGE.md` §A | A new research pass lands or a claim is revised |
 | `DESIGN_PARTNER_CURRICULUM.md` | The design partner's real Canvas curriculum (read-only pull) grounding §C archetypes/examples | Curriculum is re-pulled or the partner changes |
 | `PHASE0_SESSION_KIT.md` | Runnable facilitation kit for the Phase 0 design-partner co-validation session (run sheet, validation decisions D1–D8, capture template, live-demo path) | Session format changes, or after running it (fold results back per §6) |
+| `PHASE0_SYNTHETIC_PREVALIDATION.md` | **Hypothesis-grade** dry-run: 3 adversarial Polón personas grounded in his real Canvas; reshape candidates + kit improvements. NOT a sign-off. | A new synthetic pass runs, or the real session confirms/denies its candidates |
 | `TASKS.md` | Phased checklist | Items start, complete, block, or are newly identified |
 
 **Update order on scope changes:** CHARTER → DESIGN_LANGUAGE → ROADMAP → TASKS.

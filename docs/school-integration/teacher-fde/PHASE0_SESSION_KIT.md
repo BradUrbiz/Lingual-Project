@@ -35,6 +35,22 @@ agreement.** That produces a rubber-stamp, not validation.
 When you reveal §B, frame every variable as a **question mapped to his own words** ("you said you
 care about X — we call that Y; does that match?"), never as a feature tour.
 
+## 1.1 What the synthetic pre-validation sharpened (2026-06-28)
+
+A three-persona adversarial dry-run (`PHASE0_SYNTHETIC_PREVALIDATION.md`, hypothesis-grade) predicted
+his objections. Bake these into the live run — but **let him reach them himself**; don't pre-load his
+answers:
+
+- **Lead the demo with prose→structure, not the variables table.** Open by pasting his real two-sentence
+  Canvas "expectations" and showing what the engine would infer — all three personas refused to fill a
+  ten-field form. The variables table is the *engine layer*, not the authoring surface.
+- **Pre-empt the grade-backdoor fear in segment C** (he protects a Level 0 / Level 1 line): say up front
+  it's an **assignment-aggregate practice diagnostic, not a per-student grade.**
+- **Add the elicitation-trace question** (§2.2 probe 3b below): the purist's trust hinges on *prompt vs
+  recast*, not hit-counts.
+- **Watch for the narrative gap** (§C): his L2 is the preterite↔imperfect unit; if he reaches for a
+  past-event task and the archetypes don't have one, that's predicted — capture it as D5 reshape.
+
 ## 2. The run sheet (timed, ~45 min)
 
 | Time | Segment | Goal | Facilitator does |
@@ -72,6 +88,11 @@ Reveal in this order. Each probe targets a specific `DESIGN_LANGUAGE.md` claim o
    `OVERVIEW · LEARN · PRACTICE · APPLY · ANALYZE · ASSESS` taxonomy + ACTFL modes (D6).
 3. **Feedback policy (D4).** *"We let you set the AI's correction stance — accuracy-first vs.
    fluency-first — yourself, rather than hiding it. Do you want to own that? When would you flip it?"*
+   (Synthetic run predicts he rejects the accuracy/fluency framing and reframes it as **elicitation vs.
+   answer-dump** — his "productive struggle" principle. If he does, that's a D4 reshape; don't argue.)
+   - **3b. Elicitation trace (D4 / §E).** *"Would it change your trust if the view showed whether a
+     student produced the form after a* **prompt** *(we made them retrieve it) vs. after a* **recast**
+     *(we gave it to them)?"* — the predicted trust-maker; capture as a fast-follow signal.
 4. **Tutor persona (D3).** *"Who the AI plays — debate partner, curious peer, person being interviewed —
    changes what language comes out. Should that be its own thing you set, or just part of the scenario?"*
    → resolves the §B open question (own field now vs. scenario-embedded for v0).

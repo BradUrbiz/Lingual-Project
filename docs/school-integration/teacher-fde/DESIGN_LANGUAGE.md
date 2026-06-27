@@ -190,3 +190,11 @@ of Phase 1.
 - [-] §C archetypes — v0 set drafted + **first worked example grounded in the partner's real L1 unit** (`DESIGN_PARTNER_CURRICULUM.md`); still pending design-partner sign-off + confirm vs research
 - [x] §D quality model — team-approved 2026-06-27 as the readiness rubric
 - [x] §E signals — team-approved 2026-06-27 (headline metric = **task–target alignment gap**); confirm against actual engine emissions in Phase 1
+
+> **Synthetic pre-validation (2026-06-28, hypothesis-grade — NOT sign-off):** three adversarial Polón
+> personas grounded in his real Canvas artifacts surfaced reshape *candidates* — see
+> `PHASE0_SYNTHETIC_PREVALIDATION.md`. Spine (§A/D1) + the alignment-gap headline (§E) **held** under
+> attack; the strongest *challenges* were: authoring should be **prose-extraction, not field-
+> composition** (reframes Phase 2); **narrative/preterite-imperfect → ship-first** (§C); **feedback
+> policy reframed as elicitation-vs-recast**, not accuracy/fluency (§B/D4); add an **elicitation-trace**
+> signal to §E. **None are decisions** — they await the real human (Phase 0 stays open).

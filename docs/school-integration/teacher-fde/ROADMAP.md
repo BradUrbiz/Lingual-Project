@@ -67,6 +67,9 @@ view as a teaching mirror, (c) an **exemplar / archetype library** (the design p
 | 2026-06-27 | **Speak the teacher's vocabulary.** He already uses a task taxonomy (OVERVIEW→…→ASSESS) + ACTFL modes, and is AI-forward (has AI-use guideline pages). The design language should map onto his terms, not impose new ones. | Lower adoption friction; the gap we fill is execution-at-scale + observability, not "what to practice." |
 | 2026-06-27 | **Phase 1 = the Task–Target Alignment View** (spec written). Extend the plan-preview into an intended→realized arc; headline = the **never-elicited list**; grammar/objectives shown as honest "not yet measurable"; behind new flag `PEDAGOGY_ENGINE_ALIGNMENT_VIEW`. | The alignment gap is mostly a JOIN of existing data (cheap, high-signal), and the plan-preview already embodies "intended" so the gap becomes one table. |
 | 2026-06-27 | **Phase 1 BUILT** behind `PEDAGOGY_ENGINE_ALIGNMENT_VIEW` (default OFF, inert), range `cd7dd8d..4672096`. Subagent-driven (4 tasks, each reviewed + whole-branch review). Not yet cut over. | Lands the alignment view on main, inert; cutover is a separate prod-timing decision (deploy → flip → runtime-verify with/without sessions). |
+| 2026-06-28 | **Phase 1 CUT OVER + browser-verified with REAL data**; **design partner found to be a LIVE Lingual user** (Free→Guided Practice; targets conveyed as Canvas prose, not structured input — the FDE gap in his real behavior). | The alignment view shows real data today; his live usage is stronger evidence than simulation and reframes Phase 0/Phase 2. |
+| 2026-06-28 | **Polón unreachable for direct co-design → synthetic pre-validation run** (3 adversarial personas grounded in his real Canvas; `PHASE0_SYNTHETIC_PREVALIDATION.md`). **Scoped as hypothesis-grade, NOT sign-off** (user decision); Phase 0 stays open. | De-risks the real session without faking validation; convergent refutes (esp. prose-extraction authoring) are too strong to ignore but too synthetic to enact. |
+| 2026-06-28 | **Synthetic refutes worth elevating:** (1) authoring = **prose-extraction + confirm**, not field-composition → reframes Phase 2; (2) **narrative/preterite-imperfect → ship-first** archetype; (3) feedback policy = **elicitation-vs-recast**, not accuracy/fluency; (4) add **elicitation-trace** to §E. Spine (§A) + alignment-gap (§E) held. | Captured as candidates pending the real human; the spine surviving adversarial attack is the most reassuring signal. |
 
 ## Open questions
 
@@ -82,6 +85,11 @@ view as a teaching mirror, (c) an **exemplar / archetype library** (the design p
 - [x] **Observability surface shape (Phase 1).** RESOLVED 2026-06-27 — extend the **plan-preview** into
   an intended→realized arc (the alignment gap), per-assignment, review mode. Spec:
   `docs/superpowers/specs/2026-06-27-teacher-fde-alignment-view-design.md`.
+- [ ] **Observe Polón's REAL Lingual sessions?** He is a live user (Free→Guided Practice). His real runs
+  would be far stronger evidence than the synthetic pre-validation — but locating them means identifying
+  his org/account (privacy-sensitive) and confirming his usage flows through the school-integration
+  engine (structured assignments) vs. B2C free chat. Decision deferred to the user; do not pull learner
+  data without an explicit go.
 
 ## Research agenda (from the SLA evidence gaps)
 
@@ -92,5 +100,8 @@ observability to probe these, turning real sessions into evidence:
 - **Modality** — spoken (pushed output, no planning) vs. text (noticing, planning) for advanced learners.
 - **L1/L2 mix** — optimal `target_language_intensity` / translanguaging for Intermediate-Mid → Advanced-Low.
 - **Spaced recycling** — does S2 cross-session recycling beat massed practice in conversational AI?
+  (Synthetic-Polón sharpening, 2026-06-28: recycling should be **within-unit / within-target-set** —
+  he'd be confused by *cross-theme* recycling, e.g. L1 *relaciones* vocab surfacing in an L2 *ciudad*
+  chat. Scope the recycling claim accordingly.)
 - **Real-time LLM elicitation** — can the voice tutor reliably elicit self-repair over recast without
   answer-dumping? (Directly our S3.2 / S3.3 / S3.4 anti-answer-dump problem.)

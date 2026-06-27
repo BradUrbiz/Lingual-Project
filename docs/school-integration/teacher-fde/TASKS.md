@@ -25,8 +25,8 @@ Owner: Product + Engineering
 
 - [x] Brainstormed the surface + headline metric → **Task–Target Alignment View** (extend the plan-preview into an intended→realized arc). Spec: `docs/superpowers/specs/2026-06-27-teacher-fde-alignment-view-design.md`. — 2026-06-27
 - [x] Wrote the implementation plan: `docs/superpowers/plans/2026-06-27-teacher-fde-alignment-view.md` (4 TDD tasks: pure join → realized aggregator → route+flag+cloudbuild → frontend). — 2026-06-27
-- [ ] Build behind `PEDAGOGY_ENGINE_ALIGNMENT_VIEW`: pure `pedagogy/alignment.py` + plan-preview route `?realized=1` + `AssignmentPlanPreview` extension; tests gate `make test-backend`.
-- [ ] Deploy inert → cut over → validate with the design partner on a real run.
+- [x] Built behind `PEDAGOGY_ENGINE_ALIGNMENT_VIEW` (default OFF) via subagent-driven dev — pure `pedagogy/alignment.py` + `practice_analytics.build_assignment_realized_input` + plan-preview route `?realized=1` + `AssignmentPlanPreview` realized column / never-elicited callout + analytics mount + i18n. 4 tasks each spec+quality reviewed; whole-branch review caught + fixed a no-sessions guard gap. backend 1660 OK, frontend green. Range `cd7dd8d..4672096`. — 2026-06-27
+- [ ] Deploy inert → cut over (`--update-env-vars PEDAGOGY_ENGINE_ALIGNMENT_VIEW=1`) → runtime-verify with the test teacher on an assignment WITH sessions AND one WITHOUT (proves the no-sessions guard). **At cutover:** add LIMITATIONS entry (grammar/obj realized = honest "not yet measurable") + `backend/CLAUDE.md` alignment.py + flag-state line.
 - [ ] Fast-follow: modality split of the realized signal (voice vs. text).
 
 ## Phase 2 — Guided authoring — LATER

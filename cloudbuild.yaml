@@ -321,10 +321,13 @@ substitutions:
   # (matches live). Rollback: --update-env-vars PEDAGOGY_ENGINE_ALIGNMENT_VIEW=0.
   _PEDAGOGY_ENGINE_ALIGNMENT_VIEW: '1'
   # Teacher FDE — uptake trace (elicitation-vs-recast overlay on the realized
-  # signal). Default '0' (REPLACE-safe: matches absent/off live). Ship inert,
-  # cut over separately (deploy -> flip --update-env-vars PEDAGOGY_ENGINE_UPTAKE_TRACE=1
-  # -> runtime-verify), per the Phase 1 alignment-view precedent.
-  _PEDAGOGY_ENGINE_UPTAKE_TRACE: '0'
+  # signal). CUT OVER 2026-06-28 (rev lingual-app-00095-6rw): deployed inert on
+  # rev 00094 -> flipped --update-env-vars PEDAGOGY_ENGINE_UPTAKE_TRACE=1 -> prod
+  # runtime-verified on the Testing Class burn-in assignment (realized.uptake
+  # measured=4: afterRecast 1 / unprompted 3, headline + per-target indicators
+  # rendered; cross-checks the realized hit-counts 2+2). Default bumped 0->1 for
+  # durability (matches live). Rollback: --update-env-vars PEDAGOGY_ENGINE_UPTAKE_TRACE=0.
+  _PEDAGOGY_ENGINE_UPTAKE_TRACE: '1'
 
 # Store images in Artifact Registry
 images:

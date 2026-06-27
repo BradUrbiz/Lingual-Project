@@ -1,6 +1,6 @@
 # Teacher FDE — Uptake Trace (elicitation-vs-recast) — Design
 
-Status: Design — pending user review
+Status: BUILT (inert, behind PEDAGOGY_ENGINE_UPTAKE_TRACE, default off) — 2026-06-28
 Date: 2026-06-28
 Owner: Product + Engineering
 Related: `docs/school-integration/teacher-fde/` (DESIGN_LANGUAGE §E, PHASE0_SYNTHETIC_PREVALIDATION #4),

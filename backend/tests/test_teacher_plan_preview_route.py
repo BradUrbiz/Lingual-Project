@@ -1,3 +1,4 @@
+import contextlib
 import os
 import unittest
 from unittest import mock
@@ -246,3 +247,102 @@ class AlignmentViewRouteTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         planPreview = resp.get_json()['planPreview']
         self.assertIsNone(planPreview['realized'])
+
+
+class UptakeTraceRouteTests(unittest.TestCase):
+    """Route-level tests for realized.uptake (flag gate + fail-soft)."""
+
+    _PREVIEW = {
+        'engineEnabled': True, 'rawTutorMode': False, 'taskType': 'opinion_gap',
+        'correctionPosture': {'mode': 'balanced', 'recastDefault': True, 'elicitationRepeatThreshold': 2},
+        'targets': [{'surface': 'la cuenta', 'kind': 'expression', 'feedbackRoute': 'recast_first'}],
+    }
+    _SESSIONS = [{'student_uid': 's1', 'session_summary': {'target_expression_hits': {'la cuenta': 1}}}]
+    _EVENTS = [
+        {'session_id': 'sess1', 'event_type': 'feedback.elicitation', 'turn_index': 1, 'payload': {}},
+        {'session_id': 'sess1', 'event_type': 'metric.target_expression_hit', 'turn_index': 2,
+         'payload': {'expression': 'la cuenta', 'count': 1}},
+    ]
+
+    def _app(self, *, events=None, events_raise=False):
+        captured = self._EVENTS if events is None else events
+
+        class _Db:
+            def list_assignment_practice_sessions(self, _aid):
+                return UptakeTraceRouteTests._SESSIONS
+
+            def list_assignment_learning_events(self, _aid, event_types=None):
+                if events_raise:
+                    raise RuntimeError('events boom')
+                return captured
+
+        app = Flask(__name__)
+        app.secret_key = 'test'
+        app.register_blueprint(create_curriculum_admin_blueprint(RouteDeps(
+            db=_Db(), firebase_auth=None,
+            get_current_user_uid=lambda: (session.get('user') or {}).get('uid'),
+            get_openai_client=lambda: None, get_assessment=lambda: {},
+            compute_results=lambda *a, **k: {}, get_proficiency_description=lambda *a, **k: {},
+            login_required=_passthrough, get_user_proficiency_context=lambda **_: '',
+            build_system_prompt=lambda _c: '', get_school_request_context=lambda: None,
+            set_active_school_membership=lambda *a, **k: None,
+            allowed_learning_locales={'es-ES'}, allowed_minigame_types=set(),
+            supported_ui_languages={'en'}, audit_logger=None,
+        )))
+        return app
+
+    def _patches(self, env):
+        return [
+            mock.patch.dict(os.environ, env),
+            mock.patch('backend.routes.curriculum_admin._require_assignment_teacher_access'),
+            mock.patch('backend.routes.curriculum_admin.resolve_assignment_bootstrap_for_user', return_value={}),
+            mock.patch('backend.routes.curriculum_admin.compile_prompt_plan', return_value=object()),
+            mock.patch('backend.routes.curriculum_admin.serialize_plan_preview',
+                       return_value=dict(self._PREVIEW)),
+        ]
+
+    def test_flag_on_attaches_uptake(self):
+        with contextlib.ExitStack() as stack:
+            for p in self._patches({
+                    'PEDAGOGY_ENGINE_TEACHER_PREVIEW': '1',
+                    'PEDAGOGY_ENGINE_ALIGNMENT_VIEW': '1',
+                    'PEDAGOGY_ENGINE_UPTAKE_TRACE': '1'}):
+                stack.enter_context(p)
+            client = self._app().test_client()
+            _login(client)
+            resp = client.get('/api/teacher/assignments/a1/plan-preview?realized=1')
+        self.assertEqual(resp.status_code, 200)
+        uptake = resp.get_json()['planPreview']['realized']['uptake']
+        self.assertEqual(uptake['totals']['afterPrompt'], 1)
+        self.assertEqual(uptake['totals']['measured'], 1)
+
+    def test_uptake_flag_off_no_uptake_key(self):
+        with contextlib.ExitStack() as stack:
+            for p in self._patches({
+                    'PEDAGOGY_ENGINE_TEACHER_PREVIEW': '1',
+                    'PEDAGOGY_ENGINE_ALIGNMENT_VIEW': '1',
+                    'PEDAGOGY_ENGINE_UPTAKE_TRACE': ''}):
+                stack.enter_context(p)
+            client = self._app().test_client()
+            _login(client)
+            resp = client.get('/api/teacher/assignments/a1/plan-preview?realized=1')
+        self.assertEqual(resp.status_code, 200)
+        realized = resp.get_json()['planPreview']['realized']
+        self.assertNotIn('uptake', realized)  # flag-off: realized still present, no uptake key
+
+    def test_uptake_fail_soft_does_not_null_realized(self):
+        # events read raises -> uptake None, realized block preserved, no 500.
+        with contextlib.ExitStack() as stack:
+            for p in self._patches({
+                    'PEDAGOGY_ENGINE_TEACHER_PREVIEW': '1',
+                    'PEDAGOGY_ENGINE_ALIGNMENT_VIEW': '1',
+                    'PEDAGOGY_ENGINE_UPTAKE_TRACE': '1'}):
+                stack.enter_context(p)
+            client = self._app(events_raise=True).test_client()
+            _login(client)
+            resp = client.get('/api/teacher/assignments/a1/plan-preview?realized=1')
+        self.assertEqual(resp.status_code, 200)
+        realized = resp.get_json()['planPreview']['realized']
+        self.assertIsNotNone(realized)               # realized survives
+        self.assertIn('perTarget', realized)         # realized join intact
+        self.assertIsNone(realized['uptake'])        # uptake degraded to None

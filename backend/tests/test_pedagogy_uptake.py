@@ -138,5 +138,17 @@ class BuildTargetUptakeTestCase(unittest.TestCase):
         self.assertEqual(out["window"], 2)
 
 
+class UptakeFlagTestCase(unittest.TestCase):
+    def test_default_off(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            from backend.services.pedagogy.integration import uptake_trace_enabled
+            self.assertFalse(uptake_trace_enabled())
+
+    def test_on_when_truthy(self):
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_UPTAKE_TRACE": "1"}):
+            from backend.services.pedagogy.integration import uptake_trace_enabled
+            self.assertTrue(uptake_trace_enabled())
+
+
 if __name__ == "__main__":
     unittest.main()

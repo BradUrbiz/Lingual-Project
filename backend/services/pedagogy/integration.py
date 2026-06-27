@@ -118,6 +118,14 @@ def alignment_view_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_ALIGNMENT_VIEW", "").strip().lower() in _TRUTHY
 
 
+def uptake_trace_enabled() -> bool:
+    """Teacher FDE — uptake trace (elicitation-vs-recast overlay on the realized
+    signal). Default off; read-only/additive (no live-path effect). Rides the
+    realized block, so it is effective only with the alignment view also on.
+    Reads PEDAGOGY_ENGINE_UPTAKE_TRACE."""
+    return os.environ.get("PEDAGOGY_ENGINE_UPTAKE_TRACE", "").strip().lower() in _TRUTHY
+
+
 def resolve_assignment_system_prompt(
     bootstrap: dict[str, Any],
     *,

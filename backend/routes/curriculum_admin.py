@@ -27,11 +27,13 @@ from backend.services.ask_service import answer_ask
 from backend.services.pedagogy.assignment_debrief import build_assignment_debrief
 from backend.services.pedagogy.debrief import build_session_debrief
 from backend.services.pedagogy.alignment import build_alignment
+from backend.services.pedagogy.uptake import build_target_uptake
 from backend.services.pedagogy.integration import (
     alignment_view_enabled,
     debrief_enabled,
     debrief_rollup_enabled,
     teacher_preview_enabled,
+    uptake_trace_enabled,
 )
 from backend.services.pedagogy.plan import compile_prompt_plan, serialize_plan_preview
 from backend.services.compliance import (
@@ -1082,6 +1084,24 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                         if sessions:
                             realized_input = build_assignment_realized_input(sessions, lexical)
                             preview['realized'] = build_alignment(targets, realized_input)
+                            if uptake_trace_enabled():
+                                # Own nested fail-soft: a uptake failure must NOT
+                                # null the realized block (the outer except would).
+                                try:
+                                    events = deps.db.list_assignment_learning_events(
+                                        assignment_id,
+                                        event_types=[
+                                            'feedback.recast', 'feedback.elicitation',
+                                            'metric.target_expression_hit',
+                                            'metric.target_vocabulary_hit',
+                                        ],
+                                    )
+                                    preview['realized']['uptake'] = build_target_uptake(events, lexical)
+                                except Exception:
+                                    logger.exception(
+                                        'uptake trace derivation failed; uptake=None '
+                                        '(assignment_id=%s)', assignment_id)
+                                    preview['realized']['uptake'] = None
                     except Exception:
                         logger.exception(
                             'alignment realized join failed; omitting realized '

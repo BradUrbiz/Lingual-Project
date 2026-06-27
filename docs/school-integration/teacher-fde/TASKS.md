@@ -21,12 +21,13 @@ Owner: Product + Engineering
 - [x] Ingested the design partner's real curriculum via the Canvas PAT (read-only) → `DESIGN_PARTNER_CURRICULUM.md` (Polón, VHL Imagina / AP-track); grounded the first §C worked example. — 2026-06-27
 - [ ] Phase 0 exit: design-partner-validated v0, concrete enough to drive Phase 1.
 
-## Phase 1 — Observability (intended → realized) — NEXT
+## Phase 1 — Observability (intended → realized) — IN PROGRESS
 
-- [ ] Brainstorm the observability surface: where it lives (extend teacher debrief / plan-preview, or
-  new surface?), and the minimum first cut.
-- [ ] Define the headline metric (likely the **task–target alignment gap**) and its visual form.
-- [ ] Build + deploy behind a flag; validate with the design partner on a real run.
+- [x] Brainstormed the surface + headline metric → **Task–Target Alignment View** (extend the plan-preview into an intended→realized arc). Spec: `docs/superpowers/specs/2026-06-27-teacher-fde-alignment-view-design.md`. — 2026-06-27
+- [ ] Write the implementation plan from the spec (writing-plans).
+- [ ] Build behind `PEDAGOGY_ENGINE_ALIGNMENT_VIEW`: pure `pedagogy/alignment.py` + plan-preview route `?realized=1` + `AssignmentPlanPreview` extension; tests gate `make test-backend`.
+- [ ] Deploy inert → cut over → validate with the design partner on a real run.
+- [ ] Fast-follow: modality split of the realized signal (voice vs. text).
 
 ## Phase 2 — Guided authoring — LATER
 

@@ -65,6 +65,7 @@ view as a teaching mirror, (c) an **exemplar / archetype library** (the design p
 | 2026-06-27 | **Observability becomes an evidence flywheel.** The three evidence-thin variables (language-mix, recycling, modality) are exactly where Lingual already runs all three and the literature is silent → our observability data is positioned to produce the missing SLA evidence. | Reframes Phase 1 from "a teacher feature" to "the way Lingual generates evidence the field lacks" — a durable strategic asset. |
 | 2026-06-27 | **Design-partner curriculum ingested** (read-only Canvas pull) → `DESIGN_PARTNER_CURRICULUM.md`; first §C worked example grounded in his real L1 "Las relaciones personales" unit. Partner = **Eduardo Polón**, VHL Imagina / AP-track. | Archetypes + examples now sit on a real course, not invented scenarios — the FDE grounding the spine called for. |
 | 2026-06-27 | **Speak the teacher's vocabulary.** He already uses a task taxonomy (OVERVIEW→…→ASSESS) + ACTFL modes, and is AI-forward (has AI-use guideline pages). The design language should map onto his terms, not impose new ones. | Lower adoption friction; the gap we fill is execution-at-scale + observability, not "what to practice." |
+| 2026-06-27 | **Phase 1 = the Task–Target Alignment View** (spec written). Extend the plan-preview into an intended→realized arc; headline = the **never-elicited list**; grammar/objectives shown as honest "not yet measurable"; behind new flag `PEDAGOGY_ENGINE_ALIGNMENT_VIEW`. | The alignment gap is mostly a JOIN of existing data (cheap, high-signal), and the plan-preview already embodies "intended" so the gap becomes one table. |
 
 ## Open questions
 
@@ -76,9 +77,9 @@ view as a teaching mirror, (c) an **exemplar / archetype library** (the design p
   Culture* (VHL Imagina, AP-track), `ssfs.instructure.com`. Curriculum ingested
   (`DESIGN_PARTNER_CURRICULUM.md`). Still open: his current authoring pain, and scheduling a real
   session to observe.
-- [ ] **Observability surface shape (Phase 1).** Where does it live (extend the existing teacher
-  debrief / plan-preview, or a new surface?) and what's the minimum first cut? — Deferred to Phase 1
-  brainstorm.
+- [x] **Observability surface shape (Phase 1).** RESOLVED 2026-06-27 — extend the **plan-preview** into
+  an intended→realized arc (the alignment gap), per-assignment, review mode. Spec:
+  `docs/superpowers/specs/2026-06-27-teacher-fde-alignment-view-design.md`.
 
 ## Research agenda (from the SLA evidence gaps)
 

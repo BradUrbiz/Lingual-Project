@@ -206,23 +206,11 @@ class BuildTargetUptakeTestCase(unittest.TestCase):
         self.assertEqual(out["window"], 2)
 
 
-class UptakeFlagTestCase(unittest.TestCase):
-    def test_default_off(self):
-        with mock.patch.dict(os.environ, {}, clear=True):
-            from backend.services.pedagogy.integration import uptake_trace_enabled
-            self.assertFalse(uptake_trace_enabled())
-
-    def test_on_when_truthy(self):
-        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_UPTAKE_TRACE": "1"}):
-            from backend.services.pedagogy.integration import uptake_trace_enabled
-            self.assertTrue(uptake_trace_enabled())
-
-
 if __name__ == "__main__":
     unittest.main()
 ```
 
-> Note: `UptakeFlagTestCase` references `uptake_trace_enabled` which is added in Task 2. It will fail until Task 2 lands — that is expected; run only `BuildTargetUptakeTestCase` in Step 2 of this task (the `-k` filter below).
+> Note: the `os` / `mock` imports above are used by `UptakeFlagTestCase`, which Task 2 appends to this same file. Leave them in.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -525,6 +513,20 @@ def uptake_trace_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_UPTAKE_TRACE", "").strip().lower() in _TRUTHY
 ```
 
+Then append the flag test to `backend/tests/test_pedagogy_uptake.py` (before the `if __name__ == "__main__":` footer):
+```python
+class UptakeFlagTestCase(unittest.TestCase):
+    def test_default_off(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            from backend.services.pedagogy.integration import uptake_trace_enabled
+            self.assertFalse(uptake_trace_enabled())
+
+    def test_on_when_truthy(self):
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_UPTAKE_TRACE": "1"}):
+            from backend.services.pedagogy.integration import uptake_trace_enabled
+            self.assertTrue(uptake_trace_enabled())
+```
+
 - [ ] **Step 4: Wire the route imports**
 
 In `backend/routes/curriculum_admin.py`:
@@ -615,7 +617,7 @@ In `cloudbuild.yaml`:
 - [ ] **Step 9: Commit**
 
 ```bash
-git add backend/services/pedagogy/integration.py backend/routes/curriculum_admin.py backend/tests/test_teacher_plan_preview_route.py cloudbuild.yaml
+git add backend/services/pedagogy/integration.py backend/routes/curriculum_admin.py backend/tests/test_teacher_plan_preview_route.py backend/tests/test_pedagogy_uptake.py cloudbuild.yaml
 git commit -m "feat(teacher-fde): attach realized.uptake (flag PEDAGOGY_ENGINE_UPTAKE_TRACE, default off)"
 ```
 

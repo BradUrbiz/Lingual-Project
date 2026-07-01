@@ -1,4 +1,6 @@
+import os
 import unittest
+from unittest import mock
 from unittest.mock import patch
 
 from flask import Flask, session
@@ -1283,6 +1285,23 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
             any(m.get('content') == 'should be ignored' for m in sent),
             'coachNote should not appear in messages when flags are off',
         )
+
+
+class RealtimeSpeculativeResponseFlagTests(unittest.TestCase):
+    def test_default_off(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            from backend.routes.chat import realtime_speculative_response_enabled
+            self.assertFalse(realtime_speculative_response_enabled())
+
+    def test_on_when_truthy(self):
+        with mock.patch.dict(os.environ, {'REALTIME_SPECULATIVE_RESPONSE': '1'}):
+            from backend.routes.chat import realtime_speculative_response_enabled
+            self.assertTrue(realtime_speculative_response_enabled())
+
+    def test_off_when_other(self):
+        with mock.patch.dict(os.environ, {'REALTIME_SPECULATIVE_RESPONSE': 'no'}):
+            from backend.routes.chat import realtime_speculative_response_enabled
+            self.assertFalse(realtime_speculative_response_enabled())
 
 
 if __name__ == '__main__':

@@ -287,6 +287,18 @@ def realtime_avatar_directives_enabled() -> bool:
     }
 
 
+def realtime_speculative_response_enabled() -> bool:
+    """Whether the realtime tutor fires response.create speculatively at speech-stop
+    (metrics-gated) instead of waiting for the full input transcription. Default off.
+    Reads REALTIME_SPECULATIVE_RESPONSE. Independent of the pilot-avatar gate."""
+    return os.environ.get('REALTIME_SPECULATIVE_RESPONSE', '').strip().lower() in {
+        '1',
+        'true',
+        'yes',
+        'on',
+    }
+
+
 def realtime_avatar_directives_requested(payload: dict[str, Any] | None = None) -> bool:
     if not pilot_avatar_enabled():
         return False
@@ -653,6 +665,7 @@ def create_chat_blueprint(deps: RouteDeps) -> Blueprint:
                 'client_secret': data.get('value'),
                 'session_id': (data.get('session') or {}).get('id'),
                 'expires_at': data.get('expires_at'),
+                'speculativeResponse': realtime_speculative_response_enabled(),
             })
 
         except SuspendedOrgError as exc:

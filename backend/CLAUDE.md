@@ -59,7 +59,7 @@ The resolver reads `instructions`, `generated_scenario`, `objectives`, `target_e
 ## Request flows
 
 - **Auth:** Firebase ID token → `POST /api/auth/verify` verifies token, creates Flask session, returns memberships + active org context. `MembershipContext` on the frontend consumes this.
-- **Realtime:** `POST /api/realtime/session` mints an ephemeral OpenAI Realtime credential → frontend connects via `useRealtimeChat`. Voice is compliance-gated and fails closed without consent.
+- **Realtime:** `POST /api/realtime/session` mints an ephemeral OpenAI Realtime credential → frontend connects via `useRealtimeChat`. Voice is compliance-gated and fails closed without consent. A latency optimization is available behind `REALTIME_SPECULATIVE_RESPONSE` (env, default off, **BUILT / not cut over**): when on, the `/api/realtime/session` mint returns `speculativeResponse: true` and the frontend (`useRealtimeChat`) fires `response.create` speculatively at `speech_stopped` for audio that passes a metrics-only pre-gate (`shouldSpeculativelyRespond`), generating the reply in parallel with STT; the existing transcript noise-gate cancels it (`response.cancel` + `output_audio_buffer.clear`) if it turns out to be noise. Flag off ⇒ byte-identical (serial wait-for-transcript). Spec/plan `docs/superpowers/{specs,plans}/2026-07-01-realtime-speculative-response*.md`. Rollback `--update-env-vars REALTIME_SPECULATIVE_RESPONSE=0`.
 - **SPA serving:** in production, Flask serves `static/react/` (built by the frontend Docker stage). Never hand-edit `static/react/`.
 
 ## Key files

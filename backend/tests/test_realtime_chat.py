@@ -873,10 +873,18 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         })
 
         # Pin a prompt-capable STT model so the transcription prompt assertions
-        # below hold (the default gpt-realtime-whisper drops the prompt).
+        # below hold (the default gpt-realtime-whisper drops the prompt). Also pin
+        # REALTIME_SPECULATIVE_RESPONSE=1 so this full-route test can assert the
+        # mint's `speculativeResponse` field tracks the flag (cross-layer seam
+        # insurance: the frontend reads this key straight off `realtime_speculative_response_enabled()`
+        # and a rename on either side would fail silently without this check).
         with patch.dict(
             'os.environ',
-            {'OPENAI_API_KEY': 'test-openai-key', 'REALTIME_TRANSCRIPTION_MODEL': 'gpt-4o-transcribe'},
+            {
+                'OPENAI_API_KEY': 'test-openai-key',
+                'REALTIME_TRANSCRIPTION_MODEL': 'gpt-4o-transcribe',
+                'REALTIME_SPECULATIVE_RESPONSE': '1',
+            },
             clear=False,
         ):
             with patch('backend.routes.chat.requests.post') as mocked_post:
@@ -896,6 +904,7 @@ class RealtimeChatRoutesTestCase(unittest.TestCase):
         payload = response.get_json()
         self.assertTrue(payload['success'])
         self.assertEqual(payload['client_secret'], 'secret_123')
+        self.assertTrue(payload['speculativeResponse'])
 
         self.assertEqual(
             mocked_post.call_args.args[0],

@@ -1022,7 +1022,9 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
           }
           isListeningRef.current = false;
           setIsListening(false);
-          flushQueuedAvatarContexts();
+          if (!speculativeFiredRef.current) {
+            flushQueuedAvatarContexts();
+          }
           break;
 
         case 'response.done':

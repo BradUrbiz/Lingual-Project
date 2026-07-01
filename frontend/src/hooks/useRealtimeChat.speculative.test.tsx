@@ -256,4 +256,30 @@ describe('useRealtimeChat speculative response', () => {
     expect(cancels()).toHaveLength(0);
     expect(clears()).toHaveLength(0);
   });
+
+  it('does not double-fire response.create when an avatar/promote-back context is queued at the same speech_stopped tick', async () => {
+    mintReturns(true);
+    vi.mocked(shouldSpeculativelyRespond).mockReturnValue(true);
+    vi.mocked(shouldRespondToRealtimeTurn).mockReturnValue(true);
+    await connectAndOpen();
+
+    emitSpeechStarted();
+    // Queue a promote-back (S3.3) mid-speech: `injectPromoteBack` shares the same
+    // queue+flush path as avatar context and pushes then immediately attempts a
+    // flush, but the idle-gate (`!isListening`) blocks it while the learner is
+    // still talking, so the item lands in `queuedAvatarContextsRef` unflushed.
+    act(() => {
+      latestHookState?.injectPromoteBack('Try using the subjunctive here.');
+    });
+    expect(creates()).toHaveLength(0);
+
+    emitSpeechStopped();
+    // The speculative fire is the ONLY response.create for this turn. Before the
+    // fix, the flush that runs later in the same `speech_stopped` handler would
+    // see the queue non-empty, the idle-gate now passing (`isListening` just went
+    // false, `currentResponseId` still null because `response.created` hasn't
+    // round-tripped yet), and send a second `response.create` — which the
+    // server rejects as a duplicate and the queued context is swallowed.
+    expect(creates()).toHaveLength(1);
+  });
 });

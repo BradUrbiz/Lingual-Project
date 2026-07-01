@@ -6,6 +6,7 @@ import {
   assistantPromptLikelyExpectsReply,
   createEmptyRealtimeInputTurnMetrics,
   shouldRespondToRealtimeTurn,
+  shouldSpeculativelyRespond,
 } from './realtimeSpeechGate';
 import {
   buildBaseAvatarDiagnostics,
@@ -198,6 +199,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
   const assistantTranscriptFinalRef = useRef('');
   const assistantSpeechStartedAtRef = useRef<number | null>(null);
   const inputSpeechStartedAtRef = useRef<number | null>(null);
+  const speculativeEnabledRef = useRef(false);
+  const speculativeFiredRef = useRef(false);
   // Authoritative start timestamp for the current user input turn. Unlike
   // `inputSpeechStartedAtRef`, this is NOT cleared by transcription.completed
   // or transcription.failed, so `input_audio_buffer.speech_stopped` can still
@@ -926,11 +929,18 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
 
             if (shouldRespondToRealtimeTurn(resolvedTranscript, currentInputTurn)) {
               finalizeTranscript('user', resolvedTranscript, itemId);
-              createRealtimeResponseUnlessHeld();
+              if (!speculativeFiredRef.current) {
+                createRealtimeResponseUnlessHeld();
+              }
             } else {
               pendingUserOrderRef.current = null;
+              if (speculativeFiredRef.current) {
+                cancelCurrentResponse();
+                clearOutputAudioBuffer();
+              }
               deleteConversationItem(itemId);
             }
+            speculativeFiredRef.current = false;
           }
           break;
 
@@ -938,6 +948,9 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
           pendingUserOrderRef.current = null;
           inputSpeechStartedAtRef.current = null;
           currentInputTurnRef.current = createEmptyRealtimeInputTurnMetrics();
+          // A speculative reply already in flight is left to ride: a transcription
+          // failure is orthogonal to whether the audio was real speech.
+          speculativeFiredRef.current = false;
           // Voice-fidelity telemetry: a spoken turn produced no transcript -> no
           // student.turn will be persisted. Surface it so the workspace can record
           // an ASR-dropout marker. Fail-open: never disrupt the session.
@@ -952,6 +965,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
           break;
 
         case 'input_audio_buffer.speech_started':
+          speculativeFiredRef.current = false;
           reservePendingMessageOrder('user');
           pendingDirectiveContinuationRef.current = false;
           pendingSpeechTurnHasDirectiveRef.current = false;
@@ -991,6 +1005,18 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
               currentInputTurn.durationMs,
               computedDuration,
             );
+          }
+          if (
+            speculativeEnabledRef.current
+            && !speculativeFiredRef.current
+            && shouldSpeculativelyRespond(currentInputTurnRef.current)
+          ) {
+            // Fire the response NOW, in parallel with STT; the transcript-gate at
+            // `.completed` cancels it if this turns out to be noise. Respect the
+            // pedagogy tutor-hold: only mark fired if it actually sent.
+            if (createRealtimeResponseUnlessHeld()) {
+              speculativeFiredRef.current = true;
+            }
           }
           isListeningRef.current = false;
           setIsListening(false);
@@ -1056,7 +1082,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       setError(null);
 
       const tokenResponse = await api.post('/realtime/session', sessionParamsOverride ?? sessionParams ?? {});
-      const { client_secret } = tokenResponse.data;
+      const { client_secret, speculativeResponse } = tokenResponse.data;
+      speculativeEnabledRef.current = speculativeResponse === true;
 
       if (!client_secret) {
         throw new Error('Failed to get session token');

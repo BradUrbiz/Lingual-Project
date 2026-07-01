@@ -28,6 +28,11 @@ SUPPORTED_EVENT_TYPES = {
     'metric.repeated_error',
     'metric.rubric_dimension_signal',
     'task.completed',
+    # Voice-fidelity telemetry (Teacher FDE): a spoken user turn whose transcription
+    # failed -> no student.turn was persisted. Content-less; inert to all aggregation
+    # (no apply_learning_event_to_session branch, no derived events). Counted by
+    # pedagogy/voice_fidelity.build_voice_fidelity as dropoutTurns.
+    'metric.voice_transcript_lost',
 }
 
 GENERIC_COMMUNICATIVE_FUNCTION_PATTERNS = {

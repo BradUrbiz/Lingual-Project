@@ -155,6 +155,8 @@ const QUESTION_STARTERS = new Set([
 
 const DIRECTED_SPEECH_RMS_THRESHOLD = 0.012;
 
+export const SPECULATIVE_MIN_DURATION_MS = 400;
+
 function normalizeTranscript(transcript: string): string {
   return transcript
     .trim()
@@ -288,6 +290,19 @@ export function shouldRespondToRealtimeTurn(
   }
 
   return true;
+}
+
+/**
+ * Metrics-only pre-gate for the speculative-response optimization: decide at
+ * `speech_stopped` (before any transcript exists) whether the audio already looks
+ * like directed near-field speech worth responding to speculatively. Deliberately
+ * conservative — requires an ACTUAL near-field mic signal (not the full gate's
+ * benefit-of-the-doubt) so noise-shaped audio falls back to the serial transcript-gate.
+ */
+export function shouldSpeculativelyRespond(metrics: RealtimeInputTurnMetrics): boolean {
+  return metrics.hadMicSignal
+    && metrics.peakRms >= DIRECTED_SPEECH_RMS_THRESHOLD
+    && metrics.durationMs >= SPECULATIVE_MIN_DURATION_MS;
 }
 
 export function createEmptyRealtimeInputTurnMetrics(): RealtimeInputTurnMetrics {

@@ -3,6 +3,8 @@ import {
   assistantPromptLikelyExpectsReply,
   createEmptyRealtimeInputTurnMetrics,
   shouldRespondToRealtimeTurn,
+  shouldSpeculativelyRespond,
+  SPECULATIVE_MIN_DURATION_MS,
 } from './realtimeSpeechGate';
 
 describe('assistantPromptLikelyExpectsReply', () => {
@@ -88,5 +90,39 @@ describe('shouldRespondToRealtimeTurn', () => {
     };
 
     expect(shouldRespondToRealtimeTurn('Lingu, how do I say this?', metrics)).toBe(true);
+  });
+});
+
+describe('shouldSpeculativelyRespond', () => {
+  const near = (over: Partial<import('./realtimeSpeechGate').RealtimeInputTurnMetrics> = {}) => ({
+    ...createEmptyRealtimeInputTurnMetrics(),
+    hadMicSignal: true,
+    peakRms: 0.03,
+    durationMs: 800,
+    ...over,
+  });
+
+  it('accepts directed near-field speech of sufficient duration', () => {
+    expect(shouldSpeculativelyRespond(near())).toBe(true);
+  });
+
+  it('rejects far-field / quiet audio (peakRms below threshold)', () => {
+    expect(shouldSpeculativelyRespond(near({ peakRms: 0.005 }))).toBe(false);
+  });
+
+  it('rejects audio shorter than the duration floor', () => {
+    expect(shouldSpeculativelyRespond(near({ durationMs: SPECULATIVE_MIN_DURATION_MS - 1 }))).toBe(false);
+  });
+
+  it('rejects when there was no mic signal (cannot assess near-field)', () => {
+    expect(shouldSpeculativelyRespond(near({ hadMicSignal: false }))).toBe(false);
+  });
+
+  it('accepts exactly at the duration floor', () => {
+    expect(shouldSpeculativelyRespond(near({ durationMs: SPECULATIVE_MIN_DURATION_MS }))).toBe(true);
+  });
+
+  it('accepts exactly at the RMS threshold', () => {
+    expect(shouldSpeculativelyRespond(near({ peakRms: 0.012 }))).toBe(true);
   });
 });

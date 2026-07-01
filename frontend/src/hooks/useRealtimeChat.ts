@@ -33,6 +33,7 @@ type RealtimeSessionParams = {
 
 interface UseRealtimeChatOptions {
   onMessage?: (role: 'user' | 'assistant', content: string) => void;
+  onUserTranscriptLost?: () => void;
   sessionParams?: RealtimeSessionParams;
 }
 
@@ -154,6 +155,7 @@ function resolveRole(item: RealtimeItem | undefined, fallback: 'user' | 'assista
 
 export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeChatReturn {
   const onMessageCallback = options?.onMessage;
+  const onUserTranscriptLostCallback = options?.onUserTranscriptLost;
   const sessionParams = options?.sessionParams;
   const [isConnected, setIsConnected] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -936,6 +938,10 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
           pendingUserOrderRef.current = null;
           inputSpeechStartedAtRef.current = null;
           currentInputTurnRef.current = createEmptyRealtimeInputTurnMetrics();
+          // Voice-fidelity telemetry: a spoken turn produced no transcript -> no
+          // student.turn will be persisted. Surface it so the workspace can record
+          // an ASR-dropout marker. Fail-open: never disrupt the session.
+          onUserTranscriptLostCallback?.();
           if (event.error?.message) {
             setError(event.error.message);
           }
@@ -1026,6 +1032,7 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
       createRealtimeResponseUnlessHeld,
       deleteConversationItem,
       finalizeTranscript,
+      onUserTranscriptLostCallback,
       flushQueuedAvatarContexts,
       completedDirectiveCallsRef,
       currentInputTurnRef,

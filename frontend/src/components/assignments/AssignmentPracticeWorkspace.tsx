@@ -840,6 +840,22 @@ function useAssignmentPracticeWorkspaceController({
     }
   };
 
+  const handleUserTranscriptLost = () => {
+    const persistenceTarget = realtimePersistenceTargetRef.current;
+    if (!persistenceTarget) return;
+    // Occupy this turn's slot so the marker sits in order like a real turn would.
+    const sortOrder = nextMessageOrderRef.current;
+    nextMessageOrderRef.current += 1;
+    void queuePracticeEvent(
+      persistenceTarget.practiceSessionId,
+      'metric.voice_transcript_lost',
+      sortOrder,
+      { source: 'realtime' },
+    ).catch(() => {
+      // fail-soft: dropout telemetry must never disrupt the session
+    });
+  };
+
   const {
     isConnected,
     isListening,
@@ -857,6 +873,7 @@ function useAssignmentPracticeWorkspaceController({
     onMessage: (role, content) => {
       void persistRealtimeMessage(role, content);
     },
+    onUserTranscriptLost: handleUserTranscriptLost,
     sessionParams: realtimeSessionParams,
   });
 

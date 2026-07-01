@@ -73,8 +73,8 @@ class MockRTCPeerConnection {
   }
 }
 
-function HookHarness() {
-  const hookState = useRealtimeChat();
+function HookHarness({ options }: { options?: Parameters<typeof useRealtimeChat>[0] } = {}) {
+  const hookState = useRealtimeChat(options);
 
   useEffect(() => {
     latestHookState = hookState;
@@ -415,5 +415,55 @@ describe('useRealtimeChat directive continuation', () => {
       type: 'response.create',
     });
     expect(latestHookState?.hasHeldTutorResponse).toBe(false);
+  });
+
+  it('emits onUserTranscriptLost when a user transcription fails', async () => {
+    const onLost = vi.fn();
+    render(<HookHarness options={{ onUserTranscriptLost: onLost }} />);
+
+    await act(async () => {
+      await latestHookState?.connect();
+    });
+    act(() => {
+      activeDataChannel?.open();
+    });
+    await waitFor(() => {
+      expect(latestHookState?.isConnected).toBe(true);
+    });
+
+    act(() => {
+      activeDataChannel?.emitServerEvent({
+        type: 'conversation.item.input_audio_transcription.failed',
+        item_id: 'item_lost',
+        error: { message: 'no audio' },
+      });
+    });
+
+    expect(onLost).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not emit onUserTranscriptLost when a user transcription succeeds', async () => {
+    const onLost = vi.fn();
+    render(<HookHarness options={{ onUserTranscriptLost: onLost }} />);
+
+    await act(async () => {
+      await latestHookState?.connect();
+    });
+    act(() => {
+      activeDataChannel?.open();
+    });
+    await waitFor(() => {
+      expect(latestHookState?.isConnected).toBe(true);
+    });
+
+    act(() => {
+      activeDataChannel?.emitServerEvent({
+        type: 'conversation.item.input_audio_transcription.done',
+        item_id: 'item_ok',
+        transcript: 'Hola, quiero un café',
+      });
+    });
+
+    expect(onLost).not.toHaveBeenCalled();
   });
 });

@@ -229,4 +229,31 @@ describe('useRealtimeChat speculative response', () => {
     // from both the speculative attempt and the serial attempt having queued.
     expect(creates()).toHaveLength(1);
   });
+
+  it('does not emit a spurious cancel/clear when a held speculative turn is later rejected', async () => {
+    mintReturns(true);
+    vi.mocked(shouldSpeculativelyRespond).mockReturnValue(true);
+    vi.mocked(shouldRespondToRealtimeTurn).mockReturnValue(false);
+    await connectAndOpen();
+
+    act(() => {
+      latestHookState?.setTutorHoldActive(true);
+    });
+
+    emitSpeechStarted();
+    emitSpeechStopped();
+    // The pre-gate passed, but the hold means `createRealtimeResponseUnlessHeld()`
+    // did not actually send — nothing should have gone out yet, and
+    // `speculativeFiredRef` must NOT have been marked true from a held call.
+    expect(creates()).toHaveLength(0);
+
+    emitCompleted('...noise...');
+    // The transcript-gate rejects. Because the speculative attempt never actually
+    // sent (it was held), the arbiter's reject branch must not treat it as a fired
+    // response: no `response.cancel` / `output_audio_buffer.clear` for a response
+    // that was never created. If `speculativeFiredRef` were wrongly set true while
+    // held, both of these would be length 1.
+    expect(cancels()).toHaveLength(0);
+    expect(clears()).toHaveLength(0);
+  });
 });

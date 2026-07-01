@@ -564,6 +564,8 @@ export function useRealtimeChat(options?: UseRealtimeChatOptions): UseRealtimeCh
     isSpeakingRef.current = false;
     isTutorHoldActiveRef.current = false;
     hasHeldTutorResponseRef.current = false;
+    speculativeFiredRef.current = false;
+    speculativeEnabledRef.current = false;
 
     currentResponseIdRef.current = null;
     inputSpeechStartedAtRef.current = null;

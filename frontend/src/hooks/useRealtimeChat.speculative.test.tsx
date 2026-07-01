@@ -70,14 +70,38 @@ async function connectAndOpen() {
   await waitFor(() => { expect(latestHookState?.isConnected).toBe(true); });
 }
 
-function driveTurn(transcript: string) {
+// Split-dispatch steps so tests can assert `creates()` BETWEEN speech_stopped and
+// .completed — that's the only way to tell "fired early (speculative)" apart from
+// "fired at .completed (serial)", since the arbiter's dedupe collapses both into a
+// single `response.create` by the end of the turn.
+function emitSpeechStarted(itemId = 'u1') {
   act(() => {
-    activeDataChannel?.emitServerEvent({ type: 'input_audio_buffer.speech_started', item_id: 'u1' });
-    activeDataChannel?.emitServerEvent({ type: 'input_audio_buffer.speech_stopped', item_id: 'u1' });
+    activeDataChannel?.emitServerEvent({ type: 'input_audio_buffer.speech_started', item_id: itemId });
+  });
+}
+
+function emitSpeechStopped(itemId = 'u1') {
+  act(() => {
+    activeDataChannel?.emitServerEvent({ type: 'input_audio_buffer.speech_stopped', item_id: itemId });
+  });
+}
+
+function emitCompleted(transcript: string, itemId = 'u1') {
+  act(() => {
     activeDataChannel?.emitServerEvent({
       type: 'conversation.item.input_audio_transcription.completed',
-      item_id: 'u1',
+      item_id: itemId,
       transcript,
+    });
+  });
+}
+
+function emitFailed(itemId = 'u1') {
+  act(() => {
+    activeDataChannel?.emitServerEvent({
+      type: 'conversation.item.input_audio_transcription.failed',
+      item_id: itemId,
+      error: { message: 'no transcript' },
     });
   });
 }
@@ -107,7 +131,12 @@ describe('useRealtimeChat speculative response', () => {
     vi.mocked(shouldSpeculativelyRespond).mockReturnValue(true);
     vi.mocked(shouldRespondToRealtimeTurn).mockReturnValue(true);
     await connectAndOpen();
-    driveTurn('quiero un cafe por favor');
+    emitSpeechStarted();
+    emitSpeechStopped();
+    // Fired EARLY, at speech_stopped — before any transcript exists.
+    expect(creates()).toHaveLength(1);
+    emitCompleted('quiero un cafe por favor');
+    // The gate pass at `.completed` is DEDUPED against the early fire, not a 2nd create.
     expect(creates()).toHaveLength(1);
     expect(cancels()).toHaveLength(0);
   });
@@ -117,8 +146,10 @@ describe('useRealtimeChat speculative response', () => {
     vi.mocked(shouldSpeculativelyRespond).mockReturnValue(true);
     vi.mocked(shouldRespondToRealtimeTurn).mockReturnValue(false);
     await connectAndOpen();
-    driveTurn('...background noise...');
+    emitSpeechStarted();
+    emitSpeechStopped();
     expect(creates()).toHaveLength(1);
+    emitCompleted('...background noise...');
     expect(cancels()).toHaveLength(1);
     expect(clears()).toHaveLength(1);
   });
@@ -128,7 +159,14 @@ describe('useRealtimeChat speculative response', () => {
     vi.mocked(shouldSpeculativelyRespond).mockReturnValue(false);
     vi.mocked(shouldRespondToRealtimeTurn).mockReturnValue(true);
     await connectAndOpen();
-    driveTurn('gracias');
+    emitSpeechStarted();
+    emitSpeechStopped();
+    // No early fire: the pre-gate said no.
+    expect(creates()).toHaveLength(0);
+    // But the flag was on, so the pre-gate WAS consulted.
+    expect(vi.mocked(shouldSpeculativelyRespond)).toHaveBeenCalled();
+    emitCompleted('gracias');
+    // Fires serially, at `.completed`.
     expect(creates()).toHaveLength(1);
     expect(cancels()).toHaveLength(0);
   });
@@ -138,8 +176,14 @@ describe('useRealtimeChat speculative response', () => {
     vi.mocked(shouldSpeculativelyRespond).mockReturnValue(true); // would pass if consulted
     vi.mocked(shouldRespondToRealtimeTurn).mockReturnValue(true);
     await connectAndOpen();
-    driveTurn('hola');
-    // exactly one create, and it came from the serial `.completed` path, not speech_stopped
+    emitSpeechStarted();
+    emitSpeechStopped();
+    expect(creates()).toHaveLength(0);
+    // Proves the `speculativeEnabledRef` gate short-circuits before the pre-gate
+    // is ever consulted, not merely that its result happened to be ignored.
+    expect(vi.mocked(shouldSpeculativelyRespond)).not.toHaveBeenCalled();
+    emitCompleted('hola');
+    // Exactly one create, and it came from the serial `.completed` path, not speech_stopped.
     expect(creates()).toHaveLength(1);
     expect(cancels()).toHaveLength(0);
   });
@@ -148,16 +192,41 @@ describe('useRealtimeChat speculative response', () => {
     mintReturns(true);
     vi.mocked(shouldSpeculativelyRespond).mockReturnValue(true);
     await connectAndOpen();
-    act(() => {
-      activeDataChannel?.emitServerEvent({ type: 'input_audio_buffer.speech_started', item_id: 'u1' });
-      activeDataChannel?.emitServerEvent({ type: 'input_audio_buffer.speech_stopped', item_id: 'u1' });
-      activeDataChannel?.emitServerEvent({
-        type: 'conversation.item.input_audio_transcription.failed',
-        item_id: 'u1',
-        error: { message: 'no transcript' },
-      });
-    });
+    emitSpeechStarted();
+    emitSpeechStopped();
     expect(creates()).toHaveLength(1);
+    emitFailed();
     expect(cancels()).toHaveLength(0);
+  });
+
+  it('respects the tutor hold: speculative fire is suppressed while held, and the held response fires exactly once on release', async () => {
+    mintReturns(true);
+    vi.mocked(shouldSpeculativelyRespond).mockReturnValue(true);
+    vi.mocked(shouldRespondToRealtimeTurn).mockReturnValue(true);
+    await connectAndOpen();
+
+    act(() => {
+      latestHookState?.setTutorHoldActive(true);
+    });
+
+    emitSpeechStarted();
+    emitSpeechStopped();
+    // The pre-gate passed, but the hold means `createRealtimeResponseUnlessHeld()`
+    // did not actually send — so nothing should have gone out yet, and
+    // `speculativeFiredRef` must NOT have been marked true from a held call.
+    expect(creates()).toHaveLength(0);
+
+    emitCompleted('quiero un cafe por favor');
+    // Because the speculative attempt never actually sent, the `.completed` path
+    // is not deduped away either — it also just re-registers the hold, and still
+    // sends nothing while held.
+    expect(creates()).toHaveLength(0);
+
+    act(() => {
+      latestHookState?.setTutorHoldActive(false);
+    });
+    // Releasing the hold fires the held response exactly once — no double-fire
+    // from both the speculative attempt and the serial attempt having queued.
+    expect(creates()).toHaveLength(1);
   });
 });

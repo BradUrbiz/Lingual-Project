@@ -21,6 +21,7 @@ const disconnectMock = vi.fn();
 const clearMessagesMock = vi.fn();
 const injectPromoteBackSpy = vi.fn();
 let realtimeOnMessage: ((role: 'user' | 'assistant', content: string) => void) | null = null;
+let realtimeOnUserTranscriptLost: (() => void) | null = null;
 
 vi.mock('@/api/assignments', () => ({
   getStudentAssignmentWorkspace: (...args: unknown[]) => getStudentAssignmentWorkspaceMock(...args),
@@ -36,8 +37,12 @@ vi.mock('@/api/chat', () => ({
 }));
 
 vi.mock('@/hooks/useRealtimeChat', () => ({
-  useRealtimeChat: (options?: { onMessage?: (role: 'user' | 'assistant', content: string) => void }) => {
+  useRealtimeChat: (options?: {
+    onMessage?: (role: 'user' | 'assistant', content: string) => void;
+    onUserTranscriptLost?: () => void;
+  }) => {
     realtimeOnMessage = options?.onMessage ?? null;
+    realtimeOnUserTranscriptLost = options?.onUserTranscriptLost ?? null;
     return {
       isConnected: false,
       isListening: false,
@@ -295,6 +300,7 @@ describe('AssignmentPracticeWorkspace', () => {
     getCoachChipsMock.mockResolvedValue([]);
     injectPromoteBackSpy.mockReset();
     realtimeOnMessage = null;
+    realtimeOnUserTranscriptLost = null;
 
     getStudentAssignmentWorkspaceMock.mockResolvedValue(WORKSPACE);
     getChatSessionMock.mockImplementation(async (chatId: string) => (chatId === 'chat-2' ? CHAT_2 : CHAT_1));
@@ -1182,5 +1188,60 @@ describe('AssignmentPracticeWorkspace', () => {
     const arg = injectPromoteBackSpy.mock.calls[0][0];
     expect(arg).toContain('RESTEER: speak Spanish');
     expect(arg).toContain('PROMOTE: try voy');
+  });
+
+  it('emits metric.voice_transcript_lost when the realtime hook reports a dropped user transcript', async () => {
+    reportPracticeSessionEventMock.mockResolvedValue(undefined);
+
+    render(
+      <AssignmentPracticeWorkspace
+        open
+        bootstrap={BOOTSTRAP}
+        onClose={vi.fn()}
+      />
+    );
+
+    // Wait for the workspace to load and voice connect button to appear
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Tap the mic to connect/i })).toBeInTheDocument();
+    });
+
+    // Connect voice (selectedActivePracticeSession is ACTIVE_SESSION from WORKSPACE)
+    fireEvent.click(screen.getByRole('button', { name: /Tap the mic to connect/i }));
+
+    await waitFor(() => {
+      expect(connectMock).toHaveBeenCalled();
+    });
+
+    // Simulate the realtime hook detecting a dropped/unusable ASR transcript
+    await act(async () => {
+      realtimeOnUserTranscriptLost?.();
+    });
+
+    await waitFor(() => {
+      expect(reportPracticeSessionEventMock).toHaveBeenCalledWith('practice-1', expect.objectContaining({
+        eventType: 'metric.voice_transcript_lost',
+        payload: { source: 'realtime' },
+      }));
+    });
+  });
+
+  it('does not emit metric.voice_transcript_lost when there is no active realtime persistence target', async () => {
+    render(
+      <AssignmentPracticeWorkspace
+        open
+        bootstrap={BOOTSTRAP}
+        onClose={vi.fn()}
+      />
+    );
+
+    // Wait for the workspace to load, but never connect voice — the persistence target stays null
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Tap the mic to connect/i })).toBeInTheDocument();
+    });
+
+    realtimeOnUserTranscriptLost?.();
+
+    expect(reportPracticeSessionEventMock).not.toHaveBeenCalled();
   });
 });

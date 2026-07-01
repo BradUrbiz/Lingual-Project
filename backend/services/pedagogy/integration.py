@@ -126,6 +126,14 @@ def uptake_trace_enabled() -> bool:
     return os.environ.get("PEDAGOGY_ENGINE_UPTAKE_TRACE", "").strip().lower() in _TRUTHY
 
 
+def voice_fidelity_enabled() -> bool:
+    """Teacher FDE — voice fidelity gap measurement (internal instrument overlaid on
+    the realized signal). Default off; read-only/additive (no live-path effect).
+    Rides the realized block, so it is effective only with the alignment view also on.
+    Reads PEDAGOGY_ENGINE_VOICE_FIDELITY."""
+    return os.environ.get("PEDAGOGY_ENGINE_VOICE_FIDELITY", "").strip().lower() in _TRUTHY
+
+
 def resolve_assignment_system_prompt(
     bootstrap: dict[str, Any],
     *,

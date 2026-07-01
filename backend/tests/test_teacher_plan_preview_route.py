@@ -346,3 +346,114 @@ class UptakeTraceRouteTests(unittest.TestCase):
         self.assertIsNotNone(realized)               # realized survives
         self.assertIn('perTarget', realized)         # realized join intact
         self.assertIsNone(realized['uptake'])        # uptake degraded to None
+
+
+class VoiceFidelityFlagTestCase(unittest.TestCase):
+    def test_default_off(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            from backend.services.pedagogy.integration import voice_fidelity_enabled
+            self.assertFalse(voice_fidelity_enabled())
+
+    def test_on_when_truthy(self):
+        with mock.patch.dict(os.environ, {"PEDAGOGY_ENGINE_VOICE_FIDELITY": "1"}):
+            from backend.services.pedagogy.integration import voice_fidelity_enabled
+            self.assertTrue(voice_fidelity_enabled())
+
+
+class VoiceFidelityRouteTests(unittest.TestCase):
+    """Route-level tests for realized.voiceFidelity (flag gate + fail-soft)."""
+
+    _PREVIEW = {
+        'engineEnabled': True, 'rawTutorMode': False, 'taskType': 'opinion_gap',
+        'correctionPosture': {'mode': 'balanced', 'recastDefault': True, 'elicitationRepeatThreshold': 2},
+        'targets': [{'surface': 'la cuenta', 'kind': 'expression', 'feedbackRoute': 'recast_first'}],
+    }
+    _SESSIONS = [{'student_uid': 's1', 'session_summary': {'target_expression_hits': {'la cuenta': 1}}}]
+    _EVENTS = [
+        {'session_id': 'sess1', 'event_type': 'student.turn', 'turn_index': 0,
+         'payload': {'content': 'quiero la cuenta', 'source': 'realtime'}},
+        {'session_id': 'sess1', 'event_type': 'metric.target_expression_hit', 'turn_index': 0,
+         'payload': {'expression': 'la cuenta', 'count': 1}},
+        {'session_id': 'sess1', 'event_type': 'metric.voice_transcript_lost', 'turn_index': 2,
+         'payload': {'source': 'realtime'}},
+    ]
+
+    def _app(self, *, events_raise=False):
+        class _Db:
+            def list_assignment_practice_sessions(self, _aid):
+                return VoiceFidelityRouteTests._SESSIONS
+
+            def list_assignment_learning_events(self, _aid, event_types=None):
+                if events_raise:
+                    raise RuntimeError('events boom')
+                return VoiceFidelityRouteTests._EVENTS
+
+        app = Flask(__name__)
+        app.secret_key = 'test'
+        app.register_blueprint(create_curriculum_admin_blueprint(RouteDeps(
+            db=_Db(), firebase_auth=None,
+            get_current_user_uid=lambda: (session.get('user') or {}).get('uid'),
+            get_openai_client=lambda: None, get_assessment=lambda: {},
+            compute_results=lambda *a, **k: {}, get_proficiency_description=lambda *a, **k: {},
+            login_required=_passthrough, get_user_proficiency_context=lambda **_: '',
+            build_system_prompt=lambda _c: '', get_school_request_context=lambda: None,
+            set_active_school_membership=lambda *a, **k: None,
+            allowed_learning_locales={'es-ES'}, allowed_minigame_types=set(),
+            supported_ui_languages={'en'}, audit_logger=None,
+        )))
+        return app
+
+    def _patches(self, env):
+        return [
+            mock.patch.dict(os.environ, env),
+            mock.patch('backend.routes.curriculum_admin._require_assignment_teacher_access'),
+            mock.patch('backend.routes.curriculum_admin.resolve_assignment_bootstrap_for_user', return_value={}),
+            mock.patch('backend.routes.curriculum_admin.compile_prompt_plan', return_value=object()),
+            mock.patch('backend.routes.curriculum_admin.serialize_plan_preview',
+                       return_value=dict(self._PREVIEW)),
+        ]
+
+    def test_flag_on_attaches_voice_fidelity(self):
+        with contextlib.ExitStack() as stack:
+            for p in self._patches({
+                    'PEDAGOGY_ENGINE_TEACHER_PREVIEW': '1',
+                    'PEDAGOGY_ENGINE_ALIGNMENT_VIEW': '1',
+                    'PEDAGOGY_ENGINE_VOICE_FIDELITY': '1'}):
+                stack.enter_context(p)
+            client = self._app().test_client()
+            _login(client)
+            resp = client.get('/api/teacher/assignments/a1/plan-preview?realized=1')
+        self.assertEqual(resp.status_code, 200)
+        vf = resp.get_json()['planPreview']['realized']['voiceFidelity']
+        self.assertEqual(vf['modalitySplit'], {'voice': 1, 'text': 0, 'unknown': 0})
+        self.assertEqual(vf['dropoutTurns'], 1)
+
+    def test_flag_off_no_voice_fidelity_key(self):
+        with contextlib.ExitStack() as stack:
+            for p in self._patches({
+                    'PEDAGOGY_ENGINE_TEACHER_PREVIEW': '1',
+                    'PEDAGOGY_ENGINE_ALIGNMENT_VIEW': '1',
+                    'PEDAGOGY_ENGINE_VOICE_FIDELITY': ''}):
+                stack.enter_context(p)
+            client = self._app().test_client()
+            _login(client)
+            resp = client.get('/api/teacher/assignments/a1/plan-preview?realized=1')
+        self.assertEqual(resp.status_code, 200)
+        realized = resp.get_json()['planPreview']['realized']
+        self.assertNotIn('voiceFidelity', realized)
+
+    def test_fail_soft_does_not_null_realized(self):
+        with contextlib.ExitStack() as stack:
+            for p in self._patches({
+                    'PEDAGOGY_ENGINE_TEACHER_PREVIEW': '1',
+                    'PEDAGOGY_ENGINE_ALIGNMENT_VIEW': '1',
+                    'PEDAGOGY_ENGINE_VOICE_FIDELITY': '1'}):
+                stack.enter_context(p)
+            client = self._app(events_raise=True).test_client()
+            _login(client)
+            resp = client.get('/api/teacher/assignments/a1/plan-preview?realized=1')
+        self.assertEqual(resp.status_code, 200)
+        realized = resp.get_json()['planPreview']['realized']
+        self.assertIsNotNone(realized)
+        self.assertIn('perTarget', realized)
+        self.assertIsNone(realized['voiceFidelity'])

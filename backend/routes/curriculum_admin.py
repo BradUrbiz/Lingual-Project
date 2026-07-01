@@ -28,12 +28,14 @@ from backend.services.pedagogy.assignment_debrief import build_assignment_debrie
 from backend.services.pedagogy.debrief import build_session_debrief
 from backend.services.pedagogy.alignment import build_alignment
 from backend.services.pedagogy.uptake import build_target_uptake
+from backend.services.pedagogy.voice_fidelity import build_voice_fidelity
 from backend.services.pedagogy.integration import (
     alignment_view_enabled,
     debrief_enabled,
     debrief_rollup_enabled,
     teacher_preview_enabled,
     uptake_trace_enabled,
+    voice_fidelity_enabled,
 )
 from backend.services.pedagogy.plan import compile_prompt_plan, serialize_plan_preview
 from backend.services.compliance import (
@@ -1102,6 +1104,27 @@ def create_curriculum_admin_blueprint(deps: RouteDeps) -> Blueprint:
                                         'uptake trace derivation failed; uptake=None '
                                         '(assignment_id=%s)', assignment_id)
                                     preview['realized']['uptake'] = None
+                            if voice_fidelity_enabled():
+                                # Own nested fail-soft: a voice-fidelity failure must
+                                # NOT null the realized block (the outer except would).
+                                # Internal measurement: counts only, never content.
+                                try:
+                                    vf_events = deps.db.list_assignment_learning_events(
+                                        assignment_id,
+                                        event_types=[
+                                            'student.turn',
+                                            'metric.target_expression_hit',
+                                            'metric.target_vocabulary_hit',
+                                            'metric.voice_transcript_lost',
+                                        ],
+                                    )
+                                    preview['realized']['voiceFidelity'] = build_voice_fidelity(
+                                        vf_events, lexical)
+                                except Exception:
+                                    logger.exception(
+                                        'voice fidelity derivation failed; voiceFidelity=None '
+                                        '(assignment_id=%s)', assignment_id)
+                                    preview['realized']['voiceFidelity'] = None
                     except Exception:
                         logger.exception(
                             'alignment realized join failed; omitting realized '
